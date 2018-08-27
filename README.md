@@ -54,7 +54,7 @@ Each cookbook must define:
 
 The logging is already pre-setup by the `cookbook` entry point script that initialize the root logger, so that each
 cookbook can just initliaze its own `logging` instance and log. A special logger to send notification to the
-`#wikimedia-operation` IRC channel is also available through the `spicerack` instance passed to `main()`.
+`#wikimedia-operations` IRC channel is also available through the `spicerack` instance passed to `main()`.
 
 Example of logging:
 ```
