@@ -1,2 +1,5 @@
+/.eggs/
+/.tox/
+/wikimedia_cookbooks.egg-info/
 __pycache__/
 *.pyc

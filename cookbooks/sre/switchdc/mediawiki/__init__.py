@@ -1,1 +1,2 @@
-__title__ = 'Switch Datacenter for MediaWiki'
+"""Switch Datacenter for MediaWiki"""
+__title__ = __doc__

@@ -1,1 +1,2 @@
-__title__ = 'Switch Datacenter'
+"""Switch Datacenter"""
+__title__ = __doc__
