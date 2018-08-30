@@ -16,5 +16,9 @@ def main(args, spicerack):
     logger.info('Set MediaWiki in read-write in %s', args.dc_to)
 
     mediawiki = spicerack.mediawiki()
+    prefix = ''
+    if args.live_test:
+        prefix = '[DRY-RUN] '
+
     mediawiki.set_readwrite(args.dc_to)
-    spicerack.irc_logger.info('MediaWiki read-only period ends at: %s', datetime.utcnow())
+    spicerack.irc_logger.info('%sMediaWiki read-only period ends at: %s', prefix, datetime.utcnow())

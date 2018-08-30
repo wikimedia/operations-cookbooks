@@ -16,7 +16,12 @@ def main(args, spicerack):
     logger.info('Set MediaWiki in read-only in %s and %s', args.dc_from, args.dc_to)
 
     mediawiki = spicerack.mediawiki()
-    mediawiki.set_readonly(args.dc_to, args.ro_reason)
+    if args.live_test:
+        logger.info('Skip setting MediaWiki read-only in %s', args.dc_to)
+        prefix = '[DRY-RUN] '
+    else:
+        mediawiki.set_readonly(args.dc_to, args.ro_reason)
+        prefix = ''
 
-    spicerack.irc_logger.info('MediaWiki read-only period starts at: %s', datetime.utcnow())
+    spicerack.irc_logger.info('%sMediaWiki read-only period starts at: %s', prefix, datetime.utcnow())
     mediawiki.set_readonly(args.dc_from, args.ro_reason)
