@@ -22,11 +22,10 @@ def main(args, spicerack):
     logger.info('Running warmup script in %s', args.dc_to)
 
     warmup_dir = '/var/lib/mediawiki-cache-warmup'
-    base_warmup = "nodejs {wd}/warmup.js {wd}".format(wd=warmup_dir)
-    memc_warmup = "{basecmd}/urls-cluster.txt spread appservers.svc.{dc}.wmnet".format(
-        dc=args.dc_to, basecmd=base_warmup)
-    appserver_warmup = "{basecmd}/urls-server.txt clone appserver {dc}".format(
-        dc=args.dc_to, basecmd=base_warmup)
+    memc_warmup = "nodejs {dir}/warmup.js {dir}/urls-cluster.txt spread appservers.svc.{dc}.wmnet".format(
+        dir=warmup_dir, dc=args.dc_to)
+    appserver_warmup = "nodejs {dir}/warmup.js {dir}/urls-server.txt clone appserver {dc}".format(
+        dir=warmup_dir, dc=args.dc_to)
 
     mainteance_host = spicerack.mediawiki().get_maintenance_host(args.dc_to)
     mainteance_host.sync(memc_warmup, appserver_warmup)
