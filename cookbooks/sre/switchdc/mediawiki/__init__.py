@@ -24,7 +24,8 @@ def parse_args(name, title, args):
     parser.add_argument('dc_to', metavar='DC_TO', choices=CORE_DATACENTERS,
                         help='Name of the datacenter to switch to. One of: %(choices)s.')
 
-    if args.dc_from == args.dc_to:
+    parsed_args = parser.parse_args(args=args)
+    if parsed_args.dc_from == parsed_args.dc_to:
         parser.error('DC_FROM and DC_TO must differ')
 
-    return parser.parse_args(args=args)
+    return parsed_args
