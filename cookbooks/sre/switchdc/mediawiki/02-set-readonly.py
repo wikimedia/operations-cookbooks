@@ -1,5 +1,6 @@
 """Set MediaWiki in read-only mode"""
 import logging
+import time
 
 from datetime import datetime
 
@@ -25,3 +26,6 @@ def main(args, spicerack):
 
     spicerack.irc_logger.info('%sMediaWiki read-only period starts at: %s', prefix, datetime.utcnow())
     mediawiki.set_readonly(args.dc_from, args.ro_reason)
+
+    logger.info('Sleeping 10s to allow in-flight requests to complete')
+    time.sleep(10)
