@@ -32,4 +32,4 @@ def main(args, spicerack):
         dir=warmup_dir, dc=datacenter)
 
     mainteance_host = spicerack.mediawiki().get_maintenance_host(datacenter)
-    mainteance_host.sync(memc_warmup, appserver_warmup)
+    mainteance_host.run_sync(memc_warmup, appserver_warmup)
