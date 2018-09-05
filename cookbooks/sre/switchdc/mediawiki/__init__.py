@@ -25,6 +25,6 @@ def parse_args(name, title, args):
                         help='Name of the datacenter to switch to. One of: %(choices)s.')
 
     if args.dc_from == args.dc_to:
-        parser.error('--dc-from and --dc-to must differ')
+        parser.error('DC_FROM and DC_TO must differ')
 
     return parser.parse_args(args=args)
