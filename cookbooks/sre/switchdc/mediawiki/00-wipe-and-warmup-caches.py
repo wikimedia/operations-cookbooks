@@ -13,7 +13,8 @@ def main(args, spicerack):
     args = parse_args(__name__, __title__, args)
     remote = spicerack.remote()
     if args.live_test:
-        datacenter = args.dc_from  # Invert the DC and perform the wipe and warmup in the passive DC
+        logger.info('Inverting DC to perform the wipe and warmup in %s (passive DC)', args.dc_from)
+        datacenter = args.dc_from
     else:
         datacenter = args.dc_to
 
