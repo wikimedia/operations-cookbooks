@@ -27,6 +27,7 @@ def parse_args(name, title, args):
                         help='Name of the datacenter to switch to. One of: %(choices)s.')
     parsed_args = parser.parse_args(args=args)
     # Mangle the services list removing the excluded ones
-    actual_services = list(set(parsed_args.services) - set(parsed_args.exclude))
-    parsed_args.services = actual_services
+    if parsed_args.exclude is not None:
+        actual_services = list(set(parsed_args.services) - set(parsed_args.exclude))
+        parsed_args.services = actual_services
     return parsed_args
