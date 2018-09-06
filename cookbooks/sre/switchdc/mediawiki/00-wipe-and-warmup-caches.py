@@ -32,5 +32,5 @@ def main(args, spicerack):
     appserver_warmup = "nodejs {dir}/warmup.js {dir}/urls-server.txt clone appserver {dc}".format(
         dir=warmup_dir, dc=datacenter)
 
-    mainteance_host = spicerack.mediawiki().get_maintenance_host(datacenter)
-    mainteance_host.run_sync(memc_warmup, appserver_warmup)
+    maintenance_host = spicerack.mediawiki().get_maintenance_host(datacenter)
+    maintenance_host.run_sync(memc_warmup, appserver_warmup)

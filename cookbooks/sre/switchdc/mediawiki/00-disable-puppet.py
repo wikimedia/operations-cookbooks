@@ -13,7 +13,7 @@ def main(args, spicerack):
     args = parse_args(__name__, __title__, args)
     remote = spicerack.remote()
 
-    logger.info('Disabling Puppet on MediaWiki mainteance hosts in %s and %s', args.dc_from, args.dc_to)
+    logger.info('Disabling Puppet on MediaWiki maintenance hosts in %s and %s', args.dc_from, args.dc_to)
     remote.query('A:mw-maintenance').run_sync('disable-puppet "{message}"'.format(message=PUPPET_REASON))
 
     logger.info('Disabling Puppet on text caches in %s and %s', args.dc_from, args.dc_to)
