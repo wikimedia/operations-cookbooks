@@ -22,9 +22,6 @@ def main(args, spicerack):
 
     ask_confirmation('Are you sure to wipe and warmup caches in {dc}?'.format(dc=datacenter))
 
-    logger.info('Restart MediaWiki memcached in %s (wipe memcache)', datacenter)
-    remote.query('A:memcached-' + datacenter).run_sync('service memcached restart')
-
     logger.info('Restart MediaWiki HHVM in %s (wipe APC)', datacenter)
     remote.query('A:all-mw-' + datacenter).run_sync('service hhvm restart', batch_size=25)
 
