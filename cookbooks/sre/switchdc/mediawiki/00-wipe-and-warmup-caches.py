@@ -1,6 +1,8 @@
 """Wipe and warmup MediaWiki caches"""
 import logging
 
+from spicerack.interactive import ask_confirmation
+
 from cookbooks.sre.switchdc.mediawiki import parse_args
 
 
@@ -17,6 +19,8 @@ def main(args, spicerack):
         datacenter = args.dc_from
     else:
         datacenter = args.dc_to
+
+    ask_confirmation('Are you sure to wipe and warmup caches in {dc}?'.format(dc=datacenter))
 
     logger.info('Restart MediaWiki memcached in %s (wipe memcache)', datacenter)
     remote.query('A:memcached-' + datacenter).run_sync('service memcached restart')
