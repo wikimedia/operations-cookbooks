@@ -6,7 +6,8 @@ from spicerack.constants import CORE_DATACENTERS
 
 __title__ = __doc__
 PUPPET_REASON = __name__
-DEFAULT_READ_ONLY_REASON = 'MediaWiki is in read-only mode for maintenance. Please try again in a few minutes.'
+DEFAULT_READ_ONLY_REASON = ("You can't edit now. This is because of maintenance. Copy and save your text and try again "
+                            "in a few minutes.")
 
 
 def parse_args(name, title, args):
