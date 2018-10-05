@@ -16,7 +16,7 @@ def main(args, spicerack):
     logger.info('Update Tendril tree to start from the core DB masters in %s', args.dc_to)
 
     mysql = spicerack.mysql()
-    tendril_host = mysql.get_dbs('P{O:mariadb::misc::tendril} and A:eqiad')
+    tendril_host = mysql.get_dbs('P{P:mariadb::misc::tendril} and A:eqiad')
 
     for section in CORE_SECTIONS:
         # get_core_dbs() ensure that only one host is matched
