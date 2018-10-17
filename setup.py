@@ -3,6 +3,7 @@
 from setuptools import find_packages, setup
 
 install_requires = [
+    'python-dateutil',
     'wikimedia-spicerack',
 ]
 
