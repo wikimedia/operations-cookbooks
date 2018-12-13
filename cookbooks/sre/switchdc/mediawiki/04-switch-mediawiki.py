@@ -1,16 +1,21 @@
 """Switch MediaWiki active datacenter"""
 import logging
 
-from cookbooks.sre.switchdc.mediawiki import parse_args
+from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args
 
 
 __title__ = __doc__
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-def main(args, spicerack):
+def argument_parser():
+    """As specified by Spicerack API."""
+    return argument_parser_base(__name__, __title__)
+
+
+def run(args, spicerack):
     """Required by Spicerack API."""
-    args = parse_args(__name__, __title__, args)
+    post_process_args(args)
     logger.info('Switch MediaWiki active datacenter to %s', args.dc_to)
 
     records = ('api-rw', 'appservers-rw', 'jobrunner', 'videoscaler')

@@ -19,7 +19,7 @@ def valid_datetime_type(datetime_str):
         raise argparse.ArgumentTypeError(msg)
 
 
-def parse_args(name, title, args):
+def argument_parser_base(name, title):
     """Parse the command line arguments for all the sre.elasticsearch cookbooks."""
     parser = argparse.ArgumentParser(prog=name, description=title,
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -30,8 +30,10 @@ def parse_args(name, title, args):
     parser.add_argument('--task_id', help='task_id for the change')
     parser.add_argument('--nodes_per_run', default=3, type=int, help='Number of nodes per run.')
 
-    parsed_args = parser.parse_args(args=args)
+    return parser
 
-    if parsed_args.start_datetime is None:
-        parsed_args.start_datetime = datetime.utcnow()
-    return parsed_args
+
+def post_process_args(args):
+    """Do any post-processing of the parsed arguments."""
+    if args.start_datetime is None:
+        args.start_datetime = datetime.utcnow()

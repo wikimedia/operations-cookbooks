@@ -12,7 +12,7 @@ MEDIAWIKI_RELATED_SERVICES = ('eventbus', 'ores', 'wdqs', 'wdqs-internal')
 ALL_SERVICES = CORE_SERVICES + OTHER_SERVICES + MEDIAWIKI_RELATED_SERVICES
 
 
-def parse_args(name, title, args):
+def argument_parser_base(name, title):
     """Parse the command line arguments for all the sre.switchdc.services cookbooks."""
     parser = argparse.ArgumentParser(prog=name, description=title,
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -25,9 +25,12 @@ def parse_args(name, title, args):
                         help='Name of the datacenter to switch away from. One of: %(choices)s.')
     parser.add_argument('dc_to', metavar='DC_TO', choices=CORE_DATACENTERS,
                         help='Name of the datacenter to switch to. One of: %(choices)s.')
-    parsed_args = parser.parse_args(args=args)
+    return parser
+
+
+def post_process_args(args):
+    """Do any post-processing of the parsed arguments."""
     # Mangle the services list removing the excluded ones
-    if parsed_args.exclude is not None:
-        actual_services = list(set(parsed_args.services) - set(parsed_args.exclude))
-        parsed_args.services = actual_services
-    return parsed_args
+    if args.exclude is not None:
+        actual_services = list(set(args.services) - set(args.exclude))
+        args.services = actual_services

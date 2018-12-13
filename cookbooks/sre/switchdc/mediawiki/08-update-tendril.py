@@ -3,16 +3,21 @@ import logging
 
 from spicerack.mysql import CORE_SECTIONS
 
-from cookbooks.sre.switchdc.mediawiki import parse_args
+from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args
 
 
 __title__ = __doc__
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-def main(args, spicerack):
+def argument_parser():
+    """As specified by Spicerack API."""
+    return argument_parser_base(__name__, __title__)
+
+
+def run(args, spicerack):
     """Required by Spicerack API."""
-    args = parse_args(__name__, __title__, args)
+    post_process_args(args)
     logger.info('Update Tendril tree to start from the core DB masters in %s', args.dc_to)
 
     mysql = spicerack.mysql()

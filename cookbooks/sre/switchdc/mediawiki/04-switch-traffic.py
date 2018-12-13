@@ -4,7 +4,7 @@ import re
 
 from spicerack.interactive import ask_confirmation
 
-from cookbooks.sre.switchdc.mediawiki import parse_args, PUPPET_REASON
+from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args, PUPPET_REASON
 
 
 __title__ = __doc__
@@ -14,9 +14,14 @@ EXPECTED_DC_FROM = r'\-\s+{backend}\.add_backend\(be_{backend}_svc_{dc_from}_wmn
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-def main(args, spicerack):
+def argument_parser():
+    """As specified by Spicerack API."""
+    return argument_parser_base(__name__, __title__)
+
+
+def run(args, spicerack):
     """Required by Spicerack API."""
-    args = parse_args(__name__, __title__, args)
+    post_process_args(args)
     logger.info('Update traffic routing to MediaWiki backends from %s to %s', args.dc_from, args.dc_to)
 
     remote = spicerack.remote()

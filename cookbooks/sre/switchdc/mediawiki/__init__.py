@@ -10,7 +10,7 @@ DEFAULT_READ_ONLY_REASON = ("You can't edit now. This is because of maintenance.
                             "in a few minutes.")
 
 
-def parse_args(name, title, args):
+def argument_parser_base(name, title):
     """Parse the command line arguments for all the sre.switchdc.mediawiki cookbooks."""
     parser = argparse.ArgumentParser(prog=name, description=title,
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -25,8 +25,10 @@ def parse_args(name, title, args):
     parser.add_argument('dc_to', metavar='DC_TO', choices=CORE_DATACENTERS,
                         help='Name of the datacenter to switch to. One of: %(choices)s.')
 
-    parsed_args = parser.parse_args(args=args)
-    if parsed_args.dc_from == parsed_args.dc_to:
-        parser.error('DC_FROM and DC_TO must differ')
+    return parser
 
-    return parsed_args
+
+def post_process_args(args):
+    """Do any post-processing of the parsed arguments."""
+    if args.dc_from == args.dc_to:
+        raise ValueError('DC_FROM and DC_TO must differ')
