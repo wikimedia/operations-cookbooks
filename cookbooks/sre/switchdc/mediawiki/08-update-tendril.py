@@ -24,8 +24,11 @@ def run(args, spicerack):
     tendril_host = mysql.get_dbs('P{P:mariadb::misc::tendril} and A:eqiad')
 
     for section in CORE_SECTIONS:
-        # get_core_dbs() ensure that only one host is matched
-        master = mysql.get_core_dbs(datacenter=args.dc_to, replication_role='master', section=section).hosts[0]
+        master = mysql.get_core_dbs(datacenter=args.dc_to, replication_role='master', section=section)
+        if len(master) != 1:
+            raise RuntimeError('Expected single master for DC {dc} and section {section}, got {hosts}'.format(
+                dc=args.dc_to, section=section, hosts=master))
+
         query = ("UPDATE shards SET master_id = (SELECT id FROM servers WHERE host = '{master}') WHERE "  # nosec
                  "name = '{section}'").format(master=master, section=section)
         tendril_host.run_query(query, database='tendril')
