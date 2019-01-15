@@ -1,13 +1,15 @@
 r"""Upgrade all packages on a host and reboot it.
 
 - Set Icinga downtime
+- Disable puppet
 - Depool
+- Wait for drain
 - Upgrade software
 - Reboot
 - Wait for host to come back online
-- Wait for puppet run
-- Remove Icinga downtime
+- Force a puppet run
 - Repool
+- Remove Icinga downtime
 
 Usage example:
     cookbook sre.hosts.upgrade-and-reboot lvs2002.codfw.wmnet --depool-cmd="systemctl stop pybal" \
@@ -33,6 +35,8 @@ def argument_parser():
     parser.add_argument('--depool-cmd', required=True,
                         help='Command used to depool the service (eg: "service pybal stop").')
     parser.add_argument('--repool-cmd', required=True, help='Command used to repool the service (eg: "pool").')
+    parser.add_argument('--sleep', type=int, default=60,
+                        help='Sleep in seconds to wait after the depool before proceeding. [optional, default=60]')
 
     return parser
 
@@ -54,7 +58,7 @@ def run(args, spicerack):
         logging.info('Not performing any depool action as requested (empty --depool-cmd)')
 
     logging.info('Waiting for %s to be drained.', args.host)
-    time.sleep(30)
+    time.sleep(args.sleep)
 
     # Upgrade all packages, leave config files untouched, do not prompt
     upgrade_cmd = ("DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' "
