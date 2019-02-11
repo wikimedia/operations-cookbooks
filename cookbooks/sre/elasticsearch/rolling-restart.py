@@ -45,14 +45,18 @@ def run(args, spicerack):
                 with elasticsearch_clusters.stopped_replication():
                     elasticsearch_clusters.flush_markers()
 
-                    next_nodes.depool_nodes()
+                    if args.nodes_has_lvs:
+                        next_nodes.depool_nodes()
+                    # TODO: remove this condition when a better implementation is found.
 
                     next_nodes.stop_elasticsearch()
                     next_nodes.start_elasticsearch()
 
                     next_nodes.wait_for_elasticsearch_up(timedelta(minutes=10))
 
-                    next_nodes.pool_nodes()
+                    if args.nodes_has_lvs:
+                        next_nodes.pool_nodes()
+                    # TODO: remove this condition when a better implementation is found.
 
                 logger.info('wait for green on all clusters before thawing writes. If not green, still thaw writes')
                 elasticsearch_clusters.wait_for_green(timedelta(minutes=5))
