@@ -1,12 +1,15 @@
 """Elasticsearch Clusters Operations"""
 import argparse
+import logging
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from time import sleep
 
 from dateutil.parser import parse
 
-
 __title__ = __doc__
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
 CLUSTERGROUPS = ('search_eqiad', 'search_codfw', 'relforge')
 
 
@@ -43,3 +46,52 @@ def post_process_args(args):
     """Do any post-processing of the parsed arguments."""
     if args.start_datetime is None:
         args.start_datetime = datetime.utcnow()
+
+
+def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,   # pylint: disable=too-many-arguments
+                        nodes_per_run, clustergroup, start_datetime, nodes_have_lvs, action):
+    """Executes an action on a whole cluster, taking care of alerting, puppet, etc...
+
+    The action itself is passed as a function `action(nodes: ElasticsearchHosts)`.
+    TODO: refactor this mess to reduce the number of arguments.
+    """
+    while True:
+        elasticsearch_clusters.wait_for_green()
+
+        logger.info('Fetch %d node(s) from %s to perform rolling restart on', nodes_per_run, clustergroup)
+        nodes = elasticsearch_clusters.get_next_clusters_nodes(start_datetime, nodes_per_run)
+        if nodes is None:
+            break
+
+        remote_hosts = nodes.get_remote_hosts()
+        puppet = spicerack.puppet(remote_hosts)
+
+        with icinga.hosts_downtimed(remote_hosts.hosts, reason, duration=timedelta(minutes=30)):
+            with puppet.disabled(reason):
+                with elasticsearch_clusters.frozen_writes(reason):
+                    logger.info('Wait for a minimum time of 60sec to make sure all CirrusSearch writes are terminated')
+                    sleep(60)
+
+                    logger.info('Stopping elasticsearch replication in a safe way on %s', clustergroup)
+                    with elasticsearch_clusters.stopped_replication():
+                        elasticsearch_clusters.flush_markers()
+
+                        # TODO: remove this condition when a better implementation is found.
+                        if nodes_have_lvs:
+                            nodes.depool_nodes()
+
+                        action(nodes)
+
+                        nodes.wait_for_elasticsearch_up(timedelta(minutes=10))
+
+                        # TODO: remove this condition when a better implementation is found.
+                        if nodes_have_lvs:
+                            nodes.pool_nodes()
+
+                    logger.info('wait for green on all clusters before thawing writes. If not green, still thaw writes')
+                    elasticsearch_clusters.wait_for_green(timedelta(minutes=5))
+                    # TODO: inspect the back pressure on the kafka queue and so that nothing
+                    #       is attempted if it's too high.
+
+        logger.info('Wait for green in %s before fetching next set of nodes', clustergroup)
+        elasticsearch_clusters.wait_for_green()
