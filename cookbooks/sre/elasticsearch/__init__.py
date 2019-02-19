@@ -26,7 +26,7 @@ def argument_parser_base(name, title):
     """Parse the command line arguments for all the sre.elasticsearch cookbooks.
 
     Todo:
-        Remove ``--nodes-has-lvs`` for a better implementation as this was introduced because
+        Remove ``--without-lvs`` for a better implementation as this was introduced because
         relforge cluster does not have lvs enabled.
     """
     parser = argparse.ArgumentParser(prog=name, description=title,
@@ -37,7 +37,7 @@ def argument_parser_base(name, title):
                         help='start datetime in ISO 8601 format e.g 2018-09-15T15:53:00+00:00')
     parser.add_argument('--task-id', help='task_id for the change')
     parser.add_argument('--nodes-per-run', default=3, type=int, help='Number of nodes per run.')
-    parser.add_argument('--nodes-has-lvs', default=True, type=bool, help='True = has lvs, False = no lvs')
+    parser.add_argument('--without-lvs', action='store_true', help='This cluster does not use LVS')
 
     return parser
 

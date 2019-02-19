@@ -25,5 +25,5 @@ def run(args, spicerack):
 
     execute_on_clusters(
         elasticsearch_clusters, icinga, reason, spicerack, args.nodes_per_run,
-        args.clustergroup, args.start_datetime, args.nodes_has_lvs, restart_elasticsearch
+        args.clustergroup, args.start_datetime, not args.without_lvs, restart_elasticsearch
     )
