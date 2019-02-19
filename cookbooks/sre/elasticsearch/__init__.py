@@ -37,7 +37,7 @@ def argument_parser_base(name, title):
                         help='start datetime in ISO 8601 format e.g 2018-09-15T15:53:00+00:00')
     parser.add_argument('--task-id', help='task_id for the change')
     parser.add_argument('--nodes-per-run', default=3, type=int, help='Number of nodes per run.')
-    parser.add_argument('--without-lvs', action='store_true', help='This cluster does not use LVS')
+    parser.add_argument('--without-lvs', action='store_false', dest='with_lvs', help='This cluster does not use LVS')
 
     return parser
 
