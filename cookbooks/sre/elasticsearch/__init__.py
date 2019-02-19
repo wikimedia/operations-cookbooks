@@ -84,6 +84,9 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,   # p
 
                         nodes.wait_for_elasticsearch_up(timedelta(minutes=10))
 
+                        # let's wait a bit to make sure everything has time to settle down
+                        sleep(20)
+
                         # TODO: remove this condition when a better implementation is found.
                         if nodes_have_lvs:
                             nodes.pool_nodes()
