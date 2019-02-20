@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from time import sleep
 
 from dateutil.parser import parse
+from spicerack.elasticsearch_cluster import ElasticsearchClusterCheckError
 
 __title__ = __doc__
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -92,7 +93,10 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,   # p
                             nodes.pool_nodes()
 
                     logger.info('wait for green on all clusters before thawing writes. If not green, still thaw writes')
-                    elasticsearch_clusters.wait_for_green(timedelta(minutes=5))
+                    try:
+                        elasticsearch_clusters.wait_for_green(timedelta(minutes=5))
+                    except ElasticsearchClusterCheckError:
+                        logger.info('Cluster not yet green, thawing writes and resume waiting for green')
                     # TODO: inspect the back pressure on the kafka queue and so that nothing
                     #       is attempted if it's too high.
 
