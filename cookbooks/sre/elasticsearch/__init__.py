@@ -17,7 +17,10 @@ CLUSTERGROUPS = ('search_eqiad', 'search_codfw', 'relforge')
 def valid_datetime_type(datetime_str):
     """Custom argparse type for user datetime values given from the command line"""
     try:
-        return parse(datetime_str)
+        dt = parse(datetime_str)
+        if dt.tzinfo is not None and dt.tzinfo.utcoffset(dt) is not None:
+            raise argparse.ArgumentTypeError('datetime should be naive (without timezone information)')
+        return dt
     except ValueError:
         msg = "Error reading datetime ({0})!".format(datetime_str)
         raise argparse.ArgumentTypeError(msg)
@@ -35,7 +38,7 @@ def argument_parser_base(name, title):
     parser.add_argument('clustergroup', choices=CLUSTERGROUPS, help='Name of clustergroup. One of: %(choices)s.')
     parser.add_argument('admin_reason', help='Administrative Reason')
     parser.add_argument('--start-datetime', type=valid_datetime_type,
-                        help='start datetime in ISO 8601 format e.g 2018-09-15T15:53:00+00:00')
+                        help='start datetime in ISO 8601 format e.g 2018-09-15T15:53:00')
     parser.add_argument('--task-id', help='task_id for the change')
     parser.add_argument('--nodes-per-run', default=3, type=int, help='Number of nodes per run.')
     parser.add_argument('--without-lvs', action='store_false', dest='with_lvs', help='This cluster does not use LVS')
