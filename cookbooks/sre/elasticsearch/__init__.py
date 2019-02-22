@@ -41,7 +41,9 @@ def argument_parser_base(name, title):
                         help='start datetime in ISO 8601 format e.g 2018-09-15T15:53:00')
     parser.add_argument('--task-id', help='task_id for the change')
     parser.add_argument('--nodes-per-run', default=3, type=int, help='Number of nodes per run.')
-    parser.add_argument('--without-lvs', action='store_false', dest='with_lvs', help='This cluster does not use LVS')
+    parser.add_argument('--without-lvs', action='store_false', dest='with_lvs', help='This cluster does not use LVS.')
+    parser.add_argument('--no-wait-for-green', action='store_false', dest='wait_for_green',
+                        help='Don\'t wait for green before starting the operation (still wait at the end).')
 
     return parser
 
@@ -52,15 +54,16 @@ def post_process_args(args):
         args.start_datetime = datetime.utcnow()
 
 
-def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,   # pylint: disable=too-many-arguments
-                        nodes_per_run, clustergroup, start_datetime, nodes_have_lvs, action):
+def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # pylint: disable=too-many-arguments
+                        nodes_per_run, clustergroup, start_datetime, nodes_have_lvs, wait_for_green, action):
     """Executes an action on a whole cluster, taking care of alerting, puppet, etc...
 
     The action itself is passed as a function `action(nodes: ElasticsearchHosts)`.
     TODO: refactor this mess to reduce the number of arguments.
     """
     while True:
-        elasticsearch_clusters.wait_for_green()
+        if wait_for_green:
+            elasticsearch_clusters.wait_for_green()
 
         logger.info('Fetch %d node(s) from %s to perform rolling restart on', nodes_per_run, clustergroup)
         nodes = elasticsearch_clusters.get_next_clusters_nodes(start_datetime, nodes_per_run)

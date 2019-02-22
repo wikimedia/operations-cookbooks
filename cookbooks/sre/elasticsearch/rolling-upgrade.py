@@ -30,5 +30,5 @@ def run(args, spicerack):
 
     execute_on_clusters(
         elasticsearch_clusters, icinga, reason, spicerack, args.nodes_per_run,
-        args.clustergroup, args.start_datetime, args.with_lvs, upgrade_elasticsearch
+        args.clustergroup, args.start_datetime, args.with_lvs, args.wait_for_green, upgrade_elasticsearch
     )
