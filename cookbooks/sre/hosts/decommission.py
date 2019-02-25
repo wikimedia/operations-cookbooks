@@ -78,4 +78,4 @@ def run(args, spicerack):
 
     message = ('{name} executed by {owner} for hosts: `{hosts}`\n{actions}').format(
         name=__name__, owner=reason.owner, hosts=decom_hosts, actions='\n'.join(hosts_actions))
-    phabricator.task_comment(args.phab_task_id, message)
+    phabricator.task_comment(args.task_id, message)
