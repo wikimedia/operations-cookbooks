@@ -15,6 +15,8 @@ import logging
 
 from collections import defaultdict
 
+from spicerack.management import ManagementError
+
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 
@@ -55,12 +57,15 @@ def run(args, spicerack):
         except RuntimeError:
             actions[host].append('Skipped downtime host on Icinga (likely already removed)')
 
-        mgmt = management.get_fqdn(host)
         try:
-            icinga.downtime_hosts([mgmt], reason)
-            actions[host].append('Downtimed management interface on Icinga')
-        except RuntimeError:
-            actions[host].append('Skipped downtime management interface on Icinga (likely already removed)')
+            mgmt = management.get_fqdn(host)
+            try:
+                icinga.downtime_hosts([mgmt], reason)
+                actions[host].append('Downtimed management interface on Icinga')
+            except RuntimeError:
+                actions[host].append('Skipped downtime management interface on Icinga (likely already removed)')
+        except ManagementError:
+            actions[host].append('No management interface found (likely a VM)')
 
         debmonitor.host_delete(host)
         actions[host].append('Removed from DebMonitor')
