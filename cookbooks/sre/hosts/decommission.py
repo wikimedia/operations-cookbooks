@@ -77,5 +77,5 @@ def run(args, spicerack):
         hosts_actions += ['  - {action}'.format(action=action) for action in host_actions]
 
     message = ('{name} executed by {owner} for hosts: `{hosts}`\n{actions}').format(
-        name=__name__, user=reason.owner, hosts=decom_hosts, actions='\n'.join(hosts_actions))
+        name=__name__, owner=reason.owner, hosts=decom_hosts, actions='\n'.join(hosts_actions))
     phabricator.task_comment(args.phab_task_id, message)
