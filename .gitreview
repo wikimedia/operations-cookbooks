@@ -1,5 +1,5 @@
 [gerrit]
 host=gerrit.wikimedia.org
 port=29418
-project=operations/software/cookbooks.git
+project=operations/cookbooks.git
 track=1
