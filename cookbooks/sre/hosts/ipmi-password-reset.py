@@ -85,7 +85,7 @@ def run(args, spicerack):
             ipmi.reset_password(mgmt_host, 'root', new_password)
         except (IpmiCheckError, IpmiError) as error:
             logger.error('IPMI error encountered %s: %s', host, error)
-            host_status['fail_dns'].add(host)
+            host_status['fail_ipmi'].add(host)
             continue
         logger.info('password updated successfully for: %s', host)
         host_status['success'].add(host)
@@ -93,7 +93,7 @@ def run(args, spicerack):
     The following hosts completed successfully:
         {}
 
-    The following hosts failed to resolve:
+    The following hosts management address failed to resolve:
         {}
 
     The following hosts had ipmi failures:
