@@ -41,7 +41,6 @@ def run(args, spicerack):
     ipmi = spicerack.ipmi()
     mgmt = spicerack.management()
     remote = spicerack.remote()
-    irc_logger = spicerack.irc_logger()
     # start by collecting all physical hosts
     remote_hosts = remote.query('F:virtual = physical').hosts
     # get the hosts that intersect with the user query
@@ -73,7 +72,7 @@ def run(args, spicerack):
             continue
         break
 
-    irc_logger.info(reason)
+    spicerack.irc_logger.info(reason)
     host_status = {'success': NodeSet(), 'fail_dns': NodeSet(), 'fail_ipmi': NodeSet()}
     for host in remote_hosts:
         try:
