@@ -40,7 +40,7 @@ def run(args, spicerack):
 
         packages = ['elasticsearch-oss', 'elasticsearch-', 'wmf-elasticsearch-search-plugins=6.5.4-1~stretch']
 
-        commands = [
+        nodes.get_remote_hosts().run_async(
             # save the previous instance list (which will be changed by puppet)
             'cp -v /etc/elasticsearch/instances /tmp/previous-elasticsearch-instances',
 
@@ -55,19 +55,18 @@ def run(args, spicerack):
 
             # reinstall the plugins because for some reasons the previous command leaves the plugin dir empty
             'apt-get install --reinstall wmf-elasticsearch-search-plugins',
-        ]
-        nodes._remote_hosts.run_async(commands)  # pylint: disable=protected-access
+        )
 
         # run puppet
         puppet.run(enable_reason=reason)
 
         # stop and cleanup old units
-        nodes._remote_hosts.run_async([  # pylint: disable=protected-access
+        nodes.get_remote_hosts().run_async(
             'rm -v /lib/systemd/system/elasticsearch_5@.service',
             'systemctl daemon-reload',
             'cat /tmp/previous-elasticsearch-instances | xargs systemctl reset-failed || true',
             'rm -v /tmp/previous-elasticsearch-instances',
-        ])
+        )
 
     execute_on_clusters(
         elasticsearch_clusters, icinga, reason, spicerack, args.nodes_per_run,
