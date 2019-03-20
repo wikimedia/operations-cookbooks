@@ -55,12 +55,13 @@ def run(args, spicerack):
             # letting puppet run would cause it to fail since it'll install elasticsearch-oss without
             # removing elasticsearch (which would fail)
             Command(
-                'apt-get {options} install {packages}'.format(
-                    options='-o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
+                'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
+                    options='-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
                     packages=' '.join(packages)),
                 ok_codes=[])
         )
 
+        # log output of apt-get, just in case
         for nodeset, output in install_results:
             logger.warning('Output for %s', nodeset)
             logger.warning(output.message().decode())
