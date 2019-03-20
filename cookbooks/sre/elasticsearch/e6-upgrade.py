@@ -13,6 +13,9 @@ Order of operations for the upgrade:
 """
 import logging
 
+from cumin.transports import Command
+from spicerack.remote import RemoteExecutionError
+
 from cookbooks.sre.elasticsearch import argument_parser_base, post_process_args, execute_on_clusters
 
 __title__ = 'Rolling upgrade of elasticsearch service (elasticsearch 5.6.14 to 6.5.4 migration)'
@@ -42,19 +45,34 @@ def run(args, spicerack):
 
         nodes.get_remote_hosts().run_async(
             # save the previous instance list (which will be changed by puppet)
-            'cp -v /etc/elasticsearch/instances /tmp/previous-elasticsearch-instances',
+            'cp -v /etc/elasticsearch/instances /tmp/previous-elasticsearch-instances'
+        )
 
+        install_results = nodes.get_remote_hosts().run_async(
             # TODO: implement a generic and robust package upgrade mechanism in spicerack
             # upgrade the packages before switching the config es6
             # package names have changed use a hack to remove&install in one apt command
             # letting puppet run would cause it to fail since it'll install elasticsearch-oss without
             # removing elasticsearch (which would fail)
-            'apt-get {options} install {packages}'.format(
-                options='-o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
-                packages=' '.join(packages)),
+            Command(
+                'apt-get {options} install {packages}'.format(
+                    options='-o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
+                    packages=' '.join(packages)),
+                ok_codes=[])
+        )
 
+        try:
+            nodes.get_remote_hosts().run_async('dpkg -l elasticsearch-oss')
+        except RemoteExecutionError:
+            # elasticsearch-oss isn't installed, something went wrong with apt-get install
+            for nodeset, output in install_results:
+                logger.warning('Output for %s', nodeset)
+                logger.warning(output.message().decode())
+            raise RemoteExecutionError(1, "elasticsearch-oss wasn't installed properly")
+
+        nodes.get_remote_hosts().run_async(
             # reinstall the plugins because for some reasons the previous command leaves the plugin dir empty
-            'apt-get install --reinstall wmf-elasticsearch-search-plugins',
+            'apt-get install --reinstall wmf-elasticsearch-search-plugins'
         )
 
         # run puppet
