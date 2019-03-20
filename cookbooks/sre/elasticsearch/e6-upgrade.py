@@ -61,13 +61,14 @@ def run(args, spicerack):
                 ok_codes=[])
         )
 
+        for nodeset, output in install_results:
+            logger.warning('Output for %s', nodeset)
+            logger.warning(output.message().decode())
+
         try:
+            # elasticsearch-oss isn't installed, something went wrong with apt-get install
             nodes.get_remote_hosts().run_async('dpkg -l elasticsearch-oss')
         except RemoteExecutionError:
-            # elasticsearch-oss isn't installed, something went wrong with apt-get install
-            for nodeset, output in install_results:
-                logger.warning('Output for %s', nodeset)
-                logger.warning(output.message().decode())
             raise RemoteExecutionError(1, "elasticsearch-oss wasn't installed properly")
 
         nodes.get_remote_hosts().run_async(
