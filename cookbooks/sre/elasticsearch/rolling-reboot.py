@@ -22,7 +22,7 @@ def run(args, spicerack):
 
     def reboot(nodes):
         reboot_time = datetime.utcnow()
-        nodes.get_remote_hosts().reboot(batch_size=args.nodes_per_run, batch_sleep=0.0)
+        nodes.get_remote_hosts().reboot(batch_size=3)
         nodes.get_remote_hosts().wait_reboot_since(reboot_time)
 
     execute_on_clusters(
