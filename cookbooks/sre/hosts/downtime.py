@@ -55,7 +55,7 @@ def run(args, spicerack):
     icinga = spicerack.icinga()
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
-    if args.force_puppet_run:
+    if args.force_puppet:
         puppet = spicerack.puppet(spicerack.icinga_master_host)
         logging.info('Forcing a Puppet run on the Icinga server')
         puppet.run(quiet=True, attempts=30)
