@@ -58,6 +58,8 @@ def _copy_file(source, dest, file):
     receive = threading.Thread(target=dest.run_sync, args=(send_cmd,))
 
     receive.start()
+    # sleep 10 seconds to ensure the receiver has started
+    sleep(10)
     send.start()
 
     receive.join()
