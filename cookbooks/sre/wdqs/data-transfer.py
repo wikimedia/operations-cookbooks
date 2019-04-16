@@ -54,8 +54,8 @@ def _copy_file(source, dest, file):
     send_cmd = "pigz -c {file} | openssl enc -e -aes-256-cbc -k {passwd} | nc -w 3 {dest} {port}".format(
         file=file, dest=dest.hosts, passwd=passwd, port=port)
 
-    send = threading.Thread(target=source.run_sync, args=(recv_cmd,))
-    receive = threading.Thread(target=dest.run_sync, args=(send_cmd,))
+    send = threading.Thread(target=source.run_sync, args=(send_cmd,))
+    receive = threading.Thread(target=dest.run_sync, args=(recv_cmd,))
 
     receive.start()
     # sleep 10 seconds to ensure the receiver has started
