@@ -57,13 +57,17 @@ def _copy_file(source, dest, file):
     send = threading.Thread(target=source.run_sync, args=(send_cmd,))
     receive = threading.Thread(target=dest.run_sync, args=(recv_cmd,))
 
+    logger.info('Starting receiver on [%s] with [%s]', dest, recv_cmd)
     receive.start()
     # sleep 10 seconds to ensure the receiver has started
     sleep(10)
+    logger.info('Starting to send file from [%s] with [%s]', source, send_cmd)
     send.start()
 
     receive.join()
+    logger.info('receiving file [%s] completed', file)
     send.join()
+    logger.info('sending file [%s] completed', file)
 
 
 def _generate_pass():
@@ -101,8 +105,11 @@ def run(args, spicerack):
     with icinga.hosts_downtimed(remote_hosts.hosts, reason, duration=timedelta(hours=args.downtime)):
         with puppet.disabled(reason):
             if args.with_lvs:
+                logger.info('depooling %s', remote_hosts)
                 remote_hosts.run_sync('depool')
                 sleep(180)
+
+            logger.info('Stopping services [%s]', stop_services_cmd)
             remote_hosts.run_sync(stop_services_cmd)
 
             for file in files:
@@ -112,6 +119,9 @@ def run(args, spicerack):
             if args.blazegraph_instance == 'blazegraph':
                 dest.run_sync('touch /srv/wdqs/data_loaded')
 
+            logger.info('Starting services [%s]', start_services_cmd)
             remote_hosts.run_sync(start_services_cmd)
+
             if args.with_lvs:
+                logger.info('pooling %s', remote_hosts)
                 remote_hosts.run_sync('pool')
