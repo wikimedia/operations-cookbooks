@@ -40,6 +40,7 @@ def argument_parser():
     parser.add_argument('--reason', required=True, help='Administrative Reason')
     parser.add_argument('--downtime', type=int, default=6, help="Hours of downtime")
     parser.add_argument('--task-id', help='task_id for the change')
+    parser.add_argument('--without-lvs', action='store_false', dest='with_lvs', help='This cluster does not use LVS.')
 
     return parser
 
@@ -97,8 +98,9 @@ def run(args, spicerack):
 
     with icinga.hosts_downtimed(remote_hosts.hosts, reason, duration=timedelta(hours=args.downtime)):
         with puppet.disabled(reason):
-            remote_hosts.run_sync('depool')
-            sleep(180)
+            if args.with_lvs:
+                remote_hosts.run_sync('depool')
+                sleep(180)
             remote_hosts.run_sync(stop_services_cmd)
 
             for file in files:
@@ -109,4 +111,5 @@ def run(args, spicerack):
                 dest.run_sync('touch /srv/wdqs/data_loaded')
 
             remote_hosts.run_sync(start_services_cmd)
-            remote_hosts.run_sync('pool')
+            if args.with_lvs:
+                remote_hosts.run_sync('pool')
