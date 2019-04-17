@@ -14,6 +14,8 @@ import logging
 
 from datetime import timedelta
 
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+
 
 DEFAULT_DOWNTIME_HOURS = 4
 __title__ = 'Downtime hosts and all their services in Icinga.'
@@ -54,6 +56,7 @@ def run(args, spicerack):
     remote_hosts = spicerack.remote().query(args.query)
     icinga = spicerack.icinga()
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
+    phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
     if args.force_puppet:
         puppet = spicerack.puppet(spicerack.icinga_master_host)
@@ -62,3 +65,9 @@ def run(args, spicerack):
 
     logging.info('Downtiming %d hosts and all their services for %s: %s', len(remote_hosts), duration, remote_hosts)
     icinga.downtime_hosts(remote_hosts.hosts, reason, duration=duration)
+
+    if args.task_id is not None:
+        message = ('Icinga downtime for {duration} set by {owner} on {n} host(s) and their services '
+                   'with reason: {reason}\n```\n{hosts}\n```').format(
+            duration=duration, owner=reason.owner, n=len(remote_hosts), reason=args.reason, hosts=remote_hosts)
+        phabricator.task_comment(args.task_id, message)
