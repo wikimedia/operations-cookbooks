@@ -47,8 +47,7 @@ def run(args, spicerack):
                 slave.run_sync('depool', 'sleep 180')
 
             slave.run_sync(
-                "systemctl stop postgresql@{pgversion}-main.service".format(
-                    pgversion=args.pgversion),
+                "systemctl stop postgresql",
                 "rm -R /srv/postgresql/{pgversion}/main".format(pgversion=args.pgversion),
                 "PGHOST=`cut -d':' -f1 /etc/postgresql/{pgversion}/main/.pgpass` "
                 "PGPASSFILE=/etc/postgresql/{pgversion}/main/.pgpass sudo -E -u postgres "
