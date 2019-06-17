@@ -13,7 +13,7 @@ extras_require = {
     'tests': [
         'bandit>=1.1.0',
         'flake8>=3.2.1',
-        'prospector[with_everything]>=0.12.4',
+        'prospector[with_everything]>=0.12.4,<=1.1.6.2',
     ],
 }
 
