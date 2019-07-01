@@ -1,7 +1,7 @@
 """Create a new Virtual Machine in Ganeti
 
 Examples:
-    Create a VM with 1 VCPU and 3 gigabytes of ram and 100 gigabytes of disk on codfw::
+    Create a VM with 1 VCPU and 3 gigabytes of ram and 100 gigabytes of disk on codfw:
 
         makevm codfw_B mytestvm.codfw.wmnet --vcpus 1 --memory 3 --disk 100
 
@@ -34,7 +34,10 @@ def argument_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 
     # build option list from cluster definitions
-    clusters_and_rows = [cluster + '_' + row for cluster, row in CLUSTERS_AND_ROWS.items()]
+    clusters_and_rows = []
+    for cluster, rows in CLUSTERS_AND_ROWS.items():
+        for row in rows:
+            clusters_and_rows.append(cluster + '_' + row)
 
     parser.add_argument(
         'cluster_and_row',
@@ -42,7 +45,7 @@ def argument_parser():
         help='Ganeti cluster identifier %(choices)s',
         type=lambda s: s.split('_', 1),
     )
-    parser.add_argument('fqdn', 'The FQDN for the VM.')
+    parser.add_argument('fqdn', help='The FQDN for the VM.')
     parser.add_argument(
         '--vcpus', help='The number of virtual CPUs to assign to VM (default: %(default)s).', type=int, default=1
     )
@@ -56,7 +59,8 @@ def argument_parser():
         '--disk', help='Number of gigabytes of disk to allocate to the VM (default: %(default)s).', type=int, default=10
     )
     parser.add_argument(
-        '--public', help='Specify that a public IP address is required (default: %(default)s).', action='store_true'
+        '--link', help='Specify if a private, analytics or public IP address is required (default: %(default)s).',
+        choices=['public', 'private', 'analytics'], default='private'
     )
     return parser
 
@@ -68,11 +72,7 @@ def run(args, spicerack):
     ganeti = spicerack.ganeti()
     cluster_fqdn = ganeti.rapi(cluster).master
     ganeti_host = spicerack.remote().query(cluster_fqdn)
-
-    # link type for public/private IP
-    link = 'private'
-    if args.public:
-        link = 'public'
+    link = args.link
 
     # Create command line
     command = CREATE_COMMAND.format(
