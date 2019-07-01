@@ -79,13 +79,14 @@ def run(args, spicerack):
     )
 
     logger.info(
-        'Creating new VM named %s in %s with row=%s vcpu=%d memory=%d gigabytes disk=%d gigabytes',
+        'Creating new VM named %s in %s with row=%s vcpu=%d memory=%d gigabytes disk=%d gigabytes link=%s',
         args.fqdn,
         cluster,
         row,
         args.vcpus,
         args.memory,
         args.disk,
+        link,
     )
 
     ask_confirmation('Is this correct?')
