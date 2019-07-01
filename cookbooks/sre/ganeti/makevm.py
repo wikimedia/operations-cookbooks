@@ -43,7 +43,6 @@ def argument_parser():
         'cluster_and_row',
         choices=clusters_and_rows,
         help='Ganeti cluster identifier %(choices)s',
-        type=lambda s: s.split('_', 1),
     )
     parser.add_argument('fqdn', help='The FQDN for the VM.')
     parser.add_argument(
@@ -68,7 +67,7 @@ def argument_parser():
 def run(args, spicerack):
     """Create a new Ganeti VM as specified."""
     # grab the cluster master from RAPI
-    cluster, row = args.cluster_and_row
+    cluster, row = args.cluster_and_row.split('_')
     ganeti = spicerack.ganeti()
     cluster_fqdn = ganeti.rapi(cluster).master
     ganeti_host = spicerack.remote().query(cluster_fqdn)
