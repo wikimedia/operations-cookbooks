@@ -20,7 +20,7 @@ CREATE_COMMAND = (
     'gnt-instance add -t drbd -I hail'
     ' --net 0:link={link}'
     ' --hypervisor-parameters=kvm:boot_order=network'
-    ' -o bootstrap+default'
+    ' -o debootstrap+default'
     ' --no-install'
     ' -g row_{row}'
     ' -B vcpus={vcpus},memory={memory}g'
