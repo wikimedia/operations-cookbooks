@@ -10,6 +10,7 @@ Examples:
 import argparse
 import logging
 
+from spicerack.dns import DnsNotFound
 from spicerack.ganeti import CLUSTERS_AND_ROWS
 from spicerack.interactive import ask_confirmation
 
@@ -44,7 +45,8 @@ def argument_parser():
         choices=clusters_and_rows,
         help='Ganeti cluster identifier %(choices)s',
     )
-    parser.add_argument('fqdn', help='The FQDN for the VM.')
+    parser.add_argument(
+        'fqdn', help='The FQDN for the VM. The DNS records need to be created separately before starting the cookbook.')
     parser.add_argument(
         '--vcpus', help='The number of virtual CPUs to assign to VM (default: %(default)s).', type=int, default=1
     )
@@ -72,6 +74,15 @@ def run(args, spicerack):
     cluster_fqdn = ganeti.rapi(cluster).master
     ganeti_host = spicerack.remote().query(cluster_fqdn)
     link = args.link
+
+    # Sanity check: the DNS A record for the VM to create
+    # needs to be created beforehand.
+    try:
+        spicerack.dns().resolve_ipv4(args.fqdn)
+    except DnsNotFound as e:
+        raise RuntimeError(
+            'The DNS A record for {} seems not available. Have you added A/PTR records before starting?'
+            .format(args.fqdn)) from e
 
     # Create command line
     command = CREATE_COMMAND.format(
