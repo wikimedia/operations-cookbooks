@@ -48,6 +48,7 @@ def _check_changes(remote_output, expected, dc_from, dc_to):
         expected (str): a regex pattern to use for matching the changes in the Puppet run output.
         dc_from (str): the datacenter we are switching away from.
         dc_to (str): the datacenter we are switching to.
+
     """
     backends = ('api', 'appservers')
     failed = False

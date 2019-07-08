@@ -22,6 +22,9 @@ pep257:
     - D213  # Multi-line docstring summary should start at the second line, D212 (first line) is enforced instead
     - D406  # Section name should end with a newline, incompatible with Google Style Python Docstrings
     - D407  # Missing dashed underline after section, incompatible with Google Style Python Docstrings
+    # First line should end with a period, question mark, or exclamation point.
+    # Cookbook docstrings are used as titles when listing cookbooks or in the menu, better without periods.
+    - D415
 
 pylint:
   disable:
