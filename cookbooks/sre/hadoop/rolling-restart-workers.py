@@ -51,11 +51,11 @@ def argument_parser():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('cluster', help='The name of the Hadoop cluster to work on.',
                         choices=['test', 'analytics'])
-    parser.add_argument('--yarn-nm-sleep-seconds', type=float, default=30,
+    parser.add_argument('--yarn-nm-sleep-seconds', type=float, default=30.0,
                         help="Seconds to sleep between each batch of Yarn Nodemanager restarts.")
-    parser.add_argument('--hdfs-dn-sleep-seconds', type=float, default=30,
+    parser.add_argument('--hdfs-dn-sleep-seconds', type=float, default=30.0,
                         help="Seconds to sleep between each batch of HDFS Datanode restarts.")
-    parser.add_argument('--hdfs-jn-sleep-seconds', type=float, default=30,
+    parser.add_argument('--hdfs-jn-sleep-seconds', type=float, default=30.0,
                         help="Seconds to sleep between each batch of HDFS Journalnode restarts.")
     parser.add_argument('--yarn-nm-batch-size', type=int, default=5,
                         help="Size of each batch of Yarn Nodemanager restarts.")
