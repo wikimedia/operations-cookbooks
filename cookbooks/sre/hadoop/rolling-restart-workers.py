@@ -51,11 +51,11 @@ def argument_parser():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('cluster', help='The name of the Hadoop cluster to work on.',
                         choices=['test', 'analytics'])
-    parser.add_argument('--yarn-nm-sleep-seconds', type=int, default=30,
+    parser.add_argument('--yarn-nm-sleep-seconds', type=float, default=30,
                         help="Seconds to sleep between each batch of Yarn Nodemanager restarts.")
-    parser.add_argument('--hdfs-dn-sleep-seconds', type=int, default=30,
+    parser.add_argument('--hdfs-dn-sleep-seconds', type=float, default=30,
                         help="Seconds to sleep between each batch of HDFS Datanode restarts.")
-    parser.add_argument('--hdfs-jn-sleep-seconds', type=int, default=30,
+    parser.add_argument('--hdfs-jn-sleep-seconds', type=float, default=30,
                         help="Seconds to sleep between each batch of HDFS Journalnode restarts.")
     parser.add_argument('--yarn-nm-batch-size', type=int, default=5,
                         help="Size of each batch of Yarn Nodemanager restarts.")
@@ -110,7 +110,7 @@ def run(args, spicerack):
                     yarn_nm_batch_size, yarn_nm_sleep)
         hadoop_workers.run_sync(
             'systemctl restart hadoop-yarn-nodemanager',
-            batch_size=yarn_nm_batch_size, batch_sleep=yarn_nm_batch_size)
+            batch_size=yarn_nm_batch_size, batch_sleep=yarn_nm_sleep)
 
         logger.info("Restarting HDFS Datanodes with batch size %s and sleep %s..",
                     hdfs_dn_batch_size, hdfs_dn_sleep)
