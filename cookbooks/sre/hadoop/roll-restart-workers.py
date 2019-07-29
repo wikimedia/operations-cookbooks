@@ -38,7 +38,7 @@ import logging
 
 
 from datetime import timedelta
-from spicerack.interactive import ask_confirmation
+from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
 
 
 __title__ = 'Roll restart all the jvm daemons on Hadoop worker nodes'
@@ -75,6 +75,8 @@ def run(args, spicerack):
         hdfs_jn_cumin_alias = 'A:hadoop-hdfs-journal'
     else:
         raise RuntimeError("Hadoop cluster {} not supported.".format(args.cluster))
+
+    ensure_shell_is_durable()
 
     """Required by Spicerack API."""
     hadoop_workers = spicerack.remote().query(cluster_cumin_alias)
