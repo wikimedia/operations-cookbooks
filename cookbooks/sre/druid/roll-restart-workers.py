@@ -70,6 +70,6 @@ def run(args, spicerack):
         if need_depool:
             commands = ['depool', 'sleep 60'] + commands + ['pool']
 
-        druid_workers.run_async(commands, batch_size=1, batch_sleep=120.0)
+        druid_workers.run_async(*commands, batch_size=1, batch_sleep=120.0)
 
     logger.info("All Druid jvm restarts completed!")
