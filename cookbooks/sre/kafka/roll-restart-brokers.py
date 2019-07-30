@@ -84,6 +84,9 @@ def run(args, spicerack):
     logger.info('Checking that all Kafka brokers are reported up by their systemd unit status.')
     kafka_brokers.run_sync('systemctl status kafka')
 
+    logger.info('Checking if /etc/profile.d/kafka.sh can be sourced.')
+    kafka_brokers.run_sync('source /etc/profile.d/kafka.sh')
+
     if args.sleep_before_pref_replica_election < 900:
         ask_confirmation(
             'The sleep time between a broker restart and kafka preferred-replica-election '
@@ -103,7 +106,7 @@ def run(args, spicerack):
         commands = [
           'systemctl restart kafka',
           'sleep ' + str(args.sleep_before_pref_replica_election),
-          'kafka preferred-replica-election'
+          'source /etc/profile.d/kafka.sh; kafka preferred-replica-election'
         ]
         kafka_brokers.run_async(
           *commands, batch_size=1, batch_sleep=args.batch_sleep_seconds)
