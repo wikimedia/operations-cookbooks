@@ -46,7 +46,7 @@ import logging
 
 
 from datetime import timedelta
-from spicerack.interactive import ask_confirmation
+from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
 
 
 __title__ = 'Roll restart all the Kafka brokers on a cluster'
@@ -71,6 +71,8 @@ def argument_parser():
 def run(args, spicerack):
     """Restart all Kafka brokers on a given cluster"""
     cluster_cumin_alias = "A:kafka-" + args.cluster
+
+    ensure_shell_is_durable()
 
     """Required by Spicerack API."""
     kafka_brokers = spicerack.remote().query(cluster_cumin_alias)
