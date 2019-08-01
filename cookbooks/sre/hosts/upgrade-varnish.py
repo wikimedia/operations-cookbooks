@@ -138,9 +138,7 @@ def run(args, spicerack):
     remote_host.run_sync(*cmds)
 
     # check HTTP response from backend/frontend
-    # Skip HTTP check if working on pinkunicorn. PU is firewalled and does
-    # not allow us to establish TCP connections to varnish.
-    if args.host != "cp1008.wikimedia.org" and not check_http_responses(args.host):
+    if not check_http_responses(args.host):
         return 1
 
     # Repool and cancel Icinga downtime
