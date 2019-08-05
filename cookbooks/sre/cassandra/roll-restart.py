@@ -1,0 +1,60 @@
+"""Perform a rolling restart of a Cassandra cluster"""
+import argparse
+import logging
+
+
+from datetime import timedelta
+
+from spicerack.interactive import ensure_shell_is_durable
+
+
+__title__ = __doc__
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+
+def argument_parser():
+    """As specified by Spicerack API."""
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('cluster', nargs='?', choices=['restbase', 'maps', 'sessionstore'],
+                       help=('The name of the Cassandra cluster to work on. This refers to ',
+                             'a Cumin alias. Alternatively you can pass an alternative Cumin ',
+                             'host query using the --query argument'))
+    group.add_argument('--query', help='A cumin query string')
+    parser.add_argument('-r', '--reason', help='The reason for performing the restart',
+                        required=True)
+    parser.add_argument('--batch-sleep-seconds', type=float, default=300.0,
+                        help="Seconds to sleep between each restart.")
+    return parser
+
+
+def run(args, spicerack):
+    """Restart all Cassandra nodes on a given cluster"""
+    if args.cluster is not None:
+        query = 'A:{}'.format(args.cluster)
+    else:
+        query = args.query
+    ensure_shell_is_durable()
+
+    cassandra_nodes = spicerack.remote().query(query)
+    icinga = spicerack.icinga()
+    reason = spicerack.admin_reason(args.reason)
+
+    logger.info('Checking that all Cassandra nodes are reported up by their systemd unit status.')
+    # perhaps we should create a c-foreach-status script?
+    status_cmd = """\
+            STRING=''; \
+            for i in $(c-ls) ; do STRING="${STRING} cassandra-${i}" ; done ; \
+            systemctl status $STRING\
+            """
+    cassandra_nodes.run_sync(status_cmd)
+
+    with icinga.hosts_downtimed(cassandra_nodes.hosts, reason,
+                                duration=timedelta(minutes=240)):
+        cassandra_nodes.run_sync(
+            'c-foreach-restart -d 10 -a 20 -r 12',
+            batch_size=1,
+            batch_sleep=args.batch_sleep_seconds)
+
+    logger.info('All Cassandra restarts completed!')
