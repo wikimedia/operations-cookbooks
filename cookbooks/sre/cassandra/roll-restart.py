@@ -17,7 +17,7 @@ def argument_parser():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('cluster', nargs='?', choices=['restbase', 'maps', 'sessionstore'],
+    group.add_argument('cluster', nargs='?', choices=['aqs', 'restbase', 'maps', 'sessionstore'],
                        help=('The name of the Cassandra cluster to work on. This refers to ',
                              'a Cumin alias. Alternatively you can pass an alternative Cumin ',
                              'host query using the --query argument'))
