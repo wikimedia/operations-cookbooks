@@ -76,6 +76,11 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
 
         with icinga.hosts_downtimed(remote_hosts.hosts, reason, duration=timedelta(minutes=30)):
             with puppet.disabled(reason):
+
+                # TODO: remove this condition when a better implementation is found.
+                if nodes_have_lvs:
+                    nodes.depool_nodes()
+
                 with elasticsearch_clusters.frozen_writes(reason):
                     logger.info('Wait for a minimum time of 60sec to make sure all CirrusSearch writes are terminated')
                     sleep(60)
@@ -83,10 +88,6 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
                     logger.info('Stopping elasticsearch replication in a safe way on %s', clustergroup)
                     with elasticsearch_clusters.stopped_replication():
                         elasticsearch_clusters.flush_markers()
-
-                        # TODO: remove this condition when a better implementation is found.
-                        if nodes_have_lvs:
-                            nodes.depool_nodes()
 
                         action(nodes)
 
@@ -96,6 +97,8 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
                         sleep(20)
 
                         # TODO: remove this condition when a better implementation is found.
+                        # NOTE: we repool nodes before thawing writes and re-enabling replication since they
+                        #       can already serve traffic at this point.
                         if nodes_have_lvs:
                             nodes.pool_nodes()
 
@@ -107,5 +110,7 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
                     # TODO: inspect the back pressure on the kafka queue and so that nothing
                     #       is attempted if it's too high.
 
+        logger.info('Allow time to consume write queue')
+        sleep(timedelta(minutes=5).seconds)
         logger.info('Wait for green in %s before fetching next set of nodes', clustergroup)
         elasticsearch_clusters.wait_for_green()
