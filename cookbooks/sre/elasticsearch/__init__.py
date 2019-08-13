@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from time import sleep
 
 from dateutil.parser import parse
+from spicerack.decorators import retry
 from spicerack.elasticsearch_cluster import ElasticsearchClusterCheckError
 
 __title__ = __doc__
@@ -55,6 +56,25 @@ def post_process_args(args):
         args.start_datetime = datetime.utcnow()
 
 
+# TODO: move this function to spicerack
+@retry(tries=60, delay=timedelta(seconds=10), backoff_mode='linear')
+def wait_for_write_queue_empty(prometheus):
+    """Wait for the Cirrus write queue to be empty.
+
+    At most waits for 60*10 seconds = 10 minutes.
+    """
+    active_dc = 'eqiad'  # hardcoded to eqiad atm, let's check if this works first
+    query = 'kafka_burrow_partition_lag{{' \
+            '    exported_cluster="main-{active_dc}",' \
+            '    group="change-prop-cirrusSearchElasticaWrite",' \
+            '    topic="{active_dc}.mediawiki.job.cirrusSearchElasticaWrite"' \
+            '}}'.format(active_dc=active_dc)
+    result = prometheus.query(query, active_dc)
+    queue_size = result[0]['value'][1]
+    if queue_size > 0:
+        raise ElasticsearchClusterCheckError('Write queue not empty.')
+
+
 def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # pylint: disable=too-many-arguments
                         nodes_per_run, clustergroup, start_datetime, nodes_have_lvs, wait_for_green, action):
     """Executes an action on a whole cluster, taking care of alerting, puppet, etc...
@@ -73,6 +93,7 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
 
         remote_hosts = nodes.get_remote_hosts()
         puppet = spicerack.puppet(remote_hosts)
+        prometheus = spicerack.prometheus()
 
         with icinga.hosts_downtimed(remote_hosts.hosts, reason, duration=timedelta(minutes=30)):
             with puppet.disabled(reason):
@@ -110,7 +131,8 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
                     # TODO: inspect the back pressure on the kafka queue and so that nothing
                     #       is attempted if it's too high.
 
-        logger.info('Allow time to consume write queue')
-        sleep(timedelta(minutes=5).seconds)
         logger.info('Wait for green in %s before fetching next set of nodes', clustergroup)
         elasticsearch_clusters.wait_for_green()
+
+        logger.info('Allow time to consume write queue')
+        wait_for_write_queue_empty(prometheus)
