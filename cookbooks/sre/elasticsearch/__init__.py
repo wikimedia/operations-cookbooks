@@ -98,10 +98,6 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
         with icinga.hosts_downtimed(remote_hosts.hosts, reason, duration=timedelta(minutes=30)):
             with puppet.disabled(reason):
 
-                # TODO: remove this condition when a better implementation is found.
-                if nodes_have_lvs:
-                    nodes.depool_nodes()
-
                 with elasticsearch_clusters.frozen_writes(reason):
                     logger.info('Wait for a minimum time of 60sec to make sure all CirrusSearch writes are terminated')
                     sleep(60)
@@ -109,6 +105,11 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
                     logger.info('Stopping elasticsearch replication in a safe way on %s', clustergroup)
                     with elasticsearch_clusters.stopped_replication():
                         elasticsearch_clusters.flush_markers()
+
+                        # TODO: remove this condition when a better implementation is found.
+                        if nodes_have_lvs:
+                            nodes.depool_nodes()
+                            sleep(20)
 
                         action(nodes)
 
