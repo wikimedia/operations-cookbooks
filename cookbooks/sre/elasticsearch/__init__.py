@@ -57,11 +57,11 @@ def post_process_args(args):
 
 
 # TODO: move this function to spicerack
-@retry(tries=60, delay=timedelta(seconds=10), backoff_mode='linear')
+@retry(tries=60, delay=timedelta(seconds=60), backoff_mode='linear')
 def wait_for_write_queue_empty(prometheus):
     """Wait for the Cirrus write queue to be empty.
 
-    At most waits for 60*10 seconds = 10 minutes.
+    At most waits for 60*60 seconds = 1 hour.
     """
     active_dc = 'eqiad'  # hardcoded to eqiad atm, let's check if this works first
     query = 'kafka_burrow_partition_lag{{' \
