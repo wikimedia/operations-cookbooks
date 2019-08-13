@@ -70,7 +70,7 @@ def wait_for_write_queue_empty(prometheus):
             '    topic="{active_dc}.mediawiki.job.cirrusSearchElasticaWrite"' \
             '}}'.format(active_dc=active_dc)
     result = prometheus.query(query, active_dc)
-    queue_size = result[0]['value'][1]
+    queue_size = int(result[0]['value'][1])
     if queue_size > 0:
         raise ElasticsearchClusterCheckError('Write queue not empty.')
 
