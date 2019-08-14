@@ -1,28 +1,5 @@
 """Restart all Hadoop jvm daemons on worker hosts.
 
-There are three types of daemons running on the Hadoop workers:
-- Yarn Nodemanager (on all hosts)
-- HDFS Datanode (on all hosts)
-- HDFS Journalnode (on a few hosts only)
-
-The Yarn Nodemanager is a resource (CPU/Memory) manager for the running host:
-it is responsible to spawn and control other jvms called "containers" (basically
-map/reduce workers in Hadoop terminology). The Nodemanager can seamlessly
-restart without impacting/killing the running jvm containers. The caveat is
-that a container will keep using a old version of the jvm until its computation
-finishes.
-
-The HDFS Datanode is more delicate since it represents the daemon that controls
-HDFS file system blocks for the node it runs on. All the datanodes collectively
-represent the HDFS distributed file system. Restarting the daemons should be done
-carefully and with slow pace since it might impact running jobs (making them fail)
-and/or create corrupted/under-replicated blocks.
-
-The HDFS Journalnode is a daemon deployed only on a few hosts, to support a distributed
-edit stream for the HDFS file system (supporting HA between master nodes). The journalnodes
-cluster can sustain up to n/2 failures without causing errors, but more than that
-causes the HDFS Namenodes to shutdown (as precautionary measure).
-
 The idea for this cookbook is to:
 - Set Icinga downtime for all nodes (no puppet disable or depool is needed).
 - Roll restart all the Yarn Node Managers in batches of 4/5 hosts.
@@ -31,15 +8,13 @@ The idea for this cookbook is to:
 - Roll restart all the HDFS Datanodes, a couple of hosts at the time,
   with 30s of delay in between.
 - Remove Icinga downtime
-
 """
 import argparse
 import logging
 
-
 from datetime import timedelta
 from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
-
+from . import HADOOP_CLUSTER_NAMES
 
 __title__ = 'Roll restart all the jvm daemons on Hadoop worker nodes'
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -50,7 +25,7 @@ def argument_parser():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('cluster', help='The name of the Hadoop cluster to work on.',
-                        choices=['test', 'analytics'])
+                        choices=HADOOP_CLUSTER_NAMES)
     parser.add_argument('--yarn-nm-sleep-seconds', type=float, default=30.0,
                         help="Seconds to sleep between each batch of Yarn Nodemanager restarts.")
     parser.add_argument('--hdfs-dn-sleep-seconds', type=float, default=60.0,
