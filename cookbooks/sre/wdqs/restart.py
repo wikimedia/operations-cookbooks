@@ -1,7 +1,7 @@
 """WDQS services restart
 
 Usage example:
-    cookbook sre.wdqs.restart-wdqs --query wdqs100* --reason upgrades --task-id T12345
+    cookbook sre.wdqs.restart --query wdqs100* --reason upgrades --task-id T12345
 
 """
 

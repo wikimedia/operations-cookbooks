@@ -1,7 +1,7 @@
 """WDQS reboot cookbook
 
 Usage example:
-    cookbook sre.wdqs.reboot-wdqs --query wdqs100* --reason upgrades --task-id T12345
+    cookbook sre.wdqs.reboot --query wdqs100* --reason upgrades --task-id T12345
 
 """
 
