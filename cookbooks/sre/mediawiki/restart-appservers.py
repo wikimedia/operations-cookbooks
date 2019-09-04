@@ -23,17 +23,7 @@ POOLS = ['apache2', 'nginx']
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-
-def get_title(args):
-    """Title of the job, depending on the specified args."""
-    to_restart = ', '.join(map(lambda x: x.capitalize()), args.services)
-    what = 'restart'
-    if args.reload:
-        what = 'reload'
-    return 'Rolling {w} of {r} in {d}, clusters: {c}'.format(
-        w=what, r=to_restart, d=', '.join(args.datacenters),
-        c=', '.join(args.clusters)
-    )
+__title__ = 'Restart services on various appserver clusters'
 
 
 def check_percentage(arg):
@@ -52,10 +42,10 @@ def argument_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--datacenters', '-d',
                         help='Datacenters where to restart the service',
-                        choice=CORE_DATACENTERS, default=CORE_DATACENTERS, nargs='+')
+                        choices=CORE_DATACENTERS, default=CORE_DATACENTERS, nargs='+')
     cluster_names = CLUSTERS.keys()
     parser.add_argument('--clusters', '-c', help='Clusters to restart',
-                        choice=cluster_names, default=cluster_names, nargs="+")
+                        choices=cluster_names, default=cluster_names, nargs="+")
     parser.add_argument('--reload', '-r',
                         help='Reload the service instead of restarting it',
                         action='store_true')
@@ -67,31 +57,34 @@ def argument_parser():
                         default=2.0,
                         type=float)
     parser.add_argument('services', help='Services to restart', metavar='SERVICE',
-                        nargs='+',
-                        required=True)
+                        nargs='+')
     return parser
 
 
 def run(args, spicerack):
     """Required by the Spicerack API."""
+    # Guard against useless conftool messages
+    logging.getLogger("conftool").setLevel(logging.WARNING)
     confctl = spicerack.confctl('node')
     remote = spicerack.remote()
     # TODO: allow running these in parallel? Does spicerack even allow it?
     for cluster_name in args.clusters:
         for dc in args.datacenters:
-            logger.info('Now acting on: {cl}/{dc}'.format(cl=cluster_name, dc=dc))
+            logger.info('Now acting on: %s/%s', cluster_name, dc)
             lbremote = remote.query_confctl(confctl, dc=dc, cluster=cluster_name)
             # 15% of a cluster
             perc = 0.01 * args.percentage
             batch_size = math.ceil(len(lbremote) * perc)
-
+            logger.info('Will act on %s servers at a time', batch_size)
             callback = lbremote.restart_services
             if args.reload:
                 callback = lbremote.reload_services
 
-            callback(
+            result = callback(
                 args.services,
                 POOLS,  # on each server, we depool all the the pools we declared
                 batch_size=batch_size,
                 batch_sleep=args.batch_sleep
             )
+            for resultset in result:
+                logger.info("Nodes %s: %s", resultset[0], str(resultset[1]))
