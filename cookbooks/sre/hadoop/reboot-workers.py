@@ -61,7 +61,7 @@ def reboot_hadoop_workers(hadoop_workers_batch, yarn_nm_sleep_seconds,
     with icinga.hosts_downtimed(hadoop_workers_batch.hosts, reason,
                                 duration=timedelta(minutes=60)):
         puppet = spicerack.puppet(hadoop_workers_batch)
-        puppet.disable()
+        puppet.disable(reason)
         logger.info('Stopping the Yarn Nodemanagers...')
         hadoop_workers_batch.run_sync('systemctl stop hadoop-yarn-nodemanager')
         logger.info(
@@ -79,7 +79,7 @@ def reboot_hadoop_workers(hadoop_workers_batch, yarn_nm_sleep_seconds,
             ask_confirmation('Do you wish to continue rebooting? '
                              'Please note that saying no will require some follow-up, '
                              'like re-enable puppet manually.')
-        puppet.enable()
+        puppet.enable(reason)
 
 
 def run(args, spicerack):
