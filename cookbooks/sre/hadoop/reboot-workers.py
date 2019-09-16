@@ -117,6 +117,6 @@ def run(args, spicerack):
     # one at the time.
     for hadoop_workers_batch in hadoop_hdfs_journal_workers.split(len(hadoop_hdfs_journal_workers.hosts)):
         logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
-        reboot_hadoop_workers([hadoop_workers_batch], yarn_nm_sleep_seconds, spicerack, icinga)
+        reboot_hadoop_workers(hadoop_workers_batch, yarn_nm_sleep_seconds, spicerack, icinga)
 
     logger.info('All reboots completed!')
