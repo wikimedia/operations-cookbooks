@@ -71,7 +71,9 @@ def reboot_hadoop_workers(hadoop_workers_batch, yarn_nm_sleep_seconds,
         hadoop_workers_batch.run_sync('systemctl stop hadoop-hdfs-datanode')
         logger.info('Rebooting hosts..')
         reboot_time = datetime.utcnow()
-        hadoop_workers_batch.reboot()
+        hadoop_workers_batch.reboot(
+            batch_size=len(hadoop_workers_batch.hosts),
+            batch_sleep=None)
         try:
             hadoop_workers_batch.wait_reboot_since(reboot_time)
         except (RemoteCheckError, RemoteExecutionError):
