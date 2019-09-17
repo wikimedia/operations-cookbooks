@@ -9,10 +9,11 @@ Usage example:
 
 """
 import logging
+import os
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from getpass import getpass
 from cumin import NodeSet
-from spicerack.interactive import ensure_shell_is_durable
+from spicerack.interactive import ensure_shell_is_durable, get_management_password
 from spicerack.ipmi import IPMI_PASSWORD_MIN_LEN, IPMI_PASSWORD_MAX_LEN, IpmiError, IpmiCheckError
 from spicerack.management import ManagementError
 
@@ -38,7 +39,6 @@ def argument_parser():
 def run(args, spicerack):
     """Required by Spicerack API."""
     ensure_shell_is_durable()
-    ipmi = spicerack.ipmi()
     mgmt = spicerack.management()
     remote = spicerack.remote()
     # start by collecting all physical hosts
@@ -49,6 +49,7 @@ def run(args, spicerack):
         'Updating IPMI password on {} hosts'.format(len(remote_hosts)),
         task_id=args.task_id
     )
+    os.environ['MGMT_PASSWORD'] = get_management_password()
 
     while True:
         new_password = getpass(prompt='New Management Password: ')
@@ -75,6 +76,7 @@ def run(args, spicerack):
     spicerack.irc_logger.info(reason)
     host_status = {'success': NodeSet(), 'fail_dns': NodeSet(), 'fail_ipmi': NodeSet()}
     for host in remote_hosts:
+        ipmi = spicerack.ipmi()
         try:
             mgmt_host = mgmt.get_fqdn(host)
         except ManagementError as error:
