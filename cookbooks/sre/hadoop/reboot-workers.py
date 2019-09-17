@@ -60,28 +60,30 @@ def reboot_hadoop_workers(hadoop_workers_batch, yarn_nm_sleep_seconds,
     reason = spicerack.admin_reason('Reboot.')
     with icinga.hosts_downtimed(hadoop_workers_batch.hosts, reason,
                                 duration=timedelta(minutes=60)):
-        puppet = spicerack.puppet(hadoop_workers_batch)
-        puppet.disable(reason)
-        logger.info('Stopping the Yarn Nodemanagers...')
-        hadoop_workers_batch.run_sync('systemctl stop hadoop-yarn-nodemanager')
-        logger.info(
-            'Wait %s seconds to allow jvm containers to finish..', yarn_nm_sleep_seconds)
-        time.sleep(yarn_nm_sleep_seconds)
-        logger.info('Stopping the HDFS Datanodes...')
-        hadoop_workers_batch.run_sync('systemctl stop hadoop-hdfs-datanode')
-        logger.info('Rebooting hosts..')
-        reboot_time = datetime.utcnow()
-        hadoop_workers_batch.reboot(
-            batch_size=len(hadoop_workers_batch.hosts),
-            batch_sleep=None)
         try:
+            puppet = spicerack.puppet(hadoop_workers_batch)
+            puppet.disable(reason)
+            logger.info('Stopping the Yarn Nodemanagers...')
+            hadoop_workers_batch.run_sync('systemctl stop hadoop-yarn-nodemanager')
+            logger.info(
+                'Wait %s seconds to allow jvm containers to finish..', yarn_nm_sleep_seconds)
+            time.sleep(yarn_nm_sleep_seconds)
+            logger.info('Stopping the HDFS Datanodes...')
+            hadoop_workers_batch.run_sync('systemctl stop hadoop-hdfs-datanode')
+            logger.info('Rebooting hosts..')
+            reboot_time = datetime.utcnow()
+            hadoop_workers_batch.reboot(
+                batch_size=len(hadoop_workers_batch.hosts),
+                batch_sleep=None)
             hadoop_workers_batch.wait_reboot_since(reboot_time)
+            puppet.enable(reason)
         except (RemoteCheckError, RemoteExecutionError, RemoteError):
-            logger.exception('Failure registered while rebooting...')
+            logger.exception('Failure registered while attempting to reboot the batch...')
             ask_confirmation('Do you wish to continue rebooting? '
-                             'Please note that saying no will require some follow-up, '
-                             'like re-enable puppet manually.')
-        puppet.enable(reason)
+                             'In any case please check the status '
+                             'of every host in the batch to verify if any manual '
+                             'follow up is needed (like re-enable puppet manually, '
+                             'powercycle via serial console if the boot got stuck, etc..')
 
 
 def run(args, spicerack):
