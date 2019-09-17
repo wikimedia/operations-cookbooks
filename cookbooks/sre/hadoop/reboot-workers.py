@@ -28,7 +28,7 @@ import time
 
 from datetime import datetime, timedelta
 from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
-from spicerack.remote import RemoteCheckError, RemoteExecutionError
+from spicerack.remote import RemoteCheckError, RemoteExecutionError, RemoteError
 from . import HADOOP_CLUSTER_NAMES
 
 __title__ = 'Reboot Hadoop worker nodes'
@@ -76,7 +76,7 @@ def reboot_hadoop_workers(hadoop_workers_batch, yarn_nm_sleep_seconds,
             batch_sleep=None)
         try:
             hadoop_workers_batch.wait_reboot_since(reboot_time)
-        except (RemoteCheckError, RemoteExecutionError):
+        except (RemoteCheckError, RemoteExecutionError, RemoteError):
             logger.exception('Failure registered while rebooting...')
             ask_confirmation('Do you wish to continue rebooting? '
                              'Please note that saying no will require some follow-up, '
