@@ -32,6 +32,55 @@ __title__ = 'Decommission a host from all inventories.'
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
+class HostActions:
+    """Helper class to keep track of actions performed on a host."""
+
+    def __init__(self):
+        """Initialize the instance."""
+        self.success = True
+        self.actions = []
+
+    def success(self, message):
+        """Register a successful action.
+
+        Arguments:
+            message (str): the action description.
+
+        """
+        self._action(logging.INFO, message)
+
+    def failure(self, message):
+        """Register a failed action.
+
+        Arguments:
+            message (str): the action description.
+
+        """
+        self._action(logging.ERROR, message)
+        self.success = False
+
+    def warning(self, message):
+        """Register a skipped action that require some attention.
+
+        Arguments:
+            message (str): the action description.
+
+        """
+        self._action(logging.WARNING, message)
+        self.success = False
+
+    def _action(self, level, message):
+        """Register an action.
+
+        Arguments:
+            level (int): a logging level to register the action for.
+            message (str): the action description.
+
+        """
+        logger.log(level, message)
+        self.actions.append(message)
+
+
 def argument_parser():
     """As specified by Spicerack API."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -45,9 +94,7 @@ def argument_parser():
 
 def _decommission_host(host, spicerack, reason):  # noqa: MC0001
     """Perform all the decommissioning actions on a single host."""
-    failed = False
-    actions = []
-
+    host_actions = HostActions()
     icinga = spicerack.icinga()
     remote = spicerack.remote()
     puppet_master = spicerack.puppet_master()
@@ -62,31 +109,30 @@ def _decommission_host(host, spicerack, reason):  # noqa: MC0001
     # Doing one host at a time to track executed actions.
     try:
         icinga.downtime_hosts([host], reason)
-        actions.append('Downtimed host on Icinga')
+        host_actions.success('Downtimed host on Icinga')
     except RemoteExecutionError:
-        actions.append('Failed downtime host on Icinga (likely already removed)')
+        host_actions.failure('Failed downtime host on Icinga (likely already removed)')
 
     mgmt = None
     try:
         mgmt = management.get_fqdn(host)
     except ManagementError:
-        actions.append('No management interface found (likely a VM)')
+        host_actions.warning('No management interface found (likely a VM)')
 
     if mgmt is not None:
         try:
             icinga.downtime_hosts([mgmt], reason)
-            actions.append('Downtimed management interface on Icinga')
+            host_actions.success('Downtimed management interface on Icinga')
         except RemoteExecutionError:
-            actions.append('Skipped downtime management interface on Icinga (likely already removed)')
+            host_actions.failure('Skipped downtime management interface on Icinga (likely already removed)')
 
     try:
         remote_host.run_sync('true')
         can_connect = True
     except RemoteExecutionError as e:
-        actions.append(
+        host_actions.error(
             '**Unable to connect to the host, wipe of bootloaders will not be performed**: {e}'.format(e=e))
         can_connect = False
-        failed = True
 
     if can_connect:
         try:
@@ -94,40 +140,37 @@ def _decommission_host(host, spicerack, reason):  # noqa: MC0001
             remote_host.run_sync((r"lsblk --all --output 'NAME,TYPE' --paths | "
                                   r"awk '/^\/.* disk$/{ print $1 }' | "
                                   r"xargs -I % bash -c '/sbin/wipefs --all --force %*'"))
-            actions.append('Wiped bootloaders')
+            host_actions.success('Wiped bootloaders')
         except RemoteExecutionError as e:
-            actions.append(('**Failed to wipe bootloaders, manual intervention required to make it '
-                            'unbootable**: {e}').format(e=e))
-            failed = True
+            host_actions.failure(('**Failed to wipe bootloaders, manual intervention required to make it '
+                                  'unbootable**: {e}').format(e=e))
 
     if mgmt is not None:  # Physical host
         try:
             ipmi.command(mgmt, ['chassis', 'power', 'off'])
-            actions.append('Powered off')
+            host_actions.success('Powered off')
         except IpmiError as e:
-            actions.append('**Failed to power off, manual intervention required**: {e}'.format(e=e))
-            failed = True
+            host_actions.failure('**Failed to power off, manual intervention required**: {e}'.format(e=e))
 
         netbox.put_host_status(host.split('.')[0], 'Decommissioning')
-        actions.append('Set Netbox status to Decommissioning')
+        host_actions.success('Set Netbox status to Decommissioning')
 
     else:  # Assuming VM, pull the plug not yet supported, trying normal shutdown
         try:
             remote_host.run_sync(Command('nohup shutdown -h now &> /dev/null & exit', timeout=30))
-            actions.append('Shutdown issued. **Verify it manually, verification not yet supported**')
+            host_actions.success('Shutdown issued. **Verify it manually, verification not yet supported**')
         except RemoteExecutionError as e:
-            actions.append(('**Failed to shutdown, manual intervention required**: {e}').format(e=e))
-            failed = True
+            host_actions.failure('**Failed to shutdown, manual intervention required**: {e}'.format(e=e))
 
-        actions.append('Set Netbox status on VM not yet supported: **manual intervention required**')
+        host_actions.warning('Set Netbox status on VM not yet supported: **manual intervention required**')
 
     debmonitor.host_delete(host)
-    actions.append('Removed from DebMonitor')
+    host_actions.success('Removed from DebMonitor')
 
     puppet_master.delete(host)
-    actions.append('Removed from Puppet master and PuppetDB')
+    host_actions.success('Removed from Puppet master and PuppetDB')
 
-    return failed, actions
+    return host_actions
 
 
 def run(args, spicerack):
@@ -154,15 +197,15 @@ def run(args, spicerack):
     hosts_actions = []
     for host in decom_hosts:
         try:
-            failed, actions = _decommission_host(host, spicerack, reason)
+            host_actions = _decommission_host(host, spicerack, reason)
         except Exception as e:
-            failed = True
-            actions = ['Host steps raised exception: {e}'.format(e=e)]
+            host_actions = HostActions()
+            host_actions.failure('Host steps raised exception: {e}'.format(e=e))
 
-        success = 'PASS' if not failed else 'FAIL'
+        success = 'PASS' if host_actions.success else 'FAIL'
         hosts_actions.append('-  {host} (**{success}**)'.format(host=host, success=success))
-        hosts_actions += ['  - {action}'.format(action=action) for action in actions]
-        if failed:
+        hosts_actions += ['  - {action}'.format(action=action) for action in host_actions.actions]
+        if not host_actions.success:
             have_failures = True
 
     if have_failures:
