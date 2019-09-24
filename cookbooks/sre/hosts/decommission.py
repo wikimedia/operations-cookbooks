@@ -37,7 +37,7 @@ class HostActions:
 
     def __init__(self):
         """Initialize the instance."""
-        self.success = True
+        self.all_success = True
         self.actions = []
 
     def success(self, message):
@@ -57,7 +57,7 @@ class HostActions:
 
         """
         self._action(logging.ERROR, message)
-        self.success = False
+        self.all_success = False
 
     def warning(self, message):
         """Register a skipped action that require some attention.
@@ -67,7 +67,7 @@ class HostActions:
 
         """
         self._action(logging.WARNING, message)
-        self.success = False
+        self.all_success = False
 
     def _action(self, level, message):
         """Register an action.
@@ -199,13 +199,15 @@ def run(args, spicerack):
         try:
             host_actions = _decommission_host(host, spicerack, reason)
         except Exception as e:
+            message = 'Host steps raised exception'
+            logger.exception(message)
             host_actions = HostActions()
-            host_actions.failure('Host steps raised exception: {e}'.format(e=e))
+            host_actions.failure('{message}: {e}'.format(message=message, e=e))
 
-        success = 'PASS' if host_actions.success else 'FAIL'
+        success = 'PASS' if host_actions.all_success else 'FAIL'
         hosts_actions.append('-  {host} (**{success}**)'.format(host=host, success=success))
         hosts_actions += ['  - {action}'.format(action=action) for action in host_actions.actions]
-        if not host_actions.success:
+        if not host_actions.all_success:
             have_failures = True
 
     if have_failures:
