@@ -130,7 +130,7 @@ def _decommission_host(host, spicerack, reason):  # noqa: MC0001
         remote_host.run_sync('true')
         can_connect = True
     except RemoteExecutionError as e:
-        host_actions.error(
+        host_actions.failure(
             '**Unable to connect to the host, wipe of bootloaders will not be performed**: {e}'.format(e=e))
         can_connect = False
 
