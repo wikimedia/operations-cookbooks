@@ -218,4 +218,4 @@ def run(args, spicerack):
         name=__name__, owner=reason.owner, hosts=decom_hosts, actions='\n'.join(hosts_actions))
     phabricator.task_comment(args.task_id, message)
 
-    return have_failures
+    return int(have_failures)
