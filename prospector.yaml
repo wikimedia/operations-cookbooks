@@ -44,6 +44,10 @@ pylint:
 pyroma:
   run: true
 
+# Disable McCabe complexity check as cookbooks might have a complex main function/method.
+mccabe:
+  run: false
+
 vulture:
   # Pending Prospector to use Vulture >= 0.29 to use ignore-names to skip run() and argument_parser() functions
   run: false
