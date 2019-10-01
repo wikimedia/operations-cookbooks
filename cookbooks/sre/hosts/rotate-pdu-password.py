@@ -56,9 +56,12 @@ def run(args, spicerack):  # noqa: MC0001
         three_phases = requests.get(three_phases_url).json()
         monophase = requests.get(monophase_url).json()
         for pdu in three_phases + monophase:
-            pdus.append('{hostname}.mgmt.{site}.wmnet'.format(hostname=pdu['title'], site=pdu['parameters']['site']))
+            pdu_fqdn = '{hostname}.mgmt.{site}.wmnet'.format(hostname=pdu['title'], site=pdu['parameters']['site'])
+            if pdu_fqdn not in pdus:
+                pdus.append(pdu_fqdn)
     else:
         pdus.append(args.query)
+
     for pdu_fqdn in pdus:
         try:
             if not spicerack.dry_run:
