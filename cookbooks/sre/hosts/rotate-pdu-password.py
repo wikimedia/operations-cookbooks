@@ -125,10 +125,16 @@ def change_password(pdu_fqdn, username, current_password, new_password):
     else:
         return 1
 
-    response_change_pw = requests.post("https://{fqdn}/Forms/chngpswd_1".format(fqdn=pdu_fqdn),
-                                       data=payload,
-                                       verify=False,  # nosec
-                                       auth=(username, current_password))
+    with requests.Session() as session:
+        session.auth = (username, current_password)
+
+        # Initialize the session with any page to get the cookie settings
+        session.get("https://{fqdn}/chngpswd.html".format(fqdn=pdu_fqdn), verify=False)  # nosec
+
+        # Then change the password
+        response_change_pw = session.post("https://{fqdn}/Forms/chngpswd_1".format(fqdn=pdu_fqdn),
+                                          data=payload,
+                                          verify=False)  # nosec
 
     if response_change_pw.status_code == 200:
         response_check_success = requests.get("https://{fqdn}/chngpswd.html".format(
@@ -140,7 +146,7 @@ def change_password(pdu_fqdn, username, current_password, new_password):
             return 0
         else:
             logger.error('{pdu_fqdn}: Error {status_code}. New password not working, \
-            the change probably failed'.format(status_code=response_check_success.status_code, pdu_fqdn=pdu_fqdn))
+the change probably failed'.format(status_code=response_check_success.status_code, pdu_fqdn=pdu_fqdn))
             return 1
     else:
         logger.error("{pdu_fqdn}: Error {status_code} while trying to change the password.".format(
