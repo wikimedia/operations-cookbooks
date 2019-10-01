@@ -70,7 +70,7 @@ def run(args, spicerack):  # noqa: MC0001
                 if check_default(pdu_fqdn) == 1:
                     return_code = 1
         except Exception as e:
-            logger.error('{pdu_fqdn}: Something went wrong: {error}').format(pdu_fqdn=pdu_fqdn, error=str(e))
+            logger.error('{pdu_fqdn}: Something went wrong: {error}'.format(pdu_fqdn=pdu_fqdn, error=str(e)))
 
     return return_code
 
@@ -94,7 +94,7 @@ def get_version(pdu_fqdn, username, password):
             logger.debug('{pdu_fqdn}: Sentry 4 detected').format(pdu_fqdn=pdu_fqdn)
             return 4
         else:
-            logger.error('{pdu_fqdn}: Unknown Sentry version').format(pdu_fqdn=pdu_fqdn)
+            logger.error('{pdu_fqdn}: Unknown Sentry version'.format(pdu_fqdn=pdu_fqdn))
             return 0
     else:
         logger.error("{pdu_fqdn}: Error {status_code} while trying to check the version.".format(
