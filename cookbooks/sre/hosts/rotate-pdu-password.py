@@ -65,7 +65,7 @@ def run(args, spicerack):  # noqa: MC0001
                 if change_password(pdu_fqdn, args.username, current_password, new_password) == 1:
                     return_code = 1
             else:
-                logger.info('{pdu_fqdn}: Dry run, not trying.').format(pdu_fqdn=pdu_fqdn)
+                logger.info('{pdu_fqdn}: Dry run, not trying.'.format(pdu_fqdn=pdu_fqdn))
             if args.check_default:
                 if check_default(pdu_fqdn) == 1:
                     return_code = 1
@@ -89,9 +89,9 @@ def get_version(pdu_fqdn, username, password):
     if response_version_check.status_code == 200:
         if 'v7' in response_version_check.headers['Server']:
             return 3
-            logger.debug('{pdu_fqdn}: Sentry 3 detected').format(pdu_fqdn=pdu_fqdn)
+            logger.debug('{pdu_fqdn}: Sentry 3 detected'.format(pdu_fqdn=pdu_fqdn))
         elif 'v8' in response_version_check.headers['Server']:
-            logger.debug('{pdu_fqdn}: Sentry 4 detected').format(pdu_fqdn=pdu_fqdn)
+            logger.debug('{pdu_fqdn}: Sentry 4 detected'.format(pdu_fqdn=pdu_fqdn))
             return 4
         else:
             logger.error('{pdu_fqdn}: Unknown Sentry version'.format(pdu_fqdn=pdu_fqdn))
@@ -133,7 +133,7 @@ def change_password(pdu_fqdn, username, current_password, new_password):
                                               verify=False,  # nosec
                                               auth=(username, new_password))
         if response_check_success.status_code == 200:
-            logger.info('{pdu_fqdn}: Password updated successfully 😌').format(pdu_fqdn=pdu_fqdn)
+            logger.info('{pdu_fqdn}: Password updated successfully 😌'.format(pdu_fqdn=pdu_fqdn))
             return 0
         else:
             logger.error('{pdu_fqdn}: Error {status_code}. New password not working, \
@@ -157,8 +157,8 @@ def check_default(pdu_fqdn):
                             verify=False,  # nosec
                             auth=('admn', 'admn'))
     if response.status_code == 200:
-        logger.warning('{pdu_fqdn}: Default user found 😞').format(pdu_fqdn=pdu_fqdn)
+        logger.warning('{pdu_fqdn}: Default user found 😞'.format(pdu_fqdn=pdu_fqdn))
         return 1
     else:
-        logger.info('{pdu_fqdn}: No default user 👍').format(pdu_fqdn=pdu_fqdn)
+        logger.info('{pdu_fqdn}: No default user 👍'.format(pdu_fqdn=pdu_fqdn))
         return 0
