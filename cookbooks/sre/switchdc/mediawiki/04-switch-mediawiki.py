@@ -18,7 +18,7 @@ def run(args, spicerack):
     post_process_args(args)
     logger.info('Switch MediaWiki active datacenter to %s', args.dc_to)
 
-    records = ('api-rw', 'appservers-rw', 'jobrunner', 'videoscaler')
+    records = ('api-rw', 'appservers-rw', 'jobrunner', 'videoscaler', 'parsoid-php')
     dnsdisc_records = spicerack.discovery(*records)
     mediawiki = spicerack.mediawiki()
 
