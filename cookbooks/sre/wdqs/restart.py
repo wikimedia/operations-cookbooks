@@ -10,6 +10,8 @@ import logging
 
 from datetime import timedelta
 
+from . import check_host_is_wdqs
+
 
 __title__ = "WDQS services restart cookbook"
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -30,10 +32,10 @@ def argument_parser():
 
 def run(args, spicerack):
     """Required by Spicerack API."""
-    if 'wdqs' not in args.query:
-        raise ValueError("Query ({query}) should only select wdqs host(s)".format(query=args.query))
+    remote = spicerack.remote()
+    remote_hosts = remote.query(args.query)
+    check_host_is_wdqs(remote_hosts, remote)
 
-    remote_hosts = spicerack.remote().query(args.query)
     icinga = spicerack.icinga()
     puppet = spicerack.puppet(remote_hosts)
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)

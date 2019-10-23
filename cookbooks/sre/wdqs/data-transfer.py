@@ -14,6 +14,8 @@ from datetime import timedelta
 from random import SystemRandom
 from time import sleep
 
+from . import check_host_is_wdqs
+
 BLAZEGRAPH_INSTANCES = {
     'categories': {
         'services': ['wdqs-categories'],
@@ -79,13 +81,16 @@ def _generate_pass():
 
 def run(args, spicerack):
     """Required by Spicerack API."""
-    remote_hosts = spicerack.remote().query("{source},{dest}".format(source=args.source, dest=args.dest))
+    remote = spicerack.remote()
+    remote_hosts = remote.query("{source},{dest}".format(source=args.source, dest=args.dest))
+    check_host_is_wdqs(remote_hosts, remote)
+
     icinga = spicerack.icinga()
     puppet = spicerack.puppet(remote_hosts)
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
-    source = spicerack.remote().query(args.source)
-    dest = spicerack.remote().query(args.dest)
+    source = remote.query(args.source)
+    dest = remote.query(args.dest)
 
     if len(source) != 1:
         raise ValueError("Only one node is needed. Not {total}({source})".

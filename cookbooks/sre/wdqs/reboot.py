@@ -13,6 +13,8 @@ from datetime import datetime, timedelta
 from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError
 
+from . import check_host_is_wdqs
+
 
 __title__ = "WDQS reboot cookbook"
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -39,15 +41,15 @@ def wait_for_blazegraph(remote_host):
 
 def run(args, spicerack):
     """Required by Spicerack API."""
-    if 'wdqs' not in args.query:
-        raise ValueError("Query should only select wdqs nodes - {query}".format(query=args.query))
+    remote = spicerack.remote()
+    remote_hosts = remote.query(args.query)
+    check_host_is_wdqs(remote_hosts, remote)
 
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
     icinga = spicerack.icinga()
-    hosts = spicerack.remote().query(args.query).hosts
 
-    for host in hosts:
-        remote_host = spicerack.remote().query(host)
+    for host in remote_hosts.hosts:
+        remote_host = remote.query(host)
 
         with icinga.hosts_downtimed(remote_host.hosts, reason, duration=timedelta(hours=args.downtime)):
             if args.depool:
