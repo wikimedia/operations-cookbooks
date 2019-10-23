@@ -50,7 +50,7 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     # Only maps hosts should be selected
     remote_hosts = spicerack.remote().query(args.query)
-    all_maps = spicerack.remote().query("A:maps-all".format(query=args.query))
+    all_maps = spicerack.remote().query("A:maps-all")
     if remote_hosts.hosts not in all_maps.hosts:
         raise ValueError("All hosts from query: {query} must be member of A:maps-all")
 
