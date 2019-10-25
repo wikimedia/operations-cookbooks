@@ -40,6 +40,7 @@ def argument_parser():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('host', help='select a single WDQS host.')
     parser.add_argument('--task-id', help='task id for the change')
+    parser.add_argument('--proxy-server', help='Specify proxy server to use')
     parser.add_argument('--reason', required=True, help='Administrative Reason')
     parser.add_argument('--reuse-downloaded-dump', action='store_true', help='Reuse downloaded dump')
     parser.add_argument('--downtime', type=int, default=1, help='Hour(s) of downtime')
@@ -48,8 +49,13 @@ def argument_parser():
     return parser
 
 
-def get_dumps(remote_host, reuse_dump):
+def get_dumps(remote_host, proxy_server, reuse_dump):
     """Use dump file if present else download file."""
+    if proxy_server:
+        curl_command = "curl -x {proxy_server}".format(proxy_server=proxy_server)
+    else:
+        curl_command = "curl"
+
     for dump in WDQS_DUMPS.values():
         if reuse_dump:
             try:
@@ -60,8 +66,10 @@ def get_dumps(remote_host, reuse_dump):
                 logger.info('Dump (%s) not found', dump['path'])
 
         logger.info('Downloading (%s)', dump['file'])
-        remote_host.run_sync("curl https://dumps.wikimedia.org/wikidatawiki/entities/{file} -o {path}".format(
-            file=dump['file'], path=dump['path']))
+        remote_host.run_sync(
+            "{curl_command} https://dumps.wikimedia.your.org/wikidatawiki/entities/{file} -o {path}".format(
+                curl_command=curl_command, file=dump['file'], path=dump['path'])
+        )
 
 
 def fail_for_disk_space(remote_host):
@@ -168,7 +176,7 @@ def run(args, spicerack):
     confctl = spicerack.confctl('node')
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
-    get_dumps(remote_host, args.reuse_downloaded_dump)
+    get_dumps(remote_host, args.proxy_server, args.reuse_downloaded_dump)
     fail_for_disk_space(remote_host)
     munge(remote_host)
 
