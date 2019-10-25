@@ -60,7 +60,7 @@ def get_dumps(remote_host, reuse_dump):
                 logger.info('Dump (%s) not found', dump['path'])
 
         logger.info('Downloading (%s)', dump['file'])
-        remote_host.run_sync("curl https://dumps.wikimedia.your.org/wikidatawiki/entities/{file} -o {path}".format(
+        remote_host.run_sync("curl https://dumps.wikimedia.org/wikidatawiki/entities/{file} -o {path}".format(
             file=dump['file'], path=dump['path']))
 
 
