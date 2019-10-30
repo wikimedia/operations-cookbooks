@@ -21,7 +21,7 @@ def run(args, spicerack):
 
     def upgrade_elasticsearch(nodes):
         nodes.stop_elasticsearch()
-        command = 'apt-get {options} install {packages}'.format(
+        command = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
             options='-o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
             packages=' '.join(['elasticsearch-oss', 'wmf-elasticsearch-search-plugins']))
         # TODO: implement a generic and robust package upgrade mechanism in spicerack
