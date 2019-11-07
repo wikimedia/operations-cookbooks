@@ -26,7 +26,8 @@ def argument_parser():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('cluster', help='The name of the Zookeeper cluster to work on.',
-                        choices=['main-eqiad', 'main-codfw', 'druid-public', 'druid-analytics'])
+                        choices=['main-eqiad', 'main-codfw', 'druid-public',
+                                 'druid-analytics', 'analytics'])
     parser.add_argument('--batch-sleep-seconds', type=float, default=120.0,
                         help="Seconds to sleep between each restart.")
     return parser
