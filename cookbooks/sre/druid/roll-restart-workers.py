@@ -57,6 +57,7 @@ def run(args, spicerack):
     with icinga.hosts_downtimed(druid_workers.hosts, reason,
                                 duration=timedelta(minutes=60)):
 
+        logger.info('Restarting daemons (one host at the time)...')
         commands = ['systemctl restart druid-historical',
                     'sleep 300',
                     'systemctl restart druid-overlord',
