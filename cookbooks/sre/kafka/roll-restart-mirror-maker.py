@@ -15,6 +15,8 @@ import logging
 
 from datetime import timedelta
 
+from cookbooks import ArgparseFormatter
+
 
 __title__ = 'Roll restart all the Kafka Mirror Maker daemons on a cluster'
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -22,8 +24,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 def argument_parser():
     """As specified by Spicerack API."""
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
     parser.add_argument('cluster', help='The name of the Kafka Mirror Maker cluster to work on.',
                         choices=['main-eqiad', 'jumbo', 'main-codfw'])
     parser.add_argument('--batch-sleep-seconds', type=float, default=120.0,

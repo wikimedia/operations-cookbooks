@@ -2,10 +2,11 @@
 import argparse
 import logging
 
-
 from datetime import timedelta
 
 from spicerack.interactive import ensure_shell_is_durable
+
+from cookbooks import ArgparseFormatter
 
 
 __title__ = __doc__
@@ -14,8 +15,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 def argument_parser():
     """As specified by Spicerack API."""
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('cluster', nargs='?', choices=['aqs', 'restbase', 'maps', 'sessionstore'],
                        help=('The name of the Cassandra cluster to work on. This refers to ',

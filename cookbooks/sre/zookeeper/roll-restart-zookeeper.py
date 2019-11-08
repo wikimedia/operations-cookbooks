@@ -14,7 +14,10 @@ import argparse
 import logging
 
 from datetime import timedelta
+
 from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
+
+from cookbooks import ArgparseFormatter
 
 
 __title__ = 'Roll restart all the Zookeeper daemons on a cluster'
@@ -23,8 +26,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 def argument_parser():
     """As specified by Spicerack API."""
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
     parser.add_argument('cluster', help='The name of the Zookeeper cluster to work on.',
                         choices=['main-eqiad', 'main-codfw', 'druid-public',
                                  'druid-analytics', 'analytics'])

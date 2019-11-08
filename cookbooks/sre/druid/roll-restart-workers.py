@@ -24,7 +24,10 @@ import argparse
 import logging
 
 from datetime import timedelta
+
 from spicerack.interactive import ensure_shell_is_durable
+
+from cookbooks import ArgparseFormatter
 
 
 __title__ = 'Roll restart all the jvm daemons on Druid worker nodes'
@@ -33,8 +36,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 def argument_parser():
     """As specified by Spicerack API."""
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
     parser.add_argument('cluster', help='The name of the Druid cluster to work on.',
                         choices=['public', 'analytics'])
 

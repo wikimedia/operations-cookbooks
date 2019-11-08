@@ -27,9 +27,13 @@ import math
 import time
 
 from datetime import datetime, timedelta
+
 from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
 from spicerack.remote import RemoteCheckError, RemoteExecutionError, RemoteError
+
+from cookbooks import ArgparseFormatter
 from . import HADOOP_CLUSTER_NAMES
+
 
 __title__ = 'Reboot Hadoop worker nodes'
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -37,8 +41,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 def argument_parser():
     """As specified by Spicerack API."""
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
     parser.add_argument('cluster', help='The name of the Hadoop cluster to work on.',
                         choices=HADOOP_CLUSTER_NAMES)
     parser.add_argument('--yarn-nm-sleep-seconds', type=float, default=600.0,
