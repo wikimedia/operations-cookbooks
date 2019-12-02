@@ -26,7 +26,7 @@ def run(args, spicerack):
     ensure_shell_is_durable()
     remote = spicerack.remote()
     confctl = spicerack.confctl('node')
-    aqs_workers = remote.query(args.cluster)
+    aqs_workers = remote.query('A:' + args.cluster)
     aqs_lbconfig = remote.query_confctl(confctl, cluster=args.cluster)
     icinga = spicerack.icinga()
     reason = spicerack.admin_reason('Roll restart of all AQS\'s nodejs daemons.')
