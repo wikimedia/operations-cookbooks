@@ -24,8 +24,10 @@ def argument_parser():
 def run(args, spicerack):
     """Restart all AQS nodejs service daemons on a given cluster"""
     ensure_shell_is_durable()
+    remote = spicerack.remote()
     confctl = spicerack.confctl('node')
-    aqs_workers = spicerack.remote().query_confctl(confctl, cluster=args.cluster)
+    aqs_workers = remote.query(args.cluster)
+    aqs_lbconfig = remote.query_confctl(confctl, cluster=args.cluster)
     icinga = spicerack.icinga()
     reason = spicerack.admin_reason('Roll restart of all AQS\'s nodejs daemons.')
 
@@ -33,7 +35,7 @@ def run(args, spicerack):
                                 duration=timedelta(minutes=60)):
 
         logger.info('Restarting daemons (one host at the time)...')
-        aqs_workers.run(
+        aqs_lbconfig.run(
             'systemctl restart aqs', svc_to_depool=['aqs'],
             batch_size=1, max_failed_batches=2,
             batch_sleep=30.0)
