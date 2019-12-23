@@ -18,6 +18,7 @@ Usage example:
 """
 import argparse
 import logging
+import time
 
 from cumin.transports import Command
 from spicerack.interactive import ask_confirmation
@@ -163,6 +164,9 @@ def _decommission_host(host, spicerack, reason):  # noqa: MC0001
             host_actions.failure('**Failed to shutdown, manual intervention required**: {e}'.format(e=e))
 
         host_actions.warning('Set Netbox status on VM not yet supported: **manual intervention required**')
+
+    logger.info('Sleeping for 20s to avoid race conditions...')
+    time.sleep(20)
 
     debmonitor.host_delete(host)
     host_actions.success('Removed from DebMonitor')
