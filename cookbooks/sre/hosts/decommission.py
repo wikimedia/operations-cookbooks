@@ -3,13 +3,19 @@
 It works for both Physical and Virtual hosts. On VMs some steps are not yet supported
 
 List of actions performed:
-- Downtime the host and its management interface on Icinga
-  (it will be removed at the next Puppet run on the Icinga host)
-- Wipe bootloaders to prevent it from booting again
-- Pull the plug (power off without shutdown on physical hosts, shutdown on VMs for now)
+- Downtime the host on Icinga (it will be removed at the next Puppet run on the Icinga host)
+- Detect if Physical or Virtual host based on Netbox data.
+- If virtual host (Ganeti VM)
+  - Ganeti shutdown (tries OS shutdown first, pulls the plug after 2 minutes)
+  - Force Ganeti->Netbox sync of VMs to update its state and avoid Netbox Report errors
+- If physical host
+  - Downtime the management host on Icinga (it will be removed at the next Puppet run on the Icinga host)
+  - Wipe bootloaders to prevent it from booting again
+  - Pull the plug (IPMI power off without shutdown)
+  - Update Netbox state to Decommissioning
 - Remove it from DebMonitor
 - Remove it from Puppet master and PuppetDB
-- Update Netbox state
+- If virtual host (Ganeti VM), issue a VM removal that will destroy the VM. Can take few minutes.
 - Update the related Phabricator task
 
 Usage example:
@@ -20,10 +26,10 @@ import argparse
 import logging
 import time
 
-from cumin.transports import Command
+from spicerack.dns import DnsError
+from spicerack.ganeti import GanetiError
 from spicerack.interactive import ask_confirmation
 from spicerack.ipmi import IpmiError
-from spicerack.management import ManagementError
 from spicerack.remote import RemoteExecutionError
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -93,8 +99,9 @@ def argument_parser():
     return parser
 
 
-def _decommission_host(host, spicerack, reason):  # noqa: MC0001
+def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
     """Perform all the decommissioning actions on a single host."""
+    hostname = fqdn.split('.')[0]
     host_actions = HostActions()
     icinga = spicerack.icinga()
     remote = spicerack.remote()
@@ -103,76 +110,98 @@ def _decommission_host(host, spicerack, reason):  # noqa: MC0001
     management = spicerack.management()
     ipmi = spicerack.ipmi()
     netbox = spicerack.netbox()
+    ganeti = spicerack.ganeti()
 
-    remote_host = remote.query(host)
+    remote_host = remote.query(fqdn)
 
     # Downtime on Icinga both the host and the mgmt host, they will be removed by Puppet
     # Doing one host at a time to track executed actions.
     try:
-        icinga.downtime_hosts([host], reason)
+        icinga.downtime_hosts([fqdn], reason)
         host_actions.success('Downtimed host on Icinga')
     except RemoteExecutionError:
         host_actions.failure('Failed downtime host on Icinga (likely already removed)')
 
-    mgmt = None
-    try:
-        mgmt = management.get_fqdn(host)
-    except ManagementError:
-        host_actions.warning('No management interface found (likely a VM)')
+    netbox_data = netbox.fetch_host_detail(hostname)
+    is_virtual = netbox_data['is_virtual']
+    if is_virtual:
+        vm = ganeti.instance(fqdn, cluster=netbox_data['ganeti_cluster'])
+        host_actions.success('Found Ganeti VM')
+    else:
+        mgmt = management.get_fqdn(fqdn)
+        host_actions.success('Found physical host')
 
-    if mgmt is not None:
+    if is_virtual:
+        try:
+            vm.shutdown()
+            host_actions.success('VM shutdown')
+        except RemoteExecutionError as e:
+            host_actions.failure('**Failed to shutdown VM, manually run gnt-instance remove on the Ganeti master '
+                                 'for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
+
+        try:
+            # TODO: avoid race conditions to run it at the same time that the systemd timer will trigger it
+            spicerack.netbox_master_host.run_sync(
+                'systemctl start netbox_ganeti_{cluster}_sync.service'.format(cluster=vm.cluster))
+            # TODO: add polling and validation that it completed to run
+            host_actions.info(
+                'Started forced sync of VMs in Ganeti cluster {cluster} to Netbox'.format(cluster=vm.cluster))
+        except (DnsError, GanetiError) as e:
+            host_actions.failure('**Failed to force sync of VMs in Ganeti cluster {cluster} to Netbox**: {e}'.format(
+                cluster=vm.cluster, e=e))
+
+    else:  # Physical host
         try:
             icinga.downtime_hosts([mgmt], reason)
             host_actions.success('Downtimed management interface on Icinga')
         except RemoteExecutionError:
             host_actions.failure('Skipped downtime management interface on Icinga (likely already removed)')
 
-    try:
-        remote_host.run_sync('true')
-        can_connect = True
-    except RemoteExecutionError as e:
-        host_actions.failure(
-            '**Unable to connect to the host, wipe of bootloaders will not be performed**: {e}'.format(e=e))
-        can_connect = False
-
-    if can_connect:
         try:
-            # Call wipefs with globbing on all top level devices of type disk reported by lsblk
-            remote_host.run_sync((r"lsblk --all --output 'NAME,TYPE' --paths | "
-                                  r"awk '/^\/.* disk$/{ print $1 }' | "
-                                  r"xargs -I % bash -c '/sbin/wipefs --all --force %*'"))
-            host_actions.success('Wiped bootloaders')
+            remote_host.run_sync('true')
+            can_connect = True
         except RemoteExecutionError as e:
-            host_actions.failure(('**Failed to wipe bootloaders, manual intervention required to make it '
-                                  'unbootable**: {e}').format(e=e))
+            host_actions.failure(
+                '**Unable to connect to the host, wipe of bootloaders will not be performed**: {e}'.format(e=e))
+            can_connect = False
 
-    if mgmt is not None:  # Physical host
+        if can_connect:
+            try:
+                # Call wipefs with globbing on all top level devices of type disk reported by lsblk
+                remote_host.run_sync((r"lsblk --all --output 'NAME,TYPE' --paths | "
+                                      r"awk '/^\/.* disk$/{ print $1 }' | "
+                                      r"xargs -I % bash -c '/sbin/wipefs --all --force %*'"))
+                host_actions.success('Wiped bootloaders')
+            except RemoteExecutionError as e:
+                host_actions.failure(('**Failed to wipe bootloaders, manual intervention required to make it '
+                                      'unbootable**: {e}').format(e=e))
+
         try:
             ipmi.command(mgmt, ['chassis', 'power', 'off'])
             host_actions.success('Powered off')
         except IpmiError as e:
             host_actions.failure('**Failed to power off, manual intervention required**: {e}'.format(e=e))
 
-        netbox.put_host_status(host.split('.')[0], 'Decommissioning')
+        netbox.put_host_status(hostname, 'Decommissioning')
         host_actions.success('Set Netbox status to Decommissioning')
-
-    else:  # Assuming VM, pull the plug not yet supported, trying normal shutdown
-        try:
-            remote_host.run_sync(Command('nohup shutdown -h now &> /dev/null & exit', timeout=30))
-            host_actions.success('Shutdown issued. **Verify it manually, verification not yet supported**')
-        except RemoteExecutionError as e:
-            host_actions.failure('**Failed to shutdown, manual intervention required**: {e}'.format(e=e))
-
-        host_actions.warning('Set Netbox status on VM not yet supported: **manual intervention required**')
 
     logger.info('Sleeping for 20s to avoid race conditions...')
     time.sleep(20)
 
-    debmonitor.host_delete(host)
+    debmonitor.host_delete(fqdn)
     host_actions.success('Removed from DebMonitor')
 
-    puppet_master.delete(host)
+    puppet_master.delete(fqdn)
     host_actions.success('Removed from Puppet master and PuppetDB')
+
+    if is_virtual:
+        logger.info('Issuing Ganeti remove command, it can take up to 15 minutes...')
+        try:
+            vm.remove()
+            host_actions.success('VM removed')
+        except RemoteExecutionError as e:
+            host_actions.failure('**Failed to remove VM, manually run gnt-instance remove on the Ganeti master '
+                                 'for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
 
     return host_actions
 
@@ -199,9 +228,9 @@ def run(args, spicerack):
     phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
     hosts_actions = []
-    for host in decom_hosts:
+    for fqdn in decom_hosts:
         try:
-            host_actions = _decommission_host(host, spicerack, reason)
+            host_actions = _decommission_host(fqdn, spicerack, reason)
         except Exception as e:
             message = 'Host steps raised exception'
             logger.exception(message)
@@ -209,7 +238,7 @@ def run(args, spicerack):
             host_actions.failure('{message}: {e}'.format(message=message, e=e))
 
         success = 'PASS' if host_actions.all_success else 'FAIL'
-        hosts_actions.append('-  {host} (**{success}**)'.format(host=host, success=success))
+        hosts_actions.append('-  {host} (**{success}**)'.format(host=fqdn, success=success))
         hosts_actions += ['  - {action}'.format(action=action) for action in host_actions.actions]
         if not host_actions.all_success:
             have_failures = True
