@@ -1,7 +1,8 @@
 """Switch MediaWiki active datacenter"""
 import logging
+import time
 
-from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args
+from cookbooks.sre.switchdc.mediawiki import argument_parser_base, DNS_SHORT_TTL, post_process_args
 
 
 __title__ = __doc__
@@ -27,6 +28,7 @@ def run(args, spicerack):
     dnsdisc_records.pool(args.dc_to)
 
     # Switch MediaWiki master datacenter
+    start = time.time()
     mediawiki.set_master_datacenter(args.dc_to)
 
     # Depool DNS discovery records on the old dc, confd will apply the change
@@ -34,5 +36,12 @@ def run(args, spicerack):
 
     # Verify that the IP of the records matches the expected one
     for record in records:
+        # Converting the name of the discovery -rw into the LVS svc record name
         name = record.replace('-rw', '')
         dnsdisc_records.check_record(record, '{name}.svc.{dc_to}.wmnet'.format(name=name, dc_to=args.dc_to))
+
+    # Sleep remaining time up to DNS_SHORT_TTL to let the set_master_datacenter to propagate
+    remaining = time.time() - start - DNS_SHORT_TTL
+    if remaining > 0:
+        logger.info('Sleeping %.3f seconds to reach the %d seconds mark', remaining, DNS_SHORT_TTL)
+        time.sleep(remaining)

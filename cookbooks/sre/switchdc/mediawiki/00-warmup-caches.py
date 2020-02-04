@@ -25,7 +25,6 @@ def run(args, spicerack):
         datacenter = args.dc_to
 
     ask_confirmation('Are you sure to warmup caches in {dc}?'.format(dc=datacenter))
-    logger.info('Running warmup script in %s', datacenter)
 
     warmup_dir = '/var/lib/mediawiki-cache-warmup'
     memc_warmup = "nodejs {dir}/warmup.js {dir}/urls-cluster.txt spread appservers.svc.{dc}.wmnet".format(
@@ -34,4 +33,7 @@ def run(args, spicerack):
         dir=warmup_dir, dc=datacenter)
 
     maintenance_host = spicerack.mediawiki().get_maintenance_host(datacenter)
-    maintenance_host.run_sync(memc_warmup, appserver_warmup)
+    # Empirically 3 times is when the response times start to stabilize
+    for i in range(3):
+        logger.info('Running warmup script in %s, take %d', datacenter, i + 1)
+        maintenance_host.run_sync(memc_warmup, appserver_warmup)

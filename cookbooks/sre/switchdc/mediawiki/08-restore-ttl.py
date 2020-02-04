@@ -17,11 +17,11 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     post_process_args(args)
 
-    records = ('api-rw', 'appservers-rw', 'jobrunner', 'videoscaler')
+    records = ('api-rw', 'appservers-rw', 'jobrunner', 'videoscaler', 'parsoid-php')
     logger.info('Restoring DNS Discovery TTL to 300 for records: %s', records)
     dnsdisc_records = spicerack.discovery(*records)
     dnsdisc_records.update_ttl(300)
 
-    logger.info('Removing stale confd files generated in phase 5')
+    logger.info('Removing stale confd files generated when switching discovery records')
     command = 'rm -fv /var/run/confd-template/.discovery-{{{records}}}.state*.err'.format(records=','.join(records))
-    spicerack.remote().query('C:authdns').run_sync(command)
+    spicerack.remote().query('A:dns-auth').run_sync(command)
