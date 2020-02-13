@@ -1,111 +1,96 @@
 """Create a new Virtual Machine in Ganeti
 
 Examples:
-    Create a VM with 1 VCPU and 3 gigabytes of ram and 100 gigabytes of disk on codfw:
+    Create a Ganeti VM vmname.codfw.wmnet in the codfw Ganeti cluster on row B with 1 vCPUs, 3GB of RAM, 100GB of disk
+    in the private network:
 
-        makevm codfw_B mytestvm.codfw.wmnet --vcpus 1 --memory 3 --disk 100
+        makevm --vcpus 1 --memory 3 --disk 100 codfw_B vmname.codfw.wmnet
 
 """
 
 import argparse
 import logging
 
-from spicerack.dns import DnsNotFound
-from spicerack.ganeti import CLUSTERS_AND_ROWS
-from spicerack.interactive import ask_confirmation
+from spicerack.dns import Dns, DnsNotFound
+from spicerack.ganeti import CLUSTERS_AND_ROWS, INSTANCE_LINKS
+from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
+
+from cookbooks import ArgparseFormatter
+
 
 __title__ = 'Create a new virtual machine in Ganeti.'
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-CREATE_COMMAND = (
-    'gnt-instance add -t drbd -I hail'
-    ' --net 0:link={link}'
-    ' --hypervisor-parameters=kvm:boot_order=network'
-    ' -o debootstrap+default'
-    ' --no-install'
-    ' -g row_{row}'
-    ' -B vcpus={vcpus},memory={memory}g'
-    ' --disk 0:size={disk}g'
-    ' {fqdn}'
-)
+
+def _get_locations():
+    """Generate short location names with datacenter and row for all Ganeti clusters."""
+    locations = {}
+    for cluster, rows in CLUSTERS_AND_ROWS.items():
+        dc = cluster.split('.')[2]
+        if len(rows) == 1:
+            locations[dc] = (cluster, rows[0])
+        else:
+            for row in rows:
+                locations['{dc}_{row}'.format(dc=dc, row=row)] = (cluster, row)
+
+    return locations
 
 
 def argument_parser():
     """Parse command-line arguments for this module per spicerack API."""
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    def positive_int(param):
+        """Type validator for argparse that accepts only positive integers."""
+        value = int(param)
+        if value <= 0:
+            raise argparse.ArgumentTypeError('{param} is not a positive integer'.format(param=param))
 
-    # build option list from cluster definitions
-    clusters_and_rows = []
-    for cluster, rows in CLUSTERS_AND_ROWS.items():
-        for row in rows:
-            clusters_and_rows.append(cluster + '_' + row)
+        return value
+
+    def valid_fqdn(param):
+        """Type validator for argparse that verify the existence of the DNS records for the VM."""
+        resolver = Dns()
+        try:
+            ips = resolver.resolve_ipv4(param)
+            for ip in ips:
+                resolver.resolve_ptr(ip)
+        except DnsNotFound as e:
+            raise argparse.ArgumentTypeError('missing DNS records for FQDN {fqdn}: {e}'.format(fqdn=param, e=e))
+
+        return param
+
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
 
     parser.add_argument(
-        'cluster_and_row',
-        choices=clusters_and_rows,
-        help='Ganeti cluster identifier %(choices)s',
-    )
+        '--vcpus', type=positive_int, default=1, help='The number of virtual CPUs to assign to the VM.')
     parser.add_argument(
-        'fqdn', help='The FQDN for the VM. The DNS records need to be created separately before starting the cookbook.')
+        '--memory', type=positive_int, default=1, help='The amount of RAM to allocate to the VM in GB.')
     parser.add_argument(
-        '--vcpus', help='The number of virtual CPUs to assign to VM (default: %(default)s).', type=int, default=1
-    )
-    parser.add_argument(
-        '--memory',
-        help='The number of gigabytes of ram to allocate to the VM (default: %(default)s).',
-        type=int,
-        default=1,
-    )
-    parser.add_argument(
-        '--disk', help='Number of gigabytes of disk to allocate to the VM (default: %(default)s).', type=int, default=10
-    )
-    parser.add_argument(
-        '--link', help='Specify if a private, analytics or public IP address is required (default: %(default)s).',
-        choices=['public', 'private', 'analytics'], default='private'
-    )
+        '--disk', type=positive_int, default=10, help='The amount of disk to allocate to the VM in GB.')
+    parser.add_argument('--network', choices=INSTANCE_LINKS, default='private',
+                        help='Specify the type of network to assign to the VM.')
+    parser.add_argument('location', choices=_get_locations().keys(),
+                        help='The datacenter and row (only for multi-row clusters) where to create the VM')
+    parser.add_argument('fqdn', type=valid_fqdn, help='The FQDN for the VM. The DNS records must exist.')
+
     return parser
 
 
 def run(args, spicerack):
     """Create a new Ganeti VM as specified."""
-    # grab the cluster master from RAPI
-    cluster, row = args.cluster_and_row.split('_')
+    ensure_shell_is_durable()
+    args.cluster, args.row = _get_locations()[args.location]  # Inject cluster and row in the args object.
     ganeti = spicerack.ganeti()
-    cluster_fqdn = ganeti.rapi(cluster).master
-    ganeti_host = spicerack.remote().query(cluster_fqdn)
-    link = args.link
+    instance = ganeti.instance(args.fqdn, cluster=args.cluster)
 
-    # Sanity check: the DNS A record for the VM to create
-    # needs to be created beforehand.
-    try:
-        spicerack.dns().resolve_ipv4(args.fqdn)
-    except DnsNotFound as e:
-        raise RuntimeError(
-            'The DNS A record for {} seems not available. Have you added A/PTR records before starting?'
-            .format(args.fqdn)) from e
-
-    # Create command line
-    command = CREATE_COMMAND.format(
-        link=link, row=row, vcpus=args.vcpus, memory=args.memory, disk=args.disk, fqdn=args.fqdn
-    )
-
-    logger.info(
-        'Creating new VM named %s in %s with row=%s vcpu=%d memory=%d gigabytes disk=%d gigabytes link=%s',
-        args.fqdn,
-        cluster,
-        row,
-        args.vcpus,
-        args.memory,
-        args.disk,
-        link,
-    )
-
+    print('Ready to create Ganeti VM {a.fqdn} in the {a.cluster} cluster on row {a.row} with {a.vcpus} vCPUs, '
+          '{a.memory}GB of RAM, {a.disk}GB of disk in the {a.network} network.'.format(a=args))
     ask_confirmation('Is this correct?')
+    logger.info('The command output will be printed at the end.')
 
-    results = ganeti_host.run_sync(command)
+    instance.add(row=args.row, vcpus=args.vcpus, memory=args.memory, disk=args.disk, link=args.network)
 
-    for _, output in results:
-        logger.info(output.message().decode())
-
-    # get MAC address of instance
-    logger.info('instance %s created with MAC %s', args.fqdn, ganeti.rapi(cluster).fetch_instance_mac(args.fqdn))
+    if spicerack.dry_run:
+        logger.info('Skipping MAC address retrieval in DRY-RUN mode.')
+    else:
+        mac = ganeti.rapi(args.cluster).fetch_instance_mac(args.fqdn)
+        logger.info('MAC address for %s is: %s', args.fqdn, mac)
