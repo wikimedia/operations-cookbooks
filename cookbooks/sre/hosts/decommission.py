@@ -27,7 +27,6 @@ import logging
 import time
 
 from spicerack.dns import DnsError
-from spicerack.ganeti import GanetiError
 from spicerack.interactive import ask_confirmation
 from spicerack.ipmi import IpmiError
 from spicerack.remote import RemoteExecutionError
@@ -142,11 +141,11 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
         try:
             # TODO: avoid race conditions to run it at the same time that the systemd timer will trigger it
             spicerack.netbox_master_host.run_sync(
-                'systemctl start netbox_ganeti_{cluster}_sync.service'.format(cluster=vm.cluster))
+                'systemctl start netbox_ganeti_{cluster}_sync.service'.format(cluster=vm.cluster.split('.')[2]))
             # TODO: add polling and validation that it completed to run
-            host_actions.info(
+            host_actions.success(
                 'Started forced sync of VMs in Ganeti cluster {cluster} to Netbox'.format(cluster=vm.cluster))
-        except (DnsError, GanetiError) as e:
+        except (DnsError, RemoteExecutionError) as e:
             host_actions.failure('**Failed to force sync of VMs in Ganeti cluster {cluster} to Netbox**: {e}'.format(
                 cluster=vm.cluster, e=e))
 
