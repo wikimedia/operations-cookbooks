@@ -106,15 +106,12 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
     remote = spicerack.remote()
     puppet_master = spicerack.puppet_master()
     debmonitor = spicerack.debmonitor()
-    management = spicerack.management()
-    ipmi = spicerack.ipmi()
     netbox = spicerack.netbox()
     ganeti = spicerack.ganeti()
 
     remote_host = remote.query(fqdn)
 
-    # Downtime on Icinga both the host and the mgmt host, they will be removed by Puppet
-    # Doing one host at a time to track executed actions.
+    # Downtime on Icinga both the host and the mgmt host (later below), they will be removed by Puppet
     try:
         icinga.downtime_hosts([fqdn], reason)
         host_actions.success('Downtimed host on Icinga')
@@ -127,7 +124,8 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
         vm = ganeti.instance(fqdn, cluster=netbox_data['ganeti_cluster'])
         host_actions.success('Found Ganeti VM')
     else:
-        mgmt = management.get_fqdn(fqdn)
+        ipmi = spicerack.ipmi()
+        mgmt = spicerack.management().get_fqdn(fqdn)
         host_actions.success('Found physical host')
 
     if is_virtual:
@@ -227,7 +225,7 @@ def run(args, spicerack):
     phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
     hosts_actions = []
-    for fqdn in decom_hosts:
+    for fqdn in decom_hosts:  # Doing one host at a time to track executed actions.
         try:
             host_actions = _decommission_host(fqdn, spicerack, reason)
         except Exception as e:
