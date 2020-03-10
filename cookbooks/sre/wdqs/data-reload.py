@@ -88,7 +88,7 @@ def munge(remote_host):
     logger.info('Running munger for main database and then lexeme')
     for dump in WDQS_DUMPS.values():
         remote_host.run_sync(
-            "mkdir -p {munge_path} && bash /srv/deployment/wdqs/wdqs/munge.sh -f {path} -d {munge_path}".format(
+            "mkdir -p {munge_path} && bzcat {path} | /srv/deployment/wdqs/wdqs/munge.sh -f - -d {munge_path}".format(
                 path=dump['path'], munge_path=dump['munge_path']),
         )
 
