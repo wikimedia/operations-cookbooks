@@ -5,7 +5,7 @@
 
 Usage example:
     cookbook sre.network.cf status all
-    cookbook sre.network.cf start X.X.X.X/Y
+    cookbook sre.network.cf start esams
     cookbook sre.network.cf stop X.X.X.X/Y
     cookbook sre.network.cf stop all
 
@@ -26,7 +26,7 @@ def argument_parser():
     """As specified by Spicerack API."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('action', choices=['start', 'stop', 'status'])
-    parser.add_argument('query', help="Prefix in the X.X.X.X/Y form or 'all'")
+    parser.add_argument('query', help="Prefix in the X.X.X.X/Y form, or a datacenter name, or 'all'")
     return parser
 
 
@@ -52,8 +52,8 @@ def run(args, spicerack):
     # Iterate over all prefixes
     for prefix in list_prefixes['result']:
         # Only care about the ones we select (or all)
-        if prefix['cidr'] != args.query and prefix['description'] != args.query and args.query != 'all':
-            logger.debug('Skipping prefix %(cidr)s, not matching query', prefix)
+        if prefix['cidr'] != args.query and not prefix['description'].startswith(args.query) and args.query != 'all':
+            logger.debug('Skipping prefix %(cidr)s ("%(description)s"), not matching query', prefix)
             continue
 
         log_prefix_status(prefix)
@@ -62,11 +62,11 @@ def run(args, spicerack):
 
         advertise = args.action == 'start'
         if prefix['advertised'] == advertise:
-            logger.info('Prefix %(cidr)s already in desired state', prefix)
+            logger.info('Prefix %(cidr)s ("%(description)s") already in desired state', prefix)
             continue
 
         if spicerack.dry_run:
-            logger.debug('Skipping update of prefix %(cidr)s in DRY-RUN mode', prefix)
+            logger.debug('Skipping update of prefix %(cidr)s ("%(description)s") in DRY-RUN mode', prefix)
             continue
 
         try:
@@ -145,5 +145,5 @@ def log_prefix_status(prefix):
     """
     params = prefix.copy()
     params['is_advertised'] = '' if prefix['advertised'] else 'not '
-    logger.info('Prefix %(cidr)s: %(is_advertised)sadvertised since %(advertised_modified_at)s, '
+    logger.info('Prefix %(cidr)s "%(description)s": %(is_advertised)sadvertised since %(advertised_modified_at)s, '
                 'on_demand=%(on_demand_enabled)s', params)
