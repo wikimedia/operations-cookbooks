@@ -54,12 +54,20 @@ def run(args, spicerack):
     account_id = get_secret('account_id', config)
     api_token = get_secret('api_token', config)
 
+    # Configure the session object, reused across requests.
+    session = requests.Session()
+    # Construct the User-Agent per WMF internal policy (a good generic choice). Include the python-requests version.
+    user_agent = ('WMF spicerack/sre.network.cf (https://wikitech.wikimedia.org/wiki/Spicerack; noc@wikimedia.org) '
+                  '{}').format(session.headers['User-Agent'])
+    headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(api_token),
+               'User-Agent': user_agent}
+    session.headers.update(headers)
+    session.proxies = spicerack.requests_proxies
+
     base_url = CF_BASE_URL.format(account_id)
-    headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(api_token)}
 
     # Get all the configured prefixes
-    response = requests.get('{base_url}/addressing/prefixes'.format(base_url=base_url),
-                            headers=headers, proxies=spicerack.requests_proxies)
+    response = session.get('{base_url}/addressing/prefixes'.format(base_url=base_url))
     list_prefixes = parse_cf_response('list all prefixes', response)
 
     # Store the update action result, so we don't interrupt the run if there is an error
@@ -87,7 +95,7 @@ def run(args, spicerack):
             continue
 
         try:
-            update_prefix_status(headers, base_url, prefix, advertise, spicerack.requests_proxies)
+            update_prefix_status(session, base_url, prefix, advertise)
         except Exception as e:  # Don't interrupt the run if there is an error
             logger.error('⚠️  Failed to update prefix {cidr}: {e}'.format(cidr=prefix['cidr'], e=e))
             return_code = 1
@@ -95,15 +103,14 @@ def run(args, spicerack):
     return return_code
 
 
-def update_prefix_status(headers, base_url, prefix, advertise, proxies):
+def update_prefix_status(session, base_url, prefix, advertise):
     """Update the prefix's status
 
     Arguments:
-        headers (dict): HTTP headers.
+        session (requests.Session): Initialized connection-pooler from the Requests class.
         base_url (str): URL to use as base, including ID of our account in the API.
         prefix (dict): the prefix dictionary.
         advertise (bool): action to perform on prefix.
-        proxies (dict): proxies setting for Python Requests calls.
 
     Raises:
         Exception: on error.
@@ -114,7 +121,7 @@ def update_prefix_status(headers, base_url, prefix, advertise, proxies):
         base_url=base_url, prefix_id=prefix['id'])
     action = 'update prefix {cidr}'.format(cidr=prefix['cidr'])
 
-    response = requests.patch(url, headers=headers, json=data, proxies=proxies)
+    response = session.patch(url, json=data)
 
     update_prefix = parse_cf_response(action, response)
     if update_prefix['result']['advertised'] == advertise:
