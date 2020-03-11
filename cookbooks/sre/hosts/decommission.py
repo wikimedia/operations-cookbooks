@@ -124,7 +124,7 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
         vm = ganeti.instance(fqdn, cluster=netbox_data['ganeti_cluster'])
         host_actions.success('Found Ganeti VM')
     else:
-        ipmi = spicerack.ipmi()
+        ipmi = spicerack.ipmi(cached=True)
         mgmt = spicerack.management().get_fqdn(fqdn)
         host_actions.success('Found physical host')
 
