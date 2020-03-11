@@ -164,5 +164,5 @@ def log_prefix_status(prefix):
     """
     params = prefix.copy()
     params['is_advertised'] = '' if prefix['advertised'] else 'not '
-    logger.info('Prefix %(cidr)s "%(description)s": %(is_advertised)sadvertised since %(advertised_modified_at)s, '
-                'on_demand=%(on_demand_enabled)s', params)
+    logger.info('Prefix %(cidr)s "%(description)s": %(is_advertised)sadvertised since %(advertised_modified_at)s',
+                params)
