@@ -13,13 +13,16 @@ Usage example:
 import argparse
 import getpass
 import logging
+import os
+
 import requests
 
+from spicerack.config import load_yaml_config
 
 __title__ = 'Manage CF BGP advertisement of our prefixes'
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
-CF_AUTH_EMAIL = 'noc@wikimedia.org'
-CF_BASE_URL = 'https://api.cloudflare.com/client/v4/accounts/657bdb51dfa3942bbab412ce5ab7bb73'
+CF_BASE_URL = 'https://api.cloudflare.com/client/v4/accounts/{}'
+CONFIG_PATH = 'cookbooks/sre.network.cf.yaml'  # relative to spicerack.config_dir
 
 
 def argument_parser():
@@ -30,18 +33,32 @@ def argument_parser():
     return parser
 
 
+def get_secret(name, config):
+    """Fetches entity named 'name' from the config, or prompts the user for it."""
+    rv = config.get(name, None)
+    if not rv:
+        logger.info('Could not find %s in config file', name)
+        rv = getpass.getpass("Please provide the {} (it's in pwstore): ".format(name))
+    if not rv:
+        logger.error("%s can't be empty 👎", name)
+        raise ValueError
+    return rv
+
+
 def run(args, spicerack):
     """Required by Spicerack API."""
-    # TODO: Move the token to puppet-private so we don't have to prompt for it
-    api_token = getpass.getpass("Insert NOC API token (it's in pwstore):")
-    if not api_token:
-        logger.error("Can't be empty 👎")
-        return 1
+    config_full_path = os.path.join(spicerack.config_dir, CONFIG_PATH)
+    logger.info('Attempting to read secrets from %s', config_full_path)
+    config = load_yaml_config(config_full_path, raises=False)
 
-    headers = {'Content-Type': 'application/json', 'X-Auth-Key': api_token, 'X-Auth-Email': CF_AUTH_EMAIL}
+    account_id = get_secret('account_id', config)
+    api_token = get_secret('api_token', config)
+
+    base_url = CF_BASE_URL.format(account_id)
+    headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(api_token)}
 
     # Get all the configured prefixes
-    response = requests.get('{base_url}/addressing/prefixes'.format(base_url=CF_BASE_URL),
+    response = requests.get('{base_url}/addressing/prefixes'.format(base_url=base_url),
                             headers=headers, proxies=spicerack.requests_proxies)
     list_prefixes = parse_cf_response('list all prefixes', response)
 
@@ -70,7 +87,7 @@ def run(args, spicerack):
             continue
 
         try:
-            update_prefix_status(headers, prefix, advertise, spicerack.requests_proxies)
+            update_prefix_status(headers, base_url, prefix, advertise, spicerack.requests_proxies)
         except Exception as e:  # Don't interrupt the run if there is an error
             logger.error('⚠️  Failed to update prefix {cidr}: {e}'.format(cidr=prefix['cidr'], e=e))
             return_code = 1
@@ -78,11 +95,12 @@ def run(args, spicerack):
     return return_code
 
 
-def update_prefix_status(headers, prefix, advertise, proxies):
+def update_prefix_status(headers, base_url, prefix, advertise, proxies):
     """Update the prefix's status
 
     Arguments:
         headers (dict): HTTP headers.
+        base_url (str): URL to use as base, including ID of our account in the API.
         prefix (dict): the prefix dictionary.
         advertise (bool): action to perform on prefix.
         proxies (dict): proxies setting for Python Requests calls.
@@ -92,7 +110,8 @@ def update_prefix_status(headers, prefix, advertise, proxies):
 
     """
     data = {'advertised': advertise}
-    url = '{base_url}/addressing/prefixes/{prefix_id}/bgp/status'.format(base_url=CF_BASE_URL, prefix_id=prefix['id'])
+    url = '{base_url}/addressing/prefixes/{prefix_id}/bgp/status'.format(
+        base_url=base_url, prefix_id=prefix['id'])
     action = 'update prefix {cidr}'.format(cidr=prefix['cidr'])
 
     response = requests.patch(url, headers=headers, json=data, proxies=proxies)
