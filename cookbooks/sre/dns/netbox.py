@@ -52,6 +52,7 @@ def run(args, spicerack):
     command = Command(command_str, ok_codes=[0, 99])
 
     results = netbox_host.run_sync(command)
+    line = '{}'
     for _, output in results:
         line = output.message().decode()
         logger.info(line)
@@ -61,7 +62,8 @@ def run(args, spicerack):
 
     ask_confirmation('Have you checked that the diff is OK?')
 
-    command = ('{base} push "{path}" "{sha1}"').format(base=base_command, path=metadata['path'], sha1=metadata['sha1'])
+    command = ('{base} push "{path}" "{sha1}"').format(
+        base=base_command, path=metadata.get('path', ''), sha1=metadata.get('sha1', ''))
     results = netbox_host.run_sync(command)
     for _, output in results:
         logger.info(output.message().decode())
