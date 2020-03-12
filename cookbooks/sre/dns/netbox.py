@@ -53,13 +53,12 @@ def run(args, spicerack):
     command = Command(command_str, ok_codes=[0, 99])
 
     results = netbox_host.run_sync(command)
-    line = '{}'
+    metadata = {}
     for _, output in results:
         line = output.message().decode()
         logger.info(line)
-
-    # Last line contains the metadata
-    metadata = json.loads(line)
+        if line.startswith('METADATA:'):
+            metadata = json.loads(line.split(maxsplit=1)[1])
 
     ask_confirmation('Have you checked that the diff is OK?')
 
