@@ -44,7 +44,7 @@ def run(args, spicerack):
     netbox_hosts = remote.query(NETBOX_HOSTS_QUERY)
     reason = spicerack.admin_reason(args.message, task_id=args.task_id)
     # Always set an accessible CWD for runuser because the Python git module passes it to Popen
-    base_command = ('cd /tmp && runuser -u {user} python3 '
+    base_command = ('cd /tmp && runuser -u {user} -- python3 '
                     '/srv/deployment/netbox-extras/dns/generate_dns_snippets.py').format(user=NETBOX_USER)
 
     command_str = ('{base} commit --batch "{owner}: {msg}"').format(
@@ -70,9 +70,9 @@ def run(args, spicerack):
         logger.info(output.message().decode())
 
     passive_netbox_hosts = remote.query(str(netbox_hosts.hosts - netbox_host.hosts))
-    passive_netbox_hosts.run_sync('cd {path} && runuser -u {user} git fetch {host} master:master'.format(
+    passive_netbox_hosts.run_sync('cd {path} && runuser -u {user} -- git fetch {host} master:master'.format(
         path=NETBOX_BARE_REPO_PATH, user=NETBOX_USER, host=netbox_hostname))
-    remote.query(AUTHDNS_HOSTS_QUERY).run_sync('cd {path} && runuser -u {user} git pull'.format(
+    remote.query(AUTHDNS_HOSTS_QUERY).run_sync('cd {path} && runuser -u {user} -- git pull'.format(
         path=AUTHDNS_CHECKOUT_PATH, user=AUTHDNS_USER))
 
     # TODO: add the gdnsd deploy/reload once actually used in production
