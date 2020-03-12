@@ -76,9 +76,13 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
         logger.info(output.message().decode())
 
     passive_netbox_hosts = remote.query(str(netbox_hosts.hosts - netbox_host.hosts))
+    logger.info('Updating the Netbox passive copies of the repository on %s', passive_netbox_hosts)
     passive_netbox_hosts.run_sync('cd {path} && runuser -u {user} -- git fetch {host} master:master'.format(
         path=NETBOX_BARE_REPO_PATH, user=NETBOX_USER, host=netbox_hostname))
-    remote.query(AUTHDNS_HOSTS_QUERY).run_sync('cd {path} && runuser -u {user} -- git pull'.format(
+
+    authdns_hosts = remote.query(AUTHDNS_HOSTS_QUERY)
+    logger.info('Updating the authdns copies of the repository on %s', authdns_hosts)
+    authdns_hosts.run_sync('cd {path} && runuser -u {user} -- git pull'.format(
         path=AUTHDNS_CHECKOUT_PATH, user=AUTHDNS_USER))
 
     # TODO: add the gdnsd deploy/reload once actually used in production
