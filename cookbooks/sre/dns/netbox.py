@@ -4,7 +4,7 @@ Run the script that generates the DNS zonefile snippets on the Netbox host to up
 the snippets and then deploy them to the authdns hosts, reloading gdnsd.
 
 Usage example:
-    cookbook sre.dns.netbox 'Decommissioned mw12[22-35] - T12345'
+    cookbook sre.dns.netbox -t T12345 'Decommissioned mw12[22-35]'
 
 """
 import argparse
@@ -52,6 +52,7 @@ def run(args, spicerack):
     # NO_CHANGES_RETURN_CODE = 99 in generate_dns_snippets.py
     command = Command(command_str, ok_codes=[0, 99])
 
+    logger.info('Generating the DNS records from Netbox data. It will take a couple of minutes.')
     results = netbox_host.run_sync(command)
     metadata = {}
     for _, output in results:
@@ -59,6 +60,10 @@ def run(args, spicerack):
         logger.info(line)
         if line.startswith('METADATA:'):
             metadata = json.loads(line.split(maxsplit=1)[1])
+
+    if metadata.get('no_changes', False):
+        logger.info('No changes to deploy.')
+        return
 
     ask_confirmation('Have you checked that the diff is OK?')
 
