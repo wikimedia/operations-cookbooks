@@ -43,8 +43,9 @@ def run(args, spicerack):
     netbox_host = remote.query(netbox_hostname)
     netbox_hosts = remote.query(NETBOX_HOSTS_QUERY)
     reason = spicerack.admin_reason(args.message, task_id=args.task_id)
-    base_command = 'runuser -u {user} python3 /srv/deployment/netbox-extras/dns/generate_dns_snippets.py'.format(
-        user=NETBOX_USER)
+    # Always set an accessible CWD for runuser because the Python git module passes it to Popen
+    base_command = ('cd /tmp && runuser -u {user} python3 '
+                    '/srv/deployment/netbox-extras/dns/generate_dns_snippets.py').format(user=NETBOX_USER)
 
     command_str = ('{base} commit --batch "{owner}: {msg}"').format(
         base=base_command, owner=reason.owner, msg=args.message)
