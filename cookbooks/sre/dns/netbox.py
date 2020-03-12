@@ -36,7 +36,7 @@ def argument_parser():
     return parser
 
 
-def run(args, spicerack):
+def run(args, spicerack):  # pylint: disable=too-many-locals
     """Required by Spicerack API."""
     remote = spicerack.remote()
     netbox_hostname = spicerack.dns().resolve_cname(NETBOX_DOMAIN)
@@ -56,10 +56,12 @@ def run(args, spicerack):
     results = netbox_host.run_sync(command)
     metadata = {}
     for _, output in results:
-        line = output.message().decode()
-        logger.info(line)
-        if line.startswith('METADATA:'):
-            metadata = json.loads(line.split(maxsplit=1)[1])
+        lines = output.message().decode()
+        logger.info(lines)
+        for line in lines.splitlines():
+            if line.startswith('METADATA:'):
+                metadata = json.loads(line.split(maxsplit=1)[1])
+                break
 
     if metadata.get('no_changes', False):
         logger.info('No changes to deploy.')
