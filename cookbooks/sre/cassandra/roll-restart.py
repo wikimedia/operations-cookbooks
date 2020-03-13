@@ -17,7 +17,9 @@ def argument_parser():
     """As specified by Spicerack API."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('cluster', nargs='?', choices=['aqs', 'restbase', 'maps', 'sessionstore'],
+    group.add_argument('cluster', nargs='?',
+                       choices=['aqs', 'restbase-eqiad', 'restbase-dev', 'maps', 'sessionstore',
+                                'restbase-codfw'],
                        help=('The name of the Cassandra cluster to work on. This refers to ',
                              'a Cumin alias. Alternatively you can pass an alternative Cumin ',
                              'host query using the --query argument'))
