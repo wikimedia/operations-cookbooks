@@ -9,13 +9,12 @@ import argparse
 import logging
 
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError
 
 from . import check_host_is_wdqs
-
 
 __title__ = "WDQS data reload cookbook"
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -34,6 +33,23 @@ WDQS_DUMPS = {
 }
 
 
+class StopWatch:
+    """Stop watch to measure time."""
+
+    def __init__(self) -> None:
+        """Create a new StopWatch initialized with current time."""
+        self._start_time = datetime.now()
+
+    def elapsed(self) -> timedelta:
+        """Returns the time elapsed since the StopWatch was started."""
+        end_time = datetime.now()
+        return end_time - self._start_time
+
+    def reset(self):
+        """Reset the StopWatch to current time."""
+        self._start_time = datetime.now()
+
+
 def argument_parser():
     """Parse the command line arguments for this cookbook."""
     parser = argparse.ArgumentParser(description=__doc__,
@@ -43,7 +59,7 @@ def argument_parser():
     parser.add_argument('--proxy-server', help='Specify proxy server to use')
     parser.add_argument('--reason', required=True, help='Administrative Reason')
     parser.add_argument('--reuse-downloaded-dump', action='store_true', help='Reuse downloaded dump')
-    parser.add_argument('--downtime', type=int, default=1, help='Hour(s) of downtime')
+    parser.add_argument('--downtime', type=int, default=336, help='Hour(s) of downtime')
     parser.add_argument('--depool', action='store_true', help='Should be depooled.')
 
     return parser
@@ -66,10 +82,12 @@ def get_dumps(remote_host, proxy_server, reuse_dump):
                 logger.info('Dump (%s) not found', dump['path'])
 
         logger.info('Downloading (%s)', dump['file'])
+        watch = StopWatch()
         remote_host.run_sync(
             "{curl_command} https://dumps.wikimedia.your.org/wikidatawiki/entities/{file} -o {path}".format(
                 curl_command=curl_command, file=dump['file'], path=dump['path'])
         )
+        logger.info('Downloaded %s in %s', dump['file'], watch.elapsed())
 
 
 def fail_for_disk_space(remote_host):
@@ -86,14 +104,18 @@ def fail_for_disk_space(remote_host):
 def munge(remote_host):
     """Run munger for main database and lexeme"""
     logger.info('Running munger for main database and then lexeme')
+    stop_watch = StopWatch()
     for dump in WDQS_DUMPS.values():
+        logger.info('munging %s', dump['munge_path'])
+        stop_watch.reset()
         remote_host.run_sync(
             "mkdir -p {munge_path} && bzcat {path} | /srv/deployment/wdqs/wdqs/munge.sh -f - -d {munge_path}".format(
                 path=dump['path'], munge_path=dump['munge_path']),
         )
+        logger.info('munging %s completed in %s', dump['munge_path'], stop_watch.elapsed())
 
 
-@retry(tries=48, delay=timedelta(minutes=5), backoff_mode='constant', exceptions=(ValueError,))
+@retry(tries=1000, delay=timedelta(minutes=10), backoff_mode='constant', exceptions=(ValueError,))
 def wait_for_updater(prometheus, site, remote_host):
     """Wait for wdqs updater to catch up on updates.
 
@@ -119,6 +141,7 @@ def reload_data(remote_host):
     )
 
     logger.info('Loading wikidata dump')
+    watch = StopWatch()
     remote_host.run_sync(
         'systemctl start wdqs-blazegraph',
         'sleep 60',
@@ -127,13 +150,16 @@ def reload_data(remote_host):
             munge_path=WDQS_DUMPS['wikidata']['munge_path']
         )
     )
+    logger.info('Wikidata dump loaded in %s', watch.elapsed())
 
     logger.info('Loading lexeme dump')
-    remote_host.run_sync(
+    watch.reset()
+    remote_host.run_sync(  # FIXME missing loop for multiple files
         'curl -XPOST --data-binary update="LOAD <file:///{munge_path}/wikidump-000000001.ttl.gz>" '
         'http://localhost:9999/bigdata/namespace/wdq/sparql'.format(
             munge_path=WDQS_DUMPS['lexeme']['munge_path'])
     )
+    logger.info('Lexeme dump loaded in %s', watch.elapsed())
 
     logger.info('Performing final steps')
     remote_host.run_sync(
@@ -148,12 +174,14 @@ def reload_data(remote_host):
     )
 
     logger.info('Loading data for categories')
+    watch.reset()
     remote_host.run_sync(
         'systemctl start wdqs-categories',
         'sleep 30',
         'test -f /srv/wdqs/categories.jnl',
-        '/usr/local/bin/reloadCategories.sh'
+        '/usr/local/bin/reloadCategories.sh wdqs'
     )
+    logger.info('Categories loaded in %s', watch.elapsed())
 
     logger.info('Cleaning up downloads')
     dump_paths = " ".join([dump['path'] for dump in WDQS_DUMPS.values()])
@@ -193,10 +221,14 @@ def run(args, spicerack):
         depool_host = noop_change_and_revert
 
     with icinga.hosts_downtimed(remote_host.hosts, reason, duration=timedelta(hours=args.downtime)):
+        # FIXME: this cookbook is expected to run for weeks, we don't want to disable puppet for that long
+        #        but we want to ensure that the various services aren't restarted by puppet along the way.
         with puppet.disabled(reason):
             with depool_host():
                 remote_host.run_sync('sleep 180')
                 reload_data(remote_host)
 
                 logger.info('Data reload for blazegraph is complete. Waiting for updater to catch up')
+                watch = StopWatch()
                 wait_for_updater(prometheus, args.site, remote_host)
+                logger.info('Catch up on updates in %s', watch.elapsed())
