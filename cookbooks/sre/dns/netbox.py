@@ -22,9 +22,10 @@ NETBOX_DOMAIN = 'netbox.wikimedia.org'
 NETBOX_BARE_REPO_PATH = '/srv/netbox-exports/dns.git'
 NETBOX_USER = 'netbox'
 NETBOX_HOSTS_QUERY = 'A:netbox'
-AUTHDNS_CHECKOUT_PATH = '/srv/git/netbox_dns_snippets'
+AUTHDNS_NETBOX_CHECKOUT_PATH = '/srv/git/netbox_dns_snippets'
 AUTHDNS_USER = 'netboxdns'
 AUTHDNS_HOSTS_QUERY = 'A:dns-auth'
+AUTHDNS_DNS_CHECKOUT_PATH = '/srv/authdns/git'
 
 
 def argument_parser():
@@ -83,6 +84,8 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
     authdns_hosts = remote.query(AUTHDNS_HOSTS_QUERY)
     logger.info('Updating the authdns copies of the repository on %s', authdns_hosts)
     authdns_hosts.run_sync('cd {path} && runuser -u {user} -- git pull'.format(
-        path=AUTHDNS_CHECKOUT_PATH, user=AUTHDNS_USER))
+        path=AUTHDNS_NETBOX_CHECKOUT_PATH, user=AUTHDNS_USER))
 
-    # TODO: add the gdnsd deploy/reload once actually used in production
+    logger.info('Deploying the updated zonefiles on %s', authdns_hosts)
+    authdns_hosts.run_sync('cd {git} && utils/deploy-check.py -g {netbox} --deploy'.format(
+        git=AUTHDNS_DNS_CHECKOUT_PATH, netbox=AUTHDNS_NETBOX_CHECKOUT_PATH))
