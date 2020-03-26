@@ -70,8 +70,11 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
 
     ask_confirmation('Have you checked that the diff is OK?')
 
-    command = ('{base} push "{path}" "{sha1}"').format(
-        base=base_command, path=metadata.get('path', ''), sha1=metadata.get('sha1', ''))
+    sha1 = metadata.get('sha1', '')
+    if not sha1:
+        raise RuntimeError('Unable to fetch SHA1 from commit metadata: {meta}'.format(meta=metadata))
+
+    command = ('{base} push "{path}" "{sha1}"').format(base=base_command, path=metadata.get('path', ''), sha1=sha1)
     results = netbox_host.run_sync(command)
     for _, output in results:
         logger.info(output.message().decode())
@@ -83,8 +86,8 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
 
     authdns_hosts = remote.query(AUTHDNS_HOSTS_QUERY)
     logger.info('Updating the authdns copies of the repository on %s', authdns_hosts)
-    authdns_hosts.run_sync('cd {path} && runuser -u {user} -- git pull'.format(
-        path=AUTHDNS_NETBOX_CHECKOUT_PATH, user=AUTHDNS_USER))
+    authdns_hosts.run_sync('cd {path} && runuser -u {user} -- git fetch && git merge --ff-only {sha1}'.format(
+        path=AUTHDNS_NETBOX_CHECKOUT_PATH, user=AUTHDNS_USER, sha1=sha1))
 
     logger.info('Deploying the updated zonefiles on %s', authdns_hosts)
     authdns_hosts.run_sync('cd {git} && utils/deploy-check.py -g {netbox} --deploy'.format(
