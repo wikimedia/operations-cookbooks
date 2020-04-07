@@ -122,7 +122,12 @@ def run(args, spicerack):
                 dest.run_sync('chown blazegraph: "{file}"'.format(file=file))
 
             if args.blazegraph_instance == 'blazegraph':
+                logger.info('Touching "data_loaded" file to show that data load is completed.')
                 dest.run_sync('touch /srv/wdqs/data_loaded')
+
+            if args.blazegraph_instance == 'categories':
+                logger.info('Reloading nginx to load new categories mapping.')
+                dest.run_sync('systemctl reload nginx')
 
             logger.info('Starting services [%s]', start_services_cmd)
             remote_hosts.run_sync(start_services_cmd)
