@@ -14,6 +14,8 @@ from datetime import timedelta
 from random import SystemRandom
 from time import sleep
 
+from spicerack.remote import RemoteExecutionError
+
 from . import check_host_is_wdqs
 
 BLAZEGRAPH_INSTANCES = {
@@ -51,25 +53,32 @@ def _copy_file(source, dest, file):
     """Copy file from one node to the other via netcat."""
     passwd = _generate_pass()
     port = 9876
-    recv_cmd = "nc -l -p {port} | openssl enc -d -aes-256-cbc -k {passwd} | pigz -c -d > {file}".format(
-        port=port, file=file, passwd=passwd)
-    send_cmd = "pigz -c {file} | openssl enc -e -aes-256-cbc -k {passwd} | nc -w 3 {dest} {port}".format(
-        file=file, dest=dest.hosts, passwd=passwd, port=port)
 
-    send = threading.Thread(target=source.run_sync, args=(send_cmd,))
-    receive = threading.Thread(target=dest.run_sync, args=(recv_cmd,))
+    def receive(file, port, passwd):
+        try:
+            recv_cmd = "nc -l -p {port} | openssl enc -d -aes-256-cbc -k {passwd} | pigz -c -d > {file}".format(
+                port=port, file=file, passwd=passwd)
+            logger.info('Starting receiver on [%s] with [%s]', dest, recv_cmd)
+            dest.run_sync(recv_cmd)
+            logger.info('receiving file [%s] completed', file)
+        except RemoteExecutionError:
+            logger.error('Error when receiving file [%s].', file)
 
-    logger.info('Starting receiver on [%s] with [%s]', dest, recv_cmd)
-    receive.start()
+    def send(file, port, passwd):
+        send_cmd = "pigz -c {file} | openssl enc -e -aes-256-cbc -k {passwd} | nc -w 3 {dest} {port}".format(
+            file=file, dest=dest.hosts, passwd=passwd, port=port)
+        logger.info('Starting to send file from [%s] with [%s]', source, send_cmd)
+        source.run_sync(send_cmd)
+        logger.info('sending file [%s] completed', file)
+
+    receiver = threading.Thread(target=receive, args=(file, port, passwd))
+    receiver.start()
     # sleep 10 seconds to ensure the receiver has started
     sleep(10)
-    logger.info('Starting to send file from [%s] with [%s]', source, send_cmd)
-    send.start()
 
-    receive.join()
-    logger.info('receiving file [%s] completed', file)
-    send.join()
-    logger.info('sending file [%s] completed', file)
+    send(file, port, passwd)
+
+    receiver.join()
 
 
 def _generate_pass():
