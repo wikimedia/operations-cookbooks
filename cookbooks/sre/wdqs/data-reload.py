@@ -32,6 +32,12 @@ WDQS_DUMPS = {
     }
 }
 
+RELOAD_TYPES = {
+    'all': ['wikidata', 'categories'],
+    'wikidata': ['wikidata'],
+    'categories': ['categories']
+}
+
 
 class StopWatch:
     """Stop watch to measure time."""
@@ -61,6 +67,8 @@ def argument_parser():
     parser.add_argument('--reuse-downloaded-dump', action='store_true', help='Reuse downloaded dump')
     parser.add_argument('--downtime', type=int, default=336, help='Hour(s) of downtime')
     parser.add_argument('--depool', action='store_true', help='Should be depooled.')
+    parser.add_argument('--reload-data', default='all', choices=RELOAD_TYPES.keys(),
+                        help='Type of data to reload')
 
     return parser
 
@@ -130,9 +138,9 @@ def wait_for_updater(prometheus, site, remote_host):
         raise ValueError("Let's wait for updater to catch up.")
 
 
-def reload_data(remote_host):
-    """Execute commands on host to reload data."""
-    logger.info('Prepare to load data for blazegraph')
+def reload_wikidata(remote_host):
+    """Execute commands on host to reload wikidata data."""
+    logger.info('Prepare to load wikidata data for blazegraph')
     remote_host.run_sync(
         'rm -v /srv/wdqs/data_loaded',
         'systemctl stop wdqs-updater',
@@ -167,6 +175,9 @@ def reload_data(remote_host):
         'systemctl start wdqs-updater'
     )
 
+
+def reload_categories(remote_host):
+    """Execute commands on host to reload categories data."""
     logger.info('Preparing to load data for categories')
     remote_host.run_sync(
         'systemctl stop wdqs-categories',
@@ -174,7 +185,7 @@ def reload_data(remote_host):
     )
 
     logger.info('Loading data for categories')
-    watch.reset()
+    watch = StopWatch()
     remote_host.run_sync(
         'systemctl start wdqs-categories',
         'sleep 30',
@@ -204,6 +215,8 @@ def run(args, spicerack):
     confctl = spicerack.confctl('node')
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
+    data_to_reload = RELOAD_TYPES[args.reload_data]
+
     get_dumps(remote_host, args.proxy_server, args.reuse_downloaded_dump)
     fail_for_disk_space(remote_host)
     munge(remote_host)
@@ -226,9 +239,13 @@ def run(args, spicerack):
         with puppet.disabled(reason):
             with depool_host():
                 remote_host.run_sync('sleep 180')
-                reload_data(remote_host)
+                if 'categories' in data_to_reload:
+                    reload_categories(remote_host)
 
-                logger.info('Data reload for blazegraph is complete. Waiting for updater to catch up')
-                watch = StopWatch()
-                wait_for_updater(prometheus, args.site, remote_host)
-                logger.info('Catch up on updates in %s', watch.elapsed())
+                if 'wikidata' in data_to_reload:
+                    reload_wikidata(remote_host)
+
+                    logger.info('Data reload for blazegraph is complete. Waiting for updater to catch up')
+                    watch = StopWatch()
+                    wait_for_updater(prometheus, args.site, remote_host)
+                    logger.info('Catch up on updates in %s', watch.elapsed())
