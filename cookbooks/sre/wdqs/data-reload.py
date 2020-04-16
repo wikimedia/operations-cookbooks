@@ -217,9 +217,10 @@ def run(args, spicerack):
 
     data_to_reload = RELOAD_TYPES[args.reload_data]
 
-    get_dumps(remote_host, args.proxy_server, args.reuse_downloaded_dump)
-    fail_for_disk_space(remote_host)
-    munge(remote_host)
+    if 'wikidata' in data_to_reload:
+        get_dumps(remote_host, args.proxy_server, args.reuse_downloaded_dump)
+        fail_for_disk_space(remote_host)
+        munge(remote_host)
 
     @contextmanager
     def noop_change_and_revert():
