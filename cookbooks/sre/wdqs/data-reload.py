@@ -175,6 +175,10 @@ def reload_wikidata(remote_host):
         'systemctl start wdqs-updater'
     )
 
+    logger.info('Cleaning up downloads')
+    dump_paths = " ".join([dump['path'] for dump in WDQS_DUMPS.values()])
+    remote_host.run_sync("rm {dump_paths}".format(dump_paths=dump_paths))
+
 
 def reload_categories(remote_host):
     """Execute commands on host to reload categories data."""
@@ -193,10 +197,6 @@ def reload_categories(remote_host):
         '/usr/local/bin/reloadCategories.sh wdqs'
     )
     logger.info('Categories loaded in %s', watch.elapsed())
-
-    logger.info('Cleaning up downloads')
-    dump_paths = " ".join([dump['path'] for dump in WDQS_DUMPS.values()])
-    remote_host.run_sync("rm {dump_paths}".format(dump_paths=dump_paths))
 
 
 def run(args, spicerack):
