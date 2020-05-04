@@ -106,7 +106,7 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
     remote = spicerack.remote()
     puppet_master = spicerack.puppet_master()
     debmonitor = spicerack.debmonitor()
-    netbox = spicerack.netbox()
+    netbox = spicerack.netbox(read_write=True)
     ganeti = spicerack.ganeti()
 
     remote_host = remote.query(fqdn)
