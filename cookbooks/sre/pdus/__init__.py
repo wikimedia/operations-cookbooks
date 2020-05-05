@@ -15,6 +15,10 @@ class GetVersionError(Exception):
     """Raised if there is an issue getting PDU version"""
 
 
+class PdusRestartException(Exception):
+    """Exception raised if password reset fails"""
+
+
 def argument_parser_base():
     """As specified by Spicerack API."""
     parser = ArgumentParser(
@@ -61,7 +65,7 @@ def get_version(pdu, session):
 
     """
     try:
-        response = session.get("https://{}/chngpswd.html".format(pdu))
+        response = session.get("https://{}/".format(pdu))
         response.raise_for_status()
     except HTTPError as err:
         raise GetVersionError("{}: Error {} while trying to check the version: {}".format(
@@ -73,3 +77,44 @@ def get_version(pdu, session):
         logger.debug('%s: Sentry 4 detected', pdu)
         return 4
     raise GetVersionError('{}: Unknown Sentry version'.format(pdu))
+
+
+def restart(pdu, version, session):
+    """Restart the PDU
+
+    Arguments:
+        pdu (str): the pdu
+        version (int): the Sentry version of the PDU
+        session (requests.Session): A configured request session
+
+    """
+    form = {
+        3: {'Restart_Action': 1},
+        4: {'RST': '00000001', 'FormButton': 'Apply'},
+    }.get(version)
+
+    if form is None:
+        raise PdusRestartException('{}: Unknown Sentry version'.format(pdu))
+
+    logger.info('%s: restarting Sentry v%d PDU', pdu, version)
+    try:
+        response = session.get("https://{}/Forms/restart_1".format(pdu), data=form)
+        response.raise_for_status()
+    except HTTPError as err:
+        raise PdusRestartException("{}: Error {} while trying to check the version: {}".format(
+            pdu, response.status_code, err))
+
+
+def get_pdu_ips(netbox):
+    """Return a set of PDU IP addresses
+
+    Arguments:
+        netbox (spicerack.netbox.Netbox): A Spicerack Netbox instance
+
+    Returns:
+        set: A set of PDU IPs
+
+    """
+    devices = netbox.api.dcim.devices.filter(role='pdu')
+    return set(str(device.primary_ip).split('/')[0] for device in devices
+               if device.primary_ip is not None)

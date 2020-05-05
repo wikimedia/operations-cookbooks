@@ -18,7 +18,7 @@ from requests.exceptions import HTTPError
 
 from spicerack.interactive import ensure_shell_is_durable, get_secret
 
-from cookbooks.sre.pdus import argument_parser_base, check_default, get_version, GetVersionError
+from cookbooks.sre.pdus import argument_parser_base, check_default, get_pdu_ips, get_version, GetVersionError
 
 
 __title__ = 'Update Sentry PDUs 🔌 passwords'
@@ -91,13 +91,8 @@ def run(args, spicerack):
 
     session.auth = (args.username, current_password)
 
-    if args.query == 'all':
-        netbox = spicerack.netbox()
-        devices = netbox.api.dcim.devices.filter(role='pdu')
-        pdus = [str(device.primary_ip).split('/')[0] for device in devices
-                if device.primary_ip is not None]
-    else:
-        pdus = set(args.query)
+    # TODO: check if self.query is a PDU in netbox
+    pdus = get_pdu_ips(spicerack.netbox()) if args.query == 'all' else set([args.query])
 
     for pdu in pdus:
         try:
