@@ -1,8 +1,9 @@
 """Decommission a host from all inventories.
 
-It works for both Physical and Virtual hosts. On VMs some steps are not yet supported
+It works for both Physical and Virtual hosts.
+If the query doesn't match any hosts allow to proceed with hostname expansion.
 
-List of actions performed:
+List of actions performed on each host:
 - Downtime the host on Icinga (it will be removed at the next Puppet run on the Icinga host)
 - Detect if Physical or Virtual host based on Netbox data.
 - If virtual host (Ganeti VM)
@@ -29,7 +30,7 @@ import time
 from spicerack.dns import DnsError
 from spicerack.interactive import ask_confirmation
 from spicerack.ipmi import IpmiError
-from spicerack.remote import RemoteExecutionError
+from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
@@ -109,7 +110,8 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
     netbox = spicerack.netbox(read_write=True)
     ganeti = spicerack.ganeti()
 
-    remote_host = remote.query(fqdn)
+    # Using the Direct Cumin backend to support also hosts already removed from PuppetDB
+    remote_host = remote.query('D{' + fqdn + '}')
 
     # Downtime on Icinga both the host and the mgmt host (later below), they will be removed by Puppet
     try:
@@ -207,7 +209,15 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     have_failures = False
     remote = spicerack.remote()
-    decom_hosts = remote.query(args.query).hosts
+    try:
+        decom_hosts = remote.query(args.query).hosts
+    except RemoteError:
+        logger.debug("Query '%s' did not match any host or failed", args.query, exc_info=True)
+        decom_hosts = NodeSet(args.query)
+        ask_confirmation(('ATTENTION: the query does not match any host in PuppetDB or failed\n'
+                          'Hostname expansion matches {n} hosts: {hosts}\n'
+                          'Do you want to proceed anyway?').format(n=len(decom_hosts), hosts=decom_hosts))
+
     if len(decom_hosts) > 20:
         logger.error('Matched %d hosts, aborting. (max 20 with --force, 5 without)', len(decom_hosts))
         return 1
