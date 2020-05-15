@@ -19,7 +19,7 @@ def run(args, spicerack):
 
     logger.info('Setting in read-only mode all the core DB masters in %s and verify those in %s',
                 args.dc_from, args.dc_to)
-    mysql = spicerack.mysql()
+    mysql = spicerack.mysql_legacy()
     if args.live_test:
         logger.info('Skip verifying core DB masters in %s are in read-only mode', args.dc_to)
     else:

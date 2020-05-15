@@ -18,5 +18,5 @@ def run(args, spicerack):
     post_process_args(args)
 
     logger.info('Setting in read-write mode all the core DB masters in %s', args.dc_to)
-    mysql = spicerack.mysql()
+    mysql = spicerack.mysql_legacy()
     mysql.set_core_masters_readwrite(args.dc_to)
