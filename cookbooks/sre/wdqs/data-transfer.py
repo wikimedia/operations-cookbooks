@@ -23,11 +23,11 @@ from . import check_host_is_wdqs
 BLAZEGRAPH_INSTANCES = {
     'categories': {
         'services': ['wdqs-categories'],
-        'files': ['/srv/wdqs/categories.jnl'],
+        'files': ['/srv/wdqs/categories.jnl', '/srv/wdqs/aliases.map'],
     },
     'blazegraph': {
         'services': ['wdqs-updater', 'wdqs-blazegraph'],
-        'files': ['/srv/wdqs/wikidata.jnl', '/srv/wdqs/aliases.map'],
+        'files': ['/srv/wdqs/wikidata.jnl'],
     }
 }
 
