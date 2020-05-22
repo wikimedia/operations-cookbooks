@@ -4,6 +4,8 @@ It works for both Physical and Virtual hosts.
 If the query doesn't match any hosts allow to proceed with hostname expansion.
 
 List of actions performed on each host:
+- Check if any reference was left in the Puppet (both public and private) or mediawiki-config repositories and ask for
+  confirmation before proceeding if there is any match
 - Downtime the host on Icinga (it will be removed at the next Puppet run on the Icinga host)
 - Detect if Physical or Virtual host based on Netbox data.
 - If virtual host (Ganeti VM)
@@ -25,11 +27,15 @@ Usage example:
 """
 import argparse
 import logging
+import re
 import time
+
+from cumin.transports import Command
 
 from spicerack.dns import DnsError
 from spicerack.interactive import ask_confirmation
 from spicerack.ipmi import IpmiError
+from spicerack.puppet import get_puppet_ca_hostname
 from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -37,6 +43,10 @@ from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 __title__ = 'Decommission a host from all inventories.'
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+DEPLOYMENT_HOST = 'deployment.eqiad.wmnet'
+MEDIAWIKI_CONFIG_REPO_PATH = '/srv/mediawiki-staging'
+PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'
+PUPPET_PRIVATE_REPO_PATH = '/srv/private'
 
 
 class HostActions:
@@ -205,6 +215,41 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
     return host_actions
 
 
+def get_grep_patterns(dns, decom_hosts):
+    """Given a list of hostnames return the list of regex patterns for the hostname and all its IPs."""
+    patterns = []
+    for host in decom_hosts:
+        patterns.append(re.escape(host))
+        for ip in dns.resolve_ips(host):
+            patterns.append(re.escape(ip))
+
+    return patterns
+
+
+def check_patterns_in_repo(host_paths, patterns):
+    """Git grep for all the given patterns in the given hosts and paths and ask for confirmation if any is found.
+
+    Arguments:
+        host_paths (sequence): a sequence of 2-item tuples with the RemoteHost instance and the path of the
+            repositories to check.
+        patterns (sequence): a sequence of patterns to check.
+
+    """
+    grep_command = "git grep -E '({patterns})'".format(patterns='|'.join(patterns))
+    ask = False
+    for remote_host, path in host_paths:
+        logger.info('Looking for matches in %s:%s', remote_host, path)
+        command = 'cd {path} && {grep}'.format(path=path, grep=grep_command)
+        for _, output in remote_host.run_sync(Command(command, ok_codes=[])):
+            ask = True
+            logger.info(output.message().decode())
+
+    if ask:
+        ask_confirmation('Found match(es) in the Puppet or mediawiki-config repositories (see above), proceed anyway?')
+    else:
+        logger.info('No matches found in the Puppet or mediawiki-config repositories')
+
+
 def run(args, spicerack):
     """Required by Spicerack API."""
     have_failures = False
@@ -231,6 +276,19 @@ def run(args, spicerack):
 
     ask_confirmation('ATTENTION: destructive action for {n} hosts: {hosts}\nAre you sure to proceed?'.format(
         n=len(decom_hosts), hosts=decom_hosts))
+
+    # Check for references in the Puppet and mediawiki-config repositories.
+    puppet_master = remote.query(get_puppet_ca_hostname())
+    dns = spicerack.dns()
+    deployment_host = remote.query(dns.resolve_cname(DEPLOYMENT_HOST))
+    patterns = get_grep_patterns(dns, decom_hosts)
+    # TODO: once all the host DNS records are automatically generated from Netbox check also the DNS repository.
+    check_patterns_in_repo((
+        (puppet_master, PUPPET_REPO_PATH),
+        (puppet_master, PUPPET_PRIVATE_REPO_PATH),
+        (deployment_host, MEDIAWIKI_CONFIG_REPO_PATH),
+    ), patterns)
+
     reason = spicerack.admin_reason('Host decommission', task_id=args.task_id)
     phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
