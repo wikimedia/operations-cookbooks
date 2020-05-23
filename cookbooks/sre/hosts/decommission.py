@@ -49,55 +49,6 @@ PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'
 PUPPET_PRIVATE_REPO_PATH = '/srv/private'
 
 
-class HostActions:
-    """Helper class to keep track of actions performed on a host."""
-
-    def __init__(self):
-        """Initialize the instance."""
-        self.all_success = True
-        self.actions = []
-
-    def success(self, message):
-        """Register a successful action.
-
-        Arguments:
-            message (str): the action description.
-
-        """
-        self._action(logging.INFO, message)
-
-    def failure(self, message):
-        """Register a failed action.
-
-        Arguments:
-            message (str): the action description.
-
-        """
-        self._action(logging.ERROR, message)
-        self.all_success = False
-
-    def warning(self, message):
-        """Register a skipped action that require some attention.
-
-        Arguments:
-            message (str): the action description.
-
-        """
-        self._action(logging.WARNING, message)
-        self.all_success = False
-
-    def _action(self, level, message):
-        """Register an action.
-
-        Arguments:
-            level (int): a logging level to register the action for.
-            message (str): the action description.
-
-        """
-        logger.log(level, message)
-        self.actions.append(message)
-
-
 def argument_parser():
     """As specified by Spicerack API."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -112,7 +63,6 @@ def argument_parser():
 def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
     """Perform all the decommissioning actions on a single host."""
     hostname = fqdn.split('.')[0]
-    host_actions = HostActions()
     icinga = spicerack.icinga()
     remote = spicerack.remote()
     puppet_master = spicerack.puppet_master()
@@ -126,51 +76,52 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
     # Downtime on Icinga both the host and the mgmt host (later below), they will be removed by Puppet
     try:
         icinga.downtime_hosts([fqdn], reason)
-        host_actions.success('Downtimed host on Icinga')
+        spicerack.actions[fqdn].success('Downtimed host on Icinga')
     except RemoteExecutionError:
-        host_actions.failure('Failed downtime host on Icinga (likely already removed)')
+        spicerack.actions[fqdn].failure('Failed downtime host on Icinga (likely already removed)')
 
     netbox_data = netbox.fetch_host_detail(hostname)
     is_virtual = netbox_data['is_virtual']
     if is_virtual:
         vm = ganeti.instance(fqdn, cluster=netbox_data['ganeti_cluster'])
-        host_actions.success('Found Ganeti VM')
+        spicerack.actions[fqdn].success('Found Ganeti VM')
     else:
         ipmi = spicerack.ipmi(cached=True)
         mgmt = spicerack.management().get_fqdn(fqdn)
-        host_actions.success('Found physical host')
+        spicerack.actions[fqdn].success('Found physical host')
 
     if is_virtual:
         try:
             vm.shutdown()
-            host_actions.success('VM shutdown')
+            spicerack.actions[fqdn].success('VM shutdown')
         except RemoteExecutionError as e:
-            host_actions.failure('**Failed to shutdown VM, manually run gnt-instance remove on the Ganeti master '
-                                 'for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
+            spicerack.actions[fqdn].failure('**Failed to shutdown VM, manually run gnt-instance remove on the Ganeti '
+                                            'master for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
 
         try:
             # TODO: avoid race conditions to run it at the same time that the systemd timer will trigger it
             spicerack.netbox_master_host.run_sync(
                 'systemctl start netbox_ganeti_{cluster}_sync.service'.format(cluster=vm.cluster.split('.')[2]))
             # TODO: add polling and validation that it completed to run
-            host_actions.success(
+            spicerack.actions[fqdn].success(
                 'Started forced sync of VMs in Ganeti cluster {cluster} to Netbox'.format(cluster=vm.cluster))
         except (DnsError, RemoteExecutionError) as e:
-            host_actions.failure('**Failed to force sync of VMs in Ganeti cluster {cluster} to Netbox**: {e}'.format(
-                cluster=vm.cluster, e=e))
+            spicerack.actions[fqdn].failure(
+                '**Failed to force sync of VMs in Ganeti cluster {cluster} to Netbox**: {e}'.format(
+                    cluster=vm.cluster, e=e))
 
     else:  # Physical host
         try:
             icinga.downtime_hosts([mgmt], reason)
-            host_actions.success('Downtimed management interface on Icinga')
+            spicerack.actions[fqdn].success('Downtimed management interface on Icinga')
         except RemoteExecutionError:
-            host_actions.failure('Skipped downtime management interface on Icinga (likely already removed)')
+            spicerack.actions[fqdn].failure('Skipped downtime management interface on Icinga (likely already removed)')
 
         try:
             remote_host.run_sync('true')
             can_connect = True
         except RemoteExecutionError as e:
-            host_actions.failure(
+            spicerack.actions[fqdn].failure(
                 '**Unable to connect to the host, wipe of bootloaders will not be performed**: {e}'.format(e=e))
             can_connect = False
 
@@ -180,39 +131,37 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
                 remote_host.run_sync((r"lsblk --all --output 'NAME,TYPE' --paths | "
                                       r"awk '/^\/.* disk$/{ print $1 }' | "
                                       r"xargs -I % bash -c '/sbin/wipefs --all --force %*'"))
-                host_actions.success('Wiped bootloaders')
+                spicerack.actions[fqdn].success('Wiped bootloaders')
             except RemoteExecutionError as e:
-                host_actions.failure(('**Failed to wipe bootloaders, manual intervention required to make it '
-                                      'unbootable**: {e}').format(e=e))
+                spicerack.actions[fqdn].failure(('**Failed to wipe bootloaders, manual intervention required to make '
+                                                 'it unbootable**: {e}').format(e=e))
 
         try:
             ipmi.command(mgmt, ['chassis', 'power', 'off'])
-            host_actions.success('Powered off')
+            spicerack.actions[fqdn].success('Powered off')
         except IpmiError as e:
-            host_actions.failure('**Failed to power off, manual intervention required**: {e}'.format(e=e))
+            spicerack.actions[fqdn].failure('**Failed to power off, manual intervention required**: {e}'.format(e=e))
 
         netbox.put_host_status(hostname, 'Decommissioning')
-        host_actions.success('Set Netbox status to Decommissioning')
+        spicerack.actions[fqdn].success('Set Netbox status to Decommissioning')
 
     logger.info('Sleeping for 20s to avoid race conditions...')
     time.sleep(20)
 
     debmonitor.host_delete(fqdn)
-    host_actions.success('Removed from DebMonitor')
+    spicerack.actions[fqdn].success('Removed from DebMonitor')
 
     puppet_master.delete(fqdn)
-    host_actions.success('Removed from Puppet master and PuppetDB')
+    spicerack.actions[fqdn].success('Removed from Puppet master and PuppetDB')
 
     if is_virtual:
         logger.info('Issuing Ganeti remove command, it can take up to 15 minutes...')
         try:
             vm.remove()
-            host_actions.success('VM removed')
+            spicerack.actions[fqdn].success('VM removed')
         except RemoteExecutionError as e:
-            host_actions.failure('**Failed to remove VM, manually run gnt-instance remove on the Ganeti master '
-                                 'for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
-
-    return host_actions
+            spicerack.actions[fqdn].failure('**Failed to remove VM, manually run gnt-instance remove on the Ganeti '
+                                            'master for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
 
 
 def get_grep_patterns(dns, decom_hosts):
@@ -252,7 +201,7 @@ def check_patterns_in_repo(host_paths, patterns):
 
 def run(args, spicerack):
     """Required by Spicerack API."""
-    have_failures = False
+    has_failures = False
     remote = spicerack.remote()
     try:
         decom_hosts = remote.query(args.query).hosts
@@ -292,28 +241,24 @@ def run(args, spicerack):
     reason = spicerack.admin_reason('Host decommission', task_id=args.task_id)
     phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
-    hosts_actions = []
     for fqdn in decom_hosts:  # Doing one host at a time to track executed actions.
         try:
-            host_actions = _decommission_host(fqdn, spicerack, reason)
+            _decommission_host(fqdn, spicerack, reason)
         except Exception as e:
             message = 'Host steps raised exception'
             logger.exception(message)
-            host_actions = HostActions()
-            host_actions.failure('{message}: {e}'.format(message=message, e=e))
+            spicerack.actions[fqdn].failure('{message}: {e}'.format(message=message, e=e))
 
-        success = 'PASS' if host_actions.all_success else 'FAIL'
-        hosts_actions.append('-  {host} (**{success}**)'.format(host=fqdn, success=success))
-        hosts_actions += ['  - {action}'.format(action=action) for action in host_actions.actions]
-        if not host_actions.all_success:
-            have_failures = True
+        if spicerack.actions[fqdn].has_failures:
+            has_failures = True
 
-    if have_failures:
-        hosts_actions.append('**ERROR**: some step on some host failed, check the bolded items above')
+    suffix = ''
+    if has_failures:
+        suffix = '**ERROR**: some step on some host failed, check the bolded items above'
         logger.error('ERROR: some step failed, check the task updates.')
 
-    message = ('{name} executed by {owner} for hosts: `{hosts}`\n{actions}').format(
-        name=__name__, owner=reason.owner, hosts=decom_hosts, actions='\n'.join(hosts_actions))
+    message = '{name} executed by {owner} for hosts: `{hosts}`\n{actions}\n{suffix}'.format(
+        name=__name__, owner=reason.owner, hosts=decom_hosts, actions=spicerack.actions, suffix=suffix)
     phabricator.task_comment(args.task_id, message)
 
-    return int(have_failures)
+    return int(has_failures)
