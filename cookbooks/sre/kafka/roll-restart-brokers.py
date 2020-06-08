@@ -38,7 +38,14 @@ There are some things to keep into consideration:
    same time it becomes a big problem).
 
 This cookbook it is really simple, but it should be a good first step
-in automating Kafka restarts.
+in automating Kafka restarts. The cookbook executes the following for
+each host in the cluster:
+  1) Restart the kafka broker.
+  2) Wait 900s to make sure that any unbalanced/under-replicated/etc.. partition recovers.
+  3) Force a prefered-replica-election to make sure that partition leaders are balanced
+     before the next broker is restarted. This is not strictly needed since they should
+     auto-rebalance, but there are rare use cases in which it might not happen.
+  4) Sleep for args.batch_sleep_seconds before the next restart
 
 """
 import argparse
@@ -98,14 +105,6 @@ def run(args, spicerack):
 
     with icinga.hosts_downtimed(kafka_brokers.hosts, reason,
                                 duration=timedelta(minutes=240)):
-
-        # The idea is to:
-        # 1) restart the kafka broker
-        # 2) wait 900s to make sure that any unbalanced/under-replicated/etc.. partition recovers.
-        # 3) force a prefered-replica-election to make sure that partition leaders are balanced
-        #    before the next broker is restarted. This is not strictly needed since they should
-        #    auto-rebalance, but there are rare use cases in which it might not happen.
-        # 4) sleep for args.batch_sleep_seconds before the next restart.
         commands = [
           'systemctl restart kafka',
           'sleep ' + str(args.sleep_before_pref_replica_election),
