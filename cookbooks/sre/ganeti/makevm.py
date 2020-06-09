@@ -68,7 +68,7 @@ def argument_parser():
         '--disk', type=positive_int, default=10, help='The amount of disk to allocate to the VM in GB.')
     parser.add_argument('--network', choices=INSTANCE_LINKS, default='private',
                         help='Specify the type of network to assign to the VM.')
-    parser.add_argument('location', choices=_get_locations().keys(),
+    parser.add_argument('location', choices=sorted(_get_locations().keys()),
                         help='The datacenter and row (only for multi-row clusters) where to create the VM')
     parser.add_argument('fqdn', type=valid_fqdn, help='The FQDN for the VM. The DNS records must exist.')
 
