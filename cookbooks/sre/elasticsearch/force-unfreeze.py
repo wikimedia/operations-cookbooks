@@ -21,7 +21,7 @@ def argument_parser():
 
 def run(args, spicerack):
     """Required by Spicerack API."""
-    elasticsearch_clusters = spicerack.elasticsearch_clusters(args.clustergroup)
+    elasticsearch_clusters = spicerack.elasticsearch_clusters(args.clustergroup, args.write_queue_datacenters)
     reason = spicerack.admin_reason(args.admin_reason, task_id=args.task_id)
 
     # If frozen state is in an unstable state, freezing and thawing writes can

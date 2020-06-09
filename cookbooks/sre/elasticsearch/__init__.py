@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 from time import sleep
 
 from dateutil.parser import parse
-from spicerack.decorators import retry
 from spicerack.elasticsearch_cluster import ElasticsearchClusterCheckError
+from spicerack.constants import CORE_DATACENTERS
 
 __title__ = __doc__
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -46,6 +46,9 @@ def argument_parser_base(name, title):
     parser.add_argument('--without-lvs', action='store_false', dest='with_lvs', help='This cluster does not use LVS.')
     parser.add_argument('--no-wait-for-green', action='store_false', dest='wait_for_green',
                         help='Don\'t wait for green before starting the operation (still wait at the end).')
+    parser.add_argument('--write-queue-datacenters', choices=CORE_DATACENTERS, default=CORE_DATACENTERS, nargs='+',
+                        help='(Optional) Manually specify a list of specific datacenters to check the '
+                             'cirrus write queue rather than checking all core datacenters (default)')
 
     return parser
 
@@ -56,27 +59,9 @@ def post_process_args(args):
         args.start_datetime = datetime.utcnow()
 
 
-# TODO: move this function to spicerack
-@retry(tries=60, delay=timedelta(seconds=60), backoff_mode='linear')
-def wait_for_write_queue_empty(prometheus):
-    """Wait for the Cirrus write queue to be empty.
-
-    At most waits for 60*60 seconds = 1 hour.
-    """
-    active_dc = 'eqiad'  # hardcoded to eqiad atm, let's check if this works first
-    query = 'kafka_burrow_partition_lag{{' \
-            '    exported_cluster="main-{active_dc}",' \
-            '    group="change-prop-cirrusSearchElasticaWrite",' \
-            '    topic="{active_dc}.mediawiki.job.cirrusSearchElasticaWrite"' \
-            '}}'.format(active_dc=active_dc)
-    result = prometheus.query(query, active_dc)
-    queue_size = int(result[0]['value'][1])
-    if queue_size > 0:
-        raise ElasticsearchClusterCheckError('Write queue not empty.')
-
-
 def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # pylint: disable=too-many-arguments
-                        nodes_per_run, clustergroup, start_datetime, nodes_have_lvs, wait_for_green, action):
+                        nodes_per_run, clustergroup, start_datetime, nodes_have_lvs,
+                        wait_for_green, action):
     """Executes an action on a whole cluster, taking care of alerting, puppet, etc...
 
     The action itself is passed as a function `action(nodes: ElasticsearchHosts)`.
@@ -93,7 +78,6 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
 
         remote_hosts = nodes.get_remote_hosts()
         puppet = spicerack.puppet(remote_hosts)
-        prometheus = spicerack.prometheus()
 
         with icinga.hosts_downtimed(remote_hosts.hosts, reason, duration=timedelta(minutes=30)):
             with puppet.disabled(reason):
@@ -136,4 +120,4 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
         elasticsearch_clusters.wait_for_green()
 
         logger.info('Allow time to consume write queue')
-        wait_for_write_queue_empty(prometheus)
+        elasticsearch_clusters.wait_for_all_write_queues_empty()

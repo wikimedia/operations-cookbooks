@@ -18,6 +18,6 @@ def argument_parser():
 
 def run(args, spicerack):
     """Required by Spicerack API."""
-    elasticsearch_clusters = spicerack.elasticsearch_clusters(args.clustergroup)
+    elasticsearch_clusters = spicerack.elasticsearch_clusters(args.clustergroup, args.write_queue_datacenters)
 
     elasticsearch_clusters.reset_indices_to_read_write()

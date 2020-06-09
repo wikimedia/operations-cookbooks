@@ -16,7 +16,8 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     post_process_args(args)
     icinga = spicerack.icinga()
-    elasticsearch_clusters = spicerack.elasticsearch_clusters(args.clustergroup)
+    elasticsearch_clusters = spicerack.elasticsearch_clusters(args.clustergroup, args.write_queue_datacenters)
+
     reason = spicerack.admin_reason(args.admin_reason, task_id=args.task_id)
 
     def restart_elasticsearch(nodes):
@@ -25,5 +26,6 @@ def run(args, spicerack):
 
     execute_on_clusters(
         elasticsearch_clusters, icinga, reason, spicerack, args.nodes_per_run,
-        args.clustergroup, args.start_datetime, args.with_lvs, args.wait_for_green, restart_elasticsearch
+        args.clustergroup, args.start_datetime, args.with_lvs, args.wait_for_green,
+        restart_elasticsearch
     )
