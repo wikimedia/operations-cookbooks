@@ -2,8 +2,9 @@
 from argparse import ArgumentParser
 from logging import getLogger
 
+import requests.exceptions
+
 from requests import get
-from requests.exceptions import HTTPError
 
 from cookbooks import ArgparseFormatter
 
@@ -17,6 +18,10 @@ class GetVersionError(Exception):
 
 class PdusRestartException(Exception):
     """Exception raised if password reset fails"""
+
+
+class GetUptimeError(Exception):
+    """Exception raised if we fail to get the uptime"""
 
 
 def argument_parser_base():
@@ -67,7 +72,7 @@ def get_version(pdu, session):
     try:
         response = session.get("https://{}/".format(pdu))
         response.raise_for_status()
-    except HTTPError as err:
+    except requests.exceptions.HTTPError as err:
         raise GetVersionError("{}: Error {} while trying to check the version: {}".format(
             pdu, response.status_code, err))
     if 'v7' in response.headers['Server']:
@@ -100,7 +105,7 @@ def restart(pdu, version, session):
     try:
         response = session.get("https://{}/Forms/restart_1".format(pdu), data=form)
         response.raise_for_status()
-    except HTTPError as err:
+    except requests.exceptions.HTTPError as err:
         raise PdusRestartException("{}: Error {} while trying to check the version: {}".format(
             pdu, response.status_code, err))
 
@@ -118,3 +123,30 @@ def get_pdu_ips(netbox):
     devices = netbox.api.dcim.devices.filter(role='pdu')
     return set(str(device.primary_ip).split('/')[0] for device in devices
                if device.primary_ip is not None)
+
+
+def get_uptime(pdu, session):
+    """Return the PDU uptime
+
+    Arguments:
+        pdu (str): the pdu
+        session (requests.Session): A configured request session
+
+    Returns:
+        (str): the server uptime
+
+    """
+    try:
+        response = session.get("https://{}/CDU/summary.txt".format(pdu))
+        response.raise_for_status()
+    except requests.exceptions.ConnectionError as err:
+        raise GetUptimeError("{}: Error while trying to check get uptime: {}".format(pdu, err))
+    except requests.exceptions.HTTPError as err:
+        raise GetUptimeError("{}: Error {} while trying to check get uptime: {}".format(
+            pdu, response.status_code, err))
+    # summary.text has a bunch of entries `/key(=type)?=value/` separated by pipe
+    for entry in response.text.split('|'):
+        tokens = entry.split('=')
+        if tokens[0] == 'uptime':
+            return tokens[2]
+    raise GetUptimeError('{}: Error unable to parse uptime from summary.txt'.format(pdu))
