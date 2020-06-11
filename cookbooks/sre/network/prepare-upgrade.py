@@ -98,7 +98,7 @@ def run(args, spicerack):
     if not json_output:
         return 1
     try:
-        dst_checksum = json_output['checksum-information']['file-checksum'][0]['checksum'][0]['data']
+        dst_checksum = json_output['checksum-information'][0]['file-checksum'][0]['checksum'][0]['data']
     except KeyError:
         logger.info(json_output)
         logger.error('Can\'t generate destination side checksum, did the file copy go well?')
