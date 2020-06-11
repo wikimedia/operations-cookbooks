@@ -48,5 +48,5 @@ def run(args, spicerack):
         remote_host.reboot()
         remote_host.wait_reboot_since(reboot_time)
         puppet.wait_since(reboot_time)
-        if not icinga.get_status().optimal:
+        if not icinga.get_status(remote_host.hosts).optimal:
             logger.warning('Not all Icinga checks are fully recovered')
