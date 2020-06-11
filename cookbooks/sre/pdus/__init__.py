@@ -1,10 +1,14 @@
 """PDU Operations"""
+
 from argparse import ArgumentParser
+from datetime import datetime, timedelta
 from logging import getLogger
+from re import match
 
 import requests.exceptions
 
 from requests import get
+from spicerack.decorators import retry
 
 from cookbooks import ArgparseFormatter
 
@@ -12,15 +16,19 @@ logger = getLogger(__name__)  # pylint: disable=invalid-name
 MIN_SECRET_SIZE = 6
 
 
-class GetVersionError(Exception):
+class VersionError(Exception):
     """Raised if there is an issue getting PDU version"""
 
 
-class PdusRestartException(Exception):
+class RebootError(Exception):
     """Exception raised if password reset fails"""
 
 
-class GetUptimeError(Exception):
+class UptimeError(Exception):
+    """Exception raised if we fail to get the uptime"""
+
+
+class RemoteCheckError(Exception):
     """Exception raised if we fail to get the uptime"""
 
 
@@ -66,14 +74,14 @@ def get_version(pdu, session):
         int: the version number
 
     Raises:
-        GetVersionError
+        VersionError
 
     """
     try:
         response = session.get("https://{}/".format(pdu))
         response.raise_for_status()
     except requests.exceptions.HTTPError as err:
-        raise GetVersionError("{}: Error {} while trying to check the version: {}".format(
+        raise VersionError("{}: Error {} while trying to check the version: {}".format(
             pdu, response.status_code, err))
     if 'v7' in response.headers['Server']:
         logger.debug('%s: Sentry 3 detected', pdu)
@@ -81,11 +89,11 @@ def get_version(pdu, session):
     if 'v8' in response.headers['Server']:
         logger.debug('%s: Sentry 4 detected', pdu)
         return 4
-    raise GetVersionError('{}: Unknown Sentry version'.format(pdu))
+    raise VersionError('{}: Unknown Sentry version'.format(pdu))
 
 
-def restart(pdu, version, session):
-    """Restart the PDU
+def reboot(pdu, version, session):
+    """Reboot the PDU
 
     Arguments:
         pdu (str): the pdu
@@ -94,20 +102,41 @@ def restart(pdu, version, session):
 
     """
     form = {
-        3: {'Restart_Action': 1},
+        3: {'Reboot_Action': 1},
         4: {'RST': '00000001', 'FormButton': 'Apply'},
     }.get(version)
 
     if form is None:
-        raise PdusRestartException('{}: Unknown Sentry version'.format(pdu))
+        raise RebootError('{}: Unknown Sentry version'.format(pdu))
 
-    logger.info('%s: restarting Sentry v%d PDU', pdu, version)
+    logger.info('%s: rebooting Sentry v%d PDU', pdu, version)
     try:
-        response = session.get("https://{}/Forms/restart_1".format(pdu), data=form)
+        response = session.get("https://{}/Forms/reboot_1".format(pdu), data=form)
         response.raise_for_status()
     except requests.exceptions.HTTPError as err:
-        raise PdusRestartException("{}: Error {} while trying to check the version: {}".format(
+        raise RebootError("{}: Error {} while trying to reboot : {}".format(
             pdu, response.status_code, err))
+
+
+@retry(tries=25, delay=timedelta(seconds=10), backoff_mode='linear', exceptions=UptimeError)
+def wait_reboot_since(pdu, since, session):
+    """Poll the host until it is reachable and has an uptime lower than the provided datetime.
+
+    Arguments:
+        pdu (str): the pdu
+        since (datetime.datetime): the time after which the host should have booted.
+        session (requests.Session): A configured request session
+
+    Raises:
+        RemoteCheckError: if unable to connect to the host or the uptime is higher than expected.
+
+    """
+    delta = (datetime.utcnow() - since).total_seconds()
+    uptime = parse_uptime(get_uptime(pdu, session))
+    if uptime >= delta:
+        raise UptimeError('{}: uptime is higher then threshold: {} > {}'.format(
+            pdu, uptime, delta))
+    logger.info('%s: found reboot since %s', pdu, since)
 
 
 def get_pdu_ips(netbox):
@@ -140,13 +169,39 @@ def get_uptime(pdu, session):
         response = session.get("https://{}/CDU/summary.txt".format(pdu))
         response.raise_for_status()
     except requests.exceptions.ConnectionError as err:
-        raise GetUptimeError("{}: Error while trying to check get uptime: {}".format(pdu, err))
+        raise UptimeError("{}: Error while trying to check get uptime: {}".format(pdu, err))
     except requests.exceptions.HTTPError as err:
-        raise GetUptimeError("{}: Error {} while trying to check get uptime: {}".format(
+        raise UptimeError("{}: Error {} while trying to check get uptime: {}".format(
             pdu, response.status_code, err))
     # summary.text has a bunch of entries `/key(=type)?=value/` separated by pipe
     for entry in response.text.split('|'):
         tokens = entry.split('=')
         if tokens[0] == 'uptime':
             return tokens[2]
-    raise GetUptimeError('{}: Error unable to parse uptime from summary.txt'.format(pdu))
+    raise UptimeError('{}: Error unable to parse uptime from summary.txt'.format(pdu))
+
+
+def parse_uptime(uptime):
+    """Parse the uptime to a datetime object
+
+    Arguments:
+        uptime (str): uptime as provided by the unix uptime command
+
+    Returns:
+        int: the uptime represented in seconds
+
+    Raises:
+        UptimeError: raised if unable to parse uptime
+
+    """
+    pattern = (r'(?P<days>\d+)\s+days?'
+               r'\s+(?P<hours>\d+)\s+hours?'
+               r'\s+(?P<minutes>\d+)\s+minutes?'
+               r'\s+(?P<seconds>\d+)\s+seconds?')
+    matches = match(pattern, uptime)
+    if matches is None:
+        raise UptimeError('unable to parse uptime: {}'.format(uptime))
+    # cast values to int for timedelta
+    matches = {k: int(v) for k, v in matches.groupdict().items()}
+    uptime_delta = timedelta(**matches)
+    return int(uptime_delta.total_seconds())

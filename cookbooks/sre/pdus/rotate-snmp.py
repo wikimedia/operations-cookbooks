@@ -20,8 +20,7 @@ from requests import Session
 from requests.exceptions import HTTPError
 from spicerack.interactive import ensure_shell_is_durable, get_secret
 
-from cookbooks.sre.pdus import (argument_parser_base, check_default, get_pdu_ips,
-                                get_version, GetVersionError, restart)
+from cookbooks.sre import pdus
 
 __title__ = 'Update Sentry PDUs 🔌 SNMP communities'
 logger = getLogger(__name__)  # pylint: disable=invalid-name
@@ -185,7 +184,7 @@ def change_snmp(pdu, version, session, snmp_ro, snmp_rw=None):
 
 def argument_parser():
     """As specified by Spicerack API."""
-    parser = argument_parser_base()
+    parser = pdus.argument_parser_base()
     parser.add_argument('--reset-rw', action='store_true',
                         help='Reset the RW community to a random string')
     return parser
@@ -201,25 +200,22 @@ def run(args, spicerack):
 
     session.auth = (args.username, password)
 
-    pdus = get_pdu_ips(spicerack.netbox()) if args.query == 'all' else set([args.query])
+    _pdus = pdus.get_pdu_ips(spicerack.netbox()) if args.query == 'all' else set([args.query])
 
-    for pdu in pdus:
+    for pdu in _pdus:
         snmp_rw = random_string() if args.reset_rw else None
         try:
             if not spicerack.dry_run:
-                version = get_version(pdu, session)
+                version = pdus.get_version(pdu, session)
                 if change_snmp(pdu, version, session, snmp_ro, snmp_rw):
-                    restart(pdu, version, session)
+                    pdus.reboot(pdu, version, session)
             else:
                 logger.info('%s: Dry run, not trying.', pdu)
             if args.check_default:
-                if check_default(pdu):
+                if pdus.check_default(pdu):
                     # TODO: delete default user
                     return 1
-        except GetVersionError as error:
-            logger.error('%s: Failed to get PDU version: %s', pdu, str(error))
-            return 1
-        except SnmpResetError as error:
-            logger.error('%s: Failed to reset SNMP Community: %s', pdu, str(error))
+        except (pdus.VersionError, SnmpResetError, pdus.RebootError) as error:
+            logger.error(error)
             return 1
     return 0

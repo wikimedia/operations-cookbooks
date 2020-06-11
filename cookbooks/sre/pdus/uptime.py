@@ -5,9 +5,9 @@
 - If host 'all' is passed, will iterate over all PDUs
 
 Usage example:
-    cookbook sre.hosts.uptime --username MrFoo 'ps1-b5-eqiad.mgmt.eqiad.wmnet'
-    cookbook sre.hosts.uptime all
-    cookbook sre.hosts.uptime all --check_default
+    cookbook sre.pdus.uptime --username MrFoo 'ps1-b5-eqiad.mgmt.eqiad.wmnet'
+    cookbook sre.pdus.uptime all
+    cookbook sre.pdus.uptime all --check_default
 """
 
 import logging
@@ -16,7 +16,7 @@ from requests import Session
 
 from spicerack.interactive import get_secret
 
-from cookbooks.sre.pdus import argument_parser_base, check_default, get_pdu_ips, get_uptime, GetUptimeError
+from cookbooks.sre.pdus import argument_parser_base, check_default, get_pdu_ips, get_uptime, UptimeError
 
 
 __title__ = 'List PDU 🔌 uptime'
@@ -44,7 +44,7 @@ def run(args, spicerack):
         try:
             uptime = get_uptime(pdu, session)
             logger.info('%s: uptime %s', pdu, uptime)
-        except GetUptimeError as error:
+        except UptimeError as error:
             logger.error(error)
             return_code = 1
         if args.check_default:

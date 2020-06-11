@@ -6,9 +6,9 @@
 - So try --dry-run first 😉
 
 Usage example:
-    cookbook sre.hosts.rotate-pdu-password --username MrFoo 'ps1-b5-eqiad.mgmt.eqiad.wmnet'
-    cookbook sre.hosts.rotate-pdu-password all
-    cookbook sre.hosts.rotate-pdu-password all --check_default
+    cookbook sre.pdus.rotate-pdu-password --username MrFoo 'ps1-b5-eqiad.mgmt.eqiad.wmnet'
+    cookbook sre.pdus.rotate-pdu-password all
+    cookbook sre.pdus.rotate-pdu-password all --check_default
 """
 
 import logging
@@ -18,7 +18,7 @@ from requests.exceptions import HTTPError
 
 from spicerack.interactive import ensure_shell_is_durable, get_secret
 
-from cookbooks.sre.pdus import argument_parser_base, check_default, get_pdu_ips, get_version, GetVersionError
+from cookbooks.sre import pdus
 
 
 __title__ = 'Update Sentry PDUs 🔌 passwords'
@@ -31,7 +31,7 @@ class PasswordResetError(Exception):
 
 def argument_parser():
     """As specified by Spicerack API."""
-    return argument_parser_base()
+    return pdus.argument_parser_base()
 
 
 def change_password(pdu, session, new_password):
@@ -58,7 +58,7 @@ def change_password(pdu, session, new_password):
             'UPW': new_password,
             'UPWV': new_password
         }
-    }.get(get_version(pdu, session))
+    }.get(pdus.get_version(pdu, session))
 
     # Then change the password
     try:
@@ -92,22 +92,19 @@ def run(args, spicerack):
     session.auth = (args.username, current_password)
 
     # TODO: check if self.query is a PDU in netbox
-    pdus = get_pdu_ips(spicerack.netbox()) if args.query == 'all' else set([args.query])
+    _pdus = pdus.get_pdu_ips(spicerack.netbox()) if args.query == 'all' else set([args.query])
 
-    for pdu in pdus:
+    for pdu in _pdus:
         try:
             if not spicerack.dry_run:
                 change_password(pdu, session, new_password)
             else:
                 logger.info('%s: Dry run, not trying.', pdu)
             if args.check_default:
-                if check_default(pdu):
+                if pdus.check_default(pdu):
                     # TODO: delete default user
                     return_code = 1
-        except GetVersionError as error:
-            logger.error('%s: Failed to get PDU version: %s', pdu, str(error))
-            return_code = 1
-        except PasswordResetError as error:
-            logger.error('%s: Failed to reset password: %s', pdu, str(error))
+        except (pdus.VersionError, PasswordResetError) as error:
+            logger.error(error)
             return_code = 1
     return return_code
