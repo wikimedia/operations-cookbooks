@@ -69,6 +69,7 @@ def argument_parser():
     parser.add_argument('--depool', action='store_true', help='Should be depooled.')
     parser.add_argument('--reload-data', default='all', choices=RELOAD_TYPES.keys(),
                         help='Type of data to reload')
+    parser.add_argument('--skolemize', action='store_true', help='Skolemize blank nodes when munging')
 
     return parser
 
@@ -109,16 +110,17 @@ def fail_for_disk_space(remote_host):
             path=WDQS_DUMPS['wikidata']['path']), is_safe=True)
 
 
-def munge(remote_host):
+def munge(remote_host, skolemize):
     """Run munger for main database and lexeme"""
     logger.info('Running munger for main database and then lexeme')
     stop_watch = StopWatch()
     for dump in WDQS_DUMPS.values():
-        logger.info('munging %s', dump['munge_path'])
+        logger.info('munging %s (skolemizaton: %s)', dump['munge_path'], str(skolemize))
         stop_watch.reset()
         remote_host.run_sync(
-            "mkdir -p {munge_path} && bzcat {path} | /srv/deployment/wdqs/wdqs/munge.sh -f - -d {munge_path}".format(
-                path=dump['path'], munge_path=dump['munge_path']),
+            "mkdir -p {munge_path} && bzcat {path} | "
+            "/srv/deployment/wdqs/wdqs/munge.sh -f - -d {munge_path} -- {skolemize}"
+            .format(path=dump['path'], munge_path=dump['munge_path'], skolemize="--skolemize" if skolemize else ""),
         )
         logger.info('munging %s completed in %s', dump['munge_path'], stop_watch.elapsed())
 
@@ -220,7 +222,7 @@ def run(args, spicerack):
     if 'wikidata' in data_to_reload:
         get_dumps(remote_host, args.proxy_server, args.reuse_downloaded_dump)
         fail_for_disk_space(remote_host)
-        munge(remote_host)
+        munge(remote_host, args.skolemize)
 
     @contextmanager
     def noop_change_and_revert():
