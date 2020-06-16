@@ -20,8 +20,8 @@ def argument_parser():
     group.add_argument('cluster', nargs='?',
                        choices=['aqs', 'restbase-eqiad', 'restbase-dev', 'sessionstore',
                                 'restbase-codfw'],
-                       help=('The name of the Cassandra cluster to work on. This refers to ',
-                             'a Cumin alias. Alternatively you can pass an alternative Cumin ',
+                       help=('The name of the Cassandra cluster to work on. This refers to '
+                             'a Cumin alias. Alternatively you can pass an alternative Cumin '
                              'host query using the --query argument'))
     group.add_argument('--query', help='A cumin query string')
     parser.add_argument('-r', '--reason', help='The reason for performing the restart',
