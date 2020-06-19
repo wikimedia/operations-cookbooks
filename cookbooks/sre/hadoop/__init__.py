@@ -28,3 +28,9 @@ __title__ = "Hadoop Clusters Operations"
 
 # List of Hadoop cluster names (reused across cookbooks)
 HADOOP_CLUSTER_NAMES = ('test', 'analytics')
+
+CLUSTER_CUMIN_ALIAS = 'A:hadoop'
+MASTER_CUMIN_ALIAS = 'A:hadoop-master'
+STANDBY_CUMIN_ALIAS = 'A:hadoop-standby'
+WORKERS_CUMIN_ALIAS = 'A:hadoop-worker'
+HDFS_JOURNAL_CUMIN_ALIAS = 'A:hadoop-hdfs-journal'
