@@ -174,11 +174,11 @@ def change_snmp(pdu, version, session, snmp_ro, snmp_rw=None):
     # Check the new values applied
     if parser.form['GetCom'] != snmp_ro:
         raise SnmpResetError('{}: failed to update snmp_ro'.format(pdu))
-    else:
-        logger.info('%s: SNMP RO: updated', pdu)
+
+    logger.info('%s: SNMP RO: updated', pdu)
     if snmp_rw and parser.form['SetCom'] != snmp_rw:
         raise SnmpResetError('{}: failed to update snmp_rw'.format(pdu))
-    elif snmp_rw:
+    if snmp_rw:
         logger.info('%s: SNMP RW: updated', pdu)
     return True
 

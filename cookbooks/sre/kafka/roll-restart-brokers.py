@@ -106,11 +106,10 @@ def run(args, spicerack):
     with icinga.hosts_downtimed(kafka_brokers.hosts, reason,
                                 duration=timedelta(minutes=240)):
         commands = [
-          'systemctl restart kafka',
-          'sleep ' + str(args.sleep_before_pref_replica_election),
-          'source /etc/profile.d/kafka.sh; kafka preferred-replica-election'
+            'systemctl restart kafka',
+            'sleep ' + str(args.sleep_before_pref_replica_election),
+            'source /etc/profile.d/kafka.sh; kafka preferred-replica-election',
         ]
-        kafka_brokers.run_async(
-          *commands, batch_size=1, batch_sleep=args.batch_sleep_seconds)
+        kafka_brokers.run_async(*commands, batch_size=1, batch_sleep=args.batch_sleep_seconds)
 
     logger.info('All Kafka broker restarts completed!')

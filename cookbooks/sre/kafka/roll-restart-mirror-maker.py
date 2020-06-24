@@ -45,7 +45,6 @@ def run(args, spicerack):
                                 duration=timedelta(minutes=120)):
 
         kafka_mirror_makers.run_sync(
-          'systemctl restart kafka-mirror.service', batch_size=1,
-          batch_sleep=args.batch_sleep_seconds)
+            'systemctl restart kafka-mirror.service', batch_size=1, batch_sleep=args.batch_sleep_seconds)
 
     logger.info('All Kafka Mirror Maker restarts completed!')

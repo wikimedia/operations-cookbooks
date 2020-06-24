@@ -59,8 +59,6 @@ def run(args, spicerack):
     with icinga.hosts_downtimed(zookeeper.hosts, reason,
                                 duration=timedelta(minutes=120)):
 
-        zookeeper.run_sync(
-          'systemctl restart zookeeper', batch_size=1,
-          batch_sleep=args.batch_sleep_seconds)
+        zookeeper.run_sync('systemctl restart zookeeper', batch_size=1, batch_sleep=args.batch_sleep_seconds)
 
     logger.info('All Zookeeper restarts completed!')
