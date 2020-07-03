@@ -47,10 +47,10 @@ def safety_checks(hadoop_workers, hadoop_master, hadoop_standby):
         'so please make sure that coordinator, presto, druid, notebooks, clients, etc.. '
         'are all downtimed and with puppet disabled.\n'
         'Important things to check/remember:\n'
-        '- systemd timers running jobs need to be stopped.'
-        '- oozie/hive/presto need to be shutdown on the coordinator node.'
-        '- /mnt/hdfs mountpoints need to be unmounted from clients.'
-        '- Hue/Jupyter processes should be down.'
+        '- systemd timers running jobs need to be stopped.\n'
+        '- oozie/hive/presto need to be shutdown on the coordinator node.\n'
+        '- /mnt/hdfs mountpoints need to be unmounted from clients.\n'
+        '- Hue/Jupyter processes should be down.\n'
         '- The Cluster needs to be drained from running jobs.\n\n'
         'Also please note that the Hadoop cluster\'s hosts will be left with puppet '
         'disabled, to prevent daemons to be restarted before time.')
@@ -58,7 +58,7 @@ def safety_checks(hadoop_workers, hadoop_master, hadoop_standby):
     logger.info('Checking number of jvm processes not related to HDFS daemons running '
                 'on the workers.')
     print_run_command_output(hadoop_workers.run_sync(
-        'ps aux | grep java| egrep -v "JournalNode|DataNode|NodeManager" | grep -v egrep | wc -l'))
+        'ps aux | grep [j]ava| egrep -v "JournalNode|DataNode|NodeManager" | grep -v egrep | wc -l'))
 
     ask_confirmation(
         'If there are remaining jvm processes running on the Cluster, please kill them.')
@@ -68,9 +68,12 @@ def safety_checks(hadoop_workers, hadoop_master, hadoop_standby):
     hadoop_master_hdfs_service = hadoop_master.hosts[0].replace('.', '-')
     hadoop_standby_hdfs_service = hadoop_standby.hosts[0].replace('.', '-')
 
+    logger.info('HDFS Master status:')
     print_run_command_output(hadoop_master.run_sync(
         'kerberos-run-command hdfs /usr/bin/hdfs haadmin -getServiceState ' +
         hadoop_master_hdfs_service))
+
+    logger.info('HDFS Standby status:')
     print_run_command_output(hadoop_master.run_sync(
         'kerberos-run-command hdfs /usr/bin/hdfs haadmin -getServiceState ' +
         hadoop_standby_hdfs_service))
@@ -131,14 +134,14 @@ def run(args, spicerack):
         hadoop_standby.run_sync(
             'systemctl stop hadoop-yarn-resourcemanager')
 
-        logger.info('Sleeping some seconds to let things to stabilize')
+        logger.info('Sleeping some seconds to let things to stabilize.')
         time.sleep(10)
 
         hadoop_master.run_sync(
             'systemctl stop hadoop-yarn-resourcemanager')
 
         logger.info(
-            "Stopping all HDFS Datanodes. Be patient, very slow step."
+            "Stopping all HDFS Datanodes. Be patient, very slow step. "
             "Two nodes at the time, one minute sleep between each batch.")
         hadoop_workers.run_sync(
             'systemctl stop hadoop-hdfs-datanode',
@@ -153,12 +156,12 @@ def run(args, spicerack):
         time.sleep(60)
 
         logger.info('Stopping HDFS Master Namenode.')
-        hadoop_standby.run_sync(
+        hadoop_master.run_sync(
             'systemctl stop hadoop-hdfs-namenode',
             'systemctl stop hadoop-hdfs-zkfc')
 
         logger.info('Stopping MapReduce History Server.')
-        hadoop_standby.run_sync(
+        hadoop_master.run_sync(
             'systemctl stop hadoop-mapreduce-historyserver')
 
         logger.info('Stopping HDFS Journalnodes.')
