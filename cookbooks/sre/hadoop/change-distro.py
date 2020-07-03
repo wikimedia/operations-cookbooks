@@ -147,10 +147,10 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
             hadoop_workers.run_sync(
                 'systemctl stop hadoop-hdfs-datanode',
                 'service hadoop-hdfs-datanode rollback',
-                batch_size=5, batch_sleep=60.0)
+                batch_size=2, batch_sleep=30.0)
 
         print_run_command_output(hadoop_workers.run_sync(
-            'ps aux | grep java| egrep "JournalNode|DataNode|NodeManager" | grep -v egrep| wc -l'))
+            'ps aux | grep [j]ava| egrep "JournalNode|DataNode|NodeManager" | grep -v egrep| wc -l'))
         ask_confirmation('Verify that the count is two for non-journal workers, and 3 for journal workers.')
 
         ask_confirmation(
