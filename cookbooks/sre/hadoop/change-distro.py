@@ -149,6 +149,9 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
                 'service hadoop-hdfs-datanode rollback',
                 batch_size=2, batch_sleep=30.0)
 
+        logger.info('Checking how many java daemons are running on the worker nodes '
+                    'after installing the packages.')
+
         print_run_command_output(hadoop_workers.run_sync(
             'ps aux | grep [j]ava| egrep "JournalNode|DataNode|NodeManager" | grep -v egrep| wc -l'))
         ask_confirmation('Verify that the count is two for non-journal workers, and 3 for journal workers.')
