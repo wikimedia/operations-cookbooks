@@ -133,16 +133,8 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
                 batch_size=5, batch_sleep=60.0)
 
         # If the cookbook is running in rollback mode, then there are extra steps to be taken
-        # for HDFS Journal and Data nodes.
+        # for HDFS Datanodes.
         if args.rollback:
-            # It happened in the past, while testing upgrades, that journal nodes
-            # were started in a spurious configuration (no cluster id/version) that
-            # prevented the Namenodes to start correctly.
-            logger.info('Roll restart of the journalnodes to avoid spurious bugs.')
-            hadoop_hdfs_journal_workers.run_sync(
-                'systemctl restart hadoop-hdfs-journalnode',
-                batch_size=1, batch_sleep=60.0)
-
             logger.info('Stop each datanode and start it with the rollback option. Long step.')
             hadoop_workers.run_sync(
                 'systemctl stop hadoop-hdfs-datanode',
@@ -160,6 +152,15 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
             'MANUAL STEP: Puppet can be re-enabled manually on Hadoop worker nodes, to check if all configurations '
             'are set up correctly. Continue only once done.')
 
+        if args.rollback:
+            # It happened in the past, while testing upgrades, that journal nodes
+            # were started in a spurious configuration (no cluster id/version) that
+            # prevented the Namenodes to start correctly.
+            logger.info('Roll restart of the journalnodes to avoid spurious bugs.')
+            hadoop_hdfs_journal_workers.run_sync(
+                'systemctl restart hadoop-hdfs-journalnode',
+                batch_size=1, batch_sleep=60.0)
+
         logger.info('Install packages on the Hadoop HDFS Master node.')
 
         if args.rollback:
@@ -167,6 +168,7 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
                 'apt-get install -y `cat /root/cdh_package_list`')
             logger.info('Sleeping one minute to let things to stabilize')
             time.sleep(60)
+            logger.info('Starting the Master node with the rollback option.')
             hadoop_master.run_async(
                 'echo Y | sudo -u hdfs kerberos-run-command hdfs hdfs namenode -rollback',
                 'systemctl start hadoop-hdfs-namenode')
@@ -177,6 +179,7 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
                  f"egrep -v '{apt_package_filter}' | tr '\n' ' '`"))
             logger.info('Sleeping one minute to let things to stabilize')
             time.sleep(60)
+            logger.info('Starting the Master node with the upgrade option.')
             hadoop_master.run_sync('service hadoop-hdfs-namenode upgrade')
 
         ask_confirmation(
@@ -195,8 +198,9 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
 
         logger.info('Sleeping one minute to let things to stabilize')
         time.sleep(60)
+        logger.info('Formatting the Standby node and then starting it.')
         hadoop_standby.run_async(
-            'sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs namenode -bootstrapStandby',
+            'echo Y | sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs namenode -bootstrapStandby',
             'systemctl start hadoop-hdfs-namenode')
 
         logger.info('The procedure is completed.')
