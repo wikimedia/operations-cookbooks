@@ -85,7 +85,7 @@ def safety_checks(hadoop_workers, hadoop_master, hadoop_standby):
         'kerberos-run-command hdfs hdfs dfsadmin -safemode enter',
         'kerberos-run-command hdfs hdfs dfsadmin -saveNamespace')
 
-    logger.info("Backup of the Namenode's state..")
+    logger.info("Backup of the Namenode's state.")
     hadoop_master.run_sync(
         'tar -cvf /root/hadoop-namedir-backup-stop-cluster-cookbook-$(date +%s).tar /var/lib/hadoop/name')
     print_run_command_output(hadoop_master.run_sync(
@@ -168,6 +168,12 @@ def run(args, spicerack):
         hadoop_hdfs_journal_workers.run_sync(
             'systemctl stop hadoop-hdfs-journalnode',
             batch_size=1, batch_sleep=30.0)
+
+        logger.info("Backup of the Journalnodes' state.")
+        hadoop_hdfs_journal_workers.run_sync(
+            'tar -cvf /root/hadoop-journaldir-backup-stop-cluster-cookbook-$(date +%s).tar /var/lib/hadoop/journal')
+        print_run_command_output(hadoop_hdfs_journal_workers.run_sync(
+            'ls -lh /root/hadoop-journaldir-backup-stop-cluster-cookbook*'))
 
         print_run_command_output(hadoop_hosts.run_sync(
             'ps aux | grep java | grep -v grep | wc -l'))

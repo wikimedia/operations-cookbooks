@@ -203,4 +203,5 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
             'echo Y | sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs namenode -bootstrapStandby',
             'systemctl start hadoop-hdfs-namenode')
 
+        logger.info('Remember to re-enable puppet on the Hadoop Master/Standby nodes.')
         logger.info('The procedure is completed.')
