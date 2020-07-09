@@ -155,8 +155,15 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
         if args.rollback:
             # It happened in the past, while testing upgrades, that journal nodes
             # were started in a spurious configuration (no cluster id/version) that
-            # prevented the Namenodes to start correctly.
-            logger.info('Roll restart of the journalnodes to avoid spurious bugs.')
+            # prevented the Namenodes to start correctly. The safest option seems to
+            # be to stop journalnodes gracefully, and then start them back again.
+            logger.info('Stop/Start of the journalnodes to avoid spurious bugs. Long step.')
+            hadoop_hdfs_journal_workers.run_sync(
+                'systemctl stop hadoop-hdfs-journalnode',
+                batch_size=1, batch_sleep=60.0)
+            # We use 'restart' instead of start since sometimes the init.d scripts
+            # have trouble in recognizing if a daemon is not running or not when
+            # 'start' is requested.
             hadoop_hdfs_journal_workers.run_sync(
                 'systemctl restart hadoop-hdfs-journalnode',
                 batch_size=1, batch_sleep=60.0)
@@ -185,6 +192,10 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
         ask_confirmation(
             'Please check the HDFS Namenode logs on the master node, and continue only when it '
             'seems to be stable. Check also that it transitions to the active state.')
+
+        logger.info('Removing previous Namenode state (if any) from Hadoop HDFS Standby node. '
+                    'It does not play well with the next steps (like bootstrapStandby).')
+        hadoop_standby.run_sync('rm -rf /var/lib/hadoop/name/previous')
 
         logger.info('Install packages on the Hadoop HDFS Standby node.')
         if args.rollback:
