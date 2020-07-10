@@ -152,11 +152,22 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
             'MANUAL STEP: Puppet can be re-enabled manually on Hadoop worker nodes, to check if all configurations '
             'are set up correctly. Continue only once done.')
 
+        logger.info('Install packages on the Hadoop HDFS Master node.')
+
         if args.rollback:
+            hadoop_master.run_sync(
+                'apt-get install -y `cat /root/cdh_package_list`')
+            logger.info('Sleeping one minute to let things to stabilize')
+            time.sleep(60)
+            logger.info('Rollback the HDFS Master node state.')
+            hadoop_master.run_sync(
+                'echo Y | sudo -u hdfs kerberos-run-command hdfs hdfs namenode -rollback')
             # It happened in the past, while testing upgrades, that journal nodes
             # were started in a spurious configuration (no cluster id/version) that
-            # prevented the Namenodes to start correctly. The safest option seems to
-            # be to stop journalnodes gracefully, and then start them back again.
+            # prevented the Namenodes to start correctly. The theory is that the rollback
+            # command above is the cause, since it does also rollback the state of the JNs.
+            # The safest option seems to be to stop journalnodes gracefully,
+            # and then start them back again.
             logger.info('Stop/Start of the journalnodes to avoid spurious bugs. Long step.')
             hadoop_hdfs_journal_workers.run_sync(
                 'systemctl stop hadoop-hdfs-journalnode',
@@ -167,17 +178,8 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
             hadoop_hdfs_journal_workers.run_sync(
                 'systemctl restart hadoop-hdfs-journalnode',
                 batch_size=1, batch_sleep=60.0)
-
-        logger.info('Install packages on the Hadoop HDFS Master node.')
-
-        if args.rollback:
+            logger.info('Starting the HDFS Master node.')
             hadoop_master.run_sync(
-                'apt-get install -y `cat /root/cdh_package_list`')
-            logger.info('Sleeping one minute to let things to stabilize')
-            time.sleep(60)
-            logger.info('Starting the Master node with the rollback option.')
-            hadoop_master.run_async(
-                'echo Y | sudo -u hdfs kerberos-run-command hdfs hdfs namenode -rollback',
                 'systemctl start hadoop-hdfs-namenode')
         else:
             apt_package_filter = "|".join(CDH_PACKAGES_NOT_IN_BIGTOP)
@@ -186,7 +188,7 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
                  f"egrep -v '{apt_package_filter}' | tr '\n' ' '`"))
             logger.info('Sleeping one minute to let things to stabilize')
             time.sleep(60)
-            logger.info('Starting the Master node with the upgrade option.')
+            logger.info('Starting the HDFS Master node with the upgrade option.')
             hadoop_master.run_sync('service hadoop-hdfs-namenode upgrade')
 
         ask_confirmation(
@@ -209,7 +211,7 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
 
         logger.info('Sleeping one minute to let things to stabilize')
         time.sleep(60)
-        logger.info('Formatting the Standby node and then starting it.')
+        logger.info('Formatting the HDFS Standby node and then starting it.')
         hadoop_standby.run_async(
             'echo Y | sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs namenode -bootstrapStandby',
             'systemctl start hadoop-hdfs-namenode')
