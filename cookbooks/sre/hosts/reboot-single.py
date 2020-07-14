@@ -35,6 +35,10 @@ def run(args, spicerack):
     """Reboot the host"""
     remote_host = spicerack.remote().query(args.host)
 
+    if len(remote_host) == 0:
+        logger.error('Specified server not found, bailing out')
+        return 1
+
     if len(remote_host) != 1:
         logger.error('Only a single server can be rebooted')
         return 1
