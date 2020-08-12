@@ -36,7 +36,7 @@ def argument_parser():
     return parser
 
 
-@retry(tries=20, delay=timedelta(seconds=3), backoff_mode='constant', exceptions=(IcingaError,))
+@retry(tries=20, delay=timedelta(seconds=3), backoff_mode='linear', exceptions=(IcingaError,))
 def wait_for_icinga_optimal(icinga, remote_host):
     """Waits for an icinga optimal status, else raises an exception."""
     status = icinga.get_status(remote_host.hosts)
