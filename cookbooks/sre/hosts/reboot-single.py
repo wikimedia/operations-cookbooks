@@ -15,6 +15,7 @@ Usage example:
 """
 import argparse
 import logging
+import time
 
 from datetime import datetime, timedelta
 
@@ -28,6 +29,8 @@ def argument_parser():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('host', help='A single host to be rebooted (specified in Cumin query syntax)')
+    parser.add_argument('--depool', help='Wether to run depool/pool on the server around reboots.',
+                        actions='store_true')
     return parser
 
 
@@ -48,9 +51,17 @@ def run(args, spicerack):
     reason = spicerack.admin_reason('Rebooting host')
 
     with icinga.hosts_downtimed(remote_host.hosts, reason, duration=timedelta(minutes=20)):
+        if args.depool:
+            remote_host.run('depool')
+            logger.info('Waiting a 30 second grace period after depooling')
+            time.sleep(30)
         reboot_time = datetime.utcnow()
         remote_host.reboot()
         remote_host.wait_reboot_since(reboot_time)
         puppet.wait_since(reboot_time)
         if not icinga.get_status(remote_host.hosts).optimal:
             logger.warning('Not all Icinga checks are fully recovered')
+            if args.depool:
+                logger.warning('NOT repooling the host')
+        elif args.depool:
+            remote_host.run('pool')
