@@ -52,7 +52,7 @@ def run(args, spicerack):
 
     with icinga.hosts_downtimed(remote_host.hosts, reason, duration=timedelta(minutes=20)):
         if args.depool:
-            remote_host.run('depool')
+            remote_host.run_async('depool')
             logger.info('Waiting a 30 second grace period after depooling')
             time.sleep(30)
         reboot_time = datetime.utcnow()
@@ -64,4 +64,4 @@ def run(args, spicerack):
             if args.depool:
                 logger.warning('NOT repooling the host')
         elif args.depool:
-            remote_host.run('pool')
+            remote_host.run_async('pool')
