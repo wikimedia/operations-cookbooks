@@ -30,7 +30,7 @@ def argument_parser():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('host', help='A single host to be rebooted (specified in Cumin query syntax)')
     parser.add_argument('--depool', help='Wether to run depool/pool on the server around reboots.',
-                        actions='store_true')
+                        action='store_true')
     return parser
 
 
