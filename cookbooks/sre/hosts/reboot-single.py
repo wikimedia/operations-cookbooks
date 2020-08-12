@@ -41,7 +41,8 @@ def wait_for_icinga_optimal(icinga, remote_host):
     """Waits for an icinga optimal status, else raises an exception."""
     status = icinga.get_status(remote_host.hosts)
     if not status.optimal:
-        raise IcingaError('Not all services are recovered: {}'.format(','.join(status.failed_services.keys())))
+        failed = ["{}:{}".format(k, ','.join(v)) for k, v in status.failed_services]
+        raise IcingaError('Not all services are recovered: {}'.format(' '.join(failed)))
 
 
 def run(args, spicerack):
@@ -69,12 +70,25 @@ def run(args, spicerack):
         remote_host.reboot()
         remote_host.wait_reboot_since(reboot_time)
         puppet.wait_since(reboot_time)
-        try:
-            wait_for_icinga_optimal(icinga, remote_host)
-            if args.depool:
+
+        # First let's try to check if icinga is already in optimal state.
+        # If not, we require a recheck all service, then
+        # wait a grace period before declaring defeat.
+        icinga_ok = icinga.get_status(remote_host.hosts).optimal
+        if not icinga_ok:
+            icinga.recheck_all_services(remote_host.hosts)
+            try:
+                wait_for_icinga_optimal(icinga, remote_host)
+                icinga_ok = True
+            except IcingaError as e:
+                logger.error(str(e))
+
+        if args.depool:
+            if icinga_ok:
                 remote_host.run_async('pool')
-        except IcingaError as e:
-            logger.error(str(e))
-            if args.depool:
+            else:
                 logger.warning("NOT repooling the services.")
+
+        # Return an error if icinga didn't recover.
+        if not icinga_ok:
             return 1
