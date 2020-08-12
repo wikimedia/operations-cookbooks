@@ -41,7 +41,7 @@ def wait_for_icinga_optimal(icinga, remote_host):
     """Waits for an icinga optimal status, else raises an exception."""
     status = icinga.get_status(remote_host.hosts)
     if not status.optimal:
-        failed = ["{}:{}".format(k, ','.join(v)) for k, v in status.failed_services]
+        failed = ["{}:{}".format(k, ','.join(v)) for k, v in status.failed_services.items()]
         raise IcingaError('Not all services are recovered: {}'.format(' '.join(failed)))
 
 
