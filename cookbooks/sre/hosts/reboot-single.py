@@ -19,6 +19,8 @@ import time
 
 from datetime import datetime, timedelta
 
+from spicerack.decorators import retry
+from spicerack.icinga import IcingaError
 
 __title__ = 'Downtime a single host and reboot it'
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -32,6 +34,14 @@ def argument_parser():
     parser.add_argument('--depool', help='Wether to run depool/pool on the server around reboots.',
                         action='store_true')
     return parser
+
+
+@retry(tries=20, delay=timedelta(seconds=3), backoff_mode='constant', exceptions=(IcingaError,))
+def wait_for_icinga_optimal(icinga, remote_host):
+    """Waits for an icinga optimal status, else raises an exception."""
+    status = icinga.get_status(remote_host.hosts)
+    if not status.optimal:
+        raise IcingaError('Not all services are recovered: {}'.format(','.join(status.failed_services.keys())))
 
 
 def run(args, spicerack):
@@ -59,9 +69,12 @@ def run(args, spicerack):
         remote_host.reboot()
         remote_host.wait_reboot_since(reboot_time)
         puppet.wait_since(reboot_time)
-        if not icinga.get_status(remote_host.hosts).optimal:
-            logger.warning('Not all Icinga checks are fully recovered')
+        try:
+            wait_for_icinga_optimal(icinga, remote_host)
             if args.depool:
-                logger.warning('NOT repooling the host')
-        elif args.depool:
-            remote_host.run_async('pool')
+                remote_host.run_async('pool')
+        except IcingaError as e:
+            logger.error(str(e))
+            if args.depool:
+                logger.warning("NOT repooling the services.")
+            return 1
