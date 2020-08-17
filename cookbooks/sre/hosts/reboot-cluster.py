@@ -32,7 +32,7 @@ from spicerack.constants import CORE_DATACENTERS
 from spicerack.decorators import retry
 from spicerack.icinga import IcingaError
 from spicerack.puppet import PuppetHostsCheckError
-from spicerack.remote import RemoteCheckError, RemoteExecutionErorr
+from spicerack.remote import RemoteCheckError, RemoteExecutionError
 
 
 __title__ = "Perform a rolling reboot of a conftool cluster"
@@ -155,7 +155,7 @@ def reboot_with_downtime(spicerack, remote_hosts, results, no_fail_on_icinga):
             logger.error(e)
             logger.error('Hosts {} have NOT been repooled.'.format(','.join(results.hosts)))
             raise
-    except (PuppetHostsCheckError, RemoteCheckError, RemoteExecutionErorr) as e:
+    except (PuppetHostsCheckError, RemoteCheckError, RemoteExecutionError) as e:
         # Some host failed to come up again, or something fundamental broke.
         # log an error, exit *without* repooling
         logger.error(e)
