@@ -45,8 +45,8 @@ def check_percentage(arg):
         int_arg = int(arg)
     except ValueError:
         raise argparse.ArgumentTypeError("Percentage must be an integer.")
-    if int_arg < 1 or int_arg > 100:
-        raise argparse.ArgumentTypeError("Percentage must be between 1 and 100")
+    if int_arg < 1 or int_arg > 25:
+        raise argparse.ArgumentTypeError("Percentage must be between 1 and 25")
     return int_arg
 
 
@@ -191,7 +191,7 @@ def run(args, spicerack):
             with confctl.change_and_revert(
                 'pooled',
                 'yes',
-                'no',
+                'inactive',
                 name='|'.join(remote_slice.hosts.striter()),
             ):
                 time.sleep(args.grace_sleep)
