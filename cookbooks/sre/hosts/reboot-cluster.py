@@ -196,10 +196,11 @@ def run(args, spicerack):
                 name='|'.join(remote_slice.hosts.striter()),
             ):
                 time.sleep(args.grace_sleep)
-                reboot_with_downtime(spicerack, remote_slice, results, args.no_repool_on_icinga)
+                reboot_with_downtime(spicerack, remote_slice, results, args.no_fail_on_icinga)
         except Exception as e:
             # If an exception was raised within the context manager, we have some hosts
             # left depooled, so we stop the loop for human inspection.
+            results.fail(remote_slice.hosts)
             logger.error('Unrecoverable error. Stopping the rolling reboot: {}'.format(e))
             break
     return results.report()
