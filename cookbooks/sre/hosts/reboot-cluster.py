@@ -146,7 +146,6 @@ def reboot_with_downtime(spicerack, remote_hosts, results, no_fail_on_icinga):
         # Icinga didn't run correctly. log an error
         # but the servers will still be repooled,
         # unless it's explicitly disabled on the cli.
-        results.fail(remote_hosts.hosts)
         if no_fail_on_icinga:
             logger.warning(e)
             results.success(remote_hosts.hosts)
