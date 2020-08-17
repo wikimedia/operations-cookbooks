@@ -174,7 +174,7 @@ def run(args, spicerack):
     results = Results(hosts=remote_hosts, successful=[], failed=[])
     to_exclude = NodeSet(args.exclude)
 
-    n_slices = math.ceil(1.0 / args.percentage * 0.01)
+    n_slices = math.ceil(1.0 / (args.percentage * 0.01))
     for raw_slice in remote_hosts.split(n_slices):
         if results.failed_slices > args.max_failed:
             logger.error('Too many failures, exiting')
@@ -185,14 +185,14 @@ def run(args, spicerack):
             continue
         # Let's avoid a second query to puppetdb here.
         remote_slice = spicerack.remote().query('D{{{h}}}'.format(h=str(hosts)))
+        logger.info("Now acting on {}".format(str(hosts)))
         try:
+            # We select only on the hostnames, as we're rebooting, so we just need
+            # to depool the host pretty much everywhere.
             with confctl.change_and_revert(
                 'pooled',
                 'yes',
                 'no',
-                dc=args.datacenter,
-                cluster=args.cluster,
-                service='.*',
                 name='|'.join(remote_slice.hosts.striter()),
             ):
                 time.sleep(args.grace_sleep)
