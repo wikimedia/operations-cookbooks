@@ -179,10 +179,12 @@ def run(args, spicerack):
         if results.failed_slices > args.max_failed:
             logger.error('Too many failures, exiting')
             return results.report()
-        remote_slice = raw_slice - to_exclude
+        hosts = raw_slice.hosts - to_exclude
         # If no host in the current slice, just move on to the next.
-        if not remote_slice:
+        if not hosts:
             continue
+        # Let's avoid a second query to puppetdb here.
+        remote_slice = spicerack.remote().query('D{{{h}}}'.format(h=str(hosts)))
         try:
             with confctl.change_and_revert(
                 'pooled',
