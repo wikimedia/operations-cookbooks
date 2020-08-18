@@ -170,7 +170,7 @@ def run(args, spicerack):
         {obj.name for obj in confctl.get(dc=args.datacenter, cluster=args.cluster)}
     )
     remote_hosts = spicerack.remote().query(','.join(hosts_list))
-    results = Results(hosts=remote_hosts, successful=[], failed=[])
+    results = Results(hosts=hosts_list, successful=[], failed=[])
     to_exclude = NodeSet(args.exclude)
 
     n_slices = math.ceil(1.0 / (args.percentage * 0.01))
