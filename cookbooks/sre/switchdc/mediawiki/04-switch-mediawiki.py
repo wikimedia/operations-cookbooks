@@ -19,7 +19,7 @@ def run(args, spicerack):
     post_process_args(args)
     logger.info('Switch MediaWiki active datacenter to %s', args.dc_to)
 
-    records = ('api-rw', 'appservers-rw', 'jobrunner', 'videoscaler', 'parsoid-php')
+    records = ('api-ro', 'api-rw', 'appservers-ro', 'appservers-rw', 'jobrunner', 'videoscaler', 'parsoid-php')
     dnsdisc_records = spicerack.discovery(*records)
     mediawiki = spicerack.mediawiki()
 
@@ -36,8 +36,10 @@ def run(args, spicerack):
 
     # Verify that the IP of the records matches the expected one
     for record in records:
-        # Converting the name of the discovery -rw into the LVS svc record name
-        name = record.replace('-rw', '')
+        # Converting the name of the discovery -rw into the LVS svc record name. This will strip -rw and -ro
+        # services to the same record, so we'll check it twice, which is unnecessary but harmless. We also
+        # strip -php, because parsoid-php has a conftool entry but not a DNS record of its own.
+        name = record.replace('-rw', '').replace('-ro', '').replace('-php', '')
         dnsdisc_records.check_record(record, '{name}.svc.{dc_to}.wmnet'.format(name=name, dc_to=args.dc_to))
 
     # Sleep remaining time up to DNS_SHORT_TTL to let the set_master_datacenter to propagate
