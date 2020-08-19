@@ -17,7 +17,7 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     post_process_args(args)
 
-    records = ('api-rw', 'appservers-rw', 'jobrunner', 'videoscaler', 'parsoid-php')
+    records = ('api-ro', 'api-rw', 'appservers-ro', 'appservers-rw', 'jobrunner', 'videoscaler', 'parsoid-php')
     logger.info('Restoring DNS Discovery TTL to 300 for records: %s', records)
     dnsdisc_records = spicerack.discovery(*records)
     dnsdisc_records.update_ttl(300)
