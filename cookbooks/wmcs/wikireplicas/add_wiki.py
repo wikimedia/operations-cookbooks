@@ -48,7 +48,7 @@ def run(args, spicerack):
     replicas.run_async(index_cmd, view_cmd)
     logging.info("Adding DNS")
     control_host.run_sync(
-        "source /root/novaenv.sh; wmcs-wikireplicas-dns --aliases"
+        "source /root/novaenv.sh; wmcs-wikireplica-dns --aliases"
     )
     logging.info("Finalizing meta_p")
     replicas.run_async(meta_p_cmd)
