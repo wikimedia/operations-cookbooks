@@ -1,90 +1,153 @@
-"""DNS Discovery Operations"""
-import argparse
+"""Generic DNS Discovery Operations"""
 import logging
-import time
+from typing import List, Iterator
 
-from spicerack.confctl import ConfctlError
-from spicerack.constants import CORE_DATACENTERS
-from cookbooks import ArgparseFormatter
+import dns
 
-__title__ = __doc__
+from spicerack.decorators import retry
+from spicerack.dnsdisc import Discovery, DiscoveryError, DiscoveryCheckError
+from spicerack.remote import Remote
+
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-
-def argument_parser_base(name, description, default_ttl):
-    """Parse the command line arguments for all the sre.discovery cookbooks."""
-    parser = argparse.ArgumentParser(prog=name, description=description,
-                                     formatter_class=ArgparseFormatter)
-    parser.add_argument('record', help='Name of the dnsdisc record/service')
-    parser.add_argument('datacenter', choices=CORE_DATACENTERS, help='Name of the datacenter. One of: %(choices)s.')
-    parser.add_argument('--ttl', type=int, default=default_ttl, help='The TTL to set the discovery record to')
-
-    return parser
+# Some IP from a subnet of each DC (to be used for EDNS lookups)
+DC_IP_MAP = {
+    'eqiad': '10.64.0.1',
+    'codfw': '10.192.0.1',
+    'esams': '10.20.0.1',
+    'ulsfo': '10.128.0.1',
+    'eqsin': '10.132.0.1',
+}
 
 
-def run_base(args, spicerack, depool: bool):
-    """Generic run method for pool/depool cookbooks.
+def resolve_with_client_ip(dnsdisc: Discovery, client_ip: str, name: str) -> Iterator[dns.resolver.Answer]:
+    """Generator that yields the records as resolved from a specific datacenter (via EDNS client subnet)
+
+    Todo:
+        Move this function to spicerack dns/dnsdisc.
+        Yield the answer together with the resolver it came from.
 
     Arguments:
-        args: argparse parsed arguments
-        spicerack: spicerack instance
-        depool (bool): True for depooling, False for pooling
+        dnsdisc (spicerack.dnsdisc.Discovery): a spicerack.dnsdisc.Discovery instance.
+        client_ip (str): IP address to be used in EDNS client subnet.
+        name (str): record name to use for the resolution.
+
+    Yields:
+        dns.resolver.Answer: the DNS response.
+
+    Raises:
+        spicerack.discovery.DiscoveryError: if unable to resolve the address.
 
     """
-    pool = not depool  # Just easier to read later on
-    did_change = False  # Will be set to True if we actually changed something
-    records_propagated_at = 0.0  # Will be set to the time dnsdisc record TTL runs out
+    records = [name]
+    ecs_option_client_ip = dns.edns.ECSOption(client_ip)
 
-    dnsdisc = spicerack.discovery(args.record)
-    try:
-        active_dcs = dnsdisc.active_datacenters.get(args.record)
-    except ConfctlError as e:
-        logger.error('dnsdisc %s: %s', args.record, e)
-        return 1
+    for nameserver, dns_resolver in dnsdisc._resolvers.items():  # pylint: disable=protected-access
+        for record in records:
+            record_name = dns.name.from_text('{record}.discovery.wmnet'.format(record=record))
+            rdtype = dns.rdatatype.from_text('A')
+            try:
+                # Craft a query message
+                query_msg = dns.message.make_query(record_name, rdtype)
+                query_msg.use_edns(options=[ecs_option_client_ip])
 
-    # Get the old TTL
-    # Fixme: Should get TTL from conftool instead of DNS but its not exposed currently
-    #   https://phabricator.wikimedia.org/T259875
-    old_ttl = max([r.ttl for r in dnsdisc.resolve()])
-    if old_ttl == args.ttl:
-        logger.info('TTL already set to %d, nothing to do', args.ttl)
-    else:
-        # Fixme: It's currently not possible to update the TTL for only one DC
-        dnsdisc.update_ttl(args.ttl)
-        did_change = True
+                # Make the actual query
+                resp = dns.query.udp(query_msg, dns_resolver.nameservers[0], port=dns_resolver.port)
+                # Build an Answer instance as a Stub Resolver would
+                answer = dns.resolver.Answer(record_name, rdtype, dns.rdataclass.IN, resp)
+            except Exception as e:
+                # This is less than ideal, but dns.query.udp can return quite a lot of exceptions, there is no
+                # abstraction in dnspython 1.16.0 (2.0.0 has some) and I'm lazy.
+                raise DiscoveryError(
+                    'Unable to resolve {name} from {ns}'.format(name=record_name, ns=nameserver)) from e
 
-    if depool:
-        if args.datacenter not in active_dcs:
-            logger.info('%s is not pooled in %s', args.record, args.datacenter)
-        else:
-            dnsdisc.depool(args.datacenter)
-            did_change = True
+            logger.debug('[%s] %s -> %s TTL %d', nameserver, record, answer[0].address, answer.ttl)
+            yield answer
 
-    if pool:
-        if args.datacenter in active_dcs:
-            logger.info('%s is already pooled in %s', args.record, args.datacenter)
-        else:
-            dnsdisc.pool(args.datacenter)
-            did_change = True
 
-    # Exit early if no changes where necessary
-    if not did_change:
-        return 0
+@retry(backoff_mode='linear', exceptions=(DiscoveryCheckError,))
+def check_record_for_dc(no_fail: bool, dnsdisc: Discovery, datacenter: str, name: str, expected_name: str):
+    """Check that a Discovery record resolves on all authoritative resolvers to the correct IP.
 
-    # The actual work is done now. DNS should be propagated in old_ttl seconds from now at the latest.
-    records_propagated_at = time.time() + old_ttl
+    The IP to use for the comparison is obtained resolving the expected_name record.
+    For example with name='servicename-rw.discovery.wmnet' and expected_name='servicename.svc.eqiad.wmnet', this
+    method will resolve the 'expected_name' to get its IP address and then verify that on all authoritative
+    resolvers the record for 'name' resolves to the same IP.
+    It is retried to allow the change to be propagated through all authoritative resolvers.
 
-    # Wipe the cache on resolvers to ensure they get updated quickly
-    #   https://wikitech.wikimedia.org/wiki/DNS#How_to_Remove_a_record_from_the_DNS_resolver_caches
-    recursor_hosts = spicerack.remote().query('A:dns-rec')
-    wipe_cache_cmd = 'rec_control wipe-cache {record}.discovery.wmnet'.format(record=args.record)
+    Todo:
+        Move this function to spicerack dns/dnsdisc.
+
+    See Also:
+        https://wikitech.wikimedia.org/wiki/DNS/Discovery
+
+    Arguments:
+        no_fail (bool): don't fail is address does not match.
+        dnsdisc (spicerack.dnsdisc.Discovery): a spicerack.dnsdisc.Discovery instance.
+        datacenter (str): name of the datacenter used as EDNS client subnet.
+        name (str): the record to resolve.
+        expected_name (str): another, non-discovery dns record, known to resolve to a specific IP.
+
+    Raises:
+        DiscoveryError: if the record doesn't match the IP of the expected_name.
+
+    """
+    expected_address = dnsdisc.resolve_address(expected_name)
+    logger.info('Checking that %s.discovery.wmnet records for %s matches %s (%s)',
+                name, datacenter, expected_name, expected_address)
+
+    failed = False
+    client_ip = DC_IP_MAP[datacenter]
+    for record in resolve_with_client_ip(dnsdisc, client_ip, name):
+        if record[0].address != expected_address:
+            logger.error("Expected IP '%s', got '%s' for record %s", expected_address, record[0].address, name)
+            if not no_fail:
+                failed = True
+
+    if failed:
+        raise DiscoveryCheckError('Failed to check record {name}'.format(name=name))
+
+
+def wipe_recursor_cache(services: List[str], remote: Remote):
+    """Wipe the cache of DNS recursors.
+
+    Wipe the cache on resolvers to ensure they get updated quickly.
+
+    Todo:
+        Move this function to spicerack dns/dnsdisc.
+
+    Arguments:
+        services (List[str]): list of service names to wipe cache for.
+        remote (spicerack.remote.Remote): spicerack.remote.Remote instance.
+
+    See Also:
+        https://wikitech.wikimedia.org/wiki/DNS#How_to_Remove_a_record_from_the_DNS_resolver_caches
+
+    """
+    recursor_hosts = remote.query('A:dns-rec')
+    records = ' '.join(['{record}.discovery.wmnet'.format(record=r) for r in services])
+    wipe_cache_cmd = 'rec_control wipe-cache {records}'.format(records=records)
     recursor_hosts.run_async(wipe_cache_cmd)
 
-    # Fixme: We should check if resolvers have been updated
-    sleep_time = records_propagated_at - time.time()
-    if sleep_time > 0:
-        logging.info('Waiting %.2f seconds for DNS changes to propagate', sleep_time)
-        if not spicerack.dry_run:
-            time.sleep(sleep_time)
 
-    return 0
+def update_ttl(dnsdisc: Discovery, new_ttl: int) -> int:
+    """Update the TTL for records in dnsdisc.
+
+    Todo:
+        Should get TTL from conftool instead of DNS but its not exposed currently
+        https://phabricator.wikimedia.org/T259875
+        Set the TTL for only one DC in dnsdisc.update_ttl
+        Move this function to spicerack dns/dnsdisc.
+
+    Arguments:
+        dnsdisc (spicerack.dnsdisc): dnsdisc instance.
+        new_ttl (int): the new TTL to set.
+
+    """
+    # Get the old TTL
+    old_ttl = max([r.ttl for r in dnsdisc.resolve()])
+    if old_ttl == new_ttl:
+        logger.info('TTL already set to %d, nothing to do', new_ttl)
+    else:
+        dnsdisc.update_ttl(new_ttl)
+    return old_ttl
