@@ -118,7 +118,7 @@ def munge(remote_host, skolemize):
         logger.info('munging %s (skolemizaton: %s)', dump['munge_path'], str(skolemize))
         stop_watch.reset()
         remote_host.run_sync(
-            "mkdir -p {munge_path} && bzcat {path} | "
+            "rm -rf {munge_path} && mkdir -p {munge_path} && bzcat {path} | "
             "/srv/deployment/wdqs/wdqs/munge.sh -f - -d {munge_path} -- {skolemize}"
             .format(path=dump['path'], munge_path=dump['munge_path'], skolemize="--skolemize" if skolemize else ""),
         )
