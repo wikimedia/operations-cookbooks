@@ -15,7 +15,7 @@ List of actions performed on each host:
   - Downtime the management host on Icinga (it will be removed at the next Puppet run on the Icinga host)
   - Wipe bootloaders to prevent it from booting again
   - Pull the plug (IPMI power off without shutdown)
-  - Update Netbox state to Decommissioning
+  - Update Netbox state to Decommissioning and delete all non-mgmt interfaces and related IPs
 - Remove it from DebMonitor
 - Remove it from Puppet master and PuppetDB
 - If virtual host (Ganeti VM), issue a VM removal that will destroy the VM. Can take few minutes.
@@ -142,8 +142,9 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
         except IpmiError as e:
             spicerack.actions[fqdn].failure('**Failed to power off, manual intervention required**: {e}'.format(e=e))
 
-        netbox.put_host_status(hostname, 'Decommissioning')
-        spicerack.actions[fqdn].success('Set Netbox status to Decommissioning')
+        update_netbox(netbox, netbox_data)
+        spicerack.actions[fqdn].success('Set Netbox status to Decommissioning and deleted all non-mgmt interfaces '
+                                        'and related IPs')
 
     logger.info('Sleeping for 20s to avoid race conditions...')
     time.sleep(20)
@@ -162,6 +163,20 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
         except RemoteExecutionError as e:
             spicerack.actions[fqdn].failure('**Failed to remove VM, manually run gnt-instance remove on the Ganeti '
                                             'master for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
+
+
+def update_netbox(netbox, netbox_data):
+    """Delete all non-mgmt interfaces and set the status to Decommissioning.
+
+    The deletion of the interface automatically deletes on cascade the related IPs and unset the primary IPs.
+    """
+    for interface in netbox.api.dcim.interfaces.filter(device_id=netbox_data['id']):
+        if interface.mgmt_only:
+            logger.debug('Skipping interface %s, mgmt_only=True', interface.name)
+            continue
+        logger.info('Deleting interface %s and related IPs', interface.name)
+        interface.delete()
+    netbox.put_host_status(netbox_data['name'], 'Decommissioning')
 
 
 def get_grep_patterns(dns, decom_hosts):
