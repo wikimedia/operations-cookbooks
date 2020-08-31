@@ -1,16 +1,17 @@
 """Reduce TTL for various DNS Discovery entries"""
 import logging
 
-from cookbooks.sre.switchdc.services import argument_parser_base, post_process_args
+from cookbooks.sre.switchdc.services import argument_parser_base, load_services, post_process_args
 
 
 __title__ = __doc__
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+SERVICES = load_services()
 
 
 def argument_parser():
     """As specified by Spicerack API."""
-    return argument_parser_base(__name__, __title__)
+    return argument_parser_base(__name__, __title__, SERVICES)
 
 
 def run(args, spicerack):
