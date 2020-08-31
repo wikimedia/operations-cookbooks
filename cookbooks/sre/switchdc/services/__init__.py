@@ -6,7 +6,7 @@ from spicerack.constants import CORE_DATACENTERS
 
 __title__ = __doc__
 
-EXCLUDED_SERVICES = set(
+EXCLUDED_SERVICES = {
     'blubberoid',  # blubberoid needs to follow swift replica for the docker registry
     'docker-registry',  # swift replica goes codfw => eqiad and needs manual switching
     'helm-charts',  # non-load-balanced service, will need some ad-hoc changes.
@@ -14,14 +14,14 @@ EXCLUDED_SERVICES = set(
     'swift-ro',  # Idem
     'thanos-query',  # TODO: verify with o11y
     'thanos-swift',  # TODO: idem
-)
+}
 
-# These are services that are not active-active /right now/, but will be in the future
-# when mediawiki works cross-dc
-MEDIAWIKI_SERVICES = set(
+# These are services that are not effectively active-active /right now/, but will be in the future
+# when mediawiki works cross-dc.
+MEDIAWIKI_SERVICES = {
     'api-ro',
     'appservers-ro',
-)
+}
 
 
 def load_services():
