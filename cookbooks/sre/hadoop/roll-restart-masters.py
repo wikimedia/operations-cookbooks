@@ -42,9 +42,10 @@ def argument_parser():
 def print_run_command_output(run_command_return_status):
     """Helper to print cumin's output"""
     for nodeset, output in run_command_return_status:
-        logger.info('\n=========================================\n')
+        logger.info('\n\n=========================================\n')
         logger.info('Output for %s', nodeset)
         logger.info(output.message().decode())
+        logger.info('\n=========================================\n\n')
 
 
 def print_hadoop_service_state(
@@ -52,24 +53,26 @@ def print_hadoop_service_state(
         yarn=True, hdfs=True):
     """Helper to print the status of Hadoop daemons"""
     logger.info("Checking Master/Standby status.")
-    logger.info('Master status:')
     if hdfs:
+        logger.info("\nMaster status for HDFS:")
         print_run_command_output(remote_handle.run_sync(
             'kerberos-run-command hdfs /usr/bin/hdfs haadmin -getServiceState ' +
             hadoop_master_service_name))
 
     if yarn:
+        logger.info("\nMaster status for Yarn:")
         print_run_command_output(remote_handle.run_sync(
             'kerberos-run-command hdfs yarn rmadmin -getServiceState ' +
             hadoop_master_service_name))
 
-    logger.info('Standby status:')
     if hdfs:
+        logger.info("\nStandby status for HDFS:")
         print_run_command_output(remote_handle.run_sync(
             'kerberos-run-command hdfs /usr/bin/hdfs haadmin -getServiceState ' +
             hadoop_standby_service_name))
 
     if yarn:
+        logger.info("\nStandby status for Yarn:")
         print_run_command_output(remote_handle.run_sync(
             'kerberos-run-command hdfs yarn rmadmin -getServiceState ' +
             hadoop_standby_service_name))
@@ -173,8 +176,10 @@ def run(args, spicerack):
         logger.info("Sleeping %s seconds.", hdfs_nn_sleep)
         time.sleep(hdfs_nn_sleep)
 
+        logger.info("\n\nSummary of active/standby statuses after the restarts:")
+
         print_hadoop_service_state(
-            hadoop_master, hadoop_master_service, hadoop_standby_service, yarn=False)
+            hadoop_master, hadoop_master_service, hadoop_standby_service)
 
         logger.info("Restart MapReduce historyserver on the master.")
         hadoop_master.run_sync('systemctl restart hadoop-mapreduce-historyserver')
