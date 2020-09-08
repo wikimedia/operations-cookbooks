@@ -33,8 +33,8 @@ def argument_parser():
                         choices=HADOOP_CLUSTER_NAMES)
     parser.add_argument('--yarn-rm-sleep-seconds', type=float, default=60.0,
                         help="Seconds to sleep between Yarn Resourcemanager restarts.")
-    parser.add_argument('--hdfs-nn-sleep-seconds', type=float, default=120.0,
-                        help="Seconds to sleep between HDFS Namenode restarts and failovers.")
+    parser.add_argument('--hdfs-nn-sleep-seconds', type=float, default=600.0,
+                        help="Seconds to sleep between HDFS Namenode restarts.")
 
     return parser
 
@@ -112,7 +112,7 @@ def run(args, spicerack):
     hdfs_nn_sleep = args.hdfs_nn_sleep_seconds
 
     # Safety checks
-    if hdfs_nn_sleep < 120:
+    if hdfs_nn_sleep < 600:
         ask_confirmation('The HDFS Namenode restart sleep is less than 120s, are you sure?')
     if yarn_rm_sleep < 60:
         ask_confirmation('The Yarn Resourcemanager restart sleep is less than 60s, are you sure?')
@@ -136,6 +136,7 @@ def run(args, spicerack):
         hadoop_master.run_sync('systemctl restart hadoop-yarn-resourcemanager')
         logger.info("Sleeping %s seconds.", yarn_rm_sleep)
         time.sleep(yarn_rm_sleep)
+        logger.info("Restarting Yarn Resourcemanager on Standby.")
         hadoop_standby.run_sync('systemctl restart hadoop-yarn-resourcemanager')
 
         print_hadoop_service_state(
@@ -146,8 +147,8 @@ def run(args, spicerack):
         logger.info("Run manual HDFS failover from master to standby.")
         run_hdfs_namenode_failover(hadoop_master, hadoop_master_service, hadoop_standby_service)
 
-        logger.info("Sleeping %s seconds.", hdfs_nn_sleep)
-        time.sleep(hdfs_nn_sleep)
+        logger.info("Sleeping 30 seconds.")
+        time.sleep(30)
 
         logger.info("Restart HDFS Namenode on the master.")
         hadoop_master.run_async(
@@ -165,8 +166,8 @@ def run(args, spicerack):
         logger.info("Run manual HDFS failover from standby to master.")
         run_hdfs_namenode_failover(hadoop_master, hadoop_standby_service, hadoop_master_service)
 
-        logger.info("Sleeping %s seconds.", hdfs_nn_sleep)
-        time.sleep(hdfs_nn_sleep)
+        logger.info("Sleeping 30 seconds.")
+        time.sleep(30)
 
         logger.info("Restart HDFS Namenode on the standby.")
         hadoop_standby.run_async(
