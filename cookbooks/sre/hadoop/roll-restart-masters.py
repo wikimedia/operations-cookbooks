@@ -97,8 +97,8 @@ def run(args, spicerack):
 
     ensure_shell_is_durable()
 
-    hadoop_master_cumin_alias = 'hadoop-master' + suffix
-    hadoop_standby_cumin_alias = 'hadoop-standby' + suffix
+    hadoop_master_cumin_alias = 'A:hadoop-master' + suffix
+    hadoop_standby_cumin_alias = 'A:hadoop-standby' + suffix
 
     hadoop_master = spicerack.remote().query(hadoop_master_cumin_alias)
     hadoop_standby = spicerack.remote().query(hadoop_standby_cumin_alias)
