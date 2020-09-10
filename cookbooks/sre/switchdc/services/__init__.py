@@ -12,10 +12,6 @@ EXCLUDED_SERVICES = {
     'blubberoid',  # blubberoid needs to follow swift replica for the docker registry
     'docker-registry',  # swift replica goes codfw => eqiad and needs manual switching
     'helm-charts',  # non-load-balanced service, will need some ad-hoc changes.
-    'swift',  # Swift stays active-active in writing, not sure about reading.
-    'swift-ro',  # Idem
-    'thanos-query',  # TODO: verify with o11y
-    'thanos-swift',  # TODO: idem
 }
 
 # These are services that are not effectively active-active /right now/, but will be in the future
