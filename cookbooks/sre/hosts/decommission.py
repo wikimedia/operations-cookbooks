@@ -19,6 +19,8 @@ List of actions performed on each host:
 - Remove it from DebMonitor
 - Remove it from Puppet master and PuppetDB
 - If virtual host (Ganeti VM), issue a VM removal that will destroy the VM. Can take few minutes.
+- Run the sre.dns.netbox cookbook if the DC DNS records have been migrated to the automated system or tell the user
+  that a manual patch is required.
 - Update the related Phabricator task
 
 Usage example:
@@ -39,6 +41,7 @@ from spicerack.puppet import get_puppet_ca_hostname
 from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+from cookbooks.sre.dns.netbox import argument_parser as dns_netbox_argparse, run as dns_netbox_run
 
 
 __title__ = 'Decommission a host from all inventories.'
@@ -47,6 +50,7 @@ DEPLOYMENT_HOST = 'deployment.eqiad.wmnet'
 MEDIAWIKI_CONFIG_REPO_PATH = '/srv/mediawiki-staging'
 PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'
 PUPPET_PRIVATE_REPO_PATH = '/srv/private'
+MIGRATED_PRIMARY_SITES = ()
 
 
 def argument_parser():
@@ -163,6 +167,15 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
         except RemoteExecutionError as e:
             spicerack.actions[fqdn].failure('**Failed to remove VM, manually run gnt-instance remove on the Ganeti '
                                             'master for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
+
+    dc = netbox.api.dcim.sites.get(netbox_data['site']).slug
+    if dc in MIGRATED_PRIMARY_SITES:
+        dns_netbox_args = dns_netbox_argparse().parse_args(
+            ['{host} decommissioned, removing primary IPs'.format(host=hostname)])
+        dns_netbox_run(dns_netbox_args, spicerack)
+    else:
+        spicerack.actions[fqdn].warning('**Site {dc} DNS records not yet migrated to the automatic system, manual '
+                                        'patch required**'.format(dc=dc))
 
 
 def update_netbox(netbox, netbox_data):
