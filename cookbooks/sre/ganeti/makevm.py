@@ -84,14 +84,18 @@ def run(args, spicerack):
     # Pre-allocate IPs
     netbox = spicerack.netbox(read_write=True)
     if args.dc in CORE_DATACENTERS:
-        vlan_name = '{a.network}1-{a.row}-{a.dc}'.format(a=args)
+        vlan_name = '{a.network}1-{row}-{a.dc}'.format(a=args, row=args.row.lower())
     else:
         vlan_name = '{a.network}1-{a.dc}'.format(a=args)
 
     vlan = netbox.api.ipam.vlans.get(name=vlan_name, status='active')
+    if not vlan:
+        logger.error('Failed to find VLAN with name %s', vlan_name)
+        return 1
+
     prefix_v4 = netbox.api.ipam.prefixes.get(vlan_id=vlan.id, family=4)
     prefix_v6 = netbox.api.ipam.prefixes.get(vlan_id=vlan.id, family=6)
-    ip_v4_data = prefix_v4.available_ips.create()
+    ip_v4_data = prefix_v4.available_ips.create({})
     logger.info('Allocated IPv4 %s', ip_v4_data['address'])
     ip_v4 = netbox.api.ipam.ip_addresses.get(address=ip_v4_data['address'])
     ip_v4.dns_name = args.fqdn
@@ -130,7 +134,7 @@ def run(args, spicerack):
         logger.warning('DC %s has not yet been migrated for primary records. Manual commit in the operations/dns '
                        'repository is required. See '
                        'https://wikitech.wikimedia.org/wiki/Server_Lifecycle/DNS_Transition'
-                       'Please make a patch to the DNS repository for the following data:'
+                       '\n\nPlease make a patch to the DNS repository for the following data:'
                        '\n\n    IPv4:  %s\n    PTRv4: %s'
                        '\n    DNSv4: %s%s',
                        args.dc, ip_v4_address, ip_v4_address.reverse_pointer, args.fqdn, ip_v6_message)
