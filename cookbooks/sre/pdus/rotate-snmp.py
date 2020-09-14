@@ -12,12 +12,13 @@ Usage example:
 """
 
 from base64 import b64encode
+from datetime import datetime
 from html.parser import HTMLParser
 from logging import getLogger
 from os import urandom
+from time import sleep
 
 from requests import Session
-from requests.exceptions import HTTPError
 from spicerack.interactive import ensure_shell_is_durable, get_secret
 
 from cookbooks.sre import pdus
@@ -116,7 +117,7 @@ def random_string(string_length=16):
     return b64encode(urandom(string_length), altchars)[:string_length]
 
 
-def change_snmp(pdu, version, session, snmp_ro, snmp_rw=None):
+def change_snmp(pdu, version, session, snmp_ro, snmp_rw=None, force=False):
     """Change the snmp_string
 
     Arguments:
@@ -147,11 +148,10 @@ def change_snmp(pdu, version, session, snmp_ro, snmp_rw=None):
     try:
         # first fetch the form to get the current values
         logger.debug('%s: Fetch current values', pdu)
-        response = session.get(snmp_form)
-        response.raise_for_status()
+        response = pdus.get(session, snmp_form)
         parser.feed(response.content.decode())
-    except HTTPError as err:
-        raise SnmpResetError('{}: Unable to fetch {}: {}'.format(pdu, snmp_form, err))
+    except pdus.RequestError as err:
+        raise SnmpResetError from err
     form = parser.form.copy()
     # update the form paramters with new values
     if form['GetCom'] != snmp_ro:
@@ -162,14 +162,18 @@ def change_snmp(pdu, version, session, snmp_ro, snmp_rw=None):
         form['SetCom'] = snmp_rw
     # post new values
     if form == parser.form:
-        logger.info('%s: SNMP communities already match, no change required', pdu)
-        return False
+        uptime = pdus.get_uptime(pdu, session)
+        logger.info('%s: SNMP communities already match (version: %d, uptime: %s)',
+                    pdu, version, uptime)
+        if not force:
+            return False
+        logger.info('%s: Force update', pdu)
     try:
-        response = session.post(snmp_form, data=form)
-        response.raise_for_status()
+        logger.debug('Posting: %s -> %s', form, snmp_form)
+        response = pdus.post(session, snmp_form, form)
         parser.feed(response.content.decode())
-    except HTTPError as err:
-        raise SnmpResetError('{}: Unable to post form {}: {}'.format(pdu, snmp_form, err))
+    except pdus.RequestError as err:
+        raise SnmpResetError from err
     # Check the new values applied
     if parser.form['GetCom'] != snmp_ro:
         raise SnmpResetError('{}: failed to update snmp_ro'.format(pdu))
@@ -185,6 +189,8 @@ def change_snmp(pdu, version, session, snmp_ro, snmp_rw=None):
 def argument_parser():
     """As specified by Spicerack API."""
     parser = pdus.argument_parser_base()
+    parser.add_argument('--force', action='store_true',
+                        help='Reset the RW community to a random string')
     parser.add_argument('--reset-rw', action='store_true',
                         help='Reset the RW community to a random string')
     return parser
@@ -193,6 +199,7 @@ def argument_parser():
 def run(args, spicerack):
     """Required by Spicerack API."""
     ensure_shell_is_durable()
+    return_code = 0
     session = Session()
     session.verify = False
     password = get_secret('Enter login password')
@@ -200,22 +207,27 @@ def run(args, spicerack):
 
     session.auth = (args.username, password)
 
-    _pdus = pdus.get_pdu_ips(spicerack.netbox()) if args.query == 'all' else set([args.query])
+    _pdus = pdus.get_pdu_ips(spicerack.netbox(), args.query)
 
     for pdu in _pdus:
         snmp_rw = random_string() if args.reset_rw else None
         try:
             if not spicerack.dry_run:
                 version = pdus.get_version(pdu, session)
-                if change_snmp(pdu, version, session, snmp_ro, snmp_rw):
+                if change_snmp(pdu, version, session, snmp_ro, snmp_rw, args.force):
+                    reboot_time = datetime.utcnow()
                     pdus.reboot(pdu, version, session)
+                    # Reboots from expereince take at least 60 seconds
+                    logger.info('%s: sleep while reboot', pdu)
+                    sleep(60)
+                    pdus.wait_reboot_since(pdu, reboot_time, session)
             else:
                 logger.info('%s: Dry run, not trying.', pdu)
             if args.check_default:
-                if pdus.check_default(pdu):
+                if pdus.check_default(pdu, session):
                     # TODO: delete default user
-                    return 1
+                    pass
         except (pdus.VersionError, SnmpResetError, pdus.RebootError) as error:
             logger.error(error)
-            return 1
-    return 0
+            return_code = 1
+    return return_code

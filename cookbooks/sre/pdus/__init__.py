@@ -5,15 +5,20 @@ from datetime import datetime, timedelta
 from logging import getLogger
 from re import match
 
+import urllib3
+
 import requests.exceptions
 
-from requests import get
 from spicerack.decorators import retry
 
 from cookbooks import ArgparseFormatter
 
 logger = getLogger(__name__)  # pylint: disable=invalid-name
 MIN_SECRET_SIZE = 6
+
+
+class RequestError(Exception):
+    """Raised if there is an issue making a request to the PDU"""
 
 
 class VersionError(Exception):
@@ -39,23 +44,49 @@ def argument_parser_base():
     parser.add_argument('--username', help="Username to login to the PDU's", default='root')
     parser.add_argument('--check_default', help='Check for default user',
                         action='store_true')
-    parser.add_argument('query', help='PDU FQDN or \'all\'')
+    parser.add_argument('query', help='PDU FQDN or \'all\'', nargs='+')
 
     return parser
 
 
-def check_default(pdu):
+def _request(method, session, url, data=None, timeout=(3, 6)):
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    try:
+        logger.debug('%s to: %s -> %s', method, url, data)
+        response = session.request(method, url, data=data, timeout=timeout)
+        response.raise_for_status()
+    except (requests.exceptions.ConnectTimeout, requests.exceptions.ReadTimeout,
+            requests.exceptions.ConnectionError, requests.exceptions.SSLError) as err:
+        raise RequestError(url) from err
+    except requests.exceptions.HTTPError as err:
+        raise RequestError("{} ({})".format(url, response.status_code)) from err
+    return response
+
+
+def get(session, url, timeout=(3, 6)):
+    """Preform a get request against the pdu"""
+    return _request('GET', session, url, data=None, timeout=timeout)
+
+
+def post(session, url, data, timeout=(3, 6)):
+    """Preform a post request against the pdu"""
+    return _request('POST', session, url, data=data, timeout=timeout)
+
+
+def check_default(pdu, session):
     """Checks if the default password is set on the device
 
     Arguments:
         pdu (str): the pdu
+        session (requests.Session): A configured request session
     Returns:
         bool: indicating if the default password is in use
 
     """
-    response = get("https://{}/chngpswd.html".format(pdu),
-                   verify=False,  # nosec
-                   auth=('admn', 'admn'))
+    auth = session.auth
+    session.auth = ('admn', 'admn')
+    response = get(session, 'https://{}/chngpswd.html'.format(pdu))
+    session.auth = auth
     if response.ok:
         logger.warning('%s: Default user found 😞', pdu)
         return True
@@ -78,11 +109,9 @@ def get_version(pdu, session):
 
     """
     try:
-        response = session.get("https://{}/".format(pdu))
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as err:
-        raise VersionError("{}: Error {} while trying to check the version: {}".format(
-            pdu, response.status_code, err))
+        response = get(session, "https://{}/".format(pdu))
+    except RequestError as err:
+        raise VersionError from err
     if 'v7' in response.headers['Server']:
         logger.debug('%s: Sentry 3 detected', pdu)
         return 3
@@ -102,7 +131,7 @@ def reboot(pdu, version, session):
 
     """
     form = {
-        3: {'Reboot_Action': 1},
+        3: {'Restart_Action': 1},
         4: {'RST': '00000001', 'FormButton': 'Apply'},
     }.get(version)
 
@@ -111,14 +140,19 @@ def reboot(pdu, version, session):
 
     logger.info('%s: rebooting Sentry v%d PDU', pdu, version)
     try:
-        response = session.get("https://{}/Forms/reboot_1".format(pdu), data=form)
-        response.raise_for_status()
+        url = 'https://{}/Forms/restart_1'.format(pdu)
+        post(session, url, data=form)
     except requests.exceptions.HTTPError as err:
-        raise RebootError("{}: Error {} while trying to reboot : {}".format(
-            pdu, response.status_code, err))
+        raise RebootError from err
+    try:
+        # This seems to be required to do the actual reboot at least  on v3
+        url = 'https://{}/restarting.html'.format(pdu)
+        get(session, url, timeout=1)
+    except RequestError:
+        pass
 
 
-@retry(tries=25, delay=timedelta(seconds=10), backoff_mode='linear', exceptions=UptimeError)
+@retry(tries=25, delay=timedelta(seconds=5), backoff_mode='constant', exceptions=UptimeError)
 def wait_reboot_since(pdu, since, session):
     """Poll the host until it is reachable and has an uptime lower than the provided datetime.
 
@@ -134,24 +168,48 @@ def wait_reboot_since(pdu, since, session):
     delta = (datetime.utcnow() - since).total_seconds()
     uptime = parse_uptime(get_uptime(pdu, session))
     if uptime >= delta:
-        raise UptimeError('{}: uptime is higher then threshold: {} > {}'.format(
+        raise UptimeError('{}: uptime is higher than threshold: {} > {}'.format(
             pdu, uptime, delta))
     logger.info('%s: found reboot since %s', pdu, since)
 
 
-def get_pdu_ips(netbox):
-    """Return a set of PDU IP addresses
+def get_pdu_ips(netbox, query):
+    """Query the netbox API for pdus
+
+    If the first element in `query` is the word 'all' return all pdus' otherwise
+    filter the pdus for any devices that have a device.primary_ip or device.name
+    matching one of the values in `query`
 
     Arguments:
         netbox (spicerack.netbox.Netbox): A Spicerack Netbox instance
+        query (list): A list of pdu ipaddress/device names or the word all
 
     Returns:
         set: A set of PDU IPs
 
     """
+    _query = query.copy()
+    pdus = set()
     devices = netbox.api.dcim.devices.filter(role='pdu')
-    return set(str(device.primary_ip).split('/')[0] for device in devices
-               if device.primary_ip is not None)
+    if 'all' in _query[0]:
+        if len(_query) > 1:
+            logger.warning('`all` passed as a query argument all other values will be ignored')
+        pdus = set(str(device.primary_ip).split('/')[0] for device in devices
+                   if device.primary_ip is not None)
+    else:
+        for device in devices:
+            if device.primary_ip is not None:
+                primary_ip = str(device.primary_ip).split('/')[0]
+                if primary_ip in _query:
+                    pdus.add(primary_ip)
+                    _query.remove(primary_ip)
+                    continue
+                if device.name in _query:
+                    pdus.add(primary_ip)
+                    _query.remove(device.name)
+        if _query:
+            logger.warning("The following PDU's from the query argument where not found: %s", ', '.join(_query))
+    return pdus
 
 
 def get_uptime(pdu, session):
@@ -166,13 +224,9 @@ def get_uptime(pdu, session):
 
     """
     try:
-        response = session.get("https://{}/CDU/summary.txt".format(pdu))
-        response.raise_for_status()
-    except requests.exceptions.ConnectionError as err:
-        raise UptimeError("{}: Error while trying to check get uptime: {}".format(pdu, err))
-    except requests.exceptions.HTTPError as err:
-        raise UptimeError("{}: Error {} while trying to check get uptime: {}".format(
-            pdu, response.status_code, err))
+        response = get(session, 'https://{}/CDU/summary.txt'.format(pdu))
+    except RequestError as err:
+        raise UptimeError from err
     # summary.text has a bunch of entries `/key(=type)?=value/` separated by pipe
     for entry in response.text.split('|'):
         tokens = entry.split('=')

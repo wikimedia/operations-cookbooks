@@ -14,7 +14,6 @@ Usage example:
 import logging
 
 from requests import Session
-from requests.exceptions import HTTPError
 
 from spicerack.interactive import ensure_shell_is_durable, get_secret
 
@@ -62,21 +61,17 @@ def change_password(pdu, session, new_password):
 
     # Then change the password
     try:
-        response = session.post("https://{}/Forms/chngpswd_1".format(pdu), data=payload)
-        response.raise_for_status()
-    except HTTPError as err:
-        raise PasswordResetError("{}: Error {} while trying to change the password: {}".format(
-            pdu, response.status_code, err))
+        response = pdus.post(session, 'https://{}/Forms/chngpswd_1'.format(pdu), payload)
+    except pdus.RequestError as err:
+        raise PasswordResetError from err
 
     session.auth[1] = new_password
     session.cookies.clear()
     try:
-        response = session.get("https://{}/chngpswd.html".format(pdu))
-        response.raise_for_status()
-    except HTTPError as err:
-        raise PasswordResetError(
-            '{}: Error {}. New password not working, the change probably failed:\n{}'.format(
-                pdu, response.status_code, err))
+        response = pdus.get(session, 'https://{}/chngpswd.html'.format(pdu))
+    except pdus.RequestError as err:
+        logger.error('%s: Error %s. password reset failed', pdu, response.status_code)
+        raise PasswordResetError from err
     logger.info('%s: Password updated successfully 😌', pdu)
 
 
@@ -91,8 +86,7 @@ def run(args, spicerack):
 
     session.auth = (args.username, current_password)
 
-    # TODO: check if self.query is a PDU in netbox
-    _pdus = pdus.get_pdu_ips(spicerack.netbox()) if args.query == 'all' else set([args.query])
+    _pdus = pdus.get_pdu_ips(spicerack.netbox(), args.query)
 
     for pdu in _pdus:
         try:
@@ -101,7 +95,7 @@ def run(args, spicerack):
             else:
                 logger.info('%s: Dry run, not trying.', pdu)
             if args.check_default:
-                if pdus.check_default(pdu):
+                if pdus.check_default(pdu, session):
                     # TODO: delete default user
                     return_code = 1
         except (pdus.VersionError, PasswordResetError) as error:
