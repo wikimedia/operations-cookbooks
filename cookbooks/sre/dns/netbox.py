@@ -32,9 +32,10 @@ def argument_parser():
     """As specified by Spicerack API."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-t', '--task-id', help='The Phabricator task ID (e.g. T12345).')
-    parser.add_argument('--force', help=('Continue on no changes to force the replication to the other Netbox host(s) '
-                                         'and the push to the authoritative DNS hosts of the SHA1 given as parameter. '
-                                         'Has no effect if there are changes.'))
+    parser.add_argument('--force', metavar='SHA1',
+                        help=('Continue on no changes to force the replication to the other Netbox host(s) and the '
+                              'push to the authoritative DNS hosts of the SHA1 given as parameter. Has no effect if '
+                              'there are changes.'))
     parser.add_argument('message', help='Commit message')
 
     return parser
