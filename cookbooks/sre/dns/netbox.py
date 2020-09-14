@@ -32,6 +32,9 @@ def argument_parser():
     """As specified by Spicerack API."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-t', '--task-id', help='The Phabricator task ID (e.g. T12345).')
+    parser.add_argument('--force', action='store_true',
+                        help=('Continue on no changes to force the replication to the other Netbox host and the push '
+                              'to the authoritative DNS hosts. Has no effect if there are changes.'))
     parser.add_argument('message', help='Commit message')
 
     return parser
@@ -65,19 +68,22 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
                 break
 
     if metadata.get('no_changes', False):
-        logger.info('No changes to deploy.')
-        return
+        if args.force:
+            logger.info('No changes to deploy but --force set, continuing.')
+        else:
+            logger.info('No changes to deploy.')
+            return
+    else:
+        ask_confirmation('Have you checked that the diff is OK?')
 
-    ask_confirmation('Have you checked that the diff is OK?')
+        sha1 = metadata.get('sha1', '')
+        if not sha1:
+            raise RuntimeError('Unable to fetch SHA1 from commit metadata: {meta}'.format(meta=metadata))
 
-    sha1 = metadata.get('sha1', '')
-    if not sha1:
-        raise RuntimeError('Unable to fetch SHA1 from commit metadata: {meta}'.format(meta=metadata))
-
-    command = ('{base} push "{path}" "{sha1}"').format(base=base_command, path=metadata.get('path', ''), sha1=sha1)
-    results = netbox_host.run_sync(command)
-    for _, output in results:
-        logger.info(output.message().decode())
+        command = ('{base} push "{path}" "{sha1}"').format(base=base_command, path=metadata.get('path', ''), sha1=sha1)
+        results = netbox_host.run_sync(command)
+        for _, output in results:
+            logger.info(output.message().decode())
 
     passive_netbox_hosts = remote.query(str(netbox_hosts.hosts - netbox_host.hosts))
     logger.info('Updating the Netbox passive copies of the repository on %s', passive_netbox_hosts)
