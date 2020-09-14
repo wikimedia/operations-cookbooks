@@ -32,9 +32,9 @@ def argument_parser():
     """As specified by Spicerack API."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-t', '--task-id', help='The Phabricator task ID (e.g. T12345).')
-    parser.add_argument('--force', action='store_true',
-                        help=('Continue on no changes to force the replication to the other Netbox host and the push '
-                              'to the authoritative DNS hosts. Has no effect if there are changes.'))
+    parser.add_argument('--force', help=('Continue on no changes to force the replication to the other Netbox host(s) '
+                                         'and the push to the authoritative DNS hosts of the SHA1 given as parameter. '
+                                         'Has no effect if there are changes.'))
     parser.add_argument('message', help='Commit message')
 
     return parser
@@ -69,7 +69,8 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
 
     if metadata.get('no_changes', False):
         if args.force:
-            logger.info('No changes to deploy but --force set, continuing.')
+            logger.info('No changes to deploy but --force set to %s, continuing.', args.force)
+            sha1 = args.force
         else:
             logger.info('No changes to deploy.')
             return
