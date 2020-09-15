@@ -27,7 +27,9 @@ def argument_parser():
     parser.add_argument('-r', '--reason', help='The reason for performing the restart',
                         required=True)
     parser.add_argument('--batch-sleep-seconds', type=float, default=300.0,
-                        help="Seconds to sleep between each restart.")
+                        help="Seconds to sleep between each host.")
+    parser.add_argument('--instance-sleep-seconds', type=int, default=10,
+                        help="Seconds to sleep between each Cassandra instance restart.")
     return parser
 
 
@@ -55,7 +57,7 @@ def run(args, spicerack):
     with icinga.hosts_downtimed(cassandra_nodes.hosts, reason,
                                 duration=timedelta(minutes=240)):
         cassandra_nodes.run_sync(
-            'c-foreach-restart -d 10 -a 20 -r 12',
+            'c-foreach-restart -d ' + str(args.instance_sleep_seconds) + ' -a 20 -r 12',
             batch_size=1,
             batch_sleep=args.batch_sleep_seconds)
 
