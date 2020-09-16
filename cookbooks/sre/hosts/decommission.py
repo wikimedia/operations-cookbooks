@@ -50,6 +50,7 @@ DEPLOYMENT_HOST = 'deployment.eqiad.wmnet'
 MEDIAWIKI_CONFIG_REPO_PATH = '/srv/mediawiki-staging'
 PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'
 PUPPET_PRIVATE_REPO_PATH = '/srv/private'
+COMMON_STEPS_KEY = 'COMMON_STEPS'
 MIGRATED_PRIMARY_SITES = ()
 
 
@@ -65,7 +66,7 @@ def argument_parser():
 
 
 def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
-    """Perform all the decommissioning actions on a single host."""
+    """Perform all the decommissioning actions on a single host and return its DC name."""
     hostname = fqdn.split('.')[0]
     icinga = spicerack.icinga()
     remote = spicerack.remote()
@@ -102,17 +103,7 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
             spicerack.actions[fqdn].failure('**Failed to shutdown VM, manually run gnt-instance remove on the Ganeti '
                                             'master for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
 
-        try:
-            # TODO: avoid race conditions to run it at the same time that the systemd timer will trigger it
-            spicerack.netbox_master_host.run_sync(
-                'systemctl start netbox_ganeti_{cluster}_sync.service'.format(cluster=vm.cluster.split('.')[2]))
-            # TODO: add polling and validation that it completed to run
-            spicerack.actions[fqdn].success(
-                'Started forced sync of VMs in Ganeti cluster {cluster} to Netbox'.format(cluster=vm.cluster))
-        except (DnsError, RemoteExecutionError) as e:
-            spicerack.actions[fqdn].failure(
-                '**Failed to force sync of VMs in Ganeti cluster {cluster} to Netbox**: {e}'.format(
-                    cluster=vm.cluster, e=e))
+        sync_ganeti(spicerack, fqdn, vm)
 
     else:  # Physical host
         try:
@@ -168,14 +159,24 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
             spicerack.actions[fqdn].failure('**Failed to remove VM, manually run gnt-instance remove on the Ganeti '
                                             'master for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
 
-    dc = netbox.api.dcim.sites.get(netbox_data['site']).slug
-    if dc in MIGRATED_PRIMARY_SITES:
-        dns_netbox_args = dns_netbox_argparse().parse_args(
-            ['{host} decommissioned, removing primary IPs'.format(host=hostname)])
-        dns_netbox_run(dns_netbox_args, spicerack)
-    else:
-        spicerack.actions[fqdn].warning('**Site {dc} DNS records not yet migrated to the automatic system, manual '
-                                        'patch required**'.format(dc=dc))
+        sync_ganeti(spicerack, fqdn, vm)
+
+    return netbox.api.dcim.sites.get(netbox_data['site']).slug
+
+
+def sync_ganeti(spicerack, fqdn, vm):
+    """Force a run of the Ganeti-Netbox sync systemd timer."""
+    try:
+        # TODO: avoid race conditions to run it at the same time that the systemd timer will trigger it
+        spicerack.netbox_master_host.run_sync(
+            'systemctl start netbox_ganeti_{cluster}_sync.service'.format(cluster=vm.cluster.split('.')[2]))
+        # TODO: add polling and validation that it completed to run
+        spicerack.actions[fqdn].success(
+            'Started forced sync of VMs in Ganeti cluster {cluster} to Netbox'.format(cluster=vm.cluster))
+    except (DnsError, RemoteExecutionError) as e:
+        spicerack.actions[fqdn].failure(
+            '**Failed to force sync of VMs in Ganeti cluster {cluster} to Netbox**: {e}'.format(
+                cluster=vm.cluster, e=e))
 
 
 def update_netbox(netbox, netbox_data):
@@ -269,9 +270,10 @@ def run(args, spicerack):
     reason = spicerack.admin_reason('Host decommission', task_id=args.task_id)
     phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
+    dcs = set()
     for fqdn in decom_hosts:  # Doing one host at a time to track executed actions.
         try:
-            _decommission_host(fqdn, spicerack, reason)
+            dcs.add(_decommission_host(fqdn, spicerack, reason))
         except Exception as e:
             message = 'Host steps raised exception'
             logger.exception(message)
@@ -279,6 +281,20 @@ def run(args, spicerack):
 
         if spicerack.actions[fqdn].has_failures:
             has_failures = True
+
+    dns_netbox_args = dns_netbox_argparse().parse_args(
+        ['{hosts} decommissioned, removing primary IPs'.format(hosts=decom_hosts)])
+    try:
+        dns_netbox_run(dns_netbox_args, spicerack)
+    except RemoteExecutionError as e:
+        message = 'Failed to run the sre.dns.netbox cookbook'
+        logger.exception(message)
+        spicerack.actions[COMMON_STEPS_KEY].failure('{message}: {e}'.format(message=message, e=e))
+        has_failures = True
+
+    if any(dc not in MIGRATED_PRIMARY_SITES for dc in dcs):
+        spicerack.actions[COMMON_STEPS_KEY].warning('**Not all affected DC(s) have been migrated to automatic DNS, a '
+                                                    'manual patch to the operations/dns repository is required**')
 
     suffix = ''
     if has_failures:
