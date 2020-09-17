@@ -58,7 +58,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
     command = Command(command_str, ok_codes=[0, 99])
 
     logger.info('Generating the DNS records from Netbox data. It will take a couple of minutes.')
-    results = netbox_host.run_sync(command)
+    results = netbox_host.run_sync(command, is_safe=True)
     metadata = {}
     for _, output in results:
         lines = output.message().decode()
@@ -67,6 +67,10 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
             if line.startswith('METADATA:'):
                 metadata = json.loads(line.split(maxsplit=1)[1])
                 break
+
+    if spicerack.dry_run:
+        logger.info('Bailing out in DRY-RUN mode. Generated temporary files are available on %s', netbox_hostname)
+        return
 
     if metadata.get('no_changes', False):
         if args.force:
