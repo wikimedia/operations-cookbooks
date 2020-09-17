@@ -60,7 +60,8 @@ def argument_parser():
     parser.add_argument('query', help=('Cumin query to match the host(s) to act upon. At most 5 at a time, with '
                                        '--force at most 20 at a time.'))
     parser.add_argument('-t', '--task-id', required=True, help='the Phabricator task ID (e.g. T12345)')
-    parser.add_argument('--force', help='Bypass the default limit of 5 hosts at a time, but only up to 20 hosts.')
+    parser.add_argument('--force', action='store_true',
+                        help='Bypass the default limit of 5 hosts at a time, but only up to 20 hosts.')
 
     return parser
 
@@ -83,7 +84,7 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
         icinga.downtime_hosts([fqdn], reason)
         spicerack.actions[fqdn].success('Downtimed host on Icinga')
     except RemoteExecutionError:
-        spicerack.actions[fqdn].failure('Failed downtime host on Icinga (likely already removed)')
+        spicerack.actions[fqdn].warning('**Failed downtime host on Icinga (likely already removed)**')
 
     netbox_data = netbox.fetch_host_detail(hostname)
     is_virtual = netbox_data['is_virtual']
@@ -137,7 +138,7 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
         except IpmiError as e:
             spicerack.actions[fqdn].failure('**Failed to power off, manual intervention required**: {e}'.format(e=e))
 
-        update_netbox(netbox, netbox_data)
+        update_netbox(netbox, netbox_data, spicerack.dry_run)
         spicerack.actions[fqdn].success('Set Netbox status to Decommissioning and deleted all non-mgmt interfaces '
                                         'and related IPs')
 
@@ -179,7 +180,7 @@ def sync_ganeti(spicerack, fqdn, vm):
                 cluster=vm.cluster, e=e))
 
 
-def update_netbox(netbox, netbox_data):
+def update_netbox(netbox, netbox_data, dry_run):
     """Delete all non-mgmt interfaces and set the status to Decommissioning.
 
     The deletion of the interface automatically deletes on cascade the related IPs and unset the primary IPs.
@@ -189,7 +190,9 @@ def update_netbox(netbox, netbox_data):
             logger.debug('Skipping interface %s, mgmt_only=True', interface.name)
             continue
         logger.info('Deleting interface %s and related IPs', interface.name)
-        interface.delete()
+        if not dry_run:  # Due to the direct access to the Netbox API object it would fail in dry-run mode
+            interface.delete()
+
     netbox.put_host_status(netbox_data['name'], 'Decommissioning')
 
 
