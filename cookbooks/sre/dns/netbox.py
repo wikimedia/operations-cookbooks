@@ -69,7 +69,8 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
                 break
 
     if spicerack.dry_run:
-        logger.info('Bailing out in DRY-RUN mode. Generated temporary files are available on %s', netbox_hostname)
+        if not metadata.get('no_changes', False):
+            logger.info('Bailing out in DRY-RUN mode. Generated temporary files are available on %s', netbox_hostname)
         return
 
     if metadata.get('no_changes', False):
