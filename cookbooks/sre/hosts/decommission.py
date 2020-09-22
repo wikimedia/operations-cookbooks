@@ -286,7 +286,7 @@ def run(args, spicerack):
             has_failures = True
 
     dns_netbox_args = dns_netbox_argparse().parse_args(
-        ['{hosts} decommissioned, removing primary IPs'.format(hosts=decom_hosts)])
+        ['{hosts} decommissioned, removing all IPs except the asset tag one'.format(hosts=decom_hosts)])
     try:
         dns_netbox_run(dns_netbox_args, spicerack)
     except RemoteExecutionError as e:
