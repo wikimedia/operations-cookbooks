@@ -51,7 +51,7 @@ MEDIAWIKI_CONFIG_REPO_PATH = '/srv/mediawiki-staging'
 PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'
 PUPPET_PRIVATE_REPO_PATH = '/srv/private'
 COMMON_STEPS_KEY = 'COMMON_STEPS'
-MIGRATED_PRIMARY_SITES = ()
+MIGRATED_PRIMARY_SITES = ('ulsfo',)
 
 
 def argument_parser():

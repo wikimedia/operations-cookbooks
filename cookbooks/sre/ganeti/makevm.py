@@ -29,7 +29,7 @@ from cookbooks.sre.dns.netbox import argument_parser as dns_netbox_argparse, run
 
 __title__ = 'Create a new virtual machine in Ganeti.'
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
-MIGRATED_PRIMARY_SITES = ()
+MIGRATED_PRIMARY_SITES = ('ulsfo',)
 PRIMARY_INTERFACE_NAME = '##PRIMARY##'
 
 
@@ -119,10 +119,10 @@ def run(args, spicerack):
     logger.info('Allocated IPv6 %s with DNS name %s', ip_v6, dns_name_v6)
 
     # Run the sre.dns.netbox cookbook to generate the DNS records
-    if args.dc in MIGRATED_PRIMARY_SITES:
-        dns_netbox_args = dns_netbox_argparse().parse_args(['Created records for VM {vm}'.format(vm=args.fqdn)])
-        dns_netbox_run(dns_netbox_args, spicerack)
-    else:
+    dns_netbox_args = dns_netbox_argparse().parse_args(['Created records for VM {vm}'.format(vm=args.fqdn)])
+    dns_netbox_run(dns_netbox_args, spicerack)
+
+    if args.dc not in MIGRATED_PRIMARY_SITES:
         ip_v4_address = ipaddress.ip_interface(ip_v4).ip
         ip_v6_address = ipaddress.ip_interface(ip_v6).ip
         if args.skip_v6:
