@@ -217,7 +217,7 @@ def run(args, spicerack):
                 if change_snmp(pdu, version, session, snmp_ro, snmp_rw, args.force):
                     reboot_time = datetime.utcnow()
                     pdus.reboot(pdu, version, session)
-                    # Reboots from expereince take at least 60 seconds
+                    # Reboots from experience take at least 60 seconds
                     logger.info('%s: sleep while reboot', pdu)
                     sleep(60)
                     pdus.wait_reboot_since(pdu, reboot_time, session)

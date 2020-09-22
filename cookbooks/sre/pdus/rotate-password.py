@@ -65,7 +65,7 @@ def change_password(pdu, session, new_password):
     except pdus.RequestError as err:
         raise PasswordResetError from err
 
-    session.auth[1] = new_password
+    session.auth = (session.auth[0], new_password)
     session.cookies.clear()
     try:
         response = pdus.get(session, 'https://{}/chngpswd.html'.format(pdu))

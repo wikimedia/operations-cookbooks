@@ -146,7 +146,7 @@ def reboot(pdu, version, session):
     except requests.exceptions.HTTPError as err:
         raise RebootError from err
     try:
-        # This seems to be required to do the actual reboot at least  on v3
+        # This seems to be required to do the actual reboot at least on v3
         url = 'https://{}/restarting.html'.format(pdu)
         get(session, url, timeout=1)
     except RequestError:
