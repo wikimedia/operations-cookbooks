@@ -39,8 +39,12 @@ def run(args, spicerack):
     hadoop_workers = spicerack.remote().query(args.hostname_pattern)
 
     ask_confirmation(
-        'Please check that the hosts init are correct: {}'
+        'Please check that the hosts to initialize are the expected ones: {}'
         .format(hadoop_workers.hosts))
+
+    ask_confirmation(
+        'Please check that the disk labels to act on are the expected '
+        'ones: {}'.format(str(available_disk_labels)))
 
     logger.info('Installing parted and megacli.')
     hadoop_workers.run_async('apt-get install -y megacli parted')
@@ -48,26 +52,26 @@ def run(args, spicerack):
     logger.info('Creating ext4 disk partitions.')
     for label in available_disk_labels:
         device = '/dev/sd' + label
-        hadoop_workers.run_async([
+        hadoop_workers.run_async(
             '/sbin/parted {} --script mklabel gpt'.format(device),
             '/sbin/parted {} --script mkpart primary ext4 0% 100%'
             .format(device),
             '/sbin/mkfs.ext4 -L hadoop-' + label + " " + device + '1',
             '/sbin/tune2fs ' + device + '1',
-        ])
+        )
 
     logger.info('Configuring mountpoints.')
     for label in available_disk_labels:
         mountpoint = args.partitions_basedir + '/' + label
-        hadoop_workers.run_async([
+        hadoop_workers.run_async(
             '/bin/mkdir -p ' + mountpoint,
             'echo -e "# Hadoop DataNode partition ' + label +
             '\nLABEL=hadoop-' + label + "\t" + mountpoint + '\text4\tdefaults,noatime\t0\t2" | tee -a /etc/fstab',
             '/bin/mount -v ' + mountpoint
-        ])
+        )
 
     logger.info('Ensure some MegaCLI specific settings.')
-    hadoop_workers.run_async([
+    hadoop_workers.run_async(
         # ReadAhead Adaptive
         '/usr/sbin/megacli -LDSetProp ADRA -LALL -aALL',
         # Direct (No cache)
@@ -77,4 +81,4 @@ def run(args, spicerack):
         # Disable BBU auto-learn
         'echo "autoLearnMode=1" > /tmp/disable_learn',
         '/usr/sbin/megacli -AdpBbuCmd -SetBbuProperties -f /tmp/disable_learn -a0'
-    ])
+    )
