@@ -65,7 +65,7 @@ def run(args, spicerack):
             '/sbin/parted {} --script mkpart primary ext4 0% 100%'
             .format(device),
             '/sbin/mkfs.ext4 -L hadoop-' + label + " " + device + '1',
-            '/sbin/tune2fs ' + device + '1',
+            '/sbin/tune2fs -m 0 ' + device + '1',
         )
 
     logger.info('Configuring mountpoints.')
