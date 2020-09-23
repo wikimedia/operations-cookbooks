@@ -35,7 +35,15 @@ def run(args, spicerack):
     """Initialize an Hadoop worker"""
     ensure_shell_is_durable()
 
-    available_disk_labels = list(string.ascii_lowercase)[args.skip_disks:args.disks_number + 1]
+    letters = list(string.ascii_lowercase)
+    if len(letters[args.skip_disks:]) < args.disks_number:
+        logger.error(
+            'The number of available letters is not enough to support %s disks, '
+            'please check your parameters:\n%s',
+            args.disks_number, letters[args.skip_disks:])
+        return 1
+
+    available_disk_labels = letters[args.skip_disks:args.disks_number + args.skip_disks]
     hadoop_workers = spicerack.remote().query(args.hostname_pattern)
 
     ask_confirmation(
@@ -82,3 +90,5 @@ def run(args, spicerack):
         'echo "autoLearnMode=1" > /tmp/disable_learn',
         '/usr/sbin/megacli -AdpBbuCmd -SetBbuProperties -f /tmp/disable_learn -a0'
     )
+
+    return 0
