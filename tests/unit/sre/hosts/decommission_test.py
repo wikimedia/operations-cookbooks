@@ -6,7 +6,7 @@ from unittest import mock
 from cookbooks.sre.hosts.decommission import get_grep_patterns
 
 
-@mock.patch('spicerack.dns.Dns', spec_set=True)
+@mock.patch('wmflib.dns.Dns', spec_set=True)
 def test_get_grep_patterns(dns):
     '''
     Let's test this function

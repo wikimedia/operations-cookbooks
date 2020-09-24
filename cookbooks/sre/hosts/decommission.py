@@ -33,8 +33,8 @@ import re
 import time
 
 from cumin.transports import Command
+from wmflib.dns import DnsError
 
-from spicerack.dns import DnsError
 from spicerack.interactive import ask_confirmation
 from spicerack.ipmi import IpmiError
 from spicerack.puppet import get_puppet_ca_hostname

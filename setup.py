@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 
 install_requires = [
     'python-dateutil',
-    'wikimedia-spicerack==0.0.43',
+    'wikimedia-spicerack',
     # [fixme]: The dnspython requirement is not reflected in puppet and should be
     # removed when moving generic functions from sre.discovery.service-route to
     # spicerack. 1.16.0 is currently in buster and 2.0.0 changed a lot, so I'm
