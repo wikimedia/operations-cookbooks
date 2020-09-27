@@ -9,6 +9,7 @@ from spicerack.dnsdisc import Discovery, DiscoveryError, DiscoveryCheckError
 from spicerack.remote import Remote
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+__title__ = __doc__
 
 # Some IP from a subnet of each DC (to be used for EDNS lookups)
 DC_IP_MAP = {
