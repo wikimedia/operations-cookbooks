@@ -92,3 +92,5 @@ def run(args, spicerack):
         # Return an error if icinga didn't recover.
         if not icinga_ok:
             return 1
+
+    return 0

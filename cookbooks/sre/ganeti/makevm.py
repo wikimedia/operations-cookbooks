@@ -75,7 +75,7 @@ def argument_parser():
     return parser
 
 
-def run(args, spicerack):
+def run(args, spicerack):  # pylint: disable=too-many-locals,too-many-statements
     """Create a new Ganeti VM as specified."""
     ensure_shell_is_durable()
     args.cluster, args.row, args.dc = _get_locations()[args.location]  # Inject cluster, row and dc in the args object.

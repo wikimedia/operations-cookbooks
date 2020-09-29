@@ -89,7 +89,7 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
     netbox_data = netbox.fetch_host_detail(hostname)
     is_virtual = netbox_data['is_virtual']
     if is_virtual:
-        vm = ganeti.instance(fqdn, cluster=netbox_data['ganeti_cluster'])
+        virtual_machine = ganeti.instance(fqdn, cluster=netbox_data['ganeti_cluster'])
         spicerack.actions[fqdn].success('Found Ganeti VM')
     else:
         ipmi = spicerack.ipmi(cached=True)
@@ -98,13 +98,14 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
 
     if is_virtual:
         try:
-            vm.shutdown()
+            virtual_machine.shutdown()
             spicerack.actions[fqdn].success('VM shutdown')
         except RemoteExecutionError as e:
             spicerack.actions[fqdn].failure('**Failed to shutdown VM, manually run gnt-instance remove on the Ganeti '
-                                            'master for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
+                                            'master for the {cluster} cluster**: {e}'.format(
+                                                cluster=virtual_machine.cluster, e=e))
 
-        sync_ganeti(spicerack, fqdn, vm)
+        sync_ganeti(spicerack, fqdn, virtual_machine)
 
     else:  # Physical host
         try:
@@ -154,30 +155,33 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
     if is_virtual:
         logger.info('Issuing Ganeti remove command, it can take up to 15 minutes...')
         try:
-            vm.remove()
+            virtual_machine.remove()
             spicerack.actions[fqdn].success('VM removed')
         except RemoteExecutionError as e:
             spicerack.actions[fqdn].failure('**Failed to remove VM, manually run gnt-instance remove on the Ganeti '
-                                            'master for the {cluster} cluster**: {e}'.format(cluster=vm.cluster, e=e))
+                                            'master for the {cluster} cluster**: {e}'.format(
+                                                cluster=virtual_machine.cluster, e=e))
 
-        sync_ganeti(spicerack, fqdn, vm)
+        sync_ganeti(spicerack, fqdn, virtual_machine)
 
     return netbox.api.dcim.sites.get(netbox_data['site']).slug
 
 
-def sync_ganeti(spicerack, fqdn, vm):
+def sync_ganeti(spicerack, fqdn, virtual_machine):
     """Force a run of the Ganeti-Netbox sync systemd timer."""
     try:
         # TODO: avoid race conditions to run it at the same time that the systemd timer will trigger it
         spicerack.netbox_master_host.run_sync(
-            'systemctl start netbox_ganeti_{cluster}_sync.service'.format(cluster=vm.cluster.split('.')[2]))
+            'systemctl start netbox_ganeti_{cluster}_sync.service'.format(
+                cluster=virtual_machine.cluster.split('.')[2]))
         # TODO: add polling and validation that it completed to run
         spicerack.actions[fqdn].success(
-            'Started forced sync of VMs in Ganeti cluster {cluster} to Netbox'.format(cluster=vm.cluster))
+            'Started forced sync of VMs in Ganeti cluster {cluster} to Netbox'.format(
+                cluster=virtual_machine.cluster))
     except (DnsError, RemoteExecutionError) as e:
         spicerack.actions[fqdn].failure(
             '**Failed to force sync of VMs in Ganeti cluster {cluster} to Netbox**: {e}'.format(
-                cluster=vm.cluster, e=e))
+                cluster=virtual_machine.cluster, e=e))
 
 
 def update_netbox(netbox, netbox_data, dry_run):
@@ -231,7 +235,7 @@ def check_patterns_in_repo(host_paths, patterns):
         logger.info('No matches found in the Puppet or mediawiki-config repositories')
 
 
-def run(args, spicerack):
+def run(args, spicerack):  # pylint: disable=too-many-locals
     """Required by Spicerack API."""
     has_failures = False
     remote = spicerack.remote()
@@ -247,7 +251,8 @@ def run(args, spicerack):
     if len(decom_hosts) > 20:
         logger.error('Matched %d hosts, aborting. (max 20 with --force, 5 without)', len(decom_hosts))
         return 1
-    elif len(decom_hosts) > 5:
+
+    if len(decom_hosts) > 5:
         if args.force:
             logger.info('Authorized decommisioning of %s hosts with --force', len(decom_hosts))
         else:
@@ -277,7 +282,7 @@ def run(args, spicerack):
     for fqdn in decom_hosts:  # Doing one host at a time to track executed actions.
         try:
             dcs.add(_decommission_host(fqdn, spicerack, reason))
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             message = 'Host steps raised exception'
             logger.exception(message)
             spicerack.actions[fqdn].failure('{message}: {e}'.format(message=message, e=e))

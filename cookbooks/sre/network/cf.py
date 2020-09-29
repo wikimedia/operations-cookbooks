@@ -1,3 +1,4 @@
+# pylint: disable=invalid-name
 """Manage CF BGP advertisement of our prefixes.
 
 - Per prefix
@@ -96,8 +97,9 @@ def run(args, spicerack):
 
         try:
             update_prefix_status(session, base_url, prefix, advertise)
-        except Exception as e:  # Don't interrupt the run if there is an error
-            logger.error('⚠️  Failed to update prefix {cidr}: {e}'.format(cidr=prefix['cidr'], e=e))
+        except Exception as e:  # pylint: disable=broad-except
+            # Don't interrupt the run if there is an error
+            logger.error('⚠️  Failed to update prefix %s: %s', prefix['cidr'], e)
             return_code = 1
 
     return return_code

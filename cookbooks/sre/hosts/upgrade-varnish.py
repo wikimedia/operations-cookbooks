@@ -59,7 +59,8 @@ def check_http_responses(host):
     if req.status_code not in (requests.codes['ok'], requests.codes['not_found']):
         logger.error(
             "Unexpected response from varnish-fe. "
-            "Got {} instead of 200/404. Exiting.".format(req.status_code)
+            "Got %d instead of 200/404. Exiting.",
+            req.status_code
         )
         return False
 
@@ -67,7 +68,8 @@ def check_http_responses(host):
     if req.status_code not in (requests.codes['ok'], requests.codes['not_found']):
         logger.error(
             "Unexpected response from varnish-be. "
-            "Got {} instead of 200/404. Exiting.".format(req.status_code)
+            "Got %d instead of 200/404. Exiting.",
+            req.status_code
         )
         return False
 
@@ -144,3 +146,4 @@ def run(args, spicerack):
     # Repool and cancel Icinga downtime
     remote_host.run_sync("pool")
     icinga.remove_downtime(remote_host.hosts)
+    return 0

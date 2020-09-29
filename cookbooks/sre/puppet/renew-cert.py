@@ -50,3 +50,5 @@ def run(args, spicerack):
         puppet_master.wait_for_csr(remote_host)
         puppet_master.sign(remote_host, fingerprints[remote_host])
         puppet.run(enable_reason=reason, quiet=True)
+
+    return 0

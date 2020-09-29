@@ -26,13 +26,14 @@ from typing import List
 
 import attr
 
-from cookbooks import ArgparseFormatter
 from cumin import NodeSet
 from spicerack.constants import CORE_DATACENTERS
 from spicerack.decorators import retry
 from spicerack.icinga import IcingaError
 from spicerack.puppet import PuppetHostsCheckError
 from spicerack.remote import RemoteCheckError, RemoteExecutionError
+
+from cookbooks import ArgparseFormatter
 
 
 __title__ = "Perform a rolling reboot of a conftool cluster"
@@ -107,19 +108,19 @@ class Results:
         if self.failed_slices == 0:
             logger.info('All reboots were successful')
             return 0
-        else:
+
+        logger.info(
+            'Reboots where successful for: %s', ','.join(self.successful)
+        )
+        logger.info('Groups with failed reboots: %s', self.failed_slices)
+        logger.info('Hosts in those groups: %s', ','.join(self.failed))
+        logger.info('Check the logs for specific failures')
+        leftovers = list(set(self.hosts) - set(self.successful) - set(self.failed))
+        if leftovers:
             logger.info(
-                'Reboots where successful for: {}'.format(','.join(self.successful))
+                'No action was performed for %s', ','.join(leftovers)
             )
-            logger.info('Groups with failed reboots: {}'.format(self.failed_slices))
-            logger.info('Hosts in those groups: {}'.format(','.join(self.failed)))
-            logger.info('Check the logs for specific failures')
-            leftovers = list(set(self.hosts) - set(self.successful) - set(self.failed))
-            if leftovers:
-                logger.info(
-                    'No action was performed for {}'.format(','.join(leftovers))
-                )
-            return 1
+        return 1
 
 
 def reboot_with_downtime(spicerack, remote_hosts, results, no_fail_on_icinga):
@@ -152,13 +153,13 @@ def reboot_with_downtime(spicerack, remote_hosts, results, no_fail_on_icinga):
         else:
             results.fail(remote_hosts.hosts)
             logger.error(e)
-            logger.error('Hosts {} have NOT been repooled.'.format(','.join(results.hosts)))
+            logger.error('Hosts %s have NOT been repooled.', ','.join(results.hosts))
             raise
     except (PuppetHostsCheckError, RemoteCheckError, RemoteExecutionError) as e:
         # Some host failed to come up again, or something fundamental broke.
         # log an error, exit *without* repooling
         logger.error(e)
-        logger.error('Hosts {} have NOT been repooled.'.format(','.join(results.hosts)))
+        logger.error('Hosts %s have NOT been repooled.', ','.join(results.hosts))
         results.fail(remote_hosts.hosts)
         raise
 
@@ -184,7 +185,7 @@ def run(args, spicerack):
             continue
         # Let's avoid a second query to puppetdb here.
         remote_slice = spicerack.remote().query('D{{{h}}}'.format(h=str(hosts)))
-        logger.info("Now acting on {}".format(str(hosts)))
+        logger.info("Now acting on %s", str(hosts))
         try:
             # We select only on the hostnames, as we're rebooting, so we just need
             # to depool the host pretty much everywhere.
@@ -196,10 +197,10 @@ def run(args, spicerack):
             ):
                 time.sleep(args.grace_sleep)
                 reboot_with_downtime(spicerack, remote_slice, results, args.no_fail_on_icinga)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             # If an exception was raised within the context manager, we have some hosts
             # left depooled, so we stop the loop for human inspection.
             results.fail(remote_slice.hosts)
-            logger.error('Unrecoverable error. Stopping the rolling reboot: {}'.format(e))
+            logger.error('Unrecoverable error. Stopping the rolling reboot: %s', e)
             break
     return results.report()

@@ -54,7 +54,7 @@ def output_to_json(results):
         return result_json
 
 
-def run(args, spicerack):
+def run(args, spicerack):  # pylint: disable=too-many-return-statements
     """Required by Spicerack API."""
     ensure_shell_is_durable()
 
