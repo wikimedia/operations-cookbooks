@@ -29,7 +29,7 @@ from cookbooks.sre.dns.netbox import argument_parser as dns_netbox_argparse, run
 
 __title__ = 'Create a new virtual machine in Ganeti.'
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
-MIGRATED_PRIMARY_SITES = ('ulsfo',)
+MIGRATED_PRIMARY_SITES = ('ulsfo', 'eqsin')
 PRIMARY_INTERFACE_NAME = '##PRIMARY##'
 
 
