@@ -206,7 +206,7 @@ def get_grep_patterns(dns, decom_hosts):
     for host in decom_hosts:
         patterns.append(re.escape(host))
         for ip in dns.resolve_ips(host):
-            patterns.append(re.escape(ip))
+            patterns.append('[^0-9A-Za-z]{}[^0-9A-Za-z]'.format(re.escape(ip)))
 
     return patterns
 
