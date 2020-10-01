@@ -5,9 +5,10 @@ from setuptools import find_packages, setup
 install_requires = [
     'python-dateutil',
     'wikimedia-spicerack',
-    # Fixme: The dnspython requirement is not reflected in puppet and should be removed when moving generic functions
-    #  from sre.discovery.service-route to spicerack. 1.16.0 is currently in buster and 2.0.0 changed a lot, so I'm
-    #  pinning this here to have the right version with local tox.
+    # [fixme]: The dnspython requirement is not reflected in puppet and should be
+    # removed when moving generic functions from sre.discovery.service-route to
+    # spicerack. 1.16.0 is currently in buster and 2.0.0 changed a lot, so I'm
+    # pinning this here to have the right version with local tox.
     'dnspython==1.16.0',
 ]
 
@@ -18,6 +19,7 @@ extras_require = {
         'bandit>=1.1.0',
         'flake8>=3.2.1',
         'prospector[with_everything]>=0.12.4',
+        'pytest>=6.1.0',
     ],
 }
 
