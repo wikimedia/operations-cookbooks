@@ -4,7 +4,7 @@ import logging
 
 from datetime import timedelta
 
-from spicerack.interactive import ensure_shell_is_durable
+from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
 
@@ -26,15 +26,31 @@ def run(args, spicerack):
     ensure_shell_is_durable()
     remote = spicerack.remote()
     confctl = spicerack.confctl('node')
+    aqs_canary = remote.query('A:' + args.cluster + '-canary')
     aqs_workers = remote.query('A:' + args.cluster)
-    aqs_lbconfig = remote.query_confctl(confctl, cluster=args.cluster)
     icinga = spicerack.icinga()
     reason = spicerack.admin_reason('Roll restart of all AQS\'s nodejs daemons.')
 
+    ask_confirmation(
+        'If a config change is being rolled-out, please run puppet on all hosts '
+        'before proceeding.')
+
     with icinga.hosts_downtimed(aqs_workers.hosts, reason,
                                 duration=timedelta(minutes=60)):
+        logger.info("Depool and test on canary: %s", aqs_canary.hosts)
+        aqs_canary.run_sync(
+            'depool',
+            'systemctl restart aqs'
+        )
+        ask_confirmation('Please test aqs on the canary.')
+        logger.info('Pool the canary back.')
+        aqs_canary.run_sync('pool')
 
-        logger.info('Restarting daemons (one host at the time)...')
+        aqs_lbconfig = remote.query_confctl(
+            confctl, cluster=args.cluster,
+            name=r'(?!' + aqs_canary.hosts[0] + ').*')
+
+        logger.info('Restarting remaining daemons (one host at the time).')
         aqs_lbconfig.run(
             'systemctl restart aqs', svc_to_depool=['aqs'],
             batch_size=1, max_failed_batches=2,
