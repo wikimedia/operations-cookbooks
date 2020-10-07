@@ -41,6 +41,10 @@ def argument_parser():
                               'of the Netbox-generated repository in all the dns-auth hosts. This allows to stage '
                               'changes that require also a commit in the manual repository. After running this '
                               'cookbook a manual authdns-update will pick up also these changes.'))
+    parser.add_argument('--emergency-manual-edit', action='store_true',
+                        help=('CAUTION: to be used only in an emergency! Allow to edit the files manually before '
+                              'committing them. Be aware that any subsequent run of the cookbook will try to revert '
+                              'the manual modifications.'))
     parser.add_argument('message', help='Commit message')
 
     return parser
@@ -57,8 +61,11 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
     base_command = ('cd /tmp && runuser -u {user} -- python3 '
                     '/srv/deployment/netbox-extras/dns/generate_dns_snippets.py').format(user=NETBOX_USER)
 
-    command_str = ('{base} commit --batch "{owner}: {msg}"').format(
-        base=base_command, owner=reason.owner, msg=args.message)
+    extra_options = ''
+    if args.emergency_manual_edit:
+        extra_options = '--keep-files '
+    command_str = ('{base} commit {opts}--batch "{owner}: {msg}"').format(
+        opts=extra_options, base=base_command, owner=reason.owner, msg=args.message)
     # NO_CHANGES_RETURN_CODE = 99 in generate_dns_snippets.py
     command = Command(command_str, ok_codes=[0, 99])
 
@@ -75,8 +82,16 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
 
     if spicerack.dry_run:
         if not metadata.get('no_changes', False):
-            logger.info('Bailing out in DRY-RUN mode. Generated temporary files are available on %s', netbox_hostname)
+            logger.info('Bailing out in DRY-RUN mode. Generated temporary files are available on %s:%s',
+                        netbox_hostname, metadata.get('path'))
         return
+
+    if args.emergency_manual_edit:
+        logger.info('Generated temporary files are available on %s:%s', netbox_hostname, metadata.get('path'))
+        logger.info('SSH there, modify any file, run "git commit --amend" to commit them')
+        logger.info('Then run "git log --pretty=oneline -1" and copy the new SHA1 of HEAD')
+        metadata['sha1'] = input('Enter the new SHA1 of the commit to push: ')
+        metadata['no_changes'] = False
 
     if metadata.get('no_changes', False):
         if args.force:
