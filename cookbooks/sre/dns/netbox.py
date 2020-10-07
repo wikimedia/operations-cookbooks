@@ -36,6 +36,11 @@ def argument_parser():
                         help=('Continue on no changes to force the replication to the other Netbox host(s) and the '
                               'push to the authoritative DNS hosts of the SHA1 given as parameter. Has no effect if '
                               'there are changes.'))
+    parser.add_argument('--skip-authdns-update', action='store_true',
+                        help=('Do not perform an authdns-update after having pushed the changes to the local checkout '
+                              'of the Netbox-generated repository in all the dns-auth hosts. This allows to stage '
+                              'changes that require also a commit in the manual repository. After running this '
+                              'cookbook a manual authdns-update will pick up also these changes.'))
     parser.add_argument('message', help='Commit message')
 
     return parser
@@ -102,6 +107,10 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
     authdns_hosts.run_sync('cd {path} && runuser -u {user} -- git fetch && git merge --ff-only {sha1}'.format(
         path=AUTHDNS_NETBOX_CHECKOUT_PATH, user=AUTHDNS_USER, sha1=sha1))
 
-    logger.info('Deploying the updated zonefiles on %s', authdns_hosts)
-    authdns_hosts.run_sync('cd {git} && utils/deploy-check.py -g {netbox} --deploy'.format(
-        git=AUTHDNS_DNS_CHECKOUT_PATH, netbox=AUTHDNS_NETBOX_CHECKOUT_PATH))
+    if args.skip_authdns_update:
+        logger.warning(('ATTENTION! Skipping deploy of the updated zonefiles. The next manual authdns-update or '
+                        'run of this cookbook will deploy the changes!'))
+    else:
+        logger.info('Deploying the updated zonefiles on %s', authdns_hosts)
+        authdns_hosts.run_sync('cd {git} && utils/deploy-check.py -g {netbox} --deploy'.format(
+            git=AUTHDNS_DNS_CHECKOUT_PATH, netbox=AUTHDNS_NETBOX_CHECKOUT_PATH))
