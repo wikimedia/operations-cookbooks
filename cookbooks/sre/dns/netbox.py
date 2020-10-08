@@ -88,7 +88,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
 
     if args.emergency_manual_edit:
         logger.info('Generated temporary files are available on %s:%s', netbox_hostname, metadata.get('path'))
-        logger.info('SSH there, modify any file, run "git commit --amend" to commit them')
+        logger.info('SSH there, as root modify any file, git stage them and run "git commit --amend" to commit them')
         logger.info('Then run "git log --pretty=oneline -1" and copy the new SHA1 of HEAD')
         metadata['sha1'] = input('Enter the new SHA1 of the commit to push: ')
         metadata['no_changes'] = False
