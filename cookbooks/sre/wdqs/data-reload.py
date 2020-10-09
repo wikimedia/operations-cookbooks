@@ -144,10 +144,10 @@ def reload_wikidata(remote_host):
     """Execute commands on host to reload wikidata data."""
     logger.info('Prepare to load wikidata data for blazegraph')
     remote_host.run_sync(
-        'rm -v /srv/wdqs/data_loaded',
+        'rm -fv /srv/wdqs/data_loaded',
         'systemctl stop wdqs-updater',
         'systemctl stop wdqs-blazegraph',
-        'rm -v /srv/wdqs/wikidata.jnl'
+        'rm -fv /srv/wdqs/wikidata.jnl'
     )
 
     logger.info('Loading wikidata dump')
@@ -187,7 +187,7 @@ def reload_categories(remote_host):
     logger.info('Preparing to load data for categories')
     remote_host.run_sync(
         'systemctl stop wdqs-categories',
-        'rm /srv/wdqs/categories.jnl'
+        'rm -fv /srv/wdqs/categories.jnl'
     )
 
     logger.info('Loading data for categories')
