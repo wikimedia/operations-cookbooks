@@ -36,7 +36,7 @@ from . import HADOOP_CLUSTER_NAMES
 
 
 __title__ = 'Reboot Hadoop worker nodes'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

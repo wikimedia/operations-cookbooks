@@ -20,7 +20,7 @@ from . import (HADOOP_CLUSTER_NAMES, CLUSTER_CUMIN_ALIAS,
 
 
 __title__ = 'Gracefully stop an Hadoop cluster.'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

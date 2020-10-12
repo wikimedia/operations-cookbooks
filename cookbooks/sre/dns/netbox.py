@@ -17,7 +17,7 @@ from spicerack.interactive import ask_confirmation
 
 
 __title__ = 'Update and deploy the DNS records generated from Netbox'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 NETBOX_DOMAIN = 'netbox.wikimedia.org'
 NETBOX_BARE_REPO_PATH = '/srv/netbox-exports/dns.git'
 NETBOX_USER = 'netbox'

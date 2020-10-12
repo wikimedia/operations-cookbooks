@@ -7,7 +7,7 @@ from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_
 
 
 __title__ = __doc__
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

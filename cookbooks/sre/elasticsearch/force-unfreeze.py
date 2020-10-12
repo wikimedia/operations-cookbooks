@@ -6,7 +6,7 @@ import logging
 from cookbooks.sre.elasticsearch import CLUSTERGROUPS
 
 __title__ = __doc__
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

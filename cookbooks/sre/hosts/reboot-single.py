@@ -23,7 +23,7 @@ from spicerack.decorators import retry
 from spicerack.icinga import IcingaError
 
 __title__ = 'Downtime a single host and reboot it'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

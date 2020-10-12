@@ -8,7 +8,7 @@ from spicerack.decorators import retry
 from spicerack.dnsdisc import Discovery, DiscoveryError, DiscoveryCheckError
 from spicerack.remote import Remote
 
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 __title__ = __doc__
 
 # Some IP from a subnet of each DC (to be used for EDNS lookups)

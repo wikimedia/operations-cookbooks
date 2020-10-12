@@ -17,7 +17,7 @@ from . import check_host_is_wdqs
 
 
 __title__ = "WDQS reboot cookbook"
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

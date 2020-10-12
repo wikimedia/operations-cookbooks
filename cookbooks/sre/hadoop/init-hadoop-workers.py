@@ -12,7 +12,7 @@ from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
 from cookbooks import ArgparseFormatter
 
 __title__ = 'Initialize a new Hadoop worker'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

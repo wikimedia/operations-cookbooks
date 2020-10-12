@@ -6,7 +6,7 @@ from cookbooks.sre.switchdc.mediawiki import argument_parser_base, DNS_SHORT_TTL
 
 
 __title__ = __doc__
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

@@ -37,7 +37,7 @@ from cookbooks import ArgparseFormatter
 
 
 __title__ = "Perform a rolling reboot of a conftool cluster"
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def check_percentage(arg):

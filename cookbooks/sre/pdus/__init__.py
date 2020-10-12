@@ -13,7 +13,7 @@ from spicerack.decorators import retry
 
 from cookbooks import ArgparseFormatter
 
-logger = getLogger(__name__)  # pylint: disable=invalid-name
+logger = getLogger(__name__)
 __title__ = __doc__
 MIN_SECRET_SIZE = 6
 

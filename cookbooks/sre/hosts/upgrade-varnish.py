@@ -23,7 +23,7 @@ from datetime import timedelta
 import requests
 
 __title__ = "Upgrade/downgrade Varnish on a cache host."
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

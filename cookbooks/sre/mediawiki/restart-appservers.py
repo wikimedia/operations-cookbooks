@@ -21,7 +21,7 @@ CLUSTERS = {
 # LVS pools that are affected by the service we're restarting.
 POOLS = ['apache2', 'nginx']
 
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 __title__ = 'Restart services on various appserver clusters'
 

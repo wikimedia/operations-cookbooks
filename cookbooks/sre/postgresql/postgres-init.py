@@ -10,7 +10,7 @@ import logging
 from datetime import timedelta
 
 __title__ = "Postgres slave initialization cookbook"
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

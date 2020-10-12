@@ -36,7 +36,7 @@ CDH_PACKAGES_NOT_IN_BIGTOP = ('avro-libs', 'hadoop-0.20-mapreduce', 'kite',
                               'parquet', 'parquet-format', 'sentry')
 
 __title__ = 'Change Hadoop distribution on a cluster.'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

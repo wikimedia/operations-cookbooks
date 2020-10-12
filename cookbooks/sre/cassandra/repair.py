@@ -8,7 +8,7 @@ import argparse
 import logging
 
 __title__ = "Cassandra repair cookbook"
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

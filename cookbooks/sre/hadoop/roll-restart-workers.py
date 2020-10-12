@@ -21,7 +21,7 @@ from . import HADOOP_CLUSTER_NAMES
 
 
 __title__ = 'Roll restart all the jvm daemons on Hadoop worker nodes'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

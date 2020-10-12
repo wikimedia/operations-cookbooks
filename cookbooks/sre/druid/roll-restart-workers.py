@@ -31,7 +31,7 @@ from cookbooks import ArgparseFormatter
 
 
 __title__ = 'Roll restart all the jvm daemons on Druid worker nodes'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

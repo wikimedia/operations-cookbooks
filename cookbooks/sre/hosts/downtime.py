@@ -19,7 +19,7 @@ from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 DEFAULT_DOWNTIME_HOURS = 4
 __title__ = 'Downtime hosts and all their services in Icinga.'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

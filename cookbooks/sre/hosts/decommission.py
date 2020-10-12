@@ -45,7 +45,7 @@ from cookbooks.sre.dns.netbox import argument_parser as dns_netbox_argparse, run
 
 
 __title__ = 'Decommission a host from all inventories.'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 DEPLOYMENT_HOST = 'deployment.eqiad.wmnet'
 MEDIAWIKI_CONFIG_REPO_PATH = '/srv/mediawiki-staging'
 PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'

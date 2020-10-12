@@ -4,7 +4,7 @@ import logging
 from cookbooks.sre.switchdc.services import argument_parser_base, load_services, post_process_args
 
 __title__ = __doc__
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 SERVICES = load_services()
 
 

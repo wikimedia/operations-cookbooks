@@ -20,7 +20,7 @@ from cookbooks.sre import pdus
 
 
 __title__ = 'List PDU 🔌 uptime'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

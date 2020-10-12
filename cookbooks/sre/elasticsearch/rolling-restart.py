@@ -4,7 +4,7 @@ import logging
 from cookbooks.sre.elasticsearch import argument_parser_base, post_process_args, execute_on_clusters
 
 __title__ = __doc__
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

@@ -10,7 +10,7 @@ from cookbooks import ArgparseFormatter
 from cookbooks.sre.discovery import check_record_for_dc, wipe_recursor_cache, update_ttl
 
 __title__ = __doc__
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 # Fixme: Move to spicerack.constants
 # DNS_TTL_LONG = 3600

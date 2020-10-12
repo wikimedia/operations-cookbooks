@@ -17,7 +17,7 @@ from logging import getLogger
 
 
 __title__ = 'Renew the puppet certificate of a single host'
-logger = getLogger(__name__)  # pylint: disable=invalid-name
+logger = getLogger(__name__)
 
 
 def argument_parser():

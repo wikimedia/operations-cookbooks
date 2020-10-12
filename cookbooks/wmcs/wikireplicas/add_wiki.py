@@ -8,7 +8,7 @@ import argparse
 import logging
 
 __title__ = "WMCS wikireplicas wiki adding cookbook"
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

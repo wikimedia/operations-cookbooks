@@ -24,7 +24,7 @@ from spicerack.interactive import ensure_shell_is_durable, get_secret
 from cookbooks.sre import pdus
 
 __title__ = 'Update Sentry PDUs 🔌 SNMP communities'
-logger = getLogger(__name__)  # pylint: disable=invalid-name
+logger = getLogger(__name__)
 
 
 class SnmpResetError(Exception):

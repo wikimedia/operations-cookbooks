@@ -16,7 +16,7 @@ __title__ = 'SREtest reboot cookbook'
 batch_size = 1
 allowed_aliases = ['sretest']
 
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def pre_action_example(hosts):

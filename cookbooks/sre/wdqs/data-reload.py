@@ -17,7 +17,7 @@ from spicerack.remote import RemoteExecutionError
 from . import check_host_is_wdqs
 
 __title__ = "WDQS data reload cookbook"
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 WDQS_DUMPS = {
     'wikidata': {

@@ -10,7 +10,7 @@ from spicerack.elasticsearch_cluster import ElasticsearchClusterCheckError
 from spicerack.constants import CORE_DATACENTERS
 
 __title__ = __doc__
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 CLUSTERGROUPS = ('search_eqiad', 'search_codfw', 'relforge')
 

@@ -19,7 +19,7 @@ from spicerack.remote import RemoteExecutionError
 from cookbooks.sre.elasticsearch import argument_parser_base, post_process_args, execute_on_clusters
 
 __title__ = 'Rolling upgrade of elasticsearch service (elasticsearch 5.6.14 to 6.5.4 migration)'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

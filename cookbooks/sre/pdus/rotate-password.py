@@ -21,7 +21,7 @@ from cookbooks.sre import pdus
 
 
 __title__ = 'Update Sentry PDUs 🔌 passwords'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 class PasswordResetError(Exception):

@@ -61,7 +61,7 @@ class RebootPostScriptError(Exception):
 GRACE_SLEEP = 10
 
 __title__ = 'Downtime a group of servers and reboot them'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser_reboot_groups(batch_default):

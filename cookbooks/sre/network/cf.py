@@ -21,7 +21,7 @@ import requests
 from spicerack.config import load_yaml_config
 
 __title__ = 'Manage CF BGP advertisement of our prefixes'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 CF_BASE_URL = 'https://api.cloudflare.com/client/v4/accounts/{}'
 CONFIG_PATH = 'cookbooks/sre.network.cf.yaml'  # relative to spicerack.config_dir
 

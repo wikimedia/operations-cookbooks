@@ -19,7 +19,7 @@ from spicerack.management import ManagementError
 
 
 __title__ = 'Reset the hosts IPMI password'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

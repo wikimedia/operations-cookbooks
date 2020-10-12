@@ -59,7 +59,7 @@ from cookbooks import ArgparseFormatter
 
 
 __title__ = 'Roll restart all the Kafka brokers on a cluster'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

@@ -15,7 +15,7 @@ from spicerack.remote import RemoteExecutionError
 
 
 __title__ = 'Maps reboot cookbook'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():

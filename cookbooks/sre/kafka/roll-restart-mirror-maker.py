@@ -19,7 +19,7 @@ from cookbooks import ArgparseFormatter
 
 
 __title__ = 'Roll restart all the Kafka Mirror Maker daemons on a cluster'
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 
 
 def argument_parser():
