@@ -44,6 +44,14 @@ def argument_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
     parser.add_argument('cluster', help='The name of the Hadoop cluster to work on.',
                         choices=HADOOP_CLUSTER_NAMES)
+    parser.add_argument('--workers-cumin-query', required=False, help='A cumin query string to select '
+                        'the Hadoop workers to work on. This limits/overrides the selection of the '
+                        'cluster argument. It should be used to resume a rollback/upgrade that '
+                        'failed on a limited number of hosts.')
+    parser.add_argument('--journalnodes-cumin-query', required=False, help='A cumin query string to select '
+                        'the Hadoop Journal nodes to work on. This limits/overrides the selection of the '
+                        'cluster argument. It should be used to resume a rollback/upgrade that '
+                        'failed on a limited number of hosts.')
     parser.add_argument('--rollback', action='store_true',
                         help="Set the cookbook to run rollback commands.")
 
@@ -73,7 +81,23 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
 
     hadoop_hosts = spicerack_remote.query(CLUSTER_CUMIN_ALIAS + suffix)
     hadoop_hdfs_journal_workers = spicerack_remote.query(HDFS_JOURNAL_CUMIN_ALIAS + suffix)
+    if args.journalnodes_cumin_query:
+        hadoop_hdfs_journal_override = spicerack_remote.query(args.journalnodes_cumin_query)
+        hadoop_hdfs_journal_workers = hadoop_hdfs_journal_workers.intersection(hadoop_hdfs_journal_override)
+        ask_confirmation(
+            'The cookbook will run only on the following journal hosts ({}), please verify that '
+            'the list looks correct: {}'
+            .format(len(hadoop_hdfs_journal_workers), hadoop_hdfs_journal_workers))
+
     hadoop_workers = spicerack_remote.query(WORKERS_CUMIN_ALIAS + suffix)
+    if args.workers_cumin_query:
+        hadoop_workers_override = spicerack_remote.query(args.workers_cumin_query)
+        hadoop_workers = hadoop_workers.intersection(hadoop_workers_override)
+        ask_confirmation(
+            'The cookbook will run only on the following worker hosts ({}), please verify that '
+            'the list looks correct: {}'
+            .format(len(hadoop_workers), hadoop_workers))
+
     hadoop_master = spicerack_remote.query(MASTER_CUMIN_ALIAS + suffix)
     hadoop_standby = spicerack_remote.query(STANDBY_CUMIN_ALIAS + suffix)
 
