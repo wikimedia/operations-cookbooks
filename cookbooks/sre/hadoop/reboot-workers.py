@@ -53,6 +53,9 @@ def argument_parser():
                              'one at the time).')
     parser.add_argument('--batch-size', type=int, default=2,
                         help='Size of each batch of reboots.')
+    parser.add_argument('--workers-cumin-query', required=False, help='A cumin query string to select '
+                        'the Hadoop workers to work on. This overrides the selection of the '
+                        'cluster argument. It should used be when only a few hosts need to be rebooted.')
 
     return parser
 
@@ -104,26 +107,44 @@ def run(args, spicerack):
 
     spicerack_remote = spicerack.remote()
     icinga = spicerack.icinga()
-    hadoop_workers_no_journal = spicerack_remote.query(
-        cluster_cumin_alias + ' and not ' + hdfs_jn_cumin_alias)
-    hadoop_hdfs_journal_workers = spicerack_remote.query(hdfs_jn_cumin_alias)
-
     reboot_batch_size = args.batch_size
     yarn_nm_sleep_seconds = args.yarn_nm_sleep_seconds
 
-    # Split the workers into batches of hostnames
-    worker_hostnames_n_slices = math.floor(len(hadoop_workers_no_journal.hosts) / reboot_batch_size)
+    if args.workers_cumin_query:
+        hadoop_workers = spicerack_remote.query(cluster_cumin_alias)
+        hadoop_workers_override = spicerack_remote.query(args.workers_cumin_query)
+        hadoop_workers = hadoop_workers.intersection(hadoop_workers_override)
+        ask_confirmation(
+            'The user chose to limit the number of Hadoop workers to reboot. '
+            'This option does not care about Journal nodes and it will only reboot '
+            'hosts following the batch size ({}). This means that more than one Journal node '
+            'may potentially be rebooted at the same time. Please check the list of hosts ({}) '
+            'before proceeding: {}'.format(reboot_batch_size, len(hadoop_workers), hadoop_workers))
 
-    logger.info('Rebooting Hadoop workers NOT running a HDFS Journalnode')
-    for hadoop_workers_batch in hadoop_workers_no_journal.split(worker_hostnames_n_slices):
-        logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
-        reboot_hadoop_workers(hadoop_workers_batch, yarn_nm_sleep_seconds, spicerack, icinga)
+        worker_hostnames_n_slices = math.floor(len(hadoop_workers.hosts) / reboot_batch_size)
+        logger.info('Rebooting Hadoop workers')
+        for hadoop_workers_batch in hadoop_workers.split(worker_hostnames_n_slices):
+            logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
+            reboot_hadoop_workers(hadoop_workers_batch, yarn_nm_sleep_seconds, spicerack, icinga)
 
-    logger.info('Rebooting Hadoop workers running a HDFS Journalnode')
-    # Using the following loop to iterate over every HDFS JournalNode
-    # one at the time.
-    for hadoop_workers_batch in hadoop_hdfs_journal_workers.split(len(hadoop_hdfs_journal_workers.hosts)):
-        logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
-        reboot_hadoop_workers(hadoop_workers_batch, yarn_nm_sleep_seconds, spicerack, icinga)
+    else:
+        hadoop_workers_no_journal = spicerack_remote.query(
+            cluster_cumin_alias + ' and not ' + hdfs_jn_cumin_alias)
+        hadoop_hdfs_journal_workers = spicerack_remote.query(hdfs_jn_cumin_alias)
+
+        # Split the workers into batches of hostnames
+        worker_hostnames_n_slices = math.floor(len(hadoop_workers_no_journal.hosts) / reboot_batch_size)
+
+        logger.info('Rebooting Hadoop workers NOT running a HDFS Journalnode')
+        for hadoop_workers_batch in hadoop_workers_no_journal.split(worker_hostnames_n_slices):
+            logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
+            reboot_hadoop_workers(hadoop_workers_batch, yarn_nm_sleep_seconds, spicerack, icinga)
+
+        logger.info('Rebooting Hadoop workers running a HDFS Journalnode')
+        # Using the following loop to iterate over every HDFS JournalNode
+        # one at the time.
+        for hadoop_workers_batch in hadoop_hdfs_journal_workers.split(len(hadoop_hdfs_journal_workers.hosts)):
+            logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
+            reboot_hadoop_workers(hadoop_workers_batch, yarn_nm_sleep_seconds, spicerack, icinga)
 
     logger.info('All reboots completed!')
