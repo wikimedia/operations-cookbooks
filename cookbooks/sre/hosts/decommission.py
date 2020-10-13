@@ -185,17 +185,33 @@ def sync_ganeti(spicerack, fqdn, virtual_machine):
 
 
 def update_netbox(netbox, netbox_data, dry_run):
-    """Delete all non-mgmt interfaces and set the status to Decommissioning.
-
-    The deletion of the interface automatically deletes on cascade the related IPs and unset the primary IPs.
-    """
+    """Delete all non-mgmt IPs, disable remote interfaces/vlan and set the status to Decommissioning."""
     for interface in netbox.api.dcim.interfaces.filter(device_id=netbox_data['id']):
-        if interface.mgmt_only:
+        if interface.mgmt_only:  # Ignore mgmt interfaces
             logger.debug('Skipping interface %s, mgmt_only=True', interface.name)
             continue
-        logger.info('Deleting interface %s and related IPs', interface.name)
-        if not dry_run:  # Due to the direct access to the Netbox API object it would fail in dry-run mode
-            interface.delete()
+        # If the interface is connected to another interface (and not a circuit, etc)
+        if interface.connected_endpoint and interface.connected_endpoint_type == 'dcim.interface':
+            remote_interface = netbox.api.dcim.interfaces.get(interface.connected_endpoint.id)
+            # Disable the remote side and reset any potential vlan config
+            remote_interface.enabled = False
+            remote_interface.mode = None
+            remote_interface.untagged_vlan = None
+            remote_interface.tagged_vlans = []
+            logger.info('Disable and reset potential vlans on %s:%s for local %s',
+                        remote_interface.device.name, remote_interface.name, interface.name)
+            if not dry_run:
+                remote_interface.save()
+        else:
+            logger.debug('Interface %s is not connected to an interface', interface.name)
+        # Remote is done, now we tackle the IPs
+        if interface.count_ipaddresses > 0:
+            for ip in netbox.api.ipam.ip_addresses.filter(interface_id=interface.id):
+                logger.info('Delete IP %s on %s', ip.address, ip.interface.name)
+                if not dry_run:
+                    ip.delete()
+        else:
+            logger.debug('No IPs on interface %s', interface.name)
 
     netbox.put_host_status(netbox_data['name'], 'Decommissioning')
 
