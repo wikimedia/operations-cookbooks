@@ -80,12 +80,39 @@ def run(args, spicerack):
 
     logger.info('Ensure some MegaCLI specific settings.')
     hadoop_workers.run_async(
-        # ReadAhead Adaptive
+        # See http://lists.us.dell.com/pipermail/linux-poweredge/2006-May/025738.html for more info.
+        # All the explanations described below must be credited to the author of the above forum response.
+        #
+        # Read Policy:
+        # The read policies indicate whether or not the controller should read sequential sectors of the
+        # logical drive when seeking data.
+        # Adaptive Read-Ahead (ADRA): When using adaptive read-ahead policy, the controller initiates read-ahead
+        #     only if the two most recent read requests accessed sequential sectors of the disk. If subsequent
+        #     read requests access random sectors of the disk, the controller reverts to no-read-ahead policy.
+        #     The controller continues to evaluate whether read requests are accessing sequential sectors of
+        #     the disk, and can initiate read-ahead if necessary.
         '/usr/sbin/megacli -LDSetProp ADRA -LALL -aALL',
+
+        # The Direct I/O and Cache I/O cache policies apply to reads on a specific virtual disk.
+        # These settings do not affect the read-ahead policy.
+        # Direct: Specifies that reads are not buffered in cache memory. When using direct I/O, data is transferred
+        #         to the controller cache and the host system simultaneously during a read request.
+        #         If a subsequent read request requires data from the same data block, it can be read directly from
+        #         the controller cache. The direct I/O setting does not override the cache policy settings.
         # Direct (No cache)
         '/usr/sbin/megacli -LDSetProp -Direct -LALL -aALL',
-        # No write cache if bad BBU
+
+        # Write policy:
+        # The write policies specify whether the controller sends a write-request completion signal as soon
+        # as the data is in the cache or after it has been written to disk.
+        # Write-Back. When using write-back caching, the controller sends a write-request completion signal as soon
+        #     as the data is in the controller cache but has not yet been written to disk.
+        # Write-Through. When using write-through caching, the controller sends a write-request completion signal
+        #     only after the data is written to the disk.
+        #
+        # Set no write cache if bad BBU (default is WriteBack)
         '/usr/sbin/megacli -LDSetProp NoCachedBadBBU -LALL -aALL',
+
         # Disable BBU auto-learn
         'echo "autoLearnMode=1" > /tmp/disable_learn',
         '/usr/sbin/megacli -AdpBbuCmd -SetBbuProperties -f /tmp/disable_learn -a0'
