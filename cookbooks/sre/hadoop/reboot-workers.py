@@ -113,7 +113,8 @@ def run(args, spicerack):
     if args.workers_cumin_query:
         hadoop_workers = spicerack_remote.query(cluster_cumin_alias)
         hadoop_workers_override = spicerack_remote.query(args.workers_cumin_query)
-        hadoop_workers = hadoop_workers.intersection(hadoop_workers_override)
+        hadoop_workers = spicerack_remote.query(
+            "D{{{}}}".format(hadoop_workers.hosts.intersection(hadoop_workers_override.hosts)))
         ask_confirmation(
             'The user chose to limit the number of Hadoop workers to reboot. '
             'This option does not care about Journal nodes and it will only reboot '
