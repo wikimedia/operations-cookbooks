@@ -39,7 +39,9 @@ def argument_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
     parser.add_argument('cluster', help='The name of the Druid cluster to work on.',
                         choices=['public', 'analytics'])
-
+    parser.add_argument('--daemons', help='The daemons to restart.', nargs='+',
+                        default=['historical', 'overlord', 'middlemanager', 'broker', 'coordinator'],
+                        choices=['historical', 'overlord', 'middlemanager', 'broker', 'coordinator'])
     return parser
 
 
@@ -54,21 +56,20 @@ def run(args, spicerack):
     ensure_shell_is_durable()
     druid_workers = spicerack.remote().query(cluster_cumin_alias)
     icinga = spicerack.icinga()
-    reason = spicerack.admin_reason('Roll restart of all Druid\'s jvm daemons.')
+    reason = spicerack.admin_reason('Roll restart of Druid\'s jvm daemons.')
 
     with icinga.hosts_downtimed(druid_workers.hosts, reason,
                                 duration=timedelta(minutes=60)):
 
-        logger.info('Restarting daemons (one host at the time)...')
-        commands = ['systemctl restart druid-historical',
-                    'sleep 300',
-                    'systemctl restart druid-overlord',
-                    'sleep 30',
-                    'systemctl restart druid-middlemanager',
-                    'sleep 30',
-                    'systemctl restart druid-broker',
-                    'sleep 30',
-                    'systemctl restart druid-coordinator']
+        logger.info(
+            'Restarting daemons (%s), one host at the time.', ','.join(args.daemons))
+        commands = []
+        for daemon in args.daemons:
+            commands.append('systemctl restart druid-' + daemon)
+            if daemon == 'overlord':
+                commands.append('sleep 300')
+            else:
+                commands.append('sleep 30')
 
         if need_depool:
             commands = ['depool', 'sleep 60'] + commands + ['pool']
