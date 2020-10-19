@@ -28,12 +28,20 @@ def argument_parser():
                         "/dev/sda, 2 means skipping /dev/sd[a,b], etc..")
     parser.add_argument('--partitions-basedir', type=str, default='/var/lib/hadoop/data',
                         help="The base directory of the partitions to initialize.")
+    parser.add_argument('--wipe-partitions', type=bool, default=False,
+                        help="Use wipefs to remove any pre-existing partition table on the disks.")
+    parser.add_argument('--success-percent', type=float, default=100, choice=range(1, 100),
+                        metavar="[1-100]",
+                        help="Expected success percent when executing cumin commands to the hosts."
+                             "Useful to init old nodes with potentially broken disks.")
     return parser
 
 
 def run(args, spicerack):
     """Initialize an Hadoop worker"""
     ensure_shell_is_durable()
+
+    success_percent_cumin = args.success_percent / 100
 
     letters = list(string.ascii_lowercase)
     if len(letters[args.skip_disks:]) < args.disks_number:
@@ -55,17 +63,25 @@ def run(args, spicerack):
         'ones: {}'.format(str(available_disk_labels)))
 
     logger.info('Installing parted and megacli.')
-    hadoop_workers.run_async('apt-get install -y megacli parted')
+    hadoop_workers.run_async('apt-get install -y megacli parted wipefs')
 
     logger.info('Creating ext4 disk partitions.')
     for label in available_disk_labels:
         device = '/dev/sd' + label
+        if args.wipe_partitions:
+            # Partitions can already be unmounted, this step is only a precaution
+            # to avoid subsequent failures related to wipefs.
+            hadoop_workers.run_async('/bin/umount ' + device + '1 > /dev/null 2>&1 || /bin/true')
+            # Some old nodes might have broken disks that will fail to wipe,
+            # don't consider them a problem.
+            hadoop_workers.run_async('/sbin/wipefs -a ' + device, success_threshold=success_percent_cumin)
         hadoop_workers.run_async(
             '/sbin/parted {} --script mklabel gpt'.format(device),
             '/sbin/parted {} --script mkpart primary ext4 0% 100%'
             .format(device),
             '/sbin/mkfs.ext4 -L hadoop-' + label + " " + device + '1',
             '/sbin/tune2fs -m 0 ' + device + '1',
+            success_threshold=success_percent_cumin
         )
 
     logger.info('Configuring mountpoints.')
@@ -75,7 +91,8 @@ def run(args, spicerack):
             '/bin/mkdir -p ' + mountpoint,
             'echo -e "# Hadoop DataNode partition ' + label +
             '\nLABEL=hadoop-' + label + "\t" + mountpoint + '\text4\tdefaults,noatime\t0\t2" | tee -a /etc/fstab',
-            '/bin/mount -v ' + mountpoint
+            '/bin/mount -v ' + mountpoint,
+            success_threshold=success_percent_cumin
         )
 
     logger.info('Ensure some MegaCLI specific settings.')
@@ -115,7 +132,8 @@ def run(args, spicerack):
 
         # Disable BBU auto-learn
         'echo "autoLearnMode=1" > /tmp/disable_learn',
-        '/usr/sbin/megacli -AdpBbuCmd -SetBbuProperties -f /tmp/disable_learn -a0'
+        '/usr/sbin/megacli -AdpBbuCmd -SetBbuProperties -f /tmp/disable_learn -a0',
+        success_threshold=success_percent_cumin
     )
 
     return 0
