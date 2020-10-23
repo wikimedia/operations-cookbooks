@@ -164,10 +164,10 @@ def reload_wikidata(remote_host):
 
     logger.info('Loading lexeme dump')
     watch.reset()
-    remote_host.run_sync(  # FIXME missing loop for multiple files
-        'curl -XPOST --data-binary update="LOAD <file:///{munge_path}/wikidump-000000001.ttl.gz>" '
-        'http://localhost:9999/bigdata/namespace/wdq/sparql'.format(
-            munge_path=WDQS_DUMPS['lexeme']['munge_path'])
+    remote_host.run_sync(
+        "bash /srv/deployment/wdqs/wdqs/loadData.sh -n wdq -d {munge_path}".format(
+            munge_path=WDQS_DUMPS['lexeme']['munge_path']
+        )
     )
     logger.info('Lexeme dump loaded in %s', watch.elapsed())
 
