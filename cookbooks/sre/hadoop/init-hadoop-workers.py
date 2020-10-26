@@ -9,6 +9,7 @@ import logging
 import string
 
 from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
+from spicerack.remote import RemoteExecutionError
 from cookbooks import ArgparseFormatter
 
 __title__ = 'Initialize a new Hadoop worker'
@@ -32,7 +33,7 @@ def argument_parser():
                         help="Use wipefs to remove any pre-existing partition table on the disks.")
     parser.add_argument('--success-percent', type=float, default=100, choices=range(1, 100),
                         metavar="[1-100]",
-                        help="Expected success percent when executing cumin commands to the hosts."
+                        help="Expected success percent when executing cumin commands on multiple hosts."
                              "Useful to init old nodes with potentially broken disks.")
     return parser
 
@@ -68,72 +69,87 @@ def run(args, spicerack):
     logger.info('Creating ext4 disk partitions.')
     for label in available_disk_labels:
         device = '/dev/sd' + label
+        logger.info('Working on %s', device)
         if args.wipe_partitions:
             # Partitions can already be unmounted, this step is only a precaution
             # to avoid subsequent failures related to wipefs.
             hadoop_workers.run_async('/bin/umount ' + device + '1 > /dev/null 2>&1 || /bin/true')
             # Some old nodes might have broken disks that will fail to wipe,
             # don't consider them a problem.
-            hadoop_workers.run_async('/sbin/wipefs -a ' + device, success_threshold=success_percent_cumin)
-        hadoop_workers.run_async(
-            '/sbin/parted {} --script mklabel gpt'.format(device),
-            '/sbin/parted {} --script mkpart primary ext4 0% 100%'
-            .format(device),
-            '/sbin/mkfs.ext4 -L hadoop-' + label + " " + device + '1',
-            '/sbin/tune2fs -m 0 ' + device + '1',
-            success_threshold=success_percent_cumin
-        )
+            try:
+                hadoop_workers.run_async('/sbin/wipefs -a ' + device, success_threshold=success_percent_cumin)
+            except RemoteExecutionError:
+                logger.exception('An error has occurred while wiping the partition.')
+                ask_confirmation('Please check logs and continue (if it is the case).')
+        try:
+            hadoop_workers.run_async(
+                '/sbin/parted {} --script mklabel gpt'.format(device),
+                '/sbin/parted {} --script mkpart primary ext4 0% 100%'
+                .format(device),
+                '/sbin/mkfs.ext4 -L hadoop-' + label + " " + device + '1',
+                '/sbin/tune2fs -m 0 ' + device + '1',
+                success_threshold=success_percent_cumin)
+        except RemoteExecutionError:
+            logger.exception('An error has occurred while creating the partition.')
+            ask_confirmation('Please check logs and continue (if it is the case).')
 
     logger.info('Configuring mountpoints.')
     for label in available_disk_labels:
         mountpoint = args.partitions_basedir + '/' + label
-        hadoop_workers.run_async(
-            '/bin/mkdir -p ' + mountpoint,
-            'echo -e "# Hadoop DataNode partition ' + label +
-            '\nLABEL=hadoop-' + label + "\t" + mountpoint + '\text4\tdefaults,noatime\t0\t2" | tee -a /etc/fstab',
-            '/bin/mount -v ' + mountpoint,
-            success_threshold=success_percent_cumin
-        )
+        logger.info('Working on %s', mountpoint)
+        try:
+            hadoop_workers.run_async(
+                '/bin/mkdir -p ' + mountpoint,
+                'echo -e "# Hadoop DataNode partition ' + label +
+                '\nLABEL=hadoop-' + label + "\t" + mountpoint + '\text4\tdefaults,noatime\t0\t2" | tee -a /etc/fstab',
+                '/bin/mount -v ' + mountpoint,
+                success_threshold=success_percent_cumin)
+        except RemoteExecutionError:
+            logger.exception('An error has occurred while adding the mountpoint.')
+            ask_confirmation('Please check logs and continue (if it is the case).')
 
     logger.info('Ensure some MegaCLI specific settings.')
-    hadoop_workers.run_async(
-        # See http://lists.us.dell.com/pipermail/linux-poweredge/2006-May/025738.html for more info.
-        # All the explanations described below must be credited to the author of the above forum response.
-        #
-        # Read Policy:
-        # The read policies indicate whether or not the controller should read sequential sectors of the
-        # logical drive when seeking data.
-        # Adaptive Read-Ahead (ADRA): When using adaptive read-ahead policy, the controller initiates read-ahead
-        #     only if the two most recent read requests accessed sequential sectors of the disk. If subsequent
-        #     read requests access random sectors of the disk, the controller reverts to no-read-ahead policy.
-        #     The controller continues to evaluate whether read requests are accessing sequential sectors of
-        #     the disk, and can initiate read-ahead if necessary.
-        '/usr/sbin/megacli -LDSetProp ADRA -LALL -aALL',
+    try:
+        hadoop_workers.run_async(
+            # See http://lists.us.dell.com/pipermail/linux-poweredge/2006-May/025738.html for more info.
+            # All the explanations described below must be credited to the author of the above forum response.
+            #
+            # Read Policy:
+            # The read policies indicate whether or not the controller should read sequential sectors of the
+            # logical drive when seeking data.
+            # Adaptive Read-Ahead (ADRA): When using adaptive read-ahead policy, the controller initiates read-ahead
+            #     only if the two most recent read requests accessed sequential sectors of the disk. If subsequent
+            #     read requests access random sectors of the disk, the controller reverts to no-read-ahead policy.
+            #     The controller continues to evaluate whether read requests are accessing sequential sectors of
+            #     the disk, and can initiate read-ahead if necessary.
+            '/usr/sbin/megacli -LDSetProp ADRA -LALL -aALL',
 
-        # The Direct I/O and Cache I/O cache policies apply to reads on a specific virtual disk.
-        # These settings do not affect the read-ahead policy.
-        # Direct: Specifies that reads are not buffered in cache memory. When using direct I/O, data is transferred
-        #         to the controller cache and the host system simultaneously during a read request.
-        #         If a subsequent read request requires data from the same data block, it can be read directly from
-        #         the controller cache. The direct I/O setting does not override the cache policy settings.
-        # Direct (No cache)
-        '/usr/sbin/megacli -LDSetProp -Direct -LALL -aALL',
+            # The Direct I/O and Cache I/O cache policies apply to reads on a specific virtual disk.
+            # These settings do not affect the read-ahead policy.
+            # Direct: Specifies that reads are not buffered in cache memory. When using direct I/O, data is transferred
+            #         to the controller cache and the host system simultaneously during a read request.
+            #         If a subsequent read request requires data from the same data block, it can be read directly from
+            #         the controller cache. The direct I/O setting does not override the cache policy settings.
+            # Direct (No cache)
+            '/usr/sbin/megacli -LDSetProp -Direct -LALL -aALL',
 
-        # Write policy:
-        # The write policies specify whether the controller sends a write-request completion signal as soon
-        # as the data is in the cache or after it has been written to disk.
-        # Write-Back. When using write-back caching, the controller sends a write-request completion signal as soon
-        #     as the data is in the controller cache but has not yet been written to disk.
-        # Write-Through. When using write-through caching, the controller sends a write-request completion signal
-        #     only after the data is written to the disk.
-        #
-        # Set no write cache if bad BBU (default is WriteBack)
-        '/usr/sbin/megacli -LDSetProp NoCachedBadBBU -LALL -aALL',
+            # Write policy:
+            # The write policies specify whether the controller sends a write-request completion signal as soon
+            # as the data is in the cache or after it has been written to disk.
+            # Write-Back. When using write-back caching, the controller sends a write-request completion signal as soon
+            #     as the data is in the controller cache but has not yet been written to disk.
+            # Write-Through. When using write-through caching, the controller sends a write-request completion signal
+            #     only after the data is written to the disk.
+            #
+            # Set no write cache if bad BBU (default is WriteBack)
+            '/usr/sbin/megacli -LDSetProp NoCachedBadBBU -LALL -aALL',
 
-        # Disable BBU auto-learn
-        'echo "autoLearnMode=1" > /tmp/disable_learn',
-        '/usr/sbin/megacli -AdpBbuCmd -SetBbuProperties -f /tmp/disable_learn -a0',
-        success_threshold=success_percent_cumin
-    )
+            # Disable BBU auto-learn
+            'echo "autoLearnMode=1" > /tmp/disable_learn',
+            '/usr/sbin/megacli -AdpBbuCmd -SetBbuProperties -f /tmp/disable_learn -a0',
+            success_threshold=success_percent_cumin)
+    except RemoteExecutionError:
+        logger.exception('An error has occurred while setting MegaCLI options.')
+        ask_confirmation('Please check logs and continue (if it is the case).')
 
     return 0
