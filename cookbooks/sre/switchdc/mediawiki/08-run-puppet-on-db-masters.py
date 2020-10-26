@@ -1,4 +1,4 @@
-"""Start MediaWiki maintenance jobs"""
+"""Run Puppet on all DB masters"""
 import logging
 
 from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args
