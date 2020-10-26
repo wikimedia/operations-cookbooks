@@ -63,7 +63,7 @@ def run(args, spicerack):
         'ones: {}'.format(str(available_disk_labels)))
 
     logger.info('Installing parted and megacli.')
-    hadoop_workers.run_async('apt-get install -y megacli parted wipefs')
+    hadoop_workers.run_async('apt-get install -y megacli parted')
 
     logger.info('Creating ext4 disk partitions.')
     for label in available_disk_labels:
