@@ -43,7 +43,7 @@ def run(args, spicerack):
         dnsdisc_records.check_record(record, '{name}.svc.{dc_to}.wmnet'.format(name=name, dc_to=args.dc_to))
 
     # Sleep remaining time up to DNS_SHORT_TTL to let the set_master_datacenter to propagate
-    remaining = time.time() - start - DNS_SHORT_TTL
+    remaining = DNS_SHORT_TTL - (time.time() - start)
     if remaining > 0:
         logger.info('Sleeping %.3f seconds to reach the %d seconds mark', remaining, DNS_SHORT_TTL)
         time.sleep(remaining)
