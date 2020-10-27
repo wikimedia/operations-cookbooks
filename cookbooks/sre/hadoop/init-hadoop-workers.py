@@ -70,27 +70,26 @@ def run(args, spicerack):
     for label in available_disk_labels:
         device = '/dev/sd' + label
         logger.info('Working on %s', device)
+        commands = []
+        mkfs_prefix = ''
         if args.wipe_partitions:
             # Partitions can already be unmounted, this step is only a precaution
-            # to avoid subsequent failures related to wipefs.
-            hadoop_workers.run_async('/bin/umount ' + device + '1 > /dev/null 2>&1 || /bin/true')
-            # Some old nodes might have broken disks that will fail to wipe,
-            # don't consider them a problem.
-            try:
-                hadoop_workers.run_async('/sbin/wipefs -a ' + device, success_threshold=success_percent_cumin)
-            except RemoteExecutionError:
-                logger.exception('An error has occurred while wiping the partition.')
-                ask_confirmation('Please check logs and continue (if it is the case).')
+            # to avoid subsequent failures.
+            commands.append('/bin/umount ' + device + '1 > /dev/null 2>&1 || /bin/true')
+            # The mkfs command will ask Y/N to overwrite the partition if another one
+            # is already there.
+            mkfs_prefix = 'echo Y | '
+        commands += [
+            '/sbin/parted {} --script mklabel gpt'.format(device),
+            '/sbin/parted {} --script mkpart primary ext4 0% 100%'.format(device),
+            mkfs_prefix + '/sbin/mkfs.ext4 -L hadoop-' + label + " " + device + '1',
+            '/sbin/tune2fs -m 0 ' + device + '1'
+        ]
+
         try:
-            hadoop_workers.run_async(
-                '/sbin/parted {} --script mklabel gpt'.format(device),
-                '/sbin/parted {} --script mkpart primary ext4 0% 100%'
-                .format(device),
-                '/sbin/mkfs.ext4 -L hadoop-' + label + " " + device + '1',
-                '/sbin/tune2fs -m 0 ' + device + '1',
-                success_threshold=success_percent_cumin)
+            hadoop_workers.run_async(*commands, success_threshold=success_percent_cumin)
         except RemoteExecutionError:
-            logger.exception('An error has occurred while creating the partition.')
+            logger.error('An error has occurred while creating the partition.')
             ask_confirmation('Please check logs and continue (if it is the case).')
 
     logger.info('Configuring mountpoints.')
@@ -105,7 +104,7 @@ def run(args, spicerack):
                 '/bin/mount -v ' + mountpoint,
                 success_threshold=success_percent_cumin)
         except RemoteExecutionError:
-            logger.exception('An error has occurred while adding the mountpoint.')
+            logger.error('An error has occurred while adding the mountpoint.')
             ask_confirmation('Please check logs and continue (if it is the case).')
 
     logger.info('Ensure some MegaCLI specific settings.')
@@ -149,7 +148,7 @@ def run(args, spicerack):
             '/usr/sbin/megacli -AdpBbuCmd -SetBbuProperties -f /tmp/disable_learn -a0',
             success_threshold=success_percent_cumin)
     except RemoteExecutionError:
-        logger.exception('An error has occurred while setting MegaCLI options.')
+        logger.error('An error has occurred while setting MegaCLI options.')
         ask_confirmation('Please check logs and continue (if it is the case).')
 
     return 0
