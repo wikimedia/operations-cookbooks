@@ -69,13 +69,21 @@ def run(args, spicerack):
     logger.info('Creating ext4 disk partitions.')
     for label in available_disk_labels:
         device = '/dev/sd' + label
+        mountpoint = args.partitions_basedir + '/' + label
         logger.info('Working on %s', device)
         commands = []
         mkfs_prefix = ''
         if args.wipe_partitions:
-            # Partitions can already be unmounted, this step is only a precaution
-            # to avoid subsequent failures.
-            commands.append('/bin/umount ' + device + '1 > /dev/null 2>&1 || /bin/true')
+            commands += [
+                # Partitions can already be unmounted, this step is only a precaution
+                # to avoid subsequent failures.
+                '/bin/umount ' + mountpoint + ' > /dev/null 2>&1 || /bin/true',
+                # To avoid any automatic partition remount after 'mkpart primary ext4' from
+                # systemd, it is necessary to clean up fstab and reload systemd's config.
+                "sed '/" + mountpoint.replace('/', '\\/') + "/d' /etc/fstab -i",
+                "sed '/Hadoop DataNode partition " + label + "/d' /etc/fstab -i",
+                "sed '/Hadoop datanode " + label + " partition/d' /etc/fstab -i",
+                'systemctl daemon-reload']
             # The mkfs command will ask Y/N to overwrite the partition if another one
             # is already there.
             mkfs_prefix = 'echo Y | '
@@ -83,8 +91,7 @@ def run(args, spicerack):
             '/sbin/parted {} --script mklabel gpt'.format(device),
             '/sbin/parted {} --script mkpart primary ext4 0% 100%'.format(device),
             mkfs_prefix + '/sbin/mkfs.ext4 -L hadoop-' + label + " " + device + '1',
-            '/sbin/tune2fs -m 0 ' + device + '1'
-        ]
+            '/sbin/tune2fs -m 0 ' + device + '1']
 
         try:
             hadoop_workers.run_async(*commands, success_threshold=success_percent_cumin)
