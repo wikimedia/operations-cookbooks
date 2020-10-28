@@ -35,7 +35,8 @@ def argument_parser():
     parser.add_argument('--force', metavar='SHA1',
                         help=('Continue on no changes to force the replication to the other Netbox host(s) and the '
                               'push to the authoritative DNS hosts of the SHA1 given as parameter. Has no effect if '
-                              'there are changes.'))
+                              'there are changes. For more details, see '
+                              'https://wikitech.wikimedia.org/wiki/DNS/Netbox#Force_update_generated_records'))
     parser.add_argument('--skip-authdns-update', action='store_true',
                         help=('Do not perform an authdns-update after having pushed the changes to the local checkout '
                               'of the Netbox-generated repository in all the dns-auth hosts. This allows to stage '
