@@ -81,6 +81,10 @@ def run(args, spicerack):  # pylint: disable=too-many-locals,too-many-statements
     args.cluster, args.row, args.dc = _get_locations()[args.location]  # Inject cluster, row and dc in the args object.
     hostname = args.fqdn.split('.')[0]
 
+    print('Ready to create Ganeti VM {a.fqdn} in the {a.cluster} cluster on row {a.row} with {a.vcpus} vCPUs, '
+          '{a.memory}GB of RAM, {a.disk}GB of disk in the {a.network} network.'.format(a=args))
+    ask_confirmation('Is this correct?')
+
     # Pre-allocate IPs
     netbox = spicerack.netbox(read_write=True)
     if args.dc in CORE_DATACENTERS:
@@ -145,10 +149,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals,too-many-statements
     ganeti = spicerack.ganeti()
     instance = ganeti.instance(args.fqdn, cluster=args.cluster)
 
-    print('Ready to create Ganeti VM {a.fqdn} in the {a.cluster} cluster on row {a.row} with {a.vcpus} vCPUs, '
-          '{a.memory}GB of RAM, {a.disk}GB of disk in the {a.network} network.'.format(a=args))
-    ask_confirmation('Is this correct?')
-    logger.info('The command output will be printed at the end.')
+    logger.info('The Ganeti\'s command output will be printed at the end.')
 
     instance.add(row=args.row, vcpus=args.vcpus, memory=args.memory, disk=args.disk, link=args.network)
 
