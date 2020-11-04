@@ -44,13 +44,12 @@ def run(args, spicerack):
     )
     view_cmd = f"/usr/local/sbin/maintain-views --databases {args.database}"
     meta_p_cmd = f"/usr/local/sbin/maintain-meta_p --databases {args.database}"
-    logging.info("Generating views...")
+    wiki_dns_cmd = "source /root/novaenv.sh; wmcs-wikireplica-dns --aliases"
+    logger.info("Generating views...")
     replicas.run_async(index_cmd, view_cmd)
-    logging.info("Adding DNS")
-    control_host.run_sync(
-        "source /root/novaenv.sh; wmcs-wikireplica-dns --aliases"
-    )
-    logging.info("Finalizing meta_p")
+    logger.info("Adding DNS")
+    control_host.run_sync(wiki_dns_cmd)
+    logger.info("Finalizing meta_p")
     replicas.run_async(meta_p_cmd)
     spicerack.irc_logger.info(
         "Added views for new wiki: %s %s", args.database, args.task_id
