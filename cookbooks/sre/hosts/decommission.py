@@ -33,7 +33,7 @@ import re
 import time
 
 from cumin.transports import Command
-from wmflib.dns import DnsError
+from wmflib.dns import DnsError, DnsNotFound
 
 from spicerack.interactive import ask_confirmation
 from spicerack.ipmi import IpmiError
@@ -228,8 +228,13 @@ def get_grep_patterns(dns, decom_hosts):
     patterns = []
     for host in decom_hosts:
         patterns.append(re.escape(host))
-        for ip in dns.resolve_ips(host):
-            patterns.append('[^0-9A-Za-z]{}[^0-9A-Za-z]'.format(re.escape(ip)))
+        try:
+            ips = dns.resolve_ips(host)
+        except DnsNotFound:
+            logger.warning('No DNS record found for host %s. Generating grep patterns for the name only', host)
+            continue
+
+        patterns.extend('[^0-9A-Za-z]{}[^0-9A-Za-z]'.format(re.escape(ip)) for ip in ips)
 
     return patterns
 
