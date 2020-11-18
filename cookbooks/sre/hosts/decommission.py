@@ -197,6 +197,7 @@ def update_netbox(netbox, netbox_data, dry_run):
             remote_interface.enabled = False
             remote_interface.mode = None
             remote_interface.untagged_vlan = None
+            remote_interface.mtu = None
             remote_interface.tagged_vlans = []
             logger.info('Disable and reset potential vlans on %s:%s for local %s',
                         remote_interface.device.name, remote_interface.name, interface.name)
