@@ -38,17 +38,18 @@ def run(args, spicerack):
     if len(remote_host) != 1:
         logger.error('Only a single server can be rebooted')
         return 1
+    remote_host_str = str(remote_host.hosts[0])
 
     icinga = spicerack.icinga()
     puppet = spicerack.puppet(remote_host)
     puppet_master = spicerack.puppet_master()
     reason = spicerack.admin_reason('Renew puppet certificate')
     with icinga.hosts_downtimed(remote_host.hosts, reason, duration=timedelta(minutes=20)):
-        puppet_master.destroy(remote_host)
+        puppet_master.destroy(remote_host_str)
         puppet.disable(reason)
         fingerprints = puppet.regenerate_certificate()
-        puppet_master.wait_for_csr(remote_host)
-        puppet_master.sign(remote_host, fingerprints[remote_host])
+        puppet_master.wait_for_csr(remote_host_str)
+        puppet_master.sign(remote_host_str, fingerprints[remote_host_str])
         puppet.run(enable_reason=reason, quiet=True)
 
     return 0
