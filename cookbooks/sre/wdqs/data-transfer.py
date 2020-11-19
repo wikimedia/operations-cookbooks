@@ -2,7 +2,7 @@
 
 Usage example:
     cookbook sre.wdqs.data-transfer --source wdqs1004.eqiad.wmnet --dest wdqs1010.eqiad.wmnet
-     --reason "allocator troubles" --blazegraph-instance blazegraph --task-id T12345
+     --reason "allocator troubles" --blazegraph_instance blazegraph --task-id T12345
 
 """
 import argparse
