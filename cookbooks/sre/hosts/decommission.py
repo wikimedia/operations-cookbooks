@@ -314,7 +314,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
         except Exception as e:  # pylint: disable=broad-except
             message = 'Host steps raised exception'
             logger.exception(message)
-            spicerack.actions[fqdn].failure('{message}: {e}'.format(message=message, e=e))
+            spicerack.actions[fqdn].failure('**{message}**: {e}'.format(message=message, e=e))
 
         if spicerack.actions[fqdn].has_failures:
             has_failures = True
@@ -326,7 +326,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
     except RemoteExecutionError as e:
         message = 'Failed to run the sre.dns.netbox cookbook'
         logger.exception(message)
-        spicerack.actions[COMMON_STEPS_KEY].failure('{message}: {e}'.format(message=message, e=e))
+        spicerack.actions[COMMON_STEPS_KEY].failure('**{message}**: {e}'.format(message=message, e=e))
         has_failures = True
 
     if any(dc not in MIGRATED_PRIMARY_SITES for dc in dcs):
