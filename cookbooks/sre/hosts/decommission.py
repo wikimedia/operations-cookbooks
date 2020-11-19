@@ -215,7 +215,7 @@ def update_netbox(netbox, netbox_data, dry_run):
 
     # TODO: this is needed instead of calling put_hosts_status() because Netbox cache doesn't get invalidated
     #       immediately making the call to fail. A sleep of 10 seconds did not fix the issue either.
-    device = netbox.api.dcim.devices.get(id=netbox_data['id'])
+    device = netbox.api.dcim.devices.get(netbox_data['id'])
     device.primary_ip4_id = None
     device.primary_ip6_id = None
     device.status = 'decommissioning'
