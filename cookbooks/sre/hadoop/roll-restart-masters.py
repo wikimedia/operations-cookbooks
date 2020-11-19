@@ -41,11 +41,8 @@ def argument_parser():
 
 def print_run_command_output(run_command_return_status):
     """Helper to print cumin's output"""
-    for nodeset, output in run_command_return_status:
-        logger.info('\n\n=========================================\n')
-        logger.info('Output for %s', nodeset)
+    for _, output in run_command_return_status:
         logger.info(output.message().decode())
-        logger.info('\n=========================================\n\n')
 
 
 def print_hadoop_service_state(
@@ -142,7 +139,7 @@ def run(args, spicerack):
         print_hadoop_service_state(
             hadoop_master, hadoop_master_service, hadoop_standby_service, hdfs=False)
 
-        ask_confirmation("Ok to proceed?")
+        ask_confirmation("Ok to proceed with HDFS Namenodes ?")
 
         logger.info("Run manual HDFS failover from master to standby.")
         run_hdfs_namenode_failover(hadoop_master, hadoop_master_service, hadoop_standby_service)
