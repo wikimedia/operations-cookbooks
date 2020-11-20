@@ -33,8 +33,10 @@ import re
 import time
 
 from cumin.transports import Command
+from pynetbox.core.query import RequestError
 from wmflib.dns import DnsError, DnsNotFound
 
+from spicerack.decorators import retry
 from spicerack.interactive import ask_confirmation
 from spicerack.ipmi import IpmiError
 from spicerack.puppet import get_puppet_ca_hostname
@@ -184,6 +186,9 @@ def sync_ganeti(spicerack, fqdn, virtual_machine):
                 cluster=virtual_machine.cluster, e=e))
 
 
+# Temporary workaround as Netbox sometimes fails with 500 when updating the device because of a stale reference
+# to one of the primary IPs.
+@retry(tries=4, exceptions=(RequestError,))
 def update_netbox(netbox, netbox_data, dry_run):
     """Delete all non-mgmt IPs, disable remote interfaces/vlan and set the status to Decommissioning."""
     for interface in netbox.api.dcim.interfaces.filter(device_id=netbox_data['id']):
