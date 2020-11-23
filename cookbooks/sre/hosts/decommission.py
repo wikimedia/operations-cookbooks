@@ -49,8 +49,6 @@ from cookbooks.sre.dns.netbox import argument_parser as dns_netbox_argparse, run
 __title__ = 'Decommission a host from all inventories.'
 logger = logging.getLogger(__name__)
 DEPLOYMENT_HOST = 'deployment.eqiad.wmnet'
-KERBEROS_CUMIN_LABEL = 'A:kerberos'
-KERBEROS_KEYTABS_PATH = '/srv/kerberos/keytabs'
 MEDIAWIKI_CONFIG_REPO_PATH = '/srv/mediawiki-staging'
 PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'
 PUPPET_PRIVATE_REPO_PATH = '/srv/private'
@@ -271,29 +269,6 @@ def check_patterns_in_repo(host_paths, patterns):
         logger.info('No matches found in the Puppet or mediawiki-config repositories')
 
 
-def check_kerberos_principals(krb_remote, decom_hosts):
-    """Check if any service principal is registered in the Kerberos KDC.
-
-    Arguments:
-        krb_remote: a spicerack remote handle configured to target one of the KDCs.
-        decom_hosts (list): a list of strings containing the hostnames to check.
-
-    """
-    match_found = False
-    for hostname in decom_hosts:
-        logging.info('Looking for Kerberos principals for %s', hostname)
-        for _, output in krb_remote.run_sync(
-                '/usr/local/sbin/manage_principals.py list *{}*'.format(hostname)):
-            match_found = True
-            logger.info(output.message().decode())
-    if match_found:
-        logger.info('Please read the following guide to drop credentials: '
-                    'https://wikitech.wikimedia.org/wiki/Analytics/Systems/Kerberos'
-                    '#Delete_Kerberos_principals_and_keytabs_when_a_host_is_decommissioned')
-    else:
-        logger.info('No Kerberos service principals found.')
-
-
 def run(args, spicerack):  # pylint: disable=too-many-locals
     """Required by Spicerack API."""
     has_failures = False
@@ -326,20 +301,13 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
     puppet_master = remote.query(get_puppet_ca_hostname())
     dns = spicerack.dns()
     deployment_host = remote.query(dns.resolve_cname(DEPLOYMENT_HOST))
-    kerberos_hosts = remote.query(KERBEROS_CUMIN_LABEL)
     patterns = get_grep_patterns(dns, decom_hosts)
     # TODO: once all the host DNS records are automatically generated from Netbox check also the DNS repository.
     check_patterns_in_repo((
         (puppet_master, PUPPET_REPO_PATH),
         (puppet_master, PUPPET_PRIVATE_REPO_PATH),
         (deployment_host, MEDIAWIKI_CONFIG_REPO_PATH),
-        (kerberos_hosts, KERBEROS_KEYTABS_PATH),
     ), patterns)
-
-    # This call needs only one kerberos KDC target, so it should be fine
-    # to simply re-use the result above. Any KDC should be up to date with
-    # the other one via replication.
-    check_kerberos_principals(kerberos_hosts[0], decom_hosts)
 
     reason = spicerack.admin_reason('Host decommission', task_id=args.task_id)
     phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
