@@ -50,6 +50,8 @@ __title__ = 'Decommission a host from all inventories.'
 logger = logging.getLogger(__name__)
 DEPLOYMENT_HOST = 'deployment.eqiad.wmnet'
 MEDIAWIKI_CONFIG_REPO_PATH = '/srv/mediawiki-staging'
+KERBEROS_KDC_KEYTAB_PATH = '/srv/kerberos/keytab'
+KERBEROS_KADMIN_CUMIN_ALIAS = 'A:kerberos-kadmin'
 PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'
 PUPPET_PRIVATE_REPO_PATH = '/srv/private'
 COMMON_STEPS_KEY = 'COMMON_STEPS'
@@ -229,6 +231,26 @@ def update_netbox(netbox, netbox_data, dry_run):
         device.save()
 
 
+def find_kerberos_credentials(remote_host, decom_hosts):
+    """Check if any host provided has a kerberos keytab stored on the KDC hosts."""
+    cred_found = False
+    logger.info('Looking for Kerberos credentials on KDC kadmin node.')
+    for host in decom_hosts:
+        find_keytabs_command = 'find {} -name "{}*"'.format(KERBEROS_KDC_KEYTAB_PATH, host)
+        check_princs_command = '/usr/local/sbin/manage_principals.py list "*{}*"'.format(host)
+        cumin_commands = [Command(find_keytabs_command, ok_codes=[]),
+                          Command(check_princs_command, ok_codes=[])]
+        for _, output in remote_host.run_sync(*cumin_commands):
+            cred_found = True
+            logger.info(output.message().decode())
+    if cred_found:
+        logger.info('Please follow this guide to drop unused credentials: '
+                    'https://wikitech.wikimedia.org/wiki/Analytics/Systems/Kerberos'
+                    '#Delete_Kerberos_principals_and_keytabs_when_a_host_is_decommissioned')
+    else:
+        logger.info('No Kerberos credentials found.')
+
+
 def get_grep_patterns(dns, decom_hosts):
     """Given a list of hostnames return the list of regex patterns for the hostname and all its IPs."""
     patterns = []
@@ -299,6 +321,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
 
     # Check for references in the Puppet and mediawiki-config repositories.
     puppet_master = remote.query(get_puppet_ca_hostname())
+    kerberos_kadmin = remote.query(KERBEROS_KADMIN_CUMIN_ALIAS)
     dns = spicerack.dns()
     deployment_host = remote.query(dns.resolve_cname(DEPLOYMENT_HOST))
     patterns = get_grep_patterns(dns, decom_hosts)
@@ -308,6 +331,8 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
         (puppet_master, PUPPET_PRIVATE_REPO_PATH),
         (deployment_host, MEDIAWIKI_CONFIG_REPO_PATH),
     ), patterns)
+
+    find_kerberos_credentials(kerberos_kadmin, decom_hosts.hosts)
 
     reason = spicerack.admin_reason('Host decommission', task_id=args.task_id)
     phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
