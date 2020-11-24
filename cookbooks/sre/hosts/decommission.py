@@ -70,7 +70,7 @@ def argument_parser():
 
 
 def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
-    """Perform all the decommissioning actions on a single host and return its DC name."""
+    """Perform all the decommissioning actions on a single host."""
     hostname = fqdn.split('.')[0]
     icinga = spicerack.icinga()
     remote = spicerack.remote()
@@ -166,8 +166,6 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
                                                 cluster=virtual_machine.cluster, e=e))
 
         sync_ganeti(spicerack, fqdn, virtual_machine)
-
-    return netbox.api.dcim.sites.get(netbox_data['site']).slug
 
 
 def sync_ganeti(spicerack, fqdn, virtual_machine):
@@ -336,10 +334,9 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
     reason = spicerack.admin_reason('Host decommission', task_id=args.task_id)
     phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
-    dcs = set()
     for fqdn in decom_hosts:  # Doing one host at a time to track executed actions.
         try:
-            dcs.add(_decommission_host(fqdn, spicerack, reason))
+            _decommission_host(fqdn, spicerack, reason)
         except Exception as e:  # pylint: disable=broad-except
             message = 'Host steps raised exception'
             logger.exception(message)
