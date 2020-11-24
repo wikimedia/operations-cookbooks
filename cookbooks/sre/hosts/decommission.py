@@ -55,7 +55,6 @@ KERBEROS_KADMIN_CUMIN_ALIAS = 'A:kerberos-kadmin'
 PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'
 PUPPET_PRIVATE_REPO_PATH = '/srv/private'
 COMMON_STEPS_KEY = 'COMMON_STEPS'
-MIGRATED_PRIMARY_SITES = ('ulsfo', 'eqsin', 'esams', 'eqiad')
 
 
 def argument_parser():
@@ -358,10 +357,6 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
         logger.exception(message)
         spicerack.actions[COMMON_STEPS_KEY].failure('**{message}**: {e}'.format(message=message, e=e))
         has_failures = True
-
-    if any(dc not in MIGRATED_PRIMARY_SITES for dc in dcs):
-        spicerack.actions[COMMON_STEPS_KEY].warning('**Not all affected DC(s) have been migrated to automatic DNS, a '
-                                                    'manual patch to the operations/dns repository is required**')
 
     suffix = ''
     if has_failures:

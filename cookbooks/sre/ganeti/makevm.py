@@ -15,7 +15,6 @@ Examples:
 """
 
 import argparse
-import ipaddress
 import logging
 
 from spicerack.constants import CORE_DATACENTERS
@@ -29,7 +28,6 @@ from cookbooks.sre.dns.netbox import argument_parser as dns_netbox_argparse, run
 
 __title__ = 'Create a new virtual machine in Ganeti.'
 logger = logging.getLogger(__name__)
-MIGRATED_PRIMARY_SITES = ('ulsfo', 'eqsin', 'esams', 'eqiad')
 PRIMARY_INTERFACE_NAME = '##PRIMARY##'
 
 
@@ -125,25 +123,6 @@ def run(args, spicerack):  # pylint: disable=too-many-locals,too-many-statements
     # Run the sre.dns.netbox cookbook to generate the DNS records
     dns_netbox_args = dns_netbox_argparse().parse_args(['Created records for VM {vm}'.format(vm=args.fqdn)])
     dns_netbox_run(dns_netbox_args, spicerack)
-
-    if args.dc not in MIGRATED_PRIMARY_SITES:
-        ip_v4_address = ipaddress.ip_interface(ip_v4).ip
-        ip_v6_address = ipaddress.ip_interface(ip_v6).ip
-        if args.skip_v6:
-            ip_v6_message = ''
-        else:
-            ip_v6_message = '\n    IPv6: {ip}\n    PTRv6: {ptr}\n    DNSv6: {dns}'.format(
-                ip=ip_v6_address, ptr=ip_v6_address.reverse_pointer, dns=dns_name_v6)
-
-        logger.warning('DC %s has not yet been migrated for primary records. Manual commit in the operations/dns '
-                       'repository is required. See '
-                       'https://wikitech.wikimedia.org/wiki/Server_Lifecycle/DNS_Transition'
-                       '\n\nPlease make a patch to the DNS repository for the following data:'
-                       '\n\n    IPv4:  %s\n    PTRv4: %s'
-                       '\n    DNSv4: %s%s',
-                       args.dc, ip_v4_address, ip_v4_address.reverse_pointer, args.fqdn, ip_v6_message)
-
-        ask_confirmation('Proceed only when the DNS patch has been merged and deployed')
 
     # Create the VM
     ganeti = spicerack.ganeti()
