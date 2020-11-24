@@ -332,7 +332,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
         (deployment_host, MEDIAWIKI_CONFIG_REPO_PATH),
     ), patterns)
 
-    find_kerberos_credentials(kerberos_kadmin, decom_hosts.hosts)
+    find_kerberos_credentials(kerberos_kadmin, decom_hosts)
 
     reason = spicerack.admin_reason('Host decommission', task_id=args.task_id)
     phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
