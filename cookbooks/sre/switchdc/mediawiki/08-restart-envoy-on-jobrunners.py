@@ -4,7 +4,7 @@ import logging
 from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args
 
 
-__title__ = __doc__
+__title__ = 'Restart Envoy on jobrunners in DC_FROM.'
 logger = logging.getLogger(__name__)
 
 
