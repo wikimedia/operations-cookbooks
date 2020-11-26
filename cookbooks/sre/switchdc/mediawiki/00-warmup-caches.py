@@ -1,4 +1,6 @@
 """Warmup MediaWiki caches"""
+import datetime
+import itertools
 import logging
 
 from spicerack.interactive import ask_confirmation
@@ -33,7 +35,22 @@ def run(args, spicerack):
         dir=warmup_dir, dc=datacenter)
 
     maintenance_host = spicerack.mediawiki().get_maintenance_host(datacenter)
-    # Empirically 3 times is when the response times start to stabilize
-    for i in range(3):
-        logger.info('Running warmup script in %s, take %d', datacenter, i + 1)
+    # It takes multiple executions of the warmup script to fully warm up the appserver caches. The second run is faster
+    # than the first, and so on. Empirically, we consider the caches to be fully warmed up when this speedup disappears;
+    # that is, when the execution time converges, and each attempt takes about as long as the one before.
+    logger.info('Running warmup script in %s.', datacenter)
+    logger.info('The script will re-run until execution time converges.')
+    last_duration = datetime.timedelta.max
+    for i in itertools.count(1):
+        logger.info('Running warmup script, take %d', i)
+        start_time = datetime.datetime.utcnow()
         maintenance_host.run_sync(memc_warmup, appserver_warmup)
+        duration = datetime.datetime.utcnow() - start_time
+        logger.info('Warmup completed in %s', duration)
+        # We stop looping as soon as the warmup script takes more than 95% as long as the previous run. That is, keep
+        # looping as long as it keeps going faster than before, but with a 5% margin of error, allowing us to stop
+        # early. At that point, any further reduction is probably just noise, and we don't need to wait for it.
+        if duration > 0.95 * last_duration:
+            break
+        last_duration = duration
+    logger.info('Execution time converged, warmup complete.')
