@@ -30,6 +30,7 @@ Usage example:
 import argparse
 import logging
 import re
+import subprocess
 import time
 
 from cumin.transports import Command
@@ -70,7 +71,7 @@ def argument_parser():
 
 
 def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
-    """Perform all the decommissioning actions on a single host."""
+    """Perform all the decommissioning actions on a single host and return its switch if physical."""
     hostname = fqdn.split('.')[0]
     icinga = spicerack.icinga()
     remote = spicerack.remote()
@@ -78,6 +79,7 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
     debmonitor = spicerack.debmonitor()
     netbox = spicerack.netbox(read_write=True)
     ganeti = spicerack.ganeti()
+    switches = set()
 
     # Using the Direct Cumin backend to support also hosts already removed from PuppetDB
     remote_host = remote.query('D{' + fqdn + '}')
@@ -142,7 +144,7 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
         except IpmiError as e:
             spicerack.actions[fqdn].failure('**Failed to power off, manual intervention required**: {e}'.format(e=e))
 
-        update_netbox(netbox, netbox_data, spicerack.dry_run)
+        switches = update_netbox(netbox, netbox_data, spicerack.dry_run)
         spicerack.actions[fqdn].success('Set Netbox status to Decommissioning and deleted all non-mgmt interfaces '
                                         'and related IPs')
 
@@ -167,6 +169,8 @@ def _decommission_host(fqdn, spicerack, reason):  # noqa: MC0001
 
         sync_ganeti(spicerack, fqdn, virtual_machine)
 
+    return switches
+
 
 def sync_ganeti(spicerack, fqdn, virtual_machine):
     """Force a run of the Ganeti-Netbox sync systemd timer."""
@@ -190,6 +194,7 @@ def sync_ganeti(spicerack, fqdn, virtual_machine):
 @retry(tries=4, exceptions=(RequestError,))
 def update_netbox(netbox, netbox_data, dry_run):
     """Delete all non-mgmt IPs, disable remote interfaces/vlan and set the status to Decommissioning."""
+    switches = set()
     for interface in netbox.api.dcim.interfaces.filter(device_id=netbox_data['id']):
         if interface.mgmt_only:  # Ignore mgmt interfaces
             logger.debug('Skipping interface %s, mgmt_only=True', interface.name)
@@ -203,10 +208,17 @@ def update_netbox(netbox, netbox_data, dry_run):
             remote_interface.untagged_vlan = None
             remote_interface.mtu = None
             remote_interface.tagged_vlans = []
-            logger.info('Disable and reset potential vlans on %s:%s for local %s',
+            logger.info('Disable and reset vlan on %s:%s for local %s',
                         remote_interface.device.name, remote_interface.name, interface.name)
             if not dry_run:
                 remote_interface.save()
+
+            # Get the switch FQDN
+            if remote_interface.device.virtual_chassis:
+                switches.add(remote_interface.device.virtual_chassis.name)  # TODO Netbox >=2.9 only T266487#6653106
+            else:
+                switches.add(remote_interface.device.primary_ip.dns_name)
+
         else:
             logger.debug('Interface %s is not connected to an interface', interface.name)
         # Remote is done, now we tackle the IPs
@@ -226,6 +238,8 @@ def update_netbox(netbox, netbox_data, dry_run):
     device.status = 'decommissioning'
     if not dry_run:
         device.save()
+
+    return switches
 
 
 def find_kerberos_credentials(remote_host, decom_hosts):
@@ -333,9 +347,10 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
     reason = spicerack.admin_reason('Host decommission', task_id=args.task_id)
     phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
+    switches = set()
     for fqdn in decom_hosts:  # Doing one host at a time to track executed actions.
         try:
-            _decommission_host(fqdn, spicerack, reason)
+            switches.update(_decommission_host(fqdn, spicerack, reason))
         except Exception as e:  # pylint: disable=broad-except
             message = 'Host steps raised exception'
             logger.exception(message)
@@ -353,6 +368,21 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
         logger.exception(message)
         spicerack.actions[COMMON_STEPS_KEY].failure('**{message}**: {e}'.format(message=message, e=e))
         has_failures = True
+
+    # Run homer once per needed ToR switch
+    for switch in switches:
+        logger.info('Running Homer on {switch}, it takes time ⏳, don\'t worry').format(switch=switch)
+        try:
+            if not spicerack.dry_run:
+                subprocess.run(['/usr/local/bin/homer',
+                                switch,
+                                'commit',
+                                reason], check=True)
+        except subprocess.SubprocessError as e:
+            message = 'Failed to run Homer on {switch}'.format(switch=switch)
+            logger.exception(message)
+            spicerack.actions[COMMON_STEPS_KEY].failure('**{message}**: {e}'.format(message=message, e=e))
+            has_failures = True
 
     suffix = ''
     if has_failures:
