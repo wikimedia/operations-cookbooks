@@ -18,7 +18,7 @@ import os
 
 import requests
 
-from spicerack.config import load_yaml_config
+from wmflib.config import load_yaml_config
 
 __title__ = 'Manage CF BGP advertisement of our prefixes'
 logger = logging.getLogger(__name__)

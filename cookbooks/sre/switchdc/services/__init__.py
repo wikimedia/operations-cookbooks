@@ -1,8 +1,10 @@
 """Switch Datacenter for Services"""
 import argparse
 
-from spicerack.config import load_yaml_config
+from wmflib.config import load_yaml_config
+
 from spicerack.constants import CORE_DATACENTERS
+
 
 __title__ = __doc__
 
