@@ -35,6 +35,13 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     remote = spicerack.remote()
     replicas = remote.query("A:wikireplicas-all")
+    legacy_replicas = remote.query(
+        "P{labsdb10*.eqiad.wmnet} and A:wikireplicas-all"
+    )
+    s7_replicas = remote.query((
+        "P{R:Profile::Mariadb::Section = 's7'} and "
+        "P{P:wmcs::db::wikireplicas::mariadb_multiinstance}")
+    )
     # Get a cloudcontrol host to run the DNS update on
     cloudcontrol = remote.query("A:cloudcontrol")
     control_host = next(cloudcontrol.split(len(cloudcontrol)))
@@ -50,7 +57,8 @@ def run(args, spicerack):
     logger.info("Adding DNS")
     control_host.run_sync(wiki_dns_cmd)
     logger.info("Finalizing meta_p")
-    replicas.run_async(meta_p_cmd)
+    legacy_replicas.run_async(meta_p_cmd)
+    s7_replicas.run_async(meta_p_cmd)
     spicerack.irc_logger.info(
         "Added views for new wiki: %s %s", args.database, args.task_id
     )
