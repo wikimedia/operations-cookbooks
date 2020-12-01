@@ -8,7 +8,7 @@ Usage example:
 import logging
 from spicerack.remote import RemoteExecutionError
 from collections import namedtuple
-from cookbooks.sre.hosts.reboot_groups import argument_parser_reboot_groups, reboot_group
+from cookbooks.sre import argument_parser_reboot_groups, reboot_group
 
 ScriptReturn = namedtuple('ScriptReturn', 'returncode output')
 
