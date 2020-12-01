@@ -237,9 +237,9 @@ def find_kerberos_credentials(remote_host, decom_hosts):
         check_princs_command = '/usr/local/sbin/manage_principals.py list "*{}*"'.format(host)
         cumin_commands = [Command(find_keytabs_command, ok_codes=[]),
                           Command(check_princs_command, ok_codes=[])]
-        for _, output in remote_host.run_sync(*cumin_commands):
+        if remote_host.run_sync(*cumin_commands):
             cred_found = True
-            logger.info(output.message().decode())
+
     if cred_found:
         logger.info('Please follow this guide to drop unused credentials: '
                     'https://wikitech.wikimedia.org/wiki/Analytics/Systems/Kerberos'
@@ -278,9 +278,8 @@ def check_patterns_in_repo(host_paths, patterns):
     for remote_host, path in host_paths:
         logger.info('Looking for matches in %s:%s', remote_host, path)
         command = 'cd {path} && {grep}'.format(path=path, grep=grep_command)
-        for _, output in remote_host.run_sync(Command(command, ok_codes=[])):
+        if remote_host.run_sync(Command(command, ok_codes=[])):
             ask = True
-            logger.info(output.message().decode())
 
     if ask:
         ask_confirmation('Found match(es) in the Puppet or mediawiki-config repositories (see above), proceed anyway?')

@@ -75,7 +75,6 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
     metadata = {}
     for _, output in results:
         lines = output.message().decode()
-        logger.info(lines)
         for line in lines.splitlines():
             if line.startswith('METADATA:'):
                 metadata = json.loads(line.split(maxsplit=1)[1])
@@ -110,8 +109,6 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
 
         command = ('{base} push "{path}" "{sha1}"').format(base=base_command, path=metadata.get('path', ''), sha1=sha1)
         results = netbox_host.run_sync(command)
-        for _, output in results:
-            logger.info(output.message().decode())
 
     passive_netbox_hosts = remote.query(str(netbox_hosts.hosts - netbox_host.hosts))
     logger.info('Updating the Netbox passive copies of the repository on %s', passive_netbox_hosts)

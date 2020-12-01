@@ -45,11 +45,7 @@ def run(args, spicerack):
     icinga = spicerack.icinga()
     reason = spicerack.admin_reason('Roll restart of jvm daemons.')
 
-    zookeeper_status = zookeeper.run_sync('echo stats | nc -q 1 localhost 2181')
-    for nodeset, output in zookeeper_status:
-        logger.info('\n=========================================\n')
-        logger.info('Output for %s', nodeset)
-        logger.info(output.message().decode())
+    zookeeper.run_sync('echo stats | nc -q 1 localhost 2181')
 
     logger.info('\n=========================================\n')
     ask_confirmation(

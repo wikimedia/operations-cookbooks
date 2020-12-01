@@ -48,7 +48,7 @@ def run(args, spicerack):
             'cp -v /etc/elasticsearch/instances /tmp/previous-elasticsearch-instances'
         )
 
-        install_results = nodes.get_remote_hosts().run_async(
+        nodes.get_remote_hosts().run_async(
             # TODO: implement a generic and robust package upgrade mechanism in spicerack
             # upgrade the packages before switching the config es6
             # package names have changed use a hack to remove&install in one apt command
@@ -60,11 +60,6 @@ def run(args, spicerack):
                     packages=' '.join(packages)),
                 ok_codes=[])
         )
-
-        # log output of apt-get, just in case
-        for nodeset, output in install_results:
-            logger.warning('Output for %s', nodeset)
-            logger.warning(output.message().decode())
 
         try:
             # elasticsearch-oss isn't installed, something went wrong with apt-get install

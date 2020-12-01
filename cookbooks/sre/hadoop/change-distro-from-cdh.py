@@ -58,14 +58,6 @@ def argument_parser():
     return parser
 
 
-def print_run_command_output(run_command_return_status):
-    """Helper to print cumin's output"""
-    for nodeset, output in run_command_return_status:
-        logger.info('\n=========================================\n')
-        logger.info('Output for %s', nodeset)
-        logger.info(output.message().decode())
-
-
 def run(args, spicerack):  # pylint: disable=too-many-statements
     """Change Hadoop distribution on a given cluster"""
     if args.cluster == 'test':
@@ -142,7 +134,7 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
 
         hadoop_hosts.run_sync('apt-get update')
 
-        print_run_command_output(hadoop_hosts.run_sync('apt-cache policy hadoop | grep Candidate'))
+        hadoop_hosts.run_sync('apt-cache policy hadoop | grep Candidate')
         ask_confirmation('Please verify that the candidate hadoop package is correct.')
 
         logger.info("Install packages on worker hosts first. Long step.")
@@ -170,8 +162,8 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
         logger.info('Checking how many java daemons are running on the worker nodes '
                     'after installing the packages.')
 
-        print_run_command_output(hadoop_workers.run_sync(
-            'ps aux | grep [j]ava| egrep "JournalNode|DataNode|NodeManager" | grep -v egrep| wc -l'))
+        hadoop_workers.run_sync(
+            'ps aux | grep [j]ava| egrep "JournalNode|DataNode|NodeManager" | grep -v egrep| wc -l')
         ask_confirmation('Verify that the count is two for non-journal workers, and 3 for journal workers.')
 
         ask_confirmation(

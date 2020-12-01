@@ -35,8 +35,6 @@ def present_in_output(results, find):
         lines = output.message().decode()
         if find in lines:
             return True
-        # Only return output if there is an issue
-        logger.info(lines)
     return False
 
 
