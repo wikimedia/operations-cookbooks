@@ -40,7 +40,7 @@ BIGTOP_WORKER_PACKAGES = [
     'hadoop-yarn', 'hadoop-yarn-nodemanager', 'hive', 'hive-hcatalog', 'hive-jdbc',
     'libhdfs0', 'sqoop', 'zookeeper']
 BIGTOP_MASTER_PACKAGES = [
-    'bigtop-jsvc', 'bigtop-utils', 'hadoop,hadoop-client', 'hadoop-hdfs',
+    'bigtop-jsvc', 'bigtop-utils', 'hadoop', 'hadoop-client', 'hadoop-hdfs',
     'hadoop-hdfs-namenode', 'hadoop-hdfs-zkfc', 'hadoop-mapreduce',
     'hadoop-mapreduce-historyserver', 'hadoop-yarn', 'hadoop-yarn-resourcemanager',
     'libhdfs0', 'zookeeper']
