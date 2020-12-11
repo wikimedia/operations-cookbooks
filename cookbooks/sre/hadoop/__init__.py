@@ -45,7 +45,7 @@ BIGTOP_MASTER_PACKAGES = [
     'hadoop-mapreduce-historyserver', 'hadoop-yarn', 'hadoop-yarn-resourcemanager',
     'libhdfs0', 'zookeeper']
 BIGTOP_MASTER_STANDBY_PACKAGES = [
-    'bigtop-jsvc', 'bigtop-utils', 'hadoop,hadoop-client', 'hadoop-hdfs',
+    'bigtop-jsvc', 'bigtop-utils', 'hadoop', 'hadoop-client', 'hadoop-hdfs',
     'hadoop-hdfs-namenode', 'hadoop-hdfs-zkfc', 'hadoop-mapreduce',
     'hadoop-yarn', 'hadoop-yarn-resourcemanager',
     'libhdfs0', 'zookeeper']
