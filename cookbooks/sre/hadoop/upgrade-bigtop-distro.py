@@ -186,6 +186,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
             if self.rollback:
                 logger.info('Rollback the HDFS Master node state.')
                 self.hadoop_master.run_sync(
+                    'systemctl stop hadoop-hdfs-namenode',
                     'echo Y | sudo -u hdfs kerberos-run-command hdfs hdfs namenode -rollback')
                 # It happened in the past, while testing upgrades, that journal nodes
                 # were started in a spurious configuration (no cluster id/version) that
