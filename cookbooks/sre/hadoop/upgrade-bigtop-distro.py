@@ -228,6 +228,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
             time.sleep(60)
             logger.info('Formatting the HDFS Standby node and then starting it.')
             self.hadoop_standby.run_async(
+                'systemctl stop hadoop-hdfs-namenode',
                 'echo Y | sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs namenode -bootstrapStandby',
                 'systemctl start hadoop-hdfs-namenode')
 
