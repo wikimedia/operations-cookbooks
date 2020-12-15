@@ -135,12 +135,19 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
             self.hadoop_workers.run_sync('rm -rf /tmp/hadoop-yarn/*')
 
             if self.rollback:
-                logger.info('Removing all packages.')
-                self.hadoop_workers.run_sync(
+                # In case of a rollback, the HDFS daemons are masked to prevent any
+                # startup caused by a package install. The daemons will need to start
+                # with specific rollback options. This does not include Journalnodes
+                # (there is a specific roll-restart step later on).
+                logger.info('Removing all packages and masking HDFS daemons.')
+                self.hadoop_workers.run_async(
+                    "systemctl mask hadoop-hdfs-datanode",
                     "apt-get remove -y {}".format(' '.join(BIGTOP_WORKER_PACKAGES)))
                 self.hadoop_standby.run_sync(
+                    "systemctl mask hadoop-hdfs-namenode",
                     "apt-get remove -y {}".format(' '.join(BIGTOP_MASTER_STANDBY_PACKAGES)))
                 self.hadoop_master.run_sync(
+                    "systemctl mask hadoop-hdfs-namenode",
                     "apt-get remove -y {}".format(' '.join(BIGTOP_MASTER_PACKAGES)))
 
             self.hadoop_hosts.run_sync('apt-get update')
@@ -157,9 +164,9 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
             # If the cookbook is running in rollback mode, then there are extra steps to be taken
             # for HDFS Datanodes.
             if self.rollback:
-                logger.info('Stop each datanode and start it with the rollback option. Long step.')
+                logger.info('Unmask each datanode and start it with the rollback option. Long step.')
                 self.hadoop_workers.run_async(
-                    'systemctl stop hadoop-hdfs-datanode',
+                    'systemctl unmask hadoop-hdfs-datanode',
                     'service hadoop-hdfs-datanode rollback',
                     batch_size=2, batch_sleep=30.0)
 
@@ -186,7 +193,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
             if self.rollback:
                 logger.info('Rollback the HDFS Master node state.')
                 self.hadoop_master.run_sync(
-                    'systemctl stop hadoop-hdfs-namenode',
+                    'systemctl unmask hadoop-hdfs-namenode',
                     'echo Y | sudo -u hdfs kerberos-run-command hdfs hdfs namenode -rollback')
                 # It happened in the past, while testing upgrades, that journal nodes
                 # were started in a spurious configuration (no cluster id/version) that
@@ -227,9 +234,11 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
 
             logger.info('Sleeping one minute to let things to stabilize')
             time.sleep(60)
+            if self.rollback:
+                logger.info("Unmasking the HDFS Namenode.")
+                self.hadoop_standby.run_sync('systemctl unmask hadoop-hdfs-namenode')
             logger.info('Formatting the HDFS Standby node and then starting it.')
             self.hadoop_standby.run_async(
-                'systemctl stop hadoop-hdfs-namenode',
                 'echo Y | sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs namenode -bootstrapStandby',
                 'systemctl start hadoop-hdfs-namenode')
 
