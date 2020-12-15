@@ -16,7 +16,7 @@ install_requires = [
 extras_require = {
     # Test dependencies
     'tests': [
-        'bandit>=1.1.0',
+        'bandit>=1.5.0',
         'flake8>=3.2.1',
         'prospector[with_everything]>=0.12.4',
         'pytest>=6.1.0',
