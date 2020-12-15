@@ -49,3 +49,9 @@ BIGTOP_MASTER_STANDBY_PACKAGES = [
     'hadoop-hdfs-namenode', 'hadoop-hdfs-zkfc', 'hadoop-mapreduce',
     'hadoop-yarn', 'hadoop-yarn-resourcemanager',
     'libhdfs0', 'zookeeper']
+
+# Some packages that are shipped by the CDH distribution are not available
+# for BigTop, so the cookbook needs to workaround this filtering the list
+# of packages to install.
+CDH_PACKAGES_NOT_IN_BIGTOP = ('avro-libs', 'hadoop-0.20-mapreduce', 'kite',
+                              'parquet', 'parquet-format', 'sentry')

@@ -1,160 +1,143 @@
-"""Upgrade/Rollback Hadoop to a newer/previous distribution.
+"""Upgrade/Rollback Hadoop to a newer/previous distribution."""
 
-This cookbook should be used when there is the need to upgrade/rollback
-one cluster to a specific distribution. A distribution is a collection
-of debian package, as in this case we assume that it also means upgrading
-HDFS from one version to another one.
-
-The current version of the cookbook is tailored for a Cloudera CDH
-to Apache BigTop upgrade/rollback, but it can surely be made more generic.
-
-Assumptions:
-- Before running this cookbook, the Hadoop cluster needs to be stopped
-  completely (either manually or via cookbook).
-- This cookbook doesn't stop/start puppet, leaving the manual step to
-  the operator for safety.
-
-"""
 import argparse
 import logging
 import time
 
 from datetime import timedelta
 
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
 from cookbooks.sre.hadoop import (HADOOP_CLUSTER_NAMES, CLUSTER_CUMIN_ALIAS,
                                   MASTER_CUMIN_ALIAS, STANDBY_CUMIN_ALIAS,
-                                  WORKERS_CUMIN_ALIAS, HDFS_JOURNAL_CUMIN_ALIAS)
+                                  WORKERS_CUMIN_ALIAS, HDFS_JOURNAL_CUMIN_ALIAS,
+                                  CDH_PACKAGES_NOT_IN_BIGTOP)
 
-
-# Some packages that are shipped by the CDH distribution are not available
-# for BigTop, so the cookbook needs to workaround this filtering the list
-# of packages to install.
-CDH_PACKAGES_NOT_IN_BIGTOP = ('avro-libs', 'hadoop-0.20-mapreduce', 'kite',
-                              'parquet', 'parquet-format', 'sentry')
-
-__title__ = 'Change Hadoop distribution on a cluster.'
 logger = logging.getLogger(__name__)
 
 
-def argument_parser():
-    """As specified by Spicerack API."""
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
-    parser.add_argument('cluster', help='The name of the Hadoop cluster to work on.',
-                        choices=HADOOP_CLUSTER_NAMES)
-    parser.add_argument('--workers-cumin-query', required=False, help='A cumin query string to select '
-                        'the Hadoop workers to work on. This limits/overrides the selection of the '
-                        'cluster argument. It should be used to resume a rollback/upgrade that '
-                        'failed on a limited number of hosts.')
-    parser.add_argument('--journalnodes-cumin-query', required=False, help='A cumin query string to select '
-                        'the Hadoop Journal nodes to work on. This limits/overrides the selection of the '
-                        'cluster argument. It should be used to resume a rollback/upgrade that '
-                        'failed on a limited number of hosts.')
-    parser.add_argument('--rollback', action='store_true',
-                        help="Set the cookbook to run rollback commands.")
+class ChangeHadoopDistro(CookbookBase):
+    """Change Hadoop distribution on a cluster.
 
-    return parser
+    This cookbook should be used when there is the need to upgrade/rollback
+    one cluster to a specific distribution. A distribution is a collection
+    of debian package, as in this case we assume that it also means upgrading
+    HDFS from one version to another one.
+
+    The current version of the cookbook is tailored for a Cloudera CDH
+    to Apache BigTop upgrade/rollback, but it can surely be made more generic.
+
+    Assumptions:
+    - Before running this cookbook, the Hadoop cluster needs to be stopped
+      completely (either manually or via cookbook).
+    - This cookbook doesn't stop/start puppet, leaving the manual step to
+      the operator for safety.
+    """
+
+    def argument_parser(self):
+        """As specified by Spicerack API."""
+        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser.add_argument('cluster', help='The name of the Hadoop cluster to work on.',
+                            choices=HADOOP_CLUSTER_NAMES)
+        parser.add_argument('--workers-cumin-query', required=False, help='A cumin query string to select '
+                            'the Hadoop workers to work on. This limits/overrides the selection of the '
+                            'cluster argument. It should be used to resume a rollback/upgrade that '
+                            'failed on a limited number of hosts.')
+        parser.add_argument('--journalnodes-cumin-query', required=False, help='A cumin query string to select '
+                            'the Hadoop Journal nodes to work on. This limits/overrides the selection of the '
+                            'cluster argument. It should be used to resume a rollback/upgrade that '
+                            'failed on a limited number of hosts.')
+        parser.add_argument('--rollback', action='store_true',
+                            help="Set the cookbook to run rollback commands.")
+
+        return parser
+
+    def get_runner(self, args):
+        """As specified by Spicerack API."""
+        return ChangeHadoopDistroRunner(args, self.spicerack)
 
 
-def run(args, spicerack):  # pylint: disable=too-many-statements
-    """Change Hadoop distribution on a given cluster"""
-    if args.cluster == 'test':
-        suffix = '-test'
-    elif args.cluster == 'analytics':
-        suffix = ''
-    else:
-        raise RuntimeError("Hadoop cluster {} not supported.".format(args.cluster))
+class ChangeHadoopDistroRunner(CookbookRunnerBase):
+    """Change Hadoop distribution cookbook runner."""
 
-    ensure_shell_is_durable()
+    def __init__(self, args, spicerack):
+        """Change Hadoop distribution on a given cluster"""
+        if args.cluster == 'test':
+            suffix = '-test'
+        elif args.cluster == 'analytics':
+            suffix = ''
+        else:
+            raise RuntimeError("Hadoop cluster {} not supported.".format(args.cluster))
 
-    spicerack_remote = spicerack.remote()
+        ensure_shell_is_durable()
 
-    hadoop_hosts = spicerack_remote.query(CLUSTER_CUMIN_ALIAS + suffix)
-    hadoop_hdfs_journal_workers = spicerack_remote.query(HDFS_JOURNAL_CUMIN_ALIAS + suffix)
-    if args.journalnodes_cumin_query:
-        hadoop_hdfs_journal_override = spicerack_remote.query(args.journalnodes_cumin_query)
-        hadoop_hdfs_journal_workers = spicerack_remote.query(
-            "D{{{}}}".format(hadoop_hdfs_journal_workers.hosts.intersection(hadoop_hdfs_journal_override.hosts)))
-        ask_confirmation(
-            'The cookbook will run only on the following journal hosts ({}), please verify that '
-            'the list looks correct: {}'
-            .format(len(hadoop_hdfs_journal_workers), hadoop_hdfs_journal_workers))
+        spicerack_remote = spicerack.remote()
+        self.hadoop_hosts = spicerack_remote.query(CLUSTER_CUMIN_ALIAS + suffix)
+        self.hadoop_hdfs_journal_workers = spicerack_remote.query(HDFS_JOURNAL_CUMIN_ALIAS + suffix)
+        if args.journalnodes_cumin_query:
+            hadoop_hdfs_journal_override = spicerack_remote.query(args.journalnodes_cumin_query)
+            self.hadoop_hdfs_journal_workers = spicerack_remote.query(
+                "D{{{}}}".format(
+                    self.hadoop_hdfs_journal_workers.hosts.intersection(hadoop_hdfs_journal_override.hosts)))
+            ask_confirmation(
+                'The cookbook will run only on the following journal hosts ({}), please verify that '
+                'the list looks correct: {}'
+                .format(len(self.hadoop_hdfs_journal_workers), self.hadoop_hdfs_journal_workers))
 
-    hadoop_workers = spicerack_remote.query(WORKERS_CUMIN_ALIAS + suffix)
-    if args.workers_cumin_query:
-        hadoop_workers_override = spicerack_remote.query(args.workers_cumin_query)
-        hadoop_workers = spicerack_remote.query(
-            "D{{{}}}".format(hadoop_workers.hosts.intersection(hadoop_workers_override.hosts)))
-        ask_confirmation(
-            'The cookbook will run only on the following worker hosts ({}), please verify that '
-            'the list looks correct: {}'
-            .format(len(hadoop_workers), hadoop_workers))
+        self.hadoop_workers = spicerack_remote.query(WORKERS_CUMIN_ALIAS + suffix)
+        if args.workers_cumin_query:
+            hadoop_workers_override = spicerack_remote.query(args.workers_cumin_query)
+            self.hadoop_workers = spicerack_remote.query(
+                "D{{{}}}".format(self.hadoop_workers.hosts.intersection(hadoop_workers_override.hosts)))
+            ask_confirmation(
+                'The cookbook will run only on the following worker hosts ({}), please verify that '
+                'the list looks correct: {}'
+                .format(len(self.hadoop_workers), self.hadoop_workers))
 
-    hadoop_master = spicerack_remote.query(MASTER_CUMIN_ALIAS + suffix)
-    hadoop_standby = spicerack_remote.query(STANDBY_CUMIN_ALIAS + suffix)
+        self.hadoop_master = spicerack_remote.query(MASTER_CUMIN_ALIAS + suffix)
+        self.hadoop_standby = spicerack_remote.query(STANDBY_CUMIN_ALIAS + suffix)
 
-    # TODO: in the future we may want to improve this step, for example
-    # verifying automatically that puppet is disabled and/or that all daemons
-    # are down.
-    ask_confirmation(
-        "This cookbook assumes that the stop-cluster.py cookbook ran correctly, "
-        "hence that the Hadoop cluster to work on is currently down. It also assumes "
-        "that the hosts to be upgraded have puppet disabled (for example, as part of the "
-        "aforementioned procedure.")
+        self.yarn_metadata_cleanup_commands = [
+            f'setAcl /yarn-rmstore/analytics{suffix}-hadoop/ZKRMStateRoot world:anyone:cdrwa',
+            f'rmr /yarn-rmstore/analytics{suffix}-hadoop/ZKRMStateRoot']
 
-    yarn_metadata_cleanup_commands = [
-        f'setAcl /yarn-rmstore/analytics{suffix}-hadoop/ZKRMStateRoot world:anyone:cdrwa',
-        f'rmr /yarn-rmstore/analytics{suffix}-hadoop/ZKRMStateRoot']
+        self.icinga = spicerack.icinga()
+        self.reason = spicerack.admin_reason('Change Hadoop distribution')
+        self.rollback = args.rollback
+        self.cluster = args.cluster
 
-    ask_confirmation(
-        'MANUAL STEP: time to run the Yarn metadata cleanup commands in Zookeeper:\n' +
-        str([yarn_metadata_cleanup_commands]))
+    @property
+    def runtime_description(self):
+        """Return a nicely formatted string that represents the cookbook action."""
+        return 'for Hadoop {} cluster: {}'.format(self.cluster, self.reason)
 
-    icinga = spicerack.icinga()
-    reason = spicerack.admin_reason('Change Hadoop distribution')
+    def _remove_packages(self):
+        """Remove all Hadoop packages on the cluster"""
+        logger.info('Removing the Hadoop packages on all nodes.')
+        self.hadoop_hosts.run_async("apt-get remove -y `cat /root/cdh_package_list`")
 
-    with icinga.hosts_downtimed(hadoop_hosts.hosts, reason,
-                                duration=timedelta(minutes=120)):
+    def _install_packages_on_workers(self):
+        """Install Hadoop packages on Hadoop worker nodes."""
+        logger.info("Install packages on worker nodes (long step).")
 
-        hadoop_workers.run_sync('rm -rf /tmp/hadoop-yarn/*')
-
-        if not args.rollback:
-            logger.info(
-                'Saving a snapshot of cdh package names and versions in /root/cdh_package_list '
-                'on all nodes, and removing all packages.')
-            hadoop_hosts.run_sync(
-                "dpkg -l | awk '/+cdh/ {print $2}' | tr '\n' ' ' > /root/cdh_package_list")
-
-        logger.info('Removing all packages.')
-        hadoop_workers.run_sync("apt-get remove -y `cat /root/cdh_package_list`")
-        hadoop_standby.run_sync("apt-get remove -y `cat /root/cdh_package_list`")
-        hadoop_master.run_sync("apt-get remove -y `cat /root/cdh_package_list`")
-
-        hadoop_hosts.run_sync('apt-get update')
-
-        hadoop_hosts.run_sync('apt-cache policy hadoop | grep Candidate')
-        ask_confirmation('Please verify that the candidate hadoop package is correct.')
-
-        logger.info("Install packages on worker hosts first. Long step.")
-
-        if args.rollback:
-            hadoop_workers.run_sync(
+        if self.rollback:
+            self.hadoop_workers.run_sync(
                 'apt-get install -y `cat /root/cdh_package_list`',
                 batch_size=5, batch_sleep=60.0)
         else:
             apt_package_filter = "|".join(CDH_PACKAGES_NOT_IN_BIGTOP)
-            hadoop_workers.run_sync(
+            self.hadoop_workers.run_sync(
                 ("apt-get install -y `cat /root/cdh_package_list | tr ' ' '\n' | "
                  f"egrep -v '{apt_package_filter}' | tr '\n' ' '`"),
                 batch_size=5, batch_sleep=60.0)
 
         # If the cookbook is running in rollback mode, then there are extra steps to be taken
         # for HDFS Datanodes.
-        if args.rollback:
+        if self.rollback:
             logger.info('Stop each datanode and start it with the rollback option. Long step.')
-            hadoop_workers.run_sync(
+            self.hadoop_workers.run_async(
                 'systemctl stop hadoop-hdfs-datanode',
                 'service hadoop-hdfs-datanode rollback',
                 batch_size=2, batch_sleep=30.0)
@@ -162,23 +145,21 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
         logger.info('Checking how many java daemons are running on the worker nodes '
                     'after installing the packages.')
 
-        hadoop_workers.run_sync(
-            'ps aux | grep [j]ava| egrep "JournalNode|DataNode|NodeManager" | grep -v egrep| wc -l')
+        self.hadoop_workers.run_sync(
+            'ps aux | egrep "[j]ava.*(JournalNode|DataNode|NodeManager)" | wc -l')
         ask_confirmation('Verify that the count is two for non-journal workers, and 3 for journal workers.')
 
-        ask_confirmation(
-            'MANUAL STEP: Puppet can be re-enabled manually on Hadoop worker nodes, to check if all configurations '
-            'are set up correctly. Continue only once done.')
-
+    def _install_packages_on_master(self):
+        """Installs the Hadoop packages on the Hadoop Master node."""
         logger.info('Install packages on the Hadoop HDFS Master node.')
 
-        if args.rollback:
-            hadoop_master.run_sync(
+        if self.rollback:
+            self.hadoop_master.run_sync(
                 'apt-get install -y `cat /root/cdh_package_list`')
             logger.info('Sleeping one minute to let things to stabilize')
             time.sleep(60)
             logger.info('Rollback the HDFS Master node state.')
-            hadoop_master.run_sync(
+            self.hadoop_master.run_sync(
                 'echo Y | sudo -u hdfs kerberos-run-command hdfs hdfs namenode -rollback')
             # It happened in the past, while testing upgrades, that journal nodes
             # were started in a spurious configuration (no cluster id/version) that
@@ -187,52 +168,99 @@ def run(args, spicerack):  # pylint: disable=too-many-statements
             # The safest option seems to be to stop journalnodes gracefully,
             # and then start them back again.
             logger.info('Stop/Start of the journalnodes to avoid spurious bugs. Long step.')
-            hadoop_hdfs_journal_workers.run_sync(
+            self.hadoop_hdfs_journal_workers.run_sync(
                 'systemctl stop hadoop-hdfs-journalnode',
                 batch_size=1, batch_sleep=60.0)
             # We use 'restart' instead of start since sometimes the init.d scripts
             # have trouble in recognizing if a daemon is not running or not when
             # 'start' is requested.
-            hadoop_hdfs_journal_workers.run_sync(
+            self.hadoop_hdfs_journal_workers.run_sync(
                 'systemctl restart hadoop-hdfs-journalnode',
                 batch_size=1, batch_sleep=60.0)
             logger.info('Starting the HDFS Master node.')
-            hadoop_master.run_sync(
+            self.hadoop_master.run_sync(
                 'systemctl start hadoop-hdfs-namenode')
         else:
             apt_package_filter = "|".join(CDH_PACKAGES_NOT_IN_BIGTOP)
-            hadoop_master.run_async(
+            self.hadoop_master.run_async(
                 ("apt-get install -y `cat /root/cdh_package_list | tr ' ' '\n' | "
                  f"egrep -v '{apt_package_filter}' | tr '\n' ' '`"))
             logger.info('Sleeping one minute to let things to stabilize')
             time.sleep(60)
             logger.info('Starting the HDFS Master node with the upgrade option.')
-            hadoop_master.run_sync('service hadoop-hdfs-namenode upgrade')
+            self.hadoop_master.run_sync('service hadoop-hdfs-namenode upgrade')
 
-        ask_confirmation(
-            'Please check the HDFS Namenode logs on the master node, and continue only when it '
-            'seems to be stable. Check also that it transitions to the active state.')
-
+    def _install_packages_on_standby(self):
+        """Installs the Hadoop packages on the Hadoop Master standby node."""
         logger.info('Removing previous Namenode state (if any) from Hadoop HDFS Standby node. '
                     'It does not play well with the next steps (like bootstrapStandby).')
-        hadoop_standby.run_sync('rm -rf /var/lib/hadoop/name/previous')
+        self.hadoop_standby.run_sync('rm -rf /var/lib/hadoop/name/previous')
 
         logger.info('Install packages on the Hadoop HDFS Standby node.')
-        if args.rollback:
-            hadoop_standby.run_sync(
+        if self.rollback:
+            self.hadoop_standby.run_sync(
                 'apt-get install -y `cat /root/cdh_package_list`')
         else:
             apt_package_filter = "|".join(CDH_PACKAGES_NOT_IN_BIGTOP)
-            hadoop_standby.run_sync(
+            self.hadoop_standby.run_sync(
                 ("apt-get install -y `cat /root/cdh_package_list | tr ' ' '\n' | "
                  f"egrep -v '{apt_package_filter}' | tr '\n' ' '`"))
 
         logger.info('Sleeping one minute to let things to stabilize')
         time.sleep(60)
         logger.info('Formatting the HDFS Standby node and then starting it.')
-        hadoop_standby.run_async(
+        self.hadoop_standby.run_async(
             'echo Y | sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs namenode -bootstrapStandby',
             'systemctl start hadoop-hdfs-namenode')
 
-        logger.info('Remember to re-enable puppet on the Hadoop Master/Standby nodes.')
-        logger.info('The procedure is completed.')
+    def run(self):
+        """Change the Hadoop distribution."""
+        # TODO: in the future we may want to improve this step, for example
+        # verifying automatically that puppet is disabled and/or that all daemons
+        # are down.
+        ask_confirmation(
+            "This cookbook assumes that the stop-cluster.py cookbook ran correctly, "
+            "hence that the Hadoop cluster to work on is currently down. It also assumes "
+            "that the hosts to be upgraded have puppet disabled (for example, as part of the "
+            "aforementioned procedure.")
+
+        ask_confirmation(
+            'MANUAL STEP: time to run the Yarn metadata cleanup commands in Zookeeper:\n' +
+            str([self.yarn_metadata_cleanup_commands]))
+
+        with self.icinga.hosts_downtimed(self.hadoop_hosts.hosts, self.reason,
+                                         duration=timedelta(minutes=120)):
+
+            logger.info("Removing the /tmp/hadoop-yarn leftovers on worker nodes.")
+            self.hadoop_workers.run_sync('rm -rf /tmp/hadoop-yarn/*')
+
+            if not self.rollback:
+                logger.info(
+                    'Saving a snapshot of cdh package names and versions in /root/cdh_package_list '
+                    'on all nodes, and removing all packages.')
+                self.hadoop_hosts.run_sync(
+                    "dpkg -l | awk '/+cdh/ {print $2}' | tr '\n' ' ' > /root/cdh_package_list")
+
+            self._remove_packages()
+
+            self.hadoop_hosts.run_async('apt-get update', batch_size=10)
+
+            self.hadoop_hosts.run_sync('apt-cache policy hadoop | grep Candidate')
+            ask_confirmation('Please verify that the candidate hadoop package is correct across all nodes.')
+
+            self._install_packages_on_workers()
+
+            ask_confirmation(
+                'MANUAL STEP: Puppet can be re-enabled manually on Hadoop worker nodes, to check if all configurations '
+                'are set up correctly. Continue only once done.')
+
+            self._install_packages_on_master()
+
+            ask_confirmation(
+                'Please check the HDFS Namenode logs on the master node, and continue only when it '
+                'seems to be stable. Check also that it transitions to the active state.')
+
+            self._install_packages_on_standby()
+
+            logger.info('Remember to re-enable puppet on the Hadoop Master/Standby nodes.')
+            logger.info('The procedure is completed.')
