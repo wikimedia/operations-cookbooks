@@ -27,6 +27,7 @@ class RenewCert(CookbookBase):
         """Parse arguments"""
         parser = ArgumentParser(description=self.__doc__, formatter_class=RawDescriptionHelpFormatter)
         parser.add_argument('query', help='A single host whose puppet certificate should be renewed')
+        parser.add_argument('--allow-alt-names', action='store_true')
         return parser
 
     def get_runner(self, args):
@@ -39,7 +40,8 @@ class RenewCertRunner(CookbookRunnerBase):
 
     def __init__(self, args, spicerack):
         """Initialize the runner."""
-        hosts = spicerack.remote().query(args.host)
+        hosts = spicerack.remote().query(args.query)
+        self.allow_alt_names = args.allow_dns_alt_names
 
         if not hosts:
             raise RuntimeError('No host found for query "{query}"'.format(query=args.query))
@@ -65,5 +67,5 @@ class RenewCertRunner(CookbookRunnerBase):
             self.puppet.disable(self.reason)
             fingerprints = self.puppet.regenerate_certificate()
             self.puppet_master.wait_for_csr(self.host)
-            self.puppet_master.sign(self.host, fingerprints[self.host])
+            self.puppet_master.sign(self.host, fingerprints[self.host], self.allow_alt_names)
             self.puppet.run(enable_reason=self.reason, quiet=True)
