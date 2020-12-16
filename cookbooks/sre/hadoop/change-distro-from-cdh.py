@@ -138,7 +138,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
         if self.rollback:
             logger.info('Stop each datanode and start it with the rollback option. Long step.')
             self.hadoop_workers.run_async(
-                'systemctl stop hadoop-hdfs-datanode',
+                'systemctl unmask hadoop-hdfs-datanode',
                 'service hadoop-hdfs-datanode rollback',
                 batch_size=2, batch_sleep=30.0)
 
@@ -160,6 +160,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
             time.sleep(60)
             logger.info('Rollback the HDFS Master node state.')
             self.hadoop_master.run_sync(
+                'systemctl unmask hadoop-hdfs-namenode',
                 'echo Y | sudo -u hdfs kerberos-run-command hdfs hdfs namenode -rollback')
             # It happened in the past, while testing upgrades, that journal nodes
             # were started in a spurious configuration (no cluster id/version) that
@@ -210,6 +211,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
         time.sleep(60)
         logger.info('Formatting the HDFS Standby node and then starting it.')
         self.hadoop_standby.run_async(
+            'systemctl unmask hadoop-hdfs-namenode',
             'echo Y | sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs namenode -bootstrapStandby',
             'systemctl start hadoop-hdfs-namenode')
 
@@ -240,6 +242,16 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
                     'on all nodes, and removing all packages.')
                 self.hadoop_hosts.run_sync(
                     "dpkg -l | awk '/+cdh/ {print $2}' | tr '\n' ' ' > /root/cdh_package_list")
+
+            if self.rollback:
+                # In case of a rollback, the HDFS daemons are masked to prevent any
+                # startup caused by a package install. The daemons will need to start
+                # with specific rollback options. This does not include Journalnodes
+                # (there is a specific roll-restart step later on).
+                logger.info('Masking HDFS daemons.')
+                self.hadoop_workers.run_sync("systemctl mask hadoop-hdfs-datanode")
+                self.hadoop_standby.run_sync("systemctl mask hadoop-hdfs-namenode")
+                self.hadoop_master.run_sync("systemctl mask hadoop-hdfs-namenode")
 
             self._remove_packages()
 
