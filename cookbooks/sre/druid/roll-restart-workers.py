@@ -29,6 +29,8 @@ from wmflib.interactive import ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
 
+from . import DRUID_DAEMONS
+
 
 __title__ = 'Roll restart all the jvm daemons on Druid worker nodes'
 logger = logging.getLogger(__name__)
@@ -40,8 +42,8 @@ def argument_parser():
     parser.add_argument('cluster', help='The name of the Druid cluster to work on.',
                         choices=['public', 'analytics'])
     parser.add_argument('--daemons', help='The daemons to restart.', nargs='+',
-                        default=['historical', 'overlord', 'middlemanager', 'broker', 'coordinator'],
-                        choices=['historical', 'overlord', 'middlemanager', 'broker', 'coordinator'])
+                        default=DRUID_DAEMONS,
+                        choices=DRUID_DAEMONS)
     return parser
 
 
