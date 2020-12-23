@@ -19,7 +19,7 @@ from os import urandom
 from time import sleep
 
 from requests import Session
-from spicerack.interactive import ensure_shell_is_durable, get_secret
+from wmflib.interactive import ensure_shell_is_durable, get_secret
 
 from cookbooks.sre import pdus
 

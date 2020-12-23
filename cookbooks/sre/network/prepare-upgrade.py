@@ -15,7 +15,7 @@ import argparse
 import json
 import logging
 
-from spicerack.interactive import ensure_shell_is_durable
+from wmflib.interactive import ensure_shell_is_durable
 
 __title__ = 'Prepare the software upgrade of a network device'
 logger = logging.getLogger(__name__)

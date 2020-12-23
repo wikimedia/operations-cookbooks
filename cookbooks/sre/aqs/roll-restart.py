@@ -4,7 +4,7 @@ import logging
 
 from datetime import timedelta
 
-from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
 

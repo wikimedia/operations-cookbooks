@@ -12,8 +12,7 @@ import json
 import logging
 
 from cumin.transports import Command
-
-from spicerack.interactive import ask_confirmation
+from wmflib.interactive import ask_confirmation
 
 
 __title__ = 'Update and deploy the DNS records generated from Netbox'

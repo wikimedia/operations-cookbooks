@@ -22,6 +22,9 @@ from datetime import timedelta
 
 import requests
 
+from wmflib.interactive import ask_confirmation
+
+
 __title__ = "Upgrade/downgrade Varnish on a cache host."
 logger = logging.getLogger(__name__)
 
@@ -99,7 +102,7 @@ def run(args, spicerack):
         # installed on the system.
         puppet.check_enabled()
         puppet.disable(reason)
-        spicerack.interactive.ask_confirmation(
+        ask_confirmation(
             "Waiting for you to puppet-merge "
             "the change toggling {}'s hiera settings".format(args.host)
         )

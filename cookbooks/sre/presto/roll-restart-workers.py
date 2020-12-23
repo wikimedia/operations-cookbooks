@@ -9,7 +9,7 @@ import logging
 
 from datetime import timedelta
 
-from spicerack.interactive import ensure_shell_is_durable
+from wmflib.interactive import ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
 

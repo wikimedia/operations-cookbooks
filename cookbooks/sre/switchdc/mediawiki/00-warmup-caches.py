@@ -3,7 +3,7 @@ import datetime
 import itertools
 import logging
 
-from spicerack.interactive import ask_confirmation
+from wmflib.interactive import ask_confirmation
 
 from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args
 

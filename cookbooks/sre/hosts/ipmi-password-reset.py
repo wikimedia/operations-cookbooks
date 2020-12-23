@@ -10,10 +10,14 @@ Usage example:
 """
 import logging
 import os
+
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from getpass import getpass
+
 from cumin import NodeSet
-from spicerack.interactive import ensure_shell_is_durable, get_management_password
+from wmflib.interactive import ensure_shell_is_durable
+
+from spicerack.interactive import get_management_password
 from spicerack.ipmi import IPMI_PASSWORD_MIN_LEN, IPMI_PASSWORD_MAX_LEN, IpmiError, IpmiCheckError
 from spicerack.management import ManagementError
 

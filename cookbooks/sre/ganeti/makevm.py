@@ -17,10 +17,11 @@ Examples:
 import argparse
 import logging
 
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
+
 from spicerack.constants import CORE_DATACENTERS
 from spicerack.decorators import retry
 from spicerack.ganeti import CLUSTERS_AND_ROWS, INSTANCE_LINKS
-from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
 from cookbooks.sre.dns.netbox import argument_parser as dns_netbox_argparse, run as dns_netbox_run

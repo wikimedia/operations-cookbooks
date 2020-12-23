@@ -8,8 +8,10 @@ import argparse
 import logging
 import string
 
-from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
+
 from spicerack.remote import RemoteExecutionError
+
 from cookbooks import ArgparseFormatter
 
 __title__ = 'Initialize a new Hadoop worker'

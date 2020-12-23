@@ -14,7 +14,7 @@ import logging
 
 from requests import Session
 
-from spicerack.interactive import get_secret
+from wmflib.interactive import get_secret
 
 from cookbooks.sre import pdus
 

@@ -6,8 +6,9 @@ import time
 
 from datetime import timedelta
 
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
+
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
 from . import (HADOOP_CLUSTER_NAMES, CLUSTER_CUMIN_ALIAS,

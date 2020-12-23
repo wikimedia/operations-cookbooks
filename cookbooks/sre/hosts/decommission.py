@@ -35,9 +35,9 @@ import time
 from cumin.transports import Command
 from pynetbox.core.query import RequestError
 from wmflib.dns import DnsError, DnsNotFound
+from wmflib.interactive import ask_confirmation
 
 from spicerack.decorators import retry
-from spicerack.interactive import ask_confirmation
 from spicerack.ipmi import IpmiError
 from spicerack.puppet import get_puppet_ca_hostname
 from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError

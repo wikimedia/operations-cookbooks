@@ -28,7 +28,8 @@ import time
 
 from datetime import datetime, timedelta
 
-from spicerack.interactive import ask_confirmation, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
+
 from spicerack.remote import RemoteCheckError, RemoteExecutionError, RemoteError
 
 from cookbooks import ArgparseFormatter
