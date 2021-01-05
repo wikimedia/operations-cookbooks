@@ -6,7 +6,7 @@ import time
 
 from datetime import timedelta
 
-from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
@@ -117,36 +117,39 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
     def _remove_packages(self):
         """Remove all Hadoop packages on the cluster"""
         logger.info('Removing the Hadoop packages on all nodes.')
-        self.hadoop_hosts.run_async("apt-get remove -y `cat /root/cdh_package_list`")
+        confirm_on_failure(
+            self.hadoop_hosts.run_async, "apt-get remove -y `cat /root/cdh_package_list`")
 
     def _install_packages_on_workers(self):
         """Install Hadoop packages on Hadoop worker nodes."""
         logger.info("Install packages on worker nodes (long step).")
 
         if self.rollback:
-            self.hadoop_workers.run_sync(
-                'apt-get install -y `cat /root/cdh_package_list`',
+            confirm_on_failure(
+                self.hadoop_workers.run_sync, 'apt-get install -y `cat /root/cdh_package_list`',
                 batch_size=5, batch_sleep=60.0)
         else:
             apt_package_filter = "|".join(CDH_PACKAGES_NOT_IN_BIGTOP)
-            self.hadoop_workers.run_sync(
-                ("apt-get install -y `cat /root/cdh_package_list | tr ' ' '\n' | "
-                 f"egrep -v '{apt_package_filter}' | tr '\n' ' '`"),
+            confirm_on_failure(
+                self.hadoop_workers.run_sync,
+                "apt-get install -y `cat /root/cdh_package_list | tr ' ' '\n' | "
+                f"egrep -v '{apt_package_filter}' | tr '\n' ' '`",
                 batch_size=5, batch_sleep=60.0)
 
         # If the cookbook is running in rollback mode, then there are extra steps to be taken
         # for HDFS Datanodes.
         if self.rollback:
             logger.info('Stop each datanode and start it with the rollback option. Long step.')
-            self.hadoop_workers.run_async(
-                'systemctl unmask hadoop-hdfs-datanode',
-                'service hadoop-hdfs-datanode rollback',
+            confirm_on_failure(
+                self.hadoop_workers.run_async,
+                'systemctl unmask hadoop-hdfs-datanode', 'service hadoop-hdfs-datanode rollback',
                 batch_size=2, batch_sleep=30.0)
 
         logger.info('Checking how many java daemons are running on the worker nodes '
                     'after installing the packages.')
 
-        self.hadoop_workers.run_sync(
+        confirm_on_failure(
+            self.hadoop_workers.run_sync,
             'ps aux | egrep "[j]ava.*(JournalNode|DataNode|NodeManager)" | wc -l')
         ask_confirmation('Verify that the count is two for non-journal workers, and 3 for journal workers.')
 
@@ -155,12 +158,14 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
         logger.info('Install packages on the Hadoop HDFS Master node.')
 
         if self.rollback:
-            self.hadoop_master.run_sync(
+            confirm_on_failure(
+                self.hadoop_master.run_sync,
                 'apt-get install -y `cat /root/cdh_package_list`')
             logger.info('Sleeping one minute to let things to stabilize')
             time.sleep(60)
             logger.info('Rollback the HDFS Master node state.')
-            self.hadoop_master.run_sync(
+            confirm_on_failure(
+                self.hadoop_master.run_sync,
                 'systemctl unmask hadoop-hdfs-namenode',
                 'echo Y | sudo -u hdfs kerberos-run-command hdfs hdfs namenode -rollback')
             # It happened in the past, while testing upgrades, that journal nodes
@@ -170,48 +175,55 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
             # The safest option seems to be to stop journalnodes gracefully,
             # and then start them back again.
             logger.info('Stop/Start of the journalnodes to avoid spurious bugs. Long step.')
-            self.hadoop_hdfs_journal_workers.run_sync(
-                'systemctl stop hadoop-hdfs-journalnode',
-                batch_size=1, batch_sleep=60.0)
+            confirm_on_failure(
+                self.hadoop_hdfs_journal_workers.run_sync,
+                'systemctl stop hadoop-hdfs-journalnode', batch_size=1, batch_sleep=60.0)
             # We use 'restart' instead of start since sometimes the init.d scripts
             # have trouble in recognizing if a daemon is not running or not when
             # 'start' is requested.
-            self.hadoop_hdfs_journal_workers.run_sync(
-                'systemctl restart hadoop-hdfs-journalnode',
-                batch_size=1, batch_sleep=60.0)
+            confirm_on_failure(
+                self.hadoop_hdfs_journal_workers.run_sync,
+                'systemctl restart hadoop-hdfs-journalnode', batch_size=1, batch_sleep=60.0)
             logger.info('Starting the HDFS Master node.')
-            self.hadoop_master.run_sync(
+            confirm_on_failure(
+                self.hadoop_master.run_sync,
                 'systemctl start hadoop-hdfs-namenode')
         else:
             apt_package_filter = "|".join(CDH_PACKAGES_NOT_IN_BIGTOP)
-            self.hadoop_master.run_async(
-                ("apt-get install -y `cat /root/cdh_package_list | tr ' ' '\n' | "
-                 f"egrep -v '{apt_package_filter}' | tr '\n' ' '`"))
+            confirm_on_failure(
+                self.hadoop_master.run_async,
+                "apt-get install -y `cat /root/cdh_package_list | tr ' ' '\n' | "
+                f"egrep -v '{apt_package_filter}' | tr '\n' ' '`")
             logger.info('Sleeping one minute to let things to stabilize')
             time.sleep(60)
             logger.info('Starting the HDFS Master node with the upgrade option.')
-            self.hadoop_master.run_sync('service hadoop-hdfs-namenode upgrade')
+            confirm_on_failure(
+                self.hadoop_master.run_sync, 'service hadoop-hdfs-namenode upgrade')
 
     def _install_packages_on_standby(self):
         """Installs the Hadoop packages on the Hadoop Master standby node."""
         logger.info('Removing previous Namenode state (if any) from Hadoop HDFS Standby node. '
                     'It does not play well with the next steps (like bootstrapStandby).')
-        self.hadoop_standby.run_sync('rm -rf /var/lib/hadoop/name/previous')
+        confirm_on_failure(
+            self.hadoop_standby.run_sync, 'rm -rf /var/lib/hadoop/name/previous')
 
         logger.info('Install packages on the Hadoop HDFS Standby node.')
         if self.rollback:
-            self.hadoop_standby.run_sync(
+            confirm_on_failure(
+                self.hadoop_standby.run_sync,
                 'apt-get install -y `cat /root/cdh_package_list`')
         else:
             apt_package_filter = "|".join(CDH_PACKAGES_NOT_IN_BIGTOP)
-            self.hadoop_standby.run_sync(
-                ("apt-get install -y `cat /root/cdh_package_list | tr ' ' '\n' | "
-                 f"egrep -v '{apt_package_filter}' | tr '\n' ' '`"))
+            confirm_on_failure(
+                self.hadoop_standby.run_sync,
+                "apt-get install -y `cat /root/cdh_package_list | tr ' ' '\n' | "
+                f"egrep -v '{apt_package_filter}' | tr '\n' ' '`")
 
         logger.info('Sleeping one minute to let things to stabilize')
         time.sleep(60)
         logger.info('Formatting the HDFS Standby node and then starting it.')
-        self.hadoop_standby.run_async(
+        confirm_on_failure(
+            self.hadoop_standby.run_async,
             'systemctl unmask hadoop-hdfs-namenode',
             'echo Y | sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs namenode -bootstrapStandby',
             'systemctl start hadoop-hdfs-namenode')
@@ -235,13 +247,14 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
                                          duration=timedelta(minutes=120)):
 
             logger.info("Removing the /tmp/hadoop-yarn leftovers on worker nodes.")
-            self.hadoop_workers.run_sync('rm -rf /tmp/hadoop-yarn/*')
+            confirm_on_failure(self.hadoop_workers.run_sync, 'rm -rf /tmp/hadoop-yarn/*')
 
             if not self.rollback:
                 logger.info(
                     'Saving a snapshot of cdh package names and versions in /root/cdh_package_list '
                     'on all nodes, and removing all packages.')
-                self.hadoop_hosts.run_sync(
+                confirm_on_failure(
+                    self.hadoop_hosts.run_sync,
                     "dpkg -l | awk '/+cdh/ {print $2}' | tr '\n' ' ' > /root/cdh_package_list")
 
             if self.rollback:
@@ -250,15 +263,20 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
                 # with specific rollback options. This does not include Journalnodes
                 # (there is a specific roll-restart step later on).
                 logger.info('Masking HDFS daemons.')
-                self.hadoop_workers.run_sync("systemctl mask hadoop-hdfs-datanode")
-                self.hadoop_standby.run_sync("systemctl mask hadoop-hdfs-namenode")
-                self.hadoop_master.run_sync("systemctl mask hadoop-hdfs-namenode")
+                confirm_on_failure(
+                    self.hadoop_workers.run_sync, "systemctl mask hadoop-hdfs-datanode")
+                confirm_on_failure(
+                    self.hadoop_standby.run_sync, "systemctl mask hadoop-hdfs-namenode")
+                confirm_on_failure(
+                    self.hadoop_master.run_sync, "systemctl mask hadoop-hdfs-namenode")
 
             self._remove_packages()
 
-            self.hadoop_hosts.run_async('apt-get update', batch_size=10)
+            confirm_on_failure(
+                self.hadoop_hosts.run_async, 'apt-get update', batch_size=10)
 
-            self.hadoop_hosts.run_sync('apt-cache policy hadoop | grep Candidate')
+            confirm_on_failure(
+                self.hadoop_hosts.run_sync, 'apt-cache policy hadoop | grep Candidate')
             ask_confirmation('Please verify that the candidate hadoop package is correct across all nodes.')
 
             self._install_packages_on_workers()
