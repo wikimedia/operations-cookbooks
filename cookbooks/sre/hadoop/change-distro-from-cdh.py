@@ -14,7 +14,7 @@ from cookbooks import ArgparseFormatter
 from cookbooks.sre.hadoop import (HADOOP_CLUSTER_NAMES, CLUSTER_CUMIN_ALIAS,
                                   MASTER_CUMIN_ALIAS, STANDBY_CUMIN_ALIAS,
                                   WORKERS_CUMIN_ALIAS, HDFS_JOURNAL_CUMIN_ALIAS,
-                                  CDH_PACKAGES_NOT_IN_BIGTOP)
+                                  CDH_PACKAGES_NOT_IN_BIGTOP, HADOOP_WORKERS_CUMIN_SUCCESS_THRESHOLD)
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,9 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
         """Remove all Hadoop packages on the cluster"""
         logger.info('Removing the Hadoop packages on all nodes.')
         confirm_on_failure(
-            self.hadoop_hosts.run_async, "apt-get remove -y `cat /root/cdh_package_list`")
+            self.hadoop_hosts.run_async,
+            "apt-get remove -y `cat /root/cdh_package_list`",
+            success_threshold=HADOOP_WORKERS_CUMIN_SUCCESS_THRESHOLD)
 
     def _install_packages_on_workers(self):
         """Install Hadoop packages on Hadoop worker nodes."""
@@ -126,15 +128,18 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
 
         if self.rollback:
             confirm_on_failure(
-                self.hadoop_workers.run_sync, 'apt-get install -y `cat /root/cdh_package_list`',
-                batch_size=5, batch_sleep=60.0)
+                self.hadoop_workers.run_sync,
+                'apt-get install -y `cat /root/cdh_package_list`',
+                batch_size=5, batch_sleep=60.0,
+                success_threshold=HADOOP_WORKERS_CUMIN_SUCCESS_THRESHOLD)
         else:
             apt_package_filter = "|".join(CDH_PACKAGES_NOT_IN_BIGTOP)
             confirm_on_failure(
                 self.hadoop_workers.run_sync,
                 "apt-get install -y `cat /root/cdh_package_list | tr ' ' '\n' | "
                 f"egrep -v '{apt_package_filter}' | tr '\n' ' '`",
-                batch_size=5, batch_sleep=60.0)
+                batch_size=5, batch_sleep=60.0,
+                success_threshold=HADOOP_WORKERS_CUMIN_SUCCESS_THRESHOLD)
 
         # If the cookbook is running in rollback mode, then there are extra steps to be taken
         # for HDFS Datanodes.
@@ -143,14 +148,16 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
             confirm_on_failure(
                 self.hadoop_workers.run_async,
                 'systemctl unmask hadoop-hdfs-datanode', 'service hadoop-hdfs-datanode rollback',
-                batch_size=2, batch_sleep=30.0)
+                batch_size=2, batch_sleep=30.0,
+                success_threshold=HADOOP_WORKERS_CUMIN_SUCCESS_THRESHOLD)
 
         logger.info('Checking how many java daemons are running on the worker nodes '
                     'after installing the packages.')
 
         confirm_on_failure(
             self.hadoop_workers.run_sync,
-            'ps aux | egrep "[j]ava.*(JournalNode|DataNode|NodeManager)" | wc -l')
+            'ps aux | egrep "[j]ava.*(JournalNode|DataNode|NodeManager)" | wc -l',
+            success_threshold=HADOOP_WORKERS_CUMIN_SUCCESS_THRESHOLD)
         ask_confirmation('Verify that the count is two for non-journal workers, and 3 for journal workers.')
 
     def _install_packages_on_master(self):
@@ -273,10 +280,12 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
             self._remove_packages()
 
             confirm_on_failure(
-                self.hadoop_hosts.run_async, 'apt-get update', batch_size=10)
+                self.hadoop_hosts.run_async, 'apt-get update',
+                batch_size=10, success_threshold=HADOOP_WORKERS_CUMIN_SUCCESS_THRESHOLD)
 
             confirm_on_failure(
-                self.hadoop_hosts.run_sync, 'apt-cache policy hadoop | grep Candidate')
+                self.hadoop_hosts.run_sync, 'apt-cache policy hadoop | grep Candidate',
+                success_threshold=HADOOP_WORKERS_CUMIN_SUCCESS_THRESHOLD)
             ask_confirmation('Please verify that the candidate hadoop package is correct across all nodes.')
 
             self._install_packages_on_workers()

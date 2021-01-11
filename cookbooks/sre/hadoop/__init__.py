@@ -55,3 +55,7 @@ BIGTOP_MASTER_STANDBY_PACKAGES = [
 # of packages to install.
 CDH_PACKAGES_NOT_IN_BIGTOP = ('avro-libs', 'hadoop-0.20-mapreduce', 'kite',
                               'parquet', 'parquet-format', 'sentry')
+
+# Due to the high number of Hadoop worker nodes, remote commands are tolerated
+# to fail up to a 10% threshold to avoid unnecessary failures of cookbook.
+HADOOP_WORKERS_CUMIN_SUCCESS_THRESHOLD = 0.9
