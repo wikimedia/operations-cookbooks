@@ -34,6 +34,12 @@ MASTER_CUMIN_ALIAS = 'A:hadoop-master'
 STANDBY_CUMIN_ALIAS = 'A:hadoop-standby'
 WORKERS_CUMIN_ALIAS = 'A:hadoop-worker'
 HDFS_JOURNAL_CUMIN_ALIAS = 'A:hadoop-hdfs-journal'
+HADOOP_CLIENT_CUMIN_ALIASES = [
+    'A:hadoop-dumps-client', 'A:analytics-airflow',
+    'A:analytics-launcher', 'A:presto-analytics', 'A:druid-analytics',
+    'A:druid-public', 'A:hadoop-client', 'A:hadoop-ui']
+HADOOP_TEST_CLIENT_CUMIN_ALIASES = [
+    'A:druid-test', 'A:hadoop-client-test', 'A:hadoop-ui-test']
 BIGTOP_WORKER_PACKAGES = [
     'bigtop-jsvc', 'bigtop-utils', 'hadoop', 'hadoop-client', 'hadoop-hdfs',
     'hadoop-hdfs-datanode', 'hadoop-hdfs-journalnode', 'hadoop-mapreduce',
