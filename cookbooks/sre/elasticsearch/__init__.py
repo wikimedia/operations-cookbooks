@@ -12,7 +12,7 @@ from spicerack.constants import CORE_DATACENTERS
 __title__ = __doc__
 logger = logging.getLogger(__name__)
 
-CLUSTERGROUPS = ('search_eqiad', 'search_codfw', 'relforge')
+CLUSTERGROUPS = ('search_eqiad', 'search_codfw', 'relforge', 'cloudelastic')
 
 
 def valid_datetime_type(datetime_str):
