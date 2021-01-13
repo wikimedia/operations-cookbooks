@@ -68,7 +68,7 @@ class ChangeHadoopDistroOnClientsRunner(CookbookRunnerBase):
             cumin_labels = args.cumin_client_label
 
         self.icinga = spicerack.icinga()
-        self.hadoop_client_hosts = spicerack_remote.query(cumin_labels)
+        self.hadoop_client_hosts = spicerack_remote.query(' or '.join(cumin_labels))
         self.reason = spicerack.admin_reason('Change Hadoop distribution')
         self.rollback = args.rollback
         self.cluster = args.cluster
