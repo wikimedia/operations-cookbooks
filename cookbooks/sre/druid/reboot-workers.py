@@ -81,7 +81,7 @@ class RebootDruidWorkersRunner(CookbookRunnerBase):
 
         duration = timedelta(minutes=120)
 
-        with self.icinga.hosts_downtimed(host, self.reason, duration=duration):
+        with self.icinga.hosts_downtimed([host], self.reason, duration=duration):
             with puppet.disabled(self.reason):
                 logger.info('Stopping active zookeeper on host %s', host)
                 node.run_sync('systemctl --quiet is-active zookeeper && systemctl stop zookeeper || exit 0')
