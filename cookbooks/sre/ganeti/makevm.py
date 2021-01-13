@@ -158,12 +158,14 @@ def run(args, spicerack):  # pylint: disable=too-many-locals,too-many-statements
         virtual_machine=vm.id, name=PRIMARY_INTERFACE_NAME, type='virtual')
     logger.info('Created interface %s on VM %s', PRIMARY_INTERFACE_NAME, vm)
 
-    ip_v4.interface = iface
+    ip_v4.assigned_object_id = iface.id
+    ip_v4.assigned_object_type = 'virtualization.vminterface'
     if not ip_v4.save():
         logger.error('Failed to attach IPv4 %s to interface %s', ip_v4, iface)
         return 1
 
-    ip_v6.interface = iface
+    ip_v6.assigned_object_id = iface.id
+    ip_v6.assigned_object_type = 'virtualization.vminterface'
     if not ip_v6.save():
         logger.error('Failed to attach IPv6 %s to interface %s', ip_v6, iface)
         return 1
