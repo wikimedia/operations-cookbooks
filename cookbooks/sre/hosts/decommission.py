@@ -233,7 +233,7 @@ def update_netbox(netbox, netbox_data, dry_run):
         # Remote is done, now we tackle the IPs
         if interface.count_ipaddresses > 0:
             for ip in netbox.api.ipam.ip_addresses.filter(interface_id=interface.id):
-                logger.info('Delete IP %s on %s', ip.address, ip.interface.name)
+                logger.info('Delete IP %s on %s', ip.address, ip.assigned_object.name)
                 if not dry_run:
                     ip.delete()
         else:
