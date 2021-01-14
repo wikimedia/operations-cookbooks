@@ -44,7 +44,7 @@ class RebootPrestoWorkersRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
 
         self.icinga = spicerack.icinga()
-        self.puppet = spicerack.puppets
+        self.puppet = spicerack.puppet
         self.reason = spicerack.admin_reason('Reboot Presto nodes')
         self.remote = spicerack.remote()
 
