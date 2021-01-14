@@ -371,7 +371,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
 
     # Run homer once per needed ToR switch
     for switch in switches:
-        logger.info('Running Homer on {switch}, it takes time ⏳, don\'t worry'.format(switch=switch))
+        logger.info('Running Homer on %s, it takes time ⏳ don\'t worry', switch)
         try:
             if not spicerack.dry_run:
                 subprocess.run(['/usr/local/bin/homer',
