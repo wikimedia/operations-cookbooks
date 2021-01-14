@@ -28,8 +28,7 @@ from datetime import timedelta
 from wmflib.interactive import ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
-
-from . import DRUID_DAEMONS
+from cookbooks.sre.druid import DRUID_DAEMONS
 
 
 __title__ = 'Roll restart all the jvm daemons on Druid worker nodes'
