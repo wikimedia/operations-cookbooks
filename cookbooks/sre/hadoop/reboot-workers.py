@@ -7,10 +7,9 @@ import time
 
 from datetime import datetime, timedelta
 
-from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.remote import RemoteCheckError, RemoteExecutionError, RemoteError
 
 from cookbooks import ArgparseFormatter
 from cookbooks.sre.hadoop import HADOOP_CLUSTER_NAMES
@@ -100,34 +99,34 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return 'for Hadoop {} cluster'.format(self.cluster)
 
-    def _reboot_hadoop_workers(self, hadoop_workers_batch):
+    def _reboot_hadoop_workers(self, hadoop_workers_batch, stop_journal_daemons=False):
         """Reboot a batch of Hadoop workers"""
         with self.icinga.hosts_downtimed(hadoop_workers_batch.hosts, self.reason,
                                          duration=timedelta(minutes=60)):
-            try:
-                puppet = self.spicerack.puppet(hadoop_workers_batch)
-                puppet.disable(self.reason)
-                logger.info('Stopping the Yarn Nodemanagers...')
-                hadoop_workers_batch.run_sync('systemctl stop hadoop-yarn-nodemanager')
-                logger.info(
-                    'Wait %s seconds to allow jvm containers to finish..', self.yarn_nm_sleep_seconds)
-                time.sleep(self.yarn_nm_sleep_seconds)
-                logger.info('Stopping the HDFS Datanodes...')
-                hadoop_workers_batch.run_sync('systemctl stop hadoop-hdfs-datanode')
-                logger.info('Rebooting hosts..')
-                reboot_time = datetime.utcnow()
-                hadoop_workers_batch.reboot(
-                    batch_size=len(hadoop_workers_batch.hosts),
-                    batch_sleep=None)
-                hadoop_workers_batch.wait_reboot_since(reboot_time)
-                puppet.enable(self.reason)
-            except (RemoteCheckError, RemoteExecutionError, RemoteError):
-                logger.exception('Failure registered while attempting to reboot the batch...')
-                ask_confirmation('Do you wish to continue rebooting? '
-                                 'In any case please check the status '
-                                 'of every host in the batch to verify if any manual '
-                                 'follow up is needed (like re-enable puppet manually, '
-                                 'powercycle via serial console if the boot got stuck, etc..')
+            puppet = self.spicerack.puppet(hadoop_workers_batch)
+            puppet.disable(self.reason)
+            logger.info('Stopping the Yarn Nodemanagers...')
+            confirm_on_failure(
+                hadoop_workers_batch.run_sync, 'systemctl stop hadoop-yarn-nodemanager')
+            logger.info(
+                'Wait %s seconds to allow jvm containers to finish..', self.yarn_nm_sleep_seconds)
+            time.sleep(self.yarn_nm_sleep_seconds)
+            logger.info('Stopping the HDFS Datanodes...')
+            confirm_on_failure(
+                hadoop_workers_batch.run_sync, 'systemctl stop hadoop-hdfs-datanode')
+            if stop_journal_daemons:
+                logger.info('Stopping the HDFS Journalnode...')
+                confirm_on_failure(
+                    hadoop_workers_batch.run_sync, 'systemctl stop hadoop-hdfs-journalnode')
+            logger.info('Rebooting hosts..')
+            reboot_time = datetime.utcnow()
+            confirm_on_failure(
+                hadoop_workers_batch.reboot,
+                batch_size=len(hadoop_workers_batch.hosts),
+                batch_sleep=None)
+            confirm_on_failure(
+                hadoop_workers_batch.wait_reboot_since, reboot_time)
+            puppet.enable(self.reason)
 
     def run(self):
         """Reboot all Hadoop workers of a given cluster"""
@@ -150,23 +149,26 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
                 self._reboot_hadoop_workers(hadoop_workers_batch)
 
         else:
-            hadoop_workers_no_journal = self.spicerack_remote.query(
-                self.cluster_cumin_alias + ' and not ' + self.hdfs_jn_cumin_alias)
-            hadoop_hdfs_journal_workers = self.spicerack_remote.query(self.hdfs_jn_cumin_alias)
+            # The test cluster have few worker nodes, all running HDFS Datanodes
+            # and Journalnodes, so we need a simpler procedure for this use case.
+            if self.cluster != 'test':
+                hadoop_workers_no_journal = self.spicerack_remote.query(
+                    self.cluster_cumin_alias + ' and not ' + self.hdfs_jn_cumin_alias)
 
-            # Split the workers into batches of hostnames
-            worker_hostnames_n_slices = math.floor(len(hadoop_workers_no_journal.hosts) / self.reboot_batch_size)
+                # Split the workers into batches of hostnames
+                worker_hostnames_n_slices = math.floor(len(hadoop_workers_no_journal.hosts) / self.reboot_batch_size)
 
-            logger.info('Rebooting Hadoop workers NOT running a HDFS Journalnode')
-            for hadoop_workers_batch in hadoop_workers_no_journal.split(worker_hostnames_n_slices):
-                logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
-                self._reboot_hadoop_workers(hadoop_workers_batch)
+                logger.info('Rebooting Hadoop workers NOT running a HDFS Journalnode')
+                for hadoop_workers_batch in hadoop_workers_no_journal.split(worker_hostnames_n_slices):
+                    logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
+                    self._reboot_hadoop_workers(hadoop_workers_batch)
 
             logger.info('Rebooting Hadoop workers running a HDFS Journalnode')
             # Using the following loop to iterate over every HDFS JournalNode
             # one at the time.
+            hadoop_hdfs_journal_workers = self.spicerack_remote.query(self.hdfs_jn_cumin_alias)
             for hadoop_workers_batch in hadoop_hdfs_journal_workers.split(len(hadoop_hdfs_journal_workers.hosts)):
                 logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
-                self._reboot_hadoop_workers(hadoop_workers_batch)
+                self._reboot_hadoop_workers(hadoop_workers_batch, stop_journal_daemons=True)
 
         logger.info('All reboots completed!')
