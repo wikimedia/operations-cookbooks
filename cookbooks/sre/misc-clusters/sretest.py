@@ -5,42 +5,28 @@ Usage example:
 
 """
 
-import logging
-from spicerack.remote import RemoteExecutionError
-from collections import namedtuple
-from cookbooks.sre import argument_parser_reboot_groups, reboot_group
-
-ScriptReturn = namedtuple('ScriptReturn', 'returncode output')
-
-__title__ = 'SREtest reboot cookbook'
-batch_size = 1
-allowed_aliases = ['sretest']
-
-logger = logging.getLogger(__name__)
+from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
 
 
-def pre_action_example(hosts):
-    """Run pre boot script"""
-    actions = ['echo "Nothing really happens"', 'echo "Really"']
+class Reboot(SREBatchBase):
+    """An sretest reboot class"""
 
-    try:
-        hosts.run_sync(*actions)
-    except RemoteExecutionError as e:
-        logger.error("Failed to run pre reboot script:")
-        logger.error(e)
-        return ScriptReturn(1, e)
-
-    return ScriptReturn(0, "")
+    # We must implement this abstract method
+    def get_runner(self, args):
+        """As specified by Spicerack API."""
+        return BatchRunner(args, self.spicerack)
 
 
-def argument_parser():
-    """As specified by Spicerack API."""
-    return argument_parser_reboot_groups(__name__, batch_size)
+class BatchRunner(SREBatchRunnerBase):
+    """An example reboot class"""
 
+    @property
+    def allowed_aliases(self):
+        """Required by RebootRunnerBase"""
+        return ['sretest']
 
-def run(args, spicerack):
-    """Required by Spicerack API."""
-    logger.info('Running reboot cookbook for %s', __title__)
-
-    return reboot_group(spicerack, args.query, args.alias, allowed_aliases, args.batchsize,
-                        [pre_action_example], None)
+    @property
+    def restart_daemons(self):
+        """Required by RebootRunnerBase"""
+        # sretest dosn't  have real daemons to restart, nrpe is provided as an example
+        return ['nagios-nrpe-server.service']
