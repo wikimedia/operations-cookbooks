@@ -65,7 +65,7 @@ class ChangeHadoopDistroOnClientsRunner(CookbookRunnerBase):
                 raise RuntimeError(
                     "Cumin label {} not supported. Please use one of: {}"
                     .format(args.cumin_client_label, cumin_labels))
-            cumin_labels = args.cumin_client_label
+            cumin_labels = [args.cumin_client_label]
 
         self.icinga = spicerack.icinga()
         self.hadoop_client_hosts = spicerack_remote.query(' or '.join(cumin_labels))
