@@ -4,3 +4,4 @@
 /wikimedia_cookbooks.egg-info/
 __pycache__/
 *.pyc
+*.sw?
