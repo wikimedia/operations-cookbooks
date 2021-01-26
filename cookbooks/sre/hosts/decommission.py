@@ -377,7 +377,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
                 subprocess.run(['/usr/local/bin/homer',
                                 switch,
                                 'commit',
-                                reason], check=True)
+                                str(reason)], check=True)
         except subprocess.SubprocessError as e:
             message = 'Failed to run Homer on {switch}'.format(switch=switch)
             logger.exception(message)
