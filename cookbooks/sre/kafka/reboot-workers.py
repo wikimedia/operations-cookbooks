@@ -70,7 +70,7 @@ class RebootKafkaWorkersRunner(CookbookRunnerBase):
         node = self.remote.query('D{' + host + '}')
         puppet = self.puppet(node)
 
-        with self.icinga.hosts_downtimed(host, self.reason, duration=timedelta(minutes=30)):
+        with self.icinga.hosts_downtimed([host], self.reason, duration=timedelta(minutes=30)):
             with puppet.disabled(self.reason):
                 logger.info('Stopping kafka processes on host %s', host)
 
