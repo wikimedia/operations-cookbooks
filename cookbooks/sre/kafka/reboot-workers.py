@@ -84,8 +84,8 @@ class RebootKafkaWorkersRunner(CookbookRunnerBase):
                 logger.info(
                     'Reboot completed for node %s. Waiting %s before running preferred-replica-election '
                     'for the broker to recover.',
-                    self.sleep_before_pref_replica_election,
-                    host
+                    host,
+                    self.sleep_before_pref_replica_election
                 )
 
                 sleep(self.sleep_before_pref_replica_election)
