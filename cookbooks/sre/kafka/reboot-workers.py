@@ -33,7 +33,7 @@ class RebootKafkaWorkers(CookbookBase):
                                      # logging-eqiad and logging-codfw are running elasticsearch
                                      # as well as Kafka, so to reboot them safely we'd have to account
                                      # for that.
-                                     cluster_choices=['main-eqiad', 'jumbo', 'main-codfw', 'test-eqiad'])
+                                     cluster_choices=['main-eqiad', 'jumbo', 'main-codfw', 'test'])
 
     def get_runner(self, args):
         """As specified by Spicerack API."""

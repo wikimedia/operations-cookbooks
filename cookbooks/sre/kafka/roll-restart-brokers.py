@@ -29,7 +29,7 @@ def argument_parser():
     """As specified by Spicerack API."""
     return parse_kafka_arguments(description=__doc__,
                                  cluster_choices=['main-eqiad', 'jumbo', 'main-codfw',
-                                                  'logging-eqiad', 'logging-codfw', 'test-eqiad'])
+                                                  'logging-eqiad', 'logging-codfw', 'test'])
 
 
 def run(args, spicerack):
