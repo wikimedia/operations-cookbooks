@@ -37,7 +37,9 @@ HDFS_JOURNAL_CUMIN_ALIAS = 'A:hadoop-hdfs-journal'
 HADOOP_CLIENT_CUMIN_ALIASES = [
     'A:hadoop-dumps-client', 'A:analytics-airflow',
     'A:analytics-launcher', 'A:presto-analytics', 'A:druid-analytics',
-    'A:druid-public', 'A:hadoop-client', 'A:hadoop-ui', 'A:hadoop-coordinator']
+    'A:druid-public', 'A:hadoop-client', 'A:hadoop-hue', 'A:hadoop-yarn',
+    'A:hadoop-coordinator-primary', 'A:hadoop-coordinator-secondary',
+    'A:hadoop-hdfs-backup']
 HADOOP_TEST_CLIENT_CUMIN_ALIASES = [
     'A:druid-test', 'A:hadoop-client-test', 'A:hadoop-ui-test',
     'A:hadoop-coordinator-test']
