@@ -35,7 +35,7 @@ class InitHadoopWorkers(CookbookBase):
                             "/dev/sda, 2 means skipping /dev/sd[a,b], etc..")
         parser.add_argument('--partitions-basedir', type=str, default='/var/lib/hadoop/data',
                             help="The base directory of the partitions to initialize.")
-        parser.add_argument('--wipe-partitions', type=bool, default=False,
+        parser.add_argument('--wipe-partitions', action='store_true',
                             help="Use wipefs to remove any pre-existing partition table on the disks.")
         parser.add_argument('--success-percent', type=float, default=100, choices=range(1, 100),
                             metavar="[1-100]",
