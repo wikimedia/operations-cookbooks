@@ -55,6 +55,12 @@ def run(args, spicerack):
             if args.depool:
                 remote_host.run_sync('depool', 'sleep 180')
 
+            # explicit shutdown of Blazegraph instance, to ensure they are not killed by systemd if taking too long
+            remote_host.run_sync(
+                'systemctl stop wdqs-blazegraph',
+                'systemctl stop wdqs-categories',
+                'systemctl stop wdqs-updater')
+
             reboot_time = datetime.utcnow()
             remote_host.reboot()
             remote_host.wait_reboot_since(reboot_time)
