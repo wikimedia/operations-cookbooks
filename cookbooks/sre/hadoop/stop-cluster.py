@@ -133,60 +133,60 @@ class StopHadoopRunner(CookbookRunnerBase):
 
         self.puppet.disable(self.reason)
 
-        with self.icinga.hosts_downtimed(self.hadoop_hosts.hosts, self.reason,
-                                         duration=timedelta(minutes=120)):
+        self.icinga.downtime_hosts(self.hadoop_hosts.hosts, self.reason,
+                                   duration=timedelta(minutes=120))
 
-            logger.info("Stopping all Yarn daemons.")
-            self.hadoop_workers.run_sync(
-                'systemctl stop hadoop-yarn-nodemanager',
-                batch_size=5)
+        logger.info("Stopping all Yarn daemons.")
+        self.hadoop_workers.run_sync(
+            'systemctl stop hadoop-yarn-nodemanager',
+            batch_size=5)
 
-            self.hadoop_standby.run_sync(
-                'systemctl stop hadoop-yarn-resourcemanager')
+        self.hadoop_standby.run_sync(
+            'systemctl stop hadoop-yarn-resourcemanager')
 
-            logger.info('Sleeping some seconds to let things to stabilize.')
-            time.sleep(10)
+        logger.info('Sleeping some seconds to let things to stabilize.')
+        time.sleep(10)
 
-            self.hadoop_master.run_sync(
-                'systemctl stop hadoop-yarn-resourcemanager')
+        self.hadoop_master.run_sync(
+            'systemctl stop hadoop-yarn-resourcemanager')
 
-            logger.info(
-                "Stopping all HDFS Datanodes. Be patient, very slow step. "
-                "Two nodes at the time, one minute sleep between each batch.")
-            self.hadoop_workers.run_sync(
-                'systemctl stop hadoop-hdfs-datanode',
-                batch_size=2, batch_sleep=30.0)
+        logger.info(
+            "Stopping all HDFS Datanodes. Be patient, very slow step. "
+            "Two nodes at the time, one minute sleep between each batch.")
+        self.hadoop_workers.run_sync(
+            'systemctl stop hadoop-hdfs-datanode',
+            batch_size=2, batch_sleep=30.0)
 
-            logger.info('Stopping HDFS Standby Namenode.')
-            self.hadoop_standby.run_sync(
-                'systemctl stop hadoop-hdfs-namenode',
-                'systemctl stop hadoop-hdfs-zkfc')
+        logger.info('Stopping HDFS Standby Namenode.')
+        self.hadoop_standby.run_sync(
+            'systemctl stop hadoop-hdfs-namenode',
+            'systemctl stop hadoop-hdfs-zkfc')
 
-            logger.info('Sleeping one minute to let things to stabilize')
-            time.sleep(60)
+        logger.info('Sleeping one minute to let things to stabilize')
+        time.sleep(60)
 
-            logger.info('Stopping HDFS Master Namenode.')
-            self.hadoop_master.run_sync(
-                'systemctl stop hadoop-hdfs-namenode',
-                'systemctl stop hadoop-hdfs-zkfc')
+        logger.info('Stopping HDFS Master Namenode.')
+        self.hadoop_master.run_sync(
+            'systemctl stop hadoop-hdfs-namenode',
+            'systemctl stop hadoop-hdfs-zkfc')
 
-            logger.info('Stopping MapReduce History Server.')
-            self.hadoop_master.run_sync(
-                'systemctl stop hadoop-mapreduce-historyserver')
+        logger.info('Stopping MapReduce History Server.')
+        self.hadoop_master.run_sync(
+            'systemctl stop hadoop-mapreduce-historyserver')
 
-            logger.info('Stopping HDFS Journalnodes.')
-            self.hadoop_hdfs_journal_workers.run_sync(
-                'systemctl stop hadoop-hdfs-journalnode',
-                batch_size=1, batch_sleep=30.0)
+        logger.info('Stopping HDFS Journalnodes.')
+        self.hadoop_hdfs_journal_workers.run_sync(
+            'systemctl stop hadoop-hdfs-journalnode',
+            batch_size=1, batch_sleep=30.0)
 
-            logger.info("Backup of the Journalnodes' state.")
-            self.hadoop_hdfs_journal_workers.run_sync(
-                'tar -cvf /root/hadoop-journaldir-backup-stop-cluster-cookbook-$(date +%s).tar /var/lib/hadoop/journal')
-            self.hadoop_hdfs_journal_workers.run_sync('ls -lh /root/hadoop-journaldir-backup-stop-cluster-cookbook*')
+        logger.info("Backup of the Journalnodes' state.")
+        self.hadoop_hdfs_journal_workers.run_sync(
+            'tar -cvf /root/hadoop-journaldir-backup-stop-cluster-cookbook-$(date +%s).tar /var/lib/hadoop/journal')
+        self.hadoop_hdfs_journal_workers.run_sync('ls -lh /root/hadoop-journaldir-backup-stop-cluster-cookbook*')
 
-            self.hadoop_hosts.run_sync('ps aux | grep java | grep -v grep | wc -l')
+        self.hadoop_hosts.run_sync('ps aux | grep java | grep -v grep | wc -l')
 
-            logger.info('If there are remaining jvm processes running on the Cluster, please check them.')
+        logger.info('If there are remaining jvm processes running on the Cluster, please check them.')
 
         logger.warning('As outlined before, puppet has been left disabled on all the Hadoop hosts '
                        'to prevent daemons to be restarted before time.')
