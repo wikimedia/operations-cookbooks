@@ -92,6 +92,6 @@ class RestartDruidWorkersRunner(CookbookRunnerBase):
                 commands = ['depool', 'sleep 60'] + commands + ['pool']
 
             self.druid_workers.run_async(
-                commands, batch_size=1, batch_sleep=120.0)
+                *commands, batch_size=1, batch_sleep=120.0)
 
         logger.info("All Druid jvm restarts completed!")
