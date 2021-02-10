@@ -42,7 +42,7 @@ HADOOP_CLIENT_CUMIN_ALIASES = [
     'A:hadoop-hdfs-backup']
 HADOOP_TEST_CLIENT_CUMIN_ALIASES = [
     'A:druid-test', 'A:hadoop-client-test', 'A:hadoop-ui-test',
-    'A:hadoop-coordinator-test']
+    'A:hadoop-coordinator-test', 'A:presto-analytics-test']
 BIGTOP_WORKER_PACKAGES = [
     'bigtop-jsvc', 'bigtop-utils', 'hadoop', 'hadoop-client', 'hadoop-hdfs',
     'hadoop-hdfs-datanode', 'hadoop-hdfs-journalnode', 'hadoop-mapreduce',
