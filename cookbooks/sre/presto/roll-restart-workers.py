@@ -1,45 +1,59 @@
-"""Restart all Presto jvm-based daemons in a cluster
-
-Presto runs only a daemon called 'presto-server' on
-each worker node (including the coordinator).
-
-"""
+"""Restart all Presto jvm-based daemons in a cluster"""
 import argparse
 import logging
 
 from datetime import timedelta
 
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
 
-
-__title__ = 'Roll restart all the jvm daemons on Presto worker nodes'
 logger = logging.getLogger(__name__)
 
 
-def argument_parser():
-    """As specified by Spicerack API."""
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
-    parser.add_argument('cluster', help='The name of the Presto cluster to work on.',
-                        choices=['analytics'])
-    return parser
+class RestartPrestoWorkers(CookbookBase):
+    """Restart all Presto jvm-based daemons in a cluster
+
+    Presto runs only a daemon called 'presto-server' on
+    each worker node (including the coordinator).
+    """
+
+    def argument_parser(self):
+        """As specified by Spicerack API."""
+        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser.add_argument('cluster', help='The name of the Presto cluster to work on.',
+                            choices=['analytics'])
+        return parser
+
+    def get_runner(self, args):
+        """As specified by Spicerack API."""
+        return RestartPrestoWorkersRunner(args, self.spicerack)
 
 
-def run(args, spicerack):
-    """Restart all Presto jvm daemons on a given cluster"""
-    cluster_cumin_alias = "A:presto-" + args.cluster
+class RestartPrestoWorkersRunner(CookbookRunnerBase):
+    """Restart Presto cluster cookbook runner."""
 
-    ensure_shell_is_durable()
-    presto_workers = spicerack.remote().query(cluster_cumin_alias)
-    icinga = spicerack.icinga()
-    reason = spicerack.admin_reason('Roll restart of all Presto\'s jvm daemons.')
+    def __init__(self, args, spicerack):
+        """Restart Presto on a given cluster."""
+        ensure_shell_is_durable()
+        self.cluster = args.cluster
+        self.icinga = spicerack.icinga()
+        self.reason = spicerack.admin_reason('Roll restart of all Presto\'s jvm daemons.')
+        self.presto_workers = spicerack.remote().query("A:presto-" + self.cluster)
 
-    with icinga.hosts_downtimed(presto_workers.hosts, reason,
-                                duration=timedelta(minutes=60)):
+    @property
+    def runtime_description(self):
+        """Return a nicely formatted string that represents the cookbook action."""
+        return 'for Presto {} cluster: {}'.format(self.cluster, self.reason)
 
-        logger.info('Restarting daemons (one host at the time)...')
-        commands = ['systemctl restart presto-server']
-        presto_workers.run_async(*commands, batch_size=1, batch_sleep=120.0)
+    def run(self):
+        """Restart all Presto jvm daemons on a given cluster"""
+        with self.icinga.hosts_downtimed(self.presto_workers.hosts, self.reason,
+                                         duration=timedelta(minutes=60)):
 
-    logger.info("All Presto jvm restarts completed!")
+            logger.info('Restarting daemons (one host at the time)...')
+            commands = ['systemctl restart presto-server']
+            self.presto_workers.run_async(*commands, batch_size=1, batch_sleep=120.0)
+
+        logger.info("All Presto jvm restarts completed!")
