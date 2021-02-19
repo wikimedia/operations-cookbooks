@@ -46,6 +46,8 @@ class StopHadoopRunner(CookbookRunnerBase):
         """Gracefully stop an Hadoop cluster."""
         if args.cluster == 'test':
             suffix = '-test'
+        elif args.cluster == 'backup':
+            suffix = '-backup'
         elif args.cluster == 'analytics':
             suffix = ''
         else:
