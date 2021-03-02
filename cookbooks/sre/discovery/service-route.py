@@ -61,7 +61,8 @@ def check(args, spicerack):
             # WARNING: This is a hard coded assumption that may not cover all cases correctly.
             svc_to = svc
             for postfix in ('-rw', '-ro', '-async', '-php'):
-                svc_to = svc_to.rstrip(postfix)
+                if svc_to.endswith(postfix):
+                    svc_to = svc_to[:-len(postfix)]
 
             expected_name_fmt = '{service}.svc.{dc_to}.wmnet'
             if svc_to != svc:
