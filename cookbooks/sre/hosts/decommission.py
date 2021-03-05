@@ -214,6 +214,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
                 'Hostname expansion matches {n} hosts: {hosts}\n'
                 'Do you want to proceed anyway?'
                 .format(n=len(decom_hosts), hosts=decom_hosts))
+            self.decom_hosts = decom_hosts
 
         if len(self.decom_hosts) > 20:
             raise RuntimeError(
