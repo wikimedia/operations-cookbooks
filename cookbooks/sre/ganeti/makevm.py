@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import re
 
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
@@ -16,6 +17,14 @@ from cookbooks.sre.ganeti import get_locations
 
 logger = logging.getLogger(__name__)
 PRIMARY_INTERFACE_NAME = '##PRIMARY##'
+# TODO: use from pywmflib when available
+DATACENTER_NUMBERING_PREFIX = {
+    'eqiad': '1',
+    'codfw': '2',
+    'esams': '3',
+    'ulsfo': '4',
+    'eqsin': '5',
+}
 
 
 class GanetiMakeVM(CookbookBase):
@@ -45,6 +54,12 @@ class GanetiMakeVM(CookbookBase):
 
             return value
 
+        def validate_hostname(param):
+            """Helper to instruct people to pass in a hostname instead of fqdn"""
+            if '.' in param:
+                raise argparse.ArgumentTypeError('This cookbook now takes a hostname, not a fqdn')
+            return param
+
         parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
 
         parser.add_argument('--skip-v6', action='store_true', help='To skip the generation of the IPv6 DNS record.')
@@ -58,7 +73,7 @@ class GanetiMakeVM(CookbookBase):
                             help='Specify the type of network to assign to the VM.')
         parser.add_argument('location', choices=sorted(get_locations().keys()),
                             help='The datacenter and row (only for multi-row clusters) where to create the VM.')
-        parser.add_argument('fqdn', help='The FQDN for the VM.')
+        parser.add_argument('hostname', type=validate_hostname, help='The hostname for the VM (not the FQDN).')
 
         return parser
 
@@ -73,14 +88,14 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
     def __init__(self, args, spicerack):
         """Create a new Virtual Machine in Ganeti."""
         self.cluster, self.row, self.datacenter = get_locations()[args.location]
-        self.hostname = args.fqdn.split('.')[0]
-        self.fqdn = args.fqdn
+        self.hostname = args.hostname
         self.vcpus = args.vcpus
         self.memory = args.memory
         self.network = args.network
         self.disk = args.disk
         self.skip_v6 = args.skip_v6
         self.spicerack = spicerack
+        self.fqdn = make_fqdn(self.hostname, self.network, self.datacenter)
 
         print('Ready to create Ganeti VM {a.fqdn} in the {a.cluster} cluster on row {a.row} with {a.vcpus} vCPUs, '
               '{a.memory}GB of RAM, {a.disk}GB of disk in the {a.network} network.'.format(a=self))
@@ -195,3 +210,20 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
             ip_v4, ip_v6, vm)
 
         # TODO: run the Netbox import script for the VM after the first Puppet run to import all interfaces
+
+
+def make_fqdn(hostname: str, network: str, datacenter: str) -> str:
+    """Create a fqdn based on the hostname, network and datacenter"""
+    # Validate that the hostname uses the correct number for the datacenter
+    # Note that misc names won't end with a number at all
+    match = re.search(r'\d{4}', hostname)
+    if match:
+        first = match.group()[0]
+        expected = DATACENTER_NUMBERING_PREFIX[datacenter]
+        if first != expected:
+            raise RuntimeError(f'Hostname expected to match {expected}###, got {match.group()} instead')
+
+    if network == 'public':
+        return f'{hostname}.wikimedia.org'
+
+    return f'{hostname}.{datacenter}.wmnet'
