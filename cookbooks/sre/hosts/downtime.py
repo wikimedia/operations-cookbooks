@@ -19,9 +19,9 @@ class Downtime(CookbookBase):
     - Set Icinga downtime for the given time with a default of 4h if not specified
 
     Usage example:
-      cookbook sre.hosts.downtime --days 5 'cp1234*'
-      cookbook sre.hosts.downtime --minutes 20 cp1234.eqiad.wmnet
-      cookbook sre.hosts.downtime --minutes 20 'O:cache::upload'
+      cookbook sre.hosts.downtime --days 5 -r 'some reason' 'somehost1001*'
+      cookbook sre.hosts.downtime --minutes 20 -r 'some reason' somehost1001.eqiad.wmnet
+      cookbook sre.hosts.downtime --minutes 20 -r 'some reason' 'O:some::role'
 
     """
 
