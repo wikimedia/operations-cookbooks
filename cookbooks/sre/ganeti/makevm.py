@@ -40,7 +40,7 @@ class GanetiMakeVM(CookbookBase):
         Create a Ganeti VM vmname.codfw.wmnet in the codfw Ganeti cluster
         on row B with 1 vCPUs, 3GB of RAM, 100GB of disk in the private network:
 
-            makevm --vcpus 1 --memory 3 --disk 100 codfw_B vmname.codfw.wmnet
+            makevm --vcpus 1 --memory 3 --disk 100 codfw_B vmhostname
 
     """
 
