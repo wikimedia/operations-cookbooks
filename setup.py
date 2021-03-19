@@ -18,6 +18,9 @@ extras_require = {
     'tests': [
         'bandit>=1.5.0',
         'flake8>=3.2.1',
+        'pytest>=6.1.0',
+    ],
+    'prospector': [
         'prospector[with_everything]>=0.12.4',
         'pytest>=6.1.0',
     ],
