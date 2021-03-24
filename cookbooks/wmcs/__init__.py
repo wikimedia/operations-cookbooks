@@ -41,7 +41,7 @@ def simple_create_file(
 def get_run_os(
     control_node: RemoteHosts,
     project: str,
-) -> Callable[[str, ..., bool], Dict[str, Any]]:
+) -> Callable[..., Dict[str, Any]]:
     """Get a function to run an openstack command.
 
     The returned function, returns a structured result (loaded json).
