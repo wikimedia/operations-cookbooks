@@ -140,20 +140,21 @@ def wait_for_updater(prometheus, site, remote_host):
         raise ValueError("Let's wait for updater to catch up.")
 
 
-def reload_wikidata(remote_host):
+def reload_wikidata(remote_host, puppet, reason):
     """Execute commands on host to reload wikidata data."""
     logger.info('Prepare to load wikidata data for blazegraph')
-    remote_host.run_sync(
-        'rm -fv /srv/wdqs/data_loaded',
-        'systemctl stop wdqs-updater',
-        'systemctl stop wdqs-blazegraph',
-        'rm -fv /srv/wdqs/wikidata.jnl'
-    )
+    with puppet.disabled(reason):
+        remote_host.run_sync(
+            'rm -fv /srv/wdqs/data_loaded',
+            'systemctl stop wdqs-updater',
+            'systemctl stop wdqs-blazegraph',
+            'rm -fv /srv/wdqs/wikidata.jnl',
+            'systemctl start wdqs-blazegraph',
+        )
 
     logger.info('Loading wikidata dump')
     watch = StopWatch()
     remote_host.run_sync(
-        'systemctl start wdqs-blazegraph',
         'sleep 60',
         'test -f /srv/wdqs/wikidata.jnl',
         "bash /srv/deployment/wdqs/wdqs/loadData.sh -n wdq -d {munge_path}".format(
@@ -182,18 +183,19 @@ def reload_wikidata(remote_host):
     remote_host.run_sync("rm {dump_paths}".format(dump_paths=dump_paths))
 
 
-def reload_categories(remote_host):
+def reload_categories(remote_host, puppet, reason):
     """Execute commands on host to reload categories data."""
     logger.info('Preparing to load data for categories')
-    remote_host.run_sync(
-        'systemctl stop wdqs-categories',
-        'rm -fv /srv/wdqs/categories.jnl'
-    )
+    with puppet.disabled(reason):
+        remote_host.run_sync(
+            'systemctl stop wdqs-categories',
+            'rm -fv /srv/wdqs/categories.jnl',
+            'systemctl start wdqs-categories'
+        )
 
     logger.info('Loading data for categories')
     watch = StopWatch()
     remote_host.run_sync(
-        'systemctl start wdqs-categories',
         'sleep 30',
         'test -f /srv/wdqs/categories.jnl',
         '/usr/local/bin/reloadCategories.sh wdqs'
@@ -237,18 +239,15 @@ def run(args, spicerack):
         depool_host = noop_change_and_revert
 
     with icinga.hosts_downtimed(remote_host.hosts, reason, duration=timedelta(hours=args.downtime)):
-        # FIXME: this cookbook is expected to run for weeks, we don't want to disable puppet for that long
-        #        but we want to ensure that the various services aren't restarted by puppet along the way.
-        with puppet.disabled(reason):
-            with depool_host():
-                remote_host.run_sync('sleep 180')
-                if 'categories' in data_to_reload:
-                    reload_categories(remote_host)
+        with depool_host():
+            remote_host.run_sync('sleep 180')
+            if 'categories' in data_to_reload:
+                reload_categories(remote_host, puppet, reason)
 
-                if 'wikidata' in data_to_reload:
-                    reload_wikidata(remote_host)
+            if 'wikidata' in data_to_reload:
+                reload_wikidata(remote_host, puppet, reason)
 
-                    logger.info('Data reload for blazegraph is complete. Waiting for updater to catch up')
-                    watch = StopWatch()
-                    wait_for_updater(prometheus, args.site, remote_host)
-                    logger.info('Catch up on updates in %s', watch.elapsed())
+                logger.info('Data reload for blazegraph is complete. Waiting for updater to catch up')
+                watch = StopWatch()
+                wait_for_updater(prometheus, args.site, remote_host)
+                logger.info('Caught up on updates in %s', watch.elapsed())
