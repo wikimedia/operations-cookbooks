@@ -41,7 +41,7 @@ class RenewCertRunner(CookbookRunnerBase):
     def __init__(self, args, spicerack):
         """Initialize the runner."""
         hosts = spicerack.remote().query(args.query)
-        self.allow_alt_names = args.allow_dns_alt_names
+        self.allow_alt_names = args.allow_alt_names
 
         if not hosts:
             raise RuntimeError('No host found for query "{query}"'.format(query=args.query))
@@ -51,7 +51,7 @@ class RenewCertRunner(CookbookRunnerBase):
 
         self.host = str(hosts.hosts[0])
         self.icinga = spicerack.icinga()
-        self.puppet = spicerack.puppet([self.host])
+        self.puppet = spicerack.puppet(hosts)
         self.puppet_master = spicerack.puppet_master()
         self.reason = spicerack.admin_reason('Renew puppet certificate')
 
