@@ -236,6 +236,11 @@ class AddNodeToClusterRunner(CookbookRunnerBase):
             )
 
         existing_etcd_member_fqdn = etcd_members[0]
+        # this might happen when the new member is number 10, as the sorting is
+        # alphadecimal, so 10 goes before 1
+        if existing_etcd_member_fqdn == self.new_member_fqdn:
+            existing_etcd_member_fqdn = etcd_members[1]
+
         existing_etcd_member_node = remote.query(f"D{{{existing_etcd_member_fqdn}}}", use_sudo=True)
         self.spicerack.etcdctl(remote_host=existing_etcd_member_node).ensure_node_exists(
             new_member_fqdn=self.new_member_fqdn,
