@@ -233,9 +233,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
             # done one by one to avoid taking the cluster down
             refresh_puppet_certs_cookbook = RefreshPuppetCerts(spicerack=self.spicerack)
             refresh_puppet_certs_cookbook.get_runner(
-                args=refresh_puppet_certs_cookbook.argument_parser().parse_args(
-                    ["--fqdn", etcd_member, "--fix-alt-names"]
-                ),
+                args=refresh_puppet_certs_cookbook.argument_parser().parse_args(["--fqdn", etcd_member]),
             ).run()
             # give time for etcd to stabilize
             time.sleep(10)
