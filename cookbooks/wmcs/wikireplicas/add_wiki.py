@@ -22,6 +22,11 @@ def argument_parser():
         "--task-id", required=True, help="task_id for the change"
     )
     parser.add_argument(
+        "--skip-dns",
+        action="store_true",
+        help="If the dns step is already done, skip it",
+    )
+    parser.add_argument(
         "database",
         metavar="<database_name>",
         type=str,
@@ -38,9 +43,11 @@ def run(args, spicerack):
     legacy_replicas = remote.query(
         "P{labsdb10*.eqiad.wmnet} and A:wikireplicas-all"
     )
-    s7_replicas = remote.query((
-        "P{R:Profile::Mariadb::Section = 's7'} and "
-        "P{P:wmcs::db::wikireplicas::mariadb_multiinstance}")
+    s7_replicas = remote.query(
+        (
+            "P{R:Profile::Mariadb::Section = 's7'} and "
+            "P{P:wmcs::db::wikireplicas::mariadb_multiinstance}"
+        )
     )
     # Get a cloudcontrol host to run the DNS update on
     cloudcontrol = remote.query("A:cloudcontrol")
@@ -54,8 +61,10 @@ def run(args, spicerack):
     wiki_dns_cmd = "source /root/novaenv.sh; wmcs-wikireplica-dns --aliases"
     logger.info("Generating views...")
     replicas.run_async(index_cmd, view_cmd)
-    logger.info("Adding DNS")
-    control_host.run_sync(wiki_dns_cmd)
+    if not args.skip_dns:
+        logger.info("Adding DNS")
+        control_host.run_sync(wiki_dns_cmd)
+
     logger.info("Finalizing meta_p")
     legacy_replicas.run_async(meta_p_cmd)
     s7_replicas.run_async(meta_p_cmd)
