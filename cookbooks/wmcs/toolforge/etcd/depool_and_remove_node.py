@@ -20,7 +20,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import Remote, RemoteHosts
 
-from cookbooks.wmcs import natural_sort_key, simple_create_file
+from cookbooks.wmcs import get_run_os, natural_sort_key, simple_create_file
 from cookbooks.wmcs.toolforge.etcd.remove_node_from_hiera import RemoveNodeFromHiera
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
@@ -41,7 +41,11 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         )
         parser.add_argument("--project", required=True, help="Openstack project to manage.")
-        parser.add_argument("--fqdn-to-remove", required=True, help="FQDN of the node to remove")
+        parser.add_argument(
+            "--fqdn-to-remove",
+            required=False,
+            help="FQDN of the node to remove, if none passed will remove the intance with the lower index.",
+        )
         parser.add_argument(
             "--etcd-prefix",
             required=False,
@@ -177,12 +181,32 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         self.skip_etcd_certs_refresh = skip_etcd_certs_refresh
         self.project = project
         self.spicerack = spicerack
+        self.run_os = get_run_os(
+            control_node=spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True),
+            project=self.project,
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
         remote = self.spicerack.remote()
         etcd_prefix = self.etcd_prefix if self.etcd_prefix is not None else f"{self.project}-k8s-etcd"
+        if not self.fqdn_to_remove:
+            all_project_servers = self.run_os("server", "list", is_safe=True)
+            prefix_members = list(
+                sorted(
+                    (server for server in all_project_servers if server.get("Name", "noname").startswith(etcd_prefix)),
+                    key=lambda server: natural_sort_key(server.get("Name", "noname-0")),
+                )
+            )
+            if not prefix_members:
+                raise Exception(f"No servers in project {self.project} with prefix {etcd_prefix}, nothing to remove.")
 
+            fqdn_to_remove = f"{prefix_members[0]['Name']}.{self.project}.eqiad1.wikimedia.cloud"
+
+        else:
+            fqdn_to_remove = self.fqdn_to_remove
+
+        LOGGER.info("Removing etcd member %s...", fqdn_to_remove)
         remove_node_from_hiera_cookbook = RemoveNodeFromHiera(spicerack=self.spicerack)
         hiera_data = remove_node_from_hiera_cookbook.get_runner(
             args=remove_node_from_hiera_cookbook.argument_parser().parse_args(
@@ -192,7 +216,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
                     "--prefix",
                     etcd_prefix,
                     "--fqdn-to-remove",
-                    self.fqdn_to_remove,
+                    fqdn_to_remove,
                 ]
             ),
         ).run()
@@ -202,7 +226,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         etcd_members = list(sorted(hiera_data["profile::toolforge::k8s::etcd_nodes"], key=natural_sort_key))
         other_etcd_member = etcd_members[0]
         other_etcd_node = remote.query(f"D{{{other_etcd_member}}}", use_sudo=True)
-        self.spicerack.etcdctl(remote_host=other_etcd_node).ensure_node_does_not_exist(member_fqdn=self.fqdn_to_remove)
+        self.spicerack.etcdctl(remote_host=other_etcd_node).ensure_node_does_not_exist(member_fqdn=fqdn_to_remove)
 
         if self.skip_etcd_certs_refresh:
             LOGGER.info("Skipping the refresh of all the ssl certs in the cluster (--skip-etcd-certs-refresh)")
@@ -213,7 +237,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         _fix_kubeadm(
             remote=remote,
             k8s_control_members=k8s_control_members,
-            etcd_fqdn_to_remove=self.fqdn_to_remove,
+            etcd_fqdn_to_remove=fqdn_to_remove,
             etcd_members=etcd_members,
         )
 
@@ -224,7 +248,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
                     "--project",
                     self.project,
                     "--server-name",
-                    self.fqdn_to_remove.split(".", 1)[0],
+                    fqdn_to_remove.split(".", 1)[0],
                 ],
             ),
         ).run()
