@@ -24,7 +24,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
 from wmflib.decorators import retry
 
-from cookbooks.wmcs import get_run_os
+from cookbooks.wmcs import get_run_os, natural_sort_key
 
 LOGGER = logging.getLogger(__name__)
 
@@ -215,7 +215,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         other_prefix_members = list(
             sorted(
                 (server for server in all_project_servers if server.get("Name", "noname").startswith(self.prefix)),
-                key=lambda server: server.get("Name", "noname"),
+                key=lambda server: natural_sort_key(server.get("Name", "noname-0")),
             )
         )
         if not other_prefix_members:

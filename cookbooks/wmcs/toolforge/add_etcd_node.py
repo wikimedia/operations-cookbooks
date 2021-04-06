@@ -33,7 +33,9 @@ class ToolforgeAddEtcdNode(CookbookBase):
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         )
         parser.add_argument(
-            "--project", required=True, help="Openstack project where the toolforge installation resides."
+            "--project",
+            required=True,
+            help="Openstack project where the toolforge installation resides.",
         )
         parser.add_argument(
             "--etcd-prefix",

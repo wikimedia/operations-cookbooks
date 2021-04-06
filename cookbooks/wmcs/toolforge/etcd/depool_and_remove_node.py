@@ -20,7 +20,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import Remote, RemoteHosts
 
-from cookbooks.wmcs import simple_create_file
+from cookbooks.wmcs import natural_sort_key, simple_create_file
 from cookbooks.wmcs.toolforge.etcd.remove_node_from_hiera import RemoveNodeFromHiera
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
@@ -73,7 +73,7 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
 
 def _fix_apiserver_yaml(node: RemoteHosts, etcd_members: List[str]):
     members_urls = [f"https://{fqdn}:2379" for fqdn in etcd_members]
-    new_etcd_members_arg = "--etcd-servers=" + ",".join(sorted(members_urls))
+    new_etcd_members_arg = "--etcd-servers=" + ",".join(sorted(members_urls, key=natural_sort_key))
     apiserver_config_file = "/etc/kubernetes/manifests/kube-apiserver.yaml"
     apiserver_config = yaml.safe_load(next(node.run_sync(f"cat '{apiserver_config_file}'"))[1].message().decode())
     # we expect the container to be the first and only in the spec
@@ -199,7 +199,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         # Give some time for caches to flush
         time.sleep(30)
 
-        etcd_members = list(sorted(hiera_data["profile::toolforge::k8s::etcd_nodes"]))
+        etcd_members = list(sorted(hiera_data["profile::toolforge::k8s::etcd_nodes"], key=natural_sort_key))
         other_etcd_member = etcd_members[0]
         other_etcd_node = remote.query(f"D{{{other_etcd_member}}}", use_sudo=True)
         self.spicerack.etcdctl(remote_host=other_etcd_node).ensure_node_does_not_exist(member_fqdn=self.fqdn_to_remove)
@@ -209,7 +209,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         else:
             self._refresh_etcd_certs(etcd_members=etcd_members)
 
-        k8s_control_members = list(sorted(hiera_data["profile::toolforge::k8s::control_nodes"]))
+        k8s_control_members = list(sorted(hiera_data["profile::toolforge::k8s::control_nodes"], key=natural_sort_key))
         _fix_kubeadm(
             remote=remote,
             k8s_control_members=k8s_control_members,
@@ -220,7 +220,12 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         remove_instance_cookbook = RemoveInstance(spicerack=self.spicerack)
         remove_instance_cookbook.get_runner(
             args=remove_instance_cookbook.argument_parser().parse_args(
-                ["--project", self.project, "--server-name", self.fqdn_to_remove.split(".", 1)[0]],
+                [
+                    "--project",
+                    self.project,
+                    "--server-name",
+                    self.fqdn_to_remove.split(".", 1)[0],
+                ],
             ),
         ).run()
 

@@ -5,12 +5,14 @@ __title__ = __doc__
 import base64
 import json
 import logging
-from typing import Any, Callable, Dict, List
+import re
+from typing import Any, Callable, Dict, List, Union
 
 from spicerack.remote import RemoteHosts
 
 LOGGER = logging.getLogger(__name__)
 PHABRICATOR_BOT_CONFIG_FILE = "/etc/phabricator_ops-monitoring-bot.conf"
+DIGIT_RE = re.compile("([0-9]+)")
 
 
 def simple_create_file(
@@ -70,3 +72,11 @@ def get_run_os(
         return json.loads(raw_result)
 
     return run_os
+
+
+def natural_sort_key(element: str) -> List[Union[str, int]]:
+    """Changes "name-12.something.com" into ["name-", 12, ".something.com"]."""
+    return [
+        int(mychunk) if mychunk.isdigit() else mychunk
+        for mychunk in DIGIT_RE.split(element)
+    ]
