@@ -19,10 +19,10 @@ import logging
 from datetime import timedelta
 from typing import Optional
 
-from wmflib.decorators import retry
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
+from wmflib.decorators import retry
 
 from cookbooks.wmcs import get_run_os
 
@@ -88,7 +88,6 @@ class StartInstanceWithPrefix(CookbookBase):
         parser.add_argument(
             "--server-group",
             required=False,
-
             help=(
                 "Server group to start the instance in. If it does not exist, it well create it with anti-affinity "
                 "policy, will use the same as '--prefix' by default (ex. toolsbeta-test-k8s-etcd)."
@@ -221,7 +220,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         )
         if not other_prefix_members:
             missing_params = [
-                param_name for param_name in ['flavor', 'image', 'network'] if not getattr(self, param_name)
+                param_name for param_name in ["flavor", "image", "network"] if not getattr(self, param_name)
             ]
             if missing_params:
                 message = (

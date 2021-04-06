@@ -128,7 +128,12 @@ class ToolforgeAddEtcdNodeRunner(CookbookRunnerBase):
         ).run()
 
         add_node_to_cluster_args = [
-            "--project", self.project, "--etcd-prefix", etcd_prefix, "--new-member-fqdn", new_member_fqdn
+            "--project",
+            self.project,
+            "--etcd-prefix",
+            etcd_prefix,
+            "--new-member-fqdn",
+            new_member_fqdn,
         ]
         if self.skip_puppet_bootstrap:
             add_node_to_cluster_args.append("--skip-puppet-bootstrap")

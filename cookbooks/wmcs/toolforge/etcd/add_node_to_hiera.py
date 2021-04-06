@@ -83,10 +83,7 @@ class AddNodeToHieraRunner(CookbookRunnerBase):
         response = yaml.safe_load(
             next(
                 control_node.run_sync(
-                    (
-                        "wmcs-enc-cli --openstack-project " + self.project
-                        + " get_prefix_hiera " + etcd_prefix
-                    ),
+                    ("wmcs-enc-cli --openstack-project " + self.project + " get_prefix_hiera " + etcd_prefix),
                     is_safe=True,
                 )
             )[1]

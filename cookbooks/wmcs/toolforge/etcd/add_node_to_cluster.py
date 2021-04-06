@@ -26,7 +26,6 @@ from cookbooks.wmcs import simple_create_file
 from cookbooks.wmcs.toolforge.etcd.add_node_to_hiera import AddNodeToHiera
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -106,11 +105,7 @@ def _add_node_to_kubeadm_configmap(k8s_control_node: RemoteHosts, new_etcd_membe
     namespace = "kube-system"
     configmap = "kubeadm-config"
     kubeadm_config = yaml.safe_load(
-        next(
-            k8s_control_node.run_sync(
-                f"kubectl --namespace={namespace} get configmap {configmap} -o yaml"
-            )
-        )[1]
+        next(k8s_control_node.run_sync(f"kubectl --namespace={namespace} get configmap {configmap} -o yaml"))[1]
         .message()
         .decode()
     )
@@ -141,12 +136,14 @@ def _add_node_to_kubeadm_configmap(k8s_control_node: RemoteHosts, new_etcd_membe
     return (
         next(
             k8s_control_node.run_sync(
-                ' | '.join([
-                    f"echo '{kubeadm_config_base64.decode()}'",
-                    "base64 --decode",
-                    # this sudo is needed until we have proper support in spicerack
-                    "sudo -i kubectl apply --filename=-",
-                ])
+                " | ".join(
+                    [
+                        f"echo '{kubeadm_config_base64.decode()}'",
+                        "base64 --decode",
+                        # this sudo is needed until we have proper support in spicerack
+                        "sudo -i kubectl apply --filename=-",
+                    ]
+                )
             )
         )[1]
         .message()
