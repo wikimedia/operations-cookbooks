@@ -11,10 +11,9 @@ import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
-from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError
 
-from . import check_host_is_wdqs
+from cookbooks.sre.wdqs import check_host_is_wdqs, wait_for_updater
 
 __title__ = "WDQS data reload cookbook"
 logger = logging.getLogger(__name__)
@@ -123,21 +122,6 @@ def munge(remote_host, skolemize):
             .format(path=dump['path'], munge_path=dump['munge_path'], skolemize="--skolemize" if skolemize else ""),
         )
         logger.info('munging %s completed in %s', dump['munge_path'], stop_watch.elapsed())
-
-
-@retry(tries=1000, delay=timedelta(minutes=10), backoff_mode='constant', exceptions=(ValueError,))
-def wait_for_updater(prometheus, site, remote_host):
-    """Wait for wdqs updater to catch up on updates.
-
-    This might take a while to complete and its completely normal.
-    Hence, the long wait time.
-    """
-    host = remote_host.hosts[0].split(".")[0]
-    query = "scalar(time() - blazegraph_lastupdated{instance='%s:9193'})" % host
-    result = prometheus.query(query, site)
-    last_updated = int(result['value'][1])
-    if last_updated > 1200:
-        raise ValueError("Let's wait for updater to catch up.")
 
 
 def reload_wikidata(remote_host, puppet, reason):

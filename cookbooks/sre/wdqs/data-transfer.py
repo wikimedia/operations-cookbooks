@@ -18,7 +18,7 @@ from time import sleep
 
 from spicerack.remote import RemoteExecutionError
 
-from . import check_host_is_wdqs
+from cookbooks.sre.wdqs import check_host_is_wdqs, wait_for_updater
 
 BLAZEGRAPH_INSTANCES = {
     'categories': {
@@ -114,6 +114,15 @@ def _generate_pass():
     return ''.join([sysrand.choice(passwd_charset) for _ in range(32)])
 
 
+def site(host):
+    """Hacky way to get the site in which a host is located."""
+    if 'eqiad' in str(host):
+        return 'eqiad'
+    if 'codfw' in str(host):
+        return 'codfw'
+    raise ValueError('Site is unknown for {host}.'.format(host=host))
+
+
 def run(args, spicerack):
     """Required by Spicerack API."""
     remote = spicerack.remote()
@@ -122,6 +131,7 @@ def run(args, spicerack):
 
     icinga = spicerack.icinga()
     puppet = spicerack.puppet(remote_hosts)
+    prometheus = spicerack.prometheus()
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
     source = remote.query(args.source)
@@ -166,6 +176,8 @@ def run(args, spicerack):
 
             logger.info('Starting services [%s]', start_services_cmd)
             remote_hosts.run_sync(start_services_cmd)
+            wait_for_updater(prometheus, site(source), source)
+            wait_for_updater(prometheus, site(dest), dest)
 
             if args.with_lvs:
                 logger.info('pooling %s', remote_hosts)
