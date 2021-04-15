@@ -24,7 +24,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
 from wmflib.decorators import retry
 
-from cookbooks.wmcs import get_run_os, natural_sort_key
+from cookbooks.wmcs import OpenstackAPI, natural_sort_key
 
 LOGGER = logging.getLogger(__name__)
 
@@ -125,11 +125,9 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         network: Optional[str] = None,
     ):
         """Init"""
-        self.run_os = get_run_os(
-            control_node=spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True),
-            project=project,
+        self.openstack_api = OpenstackAPI(
+            remote=spicerack.remote(), control_node_fqdn="cloudcontrol1003.wikimedia.org", project=project
         )
-
         self.project = project
         self.prefix = prefix
         self.flavor = flavor
@@ -139,79 +137,15 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.security_group = security_group or f"{self.project}-k8s-full-connectivity"
 
-    def _ensure_security_group(self, security_group: str) -> None:
-        existing_security_groups = self.run_os("security", "group", "list", is_safe=True)
-        if not any(
-            True
-            for existing_security_group in existing_security_groups
-            if existing_security_group.get("Name", "") == security_group
-        ):
-            LOGGER.info("Creating security group %s...", security_group)
-            self.run_os(
-                "security",
-                "group",
-                "create",
-                security_group,
-                "--description",
-                "'This group provides full access from its members to its members.'",
-            )
-            self.run_os(
-                "security",
-                "group",
-                "rule",
-                "create",
-                "--egress",
-                "--remote-group",
-                security_group,
-                "--protocol",
-                "any",
-                security_group,
-            )
-            self.run_os(
-                "security",
-                "group",
-                "rule",
-                "create",
-                "--ingress",
-                "--remote-group",
-                security_group,
-                "--protocol",
-                "any",
-                security_group,
-            )
-        else:
-            LOGGER.info(
-                "Security group %s already exists, not creating.",
-                security_group,
-            )
-
-    def _ensure_server_group(self, server_group: str) -> None:
-        # it seems that on cli the project flag shows nothing :/ so we have to
-        # list all of them.
-        existing_server_groups = self.run_os("server", "group", "list", is_safe=True)
-        if not any(
-            True
-            for existing_server_group in existing_server_groups
-            if existing_server_group.get("Name", "") == server_group
-        ):
-            LOGGER.info("Creating server group %s...", server_group)
-            self.run_os(
-                "server",
-                "group",
-                "create",
-                "--policy",
-                "anti-affinity",
-                server_group,
-            )
-        else:
-            LOGGER.info("Server group %s already exists, not creating.", server_group)
-
     def run(self) -> Optional[int]:  # pylint: disable-msg=too-many-locals
         """Main entry point"""
-        self._ensure_security_group(security_group=self.security_group)
-        self._ensure_server_group(server_group=self.server_group)
+        self.openstack_api.security_group_ensure(
+            security_group=self.security_group,
+            description="This group provides full access from its members to its members.",
+        )
+        self.openstack_api.server_group_ensure(server_group=self.server_group)
 
-        all_project_servers = self.run_os("server", "list", is_safe=True)
+        all_project_servers = self.openstack_api.server_list()
         other_prefix_members = list(
             sorted(
                 (server for server in all_project_servers if server.get("Name", "noname").startswith(self.prefix)),
@@ -231,53 +165,42 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
                 raise Exception(message)
 
             last_prefix_member_id = 0
-        else:
-            last_prefix_member_name = other_prefix_members[-1]["Name"]
-            last_prefix_member_id = int(last_prefix_member_name.rsplit("-", 1)[-1])
+
+        last_prefix_member_name = other_prefix_members[-1]["Name"]
+        last_prefix_member_id = int(last_prefix_member_name.rsplit("-", 1)[-1])
 
         new_prefix_member_name = f"{self.prefix}-{last_prefix_member_id + 1}"
-        # refresh the list of groups so we get the uuid of the new one
-        existing_server_groups = self.run_os("server", "group", "list", is_safe=True)
-        server_group_info = next(
-            existing_server_group
-            for existing_server_group in existing_server_groups
-            if existing_server_group.get("Name", "") == self.server_group
-        )
+        maybe_security_group = self.openstack_api.security_group_by_name(name=self.security_group)
+        if maybe_security_group is None:
+            raise Exception(
+                f"Unable to find a '{self.security_group}' security group for project {self.project}, though it "
+                "should have been created before if not there."
+            )
 
-        # get the ids of the security groups, as names might be repeated
-        existing_security_groups = self.run_os("security", "group", "list", is_safe=True)
-        default_security_group_id = None
-        security_group_id = None
-        for security_group in existing_security_groups:
-            if security_group["Project"] == self.project:
-                if security_group["Name"] == "default":
-                    default_security_group_id = security_group["ID"]
-                elif security_group["Name"] == self.security_group:
-                    security_group_id = security_group["ID"]
+        security_group_id: str = maybe_security_group["ID"]
 
-        if default_security_group_id is None:
+        maybe_default_security_group = self.openstack_api.security_group_by_name(name="default")
+        if maybe_default_security_group is None:
             raise Exception(f"Unable to find a default security group for project {self.project}")
 
-        if security_group_id is None:
-            raise Exception(f"Unable to find a '{self.security_group}' security group for project {self.project}")
+        default_security_group_id: str = maybe_default_security_group["ID"]
 
-        self.run_os(
-            "server",
-            "create",
-            "--flavor",
-            self.flavor or other_prefix_members[-1]["Flavor"],
-            "--security-group",
-            f'"{default_security_group_id}"',
-            "--security-group",
-            f'"{security_group_id}"',
-            "--image",
-            self.image or other_prefix_members[-1]["Image"],
-            "--network",
-            self.network or other_prefix_members[-1]["Networks"].split("=", 1)[0],
-            "--hint",
-            f'group={server_group_info["ID"]}',
-            "--wait",
-            new_prefix_member_name,
+        maybe_server_group = self.openstack_api.server_group_by_name(name=self.server_group)
+        if maybe_server_group is None:
+            raise Exception(
+                f"Unable to find a server group with name {self.server_group} for project {self.project}, though it "
+                "should have been created before if not there."
+            )
+
+        server_group_id: str = maybe_server_group["ID"]
+
+        self.openstack_api.server_create(
+            flavor=self.flavor or other_prefix_members[-1]["Flavor"],
+            security_group_ids=[default_security_group_id, security_group_id],
+            server_group_id=server_group_id,
+            image=self.image or other_prefix_members[-1]["Image"],
+            network=self.network or other_prefix_members[-1]["Networks"].split("=", 1)[0],
+            name=new_prefix_member_name,
         )
 
         new_instance_fqdn = f"{new_prefix_member_name}.{self.project}.eqiad1.wikimedia.cloud"

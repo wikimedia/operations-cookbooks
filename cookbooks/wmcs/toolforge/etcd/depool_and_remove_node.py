@@ -20,7 +20,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import Remote, RemoteHosts
 
-from cookbooks.wmcs import get_run_os, natural_sort_key, simple_create_file
+from cookbooks.wmcs import OpenstackAPI, natural_sort_key, simple_create_file
 from cookbooks.wmcs.toolforge.etcd.remove_node_from_hiera import RemoveNodeFromHiera
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
@@ -181,9 +181,8 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         self.skip_etcd_certs_refresh = skip_etcd_certs_refresh
         self.project = project
         self.spicerack = spicerack
-        self.run_os = get_run_os(
-            control_node=spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True),
-            project=self.project,
+        self.openstack_api = OpenstackAPI(
+            remote=spicerack.remote(), control_node_fqdn="cloudcontrol1003.wikimedia.org", project=self.project
         )
 
     def run(self) -> Optional[int]:
@@ -191,7 +190,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         remote = self.spicerack.remote()
         etcd_prefix = self.etcd_prefix if self.etcd_prefix is not None else f"{self.project}-k8s-etcd"
         if not self.fqdn_to_remove:
-            all_project_servers = self.run_os("server", "list", is_safe=True)
+            all_project_servers = self.openstack_api.server_list()
             prefix_members = list(
                 sorted(
                     (server for server in all_project_servers if server.get("Name", "noname").startswith(etcd_prefix)),
@@ -201,6 +200,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
             if not prefix_members:
                 raise Exception(f"No servers in project {self.project} with prefix {etcd_prefix}, nothing to remove.")
 
+            # TODO: find a way to not hardcode the domain
             fqdn_to_remove = f"{prefix_members[0]['Name']}.{self.project}.eqiad1.wikimedia.cloud"
 
         else:

@@ -14,7 +14,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import get_run_os
+from cookbooks.wmcs import OpenstackAPI
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,9 +59,8 @@ class RemoveInstanceRunner(CookbookRunnerBase):
         spicerack: Spicerack,
     ):
         """Init"""
-        self.run_os = get_run_os(
-            control_node=spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True),
-            project=project,
+        self.openstack_api = OpenstackAPI(
+            remote=spicerack.remote(), control_node_fqdn="cloudcontrol1003.wikimedia.org", project=project
         )
 
         self.project = project
@@ -70,7 +69,7 @@ class RemoveInstanceRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        all_project_server_infos = self.run_os("server", "list", is_safe=True)
+        all_project_server_infos = self.openstack_api.server_list()
         if not any(info for info in all_project_server_infos if info["Name"] == self.name_to_remove):
             LOGGER.warning(
                 "Unable to find server %s in project %s. Please review the project and server name.",
@@ -79,4 +78,4 @@ class RemoveInstanceRunner(CookbookRunnerBase):
             )
             return
 
-        self.run_os("server", "delete", self.name_to_remove, is_safe=False)
+        self.openstack_api.server_delete(name_to_remove=self.name_to_remove)
