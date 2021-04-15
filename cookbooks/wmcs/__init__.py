@@ -37,7 +37,7 @@ def simple_create_file(
 
     full_command.extend(["tee", remote_path])
 
-    return next(dst_node.run_sync(' '.join(full_command)))[1].message().decode()
+    return next(dst_node.run_sync(" ".join(full_command)))[1].message().decode()
 
 
 def get_run_os(
@@ -51,7 +51,7 @@ def get_run_os(
 
     def run_os(*command: List[str], is_safe: bool = False) -> Dict[str, Any]:
         # some commands don't have formatted output
-        if 'delete' in command:
+        if "delete" in command:
             format_args = []
         else:
             format_args = ["-f", "json"]
@@ -65,7 +65,7 @@ def get_run_os(
         ]
 
         try:
-            raw_result = next(control_node.run_sync(' '.join(full_command), is_safe=is_safe))[1].message().decode()
+            raw_result = next(control_node.run_sync(" ".join(full_command), is_safe=is_safe))[1].message().decode()
         except StopIteration:
             raw_result = "{}"
 
@@ -76,7 +76,4 @@ def get_run_os(
 
 def natural_sort_key(element: str) -> List[Union[str, int]]:
     """Changes "name-12.something.com" into ["name-", 12, ".something.com"]."""
-    return [
-        int(mychunk) if mychunk.isdigit() else mychunk
-        for mychunk in DIGIT_RE.split(element)
-    ]
+    return [int(mychunk) if mychunk.isdigit() else mychunk for mychunk in DIGIT_RE.split(element)]

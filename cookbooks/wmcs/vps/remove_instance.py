@@ -35,7 +35,7 @@ class RemoveInstance(CookbookBase):
         parser.add_argument(
             "--server-name",
             required=True,
-            help="Name of the server to remove (without domain, ex. toolsbeta-test-k8s-etcd-9)."
+            help="Name of the server to remove (without domain, ex. toolsbeta-test-k8s-etcd-9).",
         )
 
         return parser
@@ -71,10 +71,7 @@ class RemoveInstanceRunner(CookbookRunnerBase):
     def run(self) -> Optional[int]:
         """Main entry point"""
         all_project_server_infos = self.run_os("server", "list", is_safe=True)
-        if not any(
-            info for info in all_project_server_infos
-            if info["Name"] == self.name_to_remove
-        ):
+        if not any(info for info in all_project_server_infos if info["Name"] == self.name_to_remove):
             LOGGER.warning(
                 "Unable to find server %s in project %s. Please review the project and server name.",
                 self.name_to_remove,

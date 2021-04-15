@@ -18,9 +18,7 @@ def argument_parser():
         description=__doc__,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument(
-        "--task-id", required=True, help="task_id for the change"
-    )
+    parser.add_argument("--task-id", required=True, help="task_id for the change")
     parser.add_argument(
         "--skip-dns",
         action="store_true",
@@ -40,22 +38,15 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     remote = spicerack.remote()
     replicas = remote.query("A:wikireplicas-all")
-    legacy_replicas = remote.query(
-        "P{labsdb10*.eqiad.wmnet} and A:wikireplicas-all"
-    )
+    legacy_replicas = remote.query("P{labsdb10*.eqiad.wmnet} and A:wikireplicas-all")
     s7_replicas = remote.query(
-        (
-            "P{R:Profile::Mariadb::Section = 's7'} and "
-            "P{P:wmcs::db::wikireplicas::mariadb_multiinstance}"
-        )
+        ("P{R:Profile::Mariadb::Section = 's7'} and " "P{P:wmcs::db::wikireplicas::mariadb_multiinstance}")
     )
     # Get a cloudcontrol host to run the DNS update on
     cloudcontrol = remote.query("A:cloudcontrol")
     control_host = next(cloudcontrol.split(len(cloudcontrol)))
 
-    index_cmd = (
-        f"/usr/local/sbin/maintain-replica-indexes --database {args.database}"
-    )
+    index_cmd = f"/usr/local/sbin/maintain-replica-indexes --database {args.database}"
     view_cmd = f"/usr/local/sbin/maintain-views --databases {args.database}"
     meta_p_cmd = f"/usr/local/sbin/maintain-meta_p --databases {args.database}"
     wiki_dns_cmd = "source /root/novaenv.sh; wmcs-wikireplica-dns --aliases"
@@ -68,6 +59,4 @@ def run(args, spicerack):
     logger.info("Finalizing meta_p")
     legacy_replicas.run_async(meta_p_cmd)
     s7_replicas.run_async(meta_p_cmd)
-    spicerack.irc_logger.info(
-        "Added views for new wiki: %s %s", args.database, args.task_id
-    )
+    spicerack.irc_logger.info("Added views for new wiki: %s %s", args.database, args.task_id)
