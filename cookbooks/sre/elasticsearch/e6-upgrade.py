@@ -11,12 +11,15 @@ Order of operations for the upgrade:
    - install elasticsearch 6.5.4
    - run puppet to activate the new elastic6 setup
 """
+import argparse
 import logging
 
+from datetime import datetime
 from cumin.transports import Command
+from spicerack.constants import CORE_DATACENTERS
 from spicerack.remote import RemoteExecutionError
 
-from cookbooks.sre.elasticsearch import argument_parser_base, post_process_args, execute_on_clusters
+from cookbooks.sre.elasticsearch import CLUSTERGROUPS, execute_on_clusters, valid_datetime_type  # noqa: E501
 
 __title__ = 'Rolling upgrade of elasticsearch service (elasticsearch 5.6.14 to 6.5.4 migration)'
 logger = logging.getLogger(__name__)
@@ -24,12 +27,29 @@ logger = logging.getLogger(__name__)
 
 def argument_parser():
     """As specified by Spicerack API."""
-    return argument_parser_base(__name__, __doc__)
+    parser = argparse.ArgumentParser(prog=__name__, description=__title__,
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('clustergroup', choices=CLUSTERGROUPS,
+                        help='Name of clustergroup. One of: %(choices)s.')
+    parser.add_argument('admin_reason', help='Administrative Reason')
+    parser.add_argument('--start-datetime', type=valid_datetime_type,
+                        help='start datetime in ISO 8601 format e.g 2018-09-15T15:53:00')
+    parser.add_argument('--task-id', help='task_id for the change')
+    parser.add_argument('--nodes-per-run', default=3, type=int, help='Number of nodes per run.')
+    parser.add_argument('--without-lvs', action='store_false', dest='with_lvs',
+                        help='This cluster does not use LVS.')
+    parser.add_argument('--no-wait-for-green', action='store_false', dest='wait_for_green',
+                        help='Don\'t wait for green before starting the operation (still wait at the end).')
+    parser.add_argument('--write-queue-datacenters', choices=CORE_DATACENTERS, default=CORE_DATACENTERS, nargs='+',
+                        help='Manually specify a list of specific datacenters to check the '
+                             'cirrus write queue rather than checking all core datacenters (default)')
+    return parser
 
 
 def run(args, spicerack):
     """Required by Spicerack API."""
-    post_process_args(args)
+    if args.start_datetime is None:
+        args.start_datetime = datetime.utcnow()
     icinga = spicerack.icinga()
     elasticsearch_clusters = spicerack.elasticsearch_clusters(args.clustergroup, args.write_queue_datacenters)
     reason = spicerack.admin_reason(args.admin_reason, task_id=args.task_id)

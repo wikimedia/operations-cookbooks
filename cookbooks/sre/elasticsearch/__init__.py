@@ -2,17 +2,16 @@
 import argparse
 import logging
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from time import sleep
 
 from dateutil.parser import parse
 from spicerack.elasticsearch_cluster import ElasticsearchClusterCheckError
-from spicerack.constants import CORE_DATACENTERS
 
 __title__ = __doc__
 logger = logging.getLogger(__name__)
 
-CLUSTERGROUPS = ('search_eqiad', 'search_codfw', 'relforge', 'cloudelastic')
+CLUSTERGROUPS = ('search_eqiad', 'search_codfw', 'relforge', 'cloudelastic')  # Used in imports for other files
 
 
 def valid_datetime_type(datetime_str):
@@ -25,38 +24,6 @@ def valid_datetime_type(datetime_str):
     except ValueError:
         msg = "Error reading datetime ({0})!".format(datetime_str)
         raise argparse.ArgumentTypeError(msg)
-
-
-def argument_parser_base(name, title):
-    """Parse the command line arguments for all the sre.elasticsearch cookbooks.
-
-    Todo:
-        Remove ``--without-lvs`` for a better implementation as this was introduced because
-        relforge cluster does not have lvs enabled.
-
-    """
-    parser = argparse.ArgumentParser(prog=name, description=title,
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('clustergroup', choices=CLUSTERGROUPS, help='Name of clustergroup. One of: %(choices)s.')
-    parser.add_argument('admin_reason', help='Administrative Reason')
-    parser.add_argument('--start-datetime', type=valid_datetime_type,
-                        help='start datetime in ISO 8601 format e.g 2018-09-15T15:53:00')
-    parser.add_argument('--task-id', help='task_id for the change')
-    parser.add_argument('--nodes-per-run', default=3, type=int, help='Number of nodes per run.')
-    parser.add_argument('--without-lvs', action='store_false', dest='with_lvs', help='This cluster does not use LVS.')
-    parser.add_argument('--no-wait-for-green', action='store_false', dest='wait_for_green',
-                        help='Don\'t wait for green before starting the operation (still wait at the end).')
-    parser.add_argument('--write-queue-datacenters', choices=CORE_DATACENTERS, default=CORE_DATACENTERS, nargs='+',
-                        help='(Optional) Manually specify a list of specific datacenters to check the '
-                             'cirrus write queue rather than checking all core datacenters (default)')
-
-    return parser
-
-
-def post_process_args(args):
-    """Do any post-processing of the parsed arguments."""
-    if args.start_datetime is None:
-        args.start_datetime = datetime.utcnow()
 
 
 def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # pylint: disable=too-many-arguments
@@ -113,7 +80,7 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
                         elasticsearch_clusters.wait_for_green(timedelta(minutes=5))
                     except ElasticsearchClusterCheckError:
                         logger.info('Cluster not yet green, thawing writes and resume waiting for green')
-                    # TODO: inspect the back pressure on the kafka queue and so that nothing
+                    # TODO: inspect the back pressure on the kafka queue so that nothing
                     #       is attempted if it's too high.
 
         logger.info('Wait for green in %s before fetching next set of nodes', clustergroup)
