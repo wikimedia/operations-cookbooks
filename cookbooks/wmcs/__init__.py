@@ -9,6 +9,7 @@ import re
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Union
 
+from cumin.transports import Command
 from spicerack.remote import Remote, RemoteHosts
 
 LOGGER = logging.getLogger(__name__)
@@ -47,8 +48,13 @@ class OpenstackAPI:
         self.control_node_fqdn = control_node_fqdn
         self._control_node = remote.query(f"D{{{control_node_fqdn}}}", use_sudo=True)
 
-    def _run(self, *command: List[str], is_safe: bool = False):
-        """Run an openstack command on a control node."""
+    def _run(
+        self, *command: List[str], is_safe: bool = False, capture_errors: bool = False
+    ) -> Union[Dict[str, Any], str]:
+        """Run an openstack command on a control node.
+
+        Returns the loaded json if able, otherwise the raw output.
+        """
         # some commands don't have formatted output
         if "delete" in command:
             format_args = []
@@ -63,14 +69,26 @@ class OpenstackAPI:
             *format_args,
         ]
 
+        command = Command(
+            command=" ".join(full_command),
+            ok_codes=[0, 1, 2] if capture_errors else [0],
+        )
         try:
-            raw_result = (
-                next(self._control_node.run_sync(" ".join(full_command), is_safe=is_safe))[1].message().decode()
-            )
-        except StopIteration:
-            raw_result = "{}"
+            result = next(self._control_node.run_sync(command, is_safe=is_safe))
 
-        return json.loads(raw_result)
+        except StopIteration:
+            result = None
+
+        if result is None:
+            raw_result = "{}"
+        else:
+            raw_result = result[1].message().decode()
+
+        try:
+            return json.loads(raw_result)
+
+        except json.JSONDecodeError:
+            return raw_result
 
     def server_list(self) -> List[Dict[str, Any]]:
         """Retrieve the list of servers for the project."""
@@ -214,6 +232,24 @@ class OpenstackAPI:
                 return server_group
 
         raise NotFound(f"Unable to find a server group with name {name}")
+
+    def aggregate_remove_host(self, aggregate_name: OpenstackName, host_name: OpenstackName) -> None:
+        """Remove the given host from the aggregate."""
+        result = self._run("aggregate", "remove", "host", aggregate_name, host_name, capture_errors=True)
+        if "HTTP 404" in result:
+            raise NotFound(
+                f"Node {host_name} was not found in aggregate {aggregate_name}, did you try using the hostname "
+                "instead of the fqdn?"
+            )
+
+    def aggregate_add_host(self, aggregate_name: OpenstackName, host_name: OpenstackName) -> None:
+        """Add the given host to the aggregate."""
+        result = self._run("aggregate", "add", "host", aggregate_name, host_name, capture_errors=True)
+        if "HTTP 404" in result:
+            raise NotFound(
+                f"Node {host_name} was not found in aggregate {aggregate_name}, did you try using the hostname "
+                "instead of the fqdn?"
+            )
 
 
 def simple_create_file(
