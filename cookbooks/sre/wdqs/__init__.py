@@ -22,6 +22,6 @@ def wait_for_updater(prometheus, site, remote_host):
     host = remote_host.hosts[0].split(".")[0]
     query = "scalar(time() - blazegraph_lastupdated{instance='%s:9193'})" % host
     result = prometheus.query(query, site)
-    last_updated = int(result[1])
-    if last_updated > 1200:
-        raise ValueError("Let's wait for updater to catch up (last_updated of {} is too high)".format(last_updated))
+    lag = float(result[1])
+    if lag > 1200.0:
+        raise ValueError("Let's wait for updater to catch up (lag of {} is too high)".format(lag))
