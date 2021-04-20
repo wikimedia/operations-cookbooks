@@ -9,8 +9,8 @@ from datetime import datetime, timedelta
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.icinga import IcingaError
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
-__title__ = 'Downtime a single host and reboot it'
 logger = logging.getLogger(__name__)
 
 
@@ -40,6 +40,11 @@ class RebootSingleHost(CookbookBase):
         parser = argparse.ArgumentParser(description=self.__doc__,
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
         parser.add_argument('host', help='A single host to be rebooted (specified in Cumin query syntax)')
+        parser.add_argument('-r', '--reason', required=False,
+                            help=('The reason for the reboot. The current username and originating host are '
+                                  'automatically added.'))
+        parser.add_argument('-t', '--task-id',
+                            help='An optional task ID to refer in the downtime message (i.e. T12345).')
         parser.add_argument('--depool', help='Whether to run depool/pool on the server around reboots.',
                             action='store_true')
         return parser
@@ -60,7 +65,16 @@ class RebootSingleHostRunner(CookbookRunnerBase):
 
         self.icinga = spicerack.icinga()
         self.puppet = spicerack.puppet(self.remote_host)
-        self.reason = spicerack.admin_reason('Rebooting host')
+        self.reason = spicerack.admin_reason('Rebooting host' if not args.reason else args.reason)
+
+        if args.task_id is not None:
+            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+            self.task_id = args.task_id
+            self.message = ('Host rebooted by {owner} with reason: {reason}\n').format(
+                owner=self.reason.owner, reason=args.reason)
+        else:
+            self.phabricator = None
+
         self.depool = args.depool
 
     @retry(tries=20, delay=timedelta(seconds=3), backoff_mode='linear', exceptions=(IcingaError,))
@@ -80,6 +94,9 @@ class RebootSingleHostRunner(CookbookRunnerBase):
         """Reboot the host"""
         with self.icinga.hosts_downtimed(
                 self.remote_host.hosts, self.reason, duration=timedelta(minutes=20)):
+            if self.phabricator is not None:
+                self.phabricator.task_comment(self.task_id, self.message)
+
             if self.depool:
                 self.remote_host.run_async('depool')
                 logger.info('Waiting a 30 second grace period after depooling')
