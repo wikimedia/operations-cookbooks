@@ -343,8 +343,11 @@ class CephClusterSatus:
         if temp_status["health"]["status"] != "HEALTH_WARN":
             return False
 
-        current_flags = self.get_osdmap_set_flags()
-        return current_flags == {"noout", "norebalance"}
+        if "OSDMAP_FLAGS" in temp_status["health"]["checks"] and len(temp_status["health"]["checks"]) == 1:
+            current_flags = self.get_osdmap_set_flags()
+            return current_flags == {"noout", "norebalance"}
+
+        return False
 
     def check_healthy(self, consider_maintenance_healthy: bool = False) -> None:
         """Check if the cluster is healthy."""
@@ -401,9 +404,9 @@ class CephController:
 
     def set_osdmap_flag(self, flag_name: str) -> None:
         """Set one of the osdmap flags."""
-        set_osdmap_flag_result = next(
-            self._controlling_node.run_sync(f"ceph osd set {flag_name}")
-        )[1].message().decode()
+        set_osdmap_flag_result = (
+            next(self._controlling_node.run_sync(f"ceph osd set {flag_name}"))[1].message().decode()
+        )
         if set_osdmap_flag_result != f"{flag_name} is set":
             raise FlagSetError(f"Unable to set `{flag_name}` on the cluster: {set_osdmap_flag_result}")
 
@@ -438,7 +441,7 @@ class CephController:
                     "Cluster is not in a healthy status, putting it in maintenance might stop any recovery processes. "
                     "Continuing as --force was specified. Current status:\n%s"
                 ),
-                json.dumps(cluster_status.status_dict['health'], indent=4),
+                json.dumps(cluster_status.status_dict["health"], indent=4),
             )
 
         self.set_osdmap_flag(flag_name="noout")
@@ -463,7 +466,7 @@ class CephController:
                     "Cluster is not in a healthy status, getting it out of maintenance might have undesirable "
                     "state. Continuing as --force was specified. Current status: \n%s"
                 ),
-                json.dumps(cluster_status.status_dict['health'], indent=4),
+                json.dumps(cluster_status.status_dict["health"], indent=4),
             )
 
         if cluster_status.is_cluster_status_just_maintenance():
@@ -473,7 +476,7 @@ class CephController:
         else:
             LOGGER.info("Cluster already out of maintenance status.")
 
-    def wait_for_cluster_healthy(self, consider_maintenance_healthy: bool = False, timeout_seconds: int = 300) -> None:
+    def wait_for_cluster_healthy(self, consider_maintenance_healthy: bool = False, timeout_seconds: int = 600) -> None:
         """Wait until a cluster becomes healthy."""
         check_interval_seconds = 10
         start_time = time.time()

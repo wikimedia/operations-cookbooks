@@ -1,7 +1,7 @@
-"""WMCS Ceph - Upgrade all the mon nodes.
+"""WMCS Ceph - Upgrade all the osd nodes.
 
 Usage example:
-    cookbook wmcs.ceph.upgrade_mons \
+    cookbook wmcs.ceph.upgrade_osds \
         --controlling-node-fqdn cloudcephosd2001-dev.codfw.wmnet
 
 """
@@ -19,7 +19,7 @@ from cookbooks.wmcs.ceph.upgrade_ceph_node import UpgradeCephNode
 LOGGER = logging.getLogger(__name__)
 
 
-class UpgradeMons(CookbookBase):
+class UpgradeOsds(CookbookBase):
     """WMCS Ceph cookbook to set a cluster in maintenance."""
 
     title = __doc__
@@ -47,15 +47,15 @@ class UpgradeMons(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return UpgradeMonsRunner(
+        return UpgradeOsdsRunner(
             controlling_node_fqdn=args.controlling_node_fqdn,
             force=args.force,
             spicerack=self.spicerack,
         )
 
 
-class UpgradeMonsRunner(CookbookRunnerBase):
-    """Runner for UpgradeMons"""
+class UpgradeOsdsRunner(CookbookRunnerBase):
+    """Runner for UpgradeOsds"""
 
     def __init__(
         self,
@@ -74,14 +74,14 @@ class UpgradeMonsRunner(CookbookRunnerBase):
         controller.set_maintenance()
 
         upgrade_ceph_node_cookbook = UpgradeCephNode(spicerack=self.spicerack)
-        monitor_nodes = list(controller.get_nodes()["mon"].keys())
-        LOGGER.info("Upgrading and rebooting the nodes %s", str(monitor_nodes))
+        osd_nodes = list(controller.get_nodes()["osd"].keys())
+        LOGGER.info("Upgrading and rebooting the nodes %s", str(osd_nodes))
 
-        for index, monitor_node in enumerate(monitor_nodes):
-            LOGGER.info("Upgrading node %s, %d done, %d to go", monitor_node, index, len(monitor_nodes) - index)
+        for index, osd_node in enumerate(osd_nodes):
+            LOGGER.info("Upgrading node %s, %d done, %d to go", osd_node, index, len(osd_nodes) - index)
             args = [
                 "--to-upgrade-fqdn",
-                f"{monitor_node}.{controller.get_nodes_domain()}",
+                f"{osd_node}.{controller.get_nodes_domain()}",
                 "--skip-maintenance",
             ]
             if self.force:
@@ -92,9 +92,9 @@ class UpgradeMonsRunner(CookbookRunnerBase):
             ).run()
             LOGGER.info(
                 "Upgraded node %s, %d done, %d to go, waiting for cluster to stabilize...",
-                monitor_node,
+                osd_node,
                 index + 1,
-                len(monitor_nodes) - index - 1,
+                len(osd_nodes) - index - 1,
             )
             controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
             LOGGER.info("Cluster stable, continuing")
