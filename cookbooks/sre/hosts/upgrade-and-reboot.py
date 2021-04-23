@@ -37,13 +37,15 @@ def argument_parser():
     parser.add_argument('--repool-cmd', required=True, help='Command used to repool the service (eg: "pool").')
     parser.add_argument('--sleep', type=int, default=60,
                         help='Sleep in seconds to wait after the depool before proceeding. [optional, default=60]')
+    parser.add_argument('-S', '--use-sudo', required=False, action="store_true",
+                        help='If set will use sudo when sshing to the host.')
 
     return parser
 
 
 def run(args, spicerack):
     """Required by Spicerack API."""
-    remote_host = spicerack.remote().query(args.host)
+    remote_host = spicerack.remote().query(args.host, use_sudo=args.use_sudo)
     icinga = spicerack.icinga()
     puppet = spicerack.puppet(remote_host)
     reason = spicerack.admin_reason('Software upgrade and reboot')
