@@ -7,9 +7,12 @@ import getpass
 import json
 import logging
 import re
+import time
 import socket
+from copy import deepcopy
+from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 from cumin.transports import Command
 from spicerack.remote import Remote, RemoteHosts
@@ -277,6 +280,224 @@ class OpenstackAPI:
                 f"Got no result when running {command} on {self.control_node_fqdn}, was expecting some output at "
                 "least."
             )
+
+
+class CephException(Exception):
+    """Parent exception for all ceph related issues."""
+
+
+class ClusterUnhealthy(CephException):
+    """Risen when trying to act on an unhealthy cluster."""
+
+
+class FlagSetError(CephException):
+    """Risen when something failed when setting a flag in the cluster."""
+
+
+class FlagUnSetError(CephException):
+    """Risen when something failed when unsetting a flag in the cluster."""
+
+
+@dataclass(frozen=True)
+class CephClusterSatus:
+    """Status of a CEPH cluster."""
+
+    status_dict: Dict[str, Any]
+
+    def get_osdmap_set_flags(self) -> Set[str]:
+        """Get osdmap set flags."""
+        osd_maps = self.status_dict["health"]["checks"].get("OSDMAP_FLAGS")
+        if not osd_maps:
+            return []
+
+        raw_flags_line = osd_maps["summary"]["message"]
+        if "flag" not in raw_flags_line:
+            return []
+
+        # ex: "noout,norebalance flag(s) set"
+        flags = raw_flags_line.split(" ")[0].split(",")
+        return set(flags)
+
+    @staticmethod
+    def _filter_out_octopus_upgrade_warns(status: Dict[str, Any]) -> Dict[str, Any]:
+        # ignore temporary alert for octopus upgrade
+        # https://docs.ceph.com/en/latest/security/CVE-2021-20288/#recommendations
+        new_status = deepcopy(status)
+        if "AUTH_INSECURE_GLOBAL_ID_RECLAIM" in new_status["health"]["checks"]:
+            del new_status["health"]["checks"]["AUTH_INSECURE_GLOBAL_ID_RECLAIM"]
+
+        if "AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED" in new_status["health"]["checks"]:
+            del new_status["health"]["checks"]["AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED"]
+
+        if len(new_status["health"]["checks"]) == 0:
+            new_status["health"]["status"] = "HEALTH_OK"
+
+        return new_status
+
+    def is_cluster_status_just_maintenance(self) -> bool:
+        """Return if the cluster is in HEALTH_WARN only because it's in maintenance status."""
+        # ignore temporary alert for octopus upgrade
+        # https://docs.ceph.com/en/latest/security/CVE-2021-20288/#recommendations
+        temp_status = self._filter_out_octopus_upgrade_warns(self.status_dict)
+
+        if temp_status["health"]["status"] != "HEALTH_WARN":
+            return False
+
+        current_flags = self.get_osdmap_set_flags()
+        return current_flags == {"noout", "norebalance"}
+
+    def check_healthy(self, consider_maintenance_healthy: bool = False) -> None:
+        """Check if the cluster is healthy."""
+        # ignore temporary alert for octopus upgrade
+        # https://docs.ceph.com/en/latest/security/CVE-2021-20288/#recommendations
+        temp_status = self._filter_out_octopus_upgrade_warns(self.status_dict)
+
+        if temp_status["health"]["status"] == "HEALTH_OK":
+            return
+
+        if consider_maintenance_healthy and self.is_cluster_status_just_maintenance():
+            return
+
+        if temp_status["health"]["status"] != "HEALTH_OK":
+            raise ClusterUnhealthy(
+                f"The cluster is currently in an unhealthy status: \n{json.dumps(self.status_dict['health'], indent=4)}"
+            )
+
+
+class CephController:
+    """Controller for a CEPH cluster."""
+
+    def __init__(self, remote: Remote, controlling_node_fqdn: str):
+        """Init."""
+        self._remote = remote
+        self._controlling_node_fqdn = controlling_node_fqdn
+        self._controlling_node = self._remote.query(f"D{{{self._controlling_node_fqdn}}}", use_sudo=True)
+
+    def get_nodes(self) -> Dict[str, Any]:
+        """Change the current monitor being used to interact with the cluster for another one."""
+        # There's usually a couple empty lines before the json data
+        raw_output = next(self._controlling_node.run_sync("ceph node ls -f json"))[1].message().decode()
+        return json.loads(raw_output.splitlines()[-1])
+
+    def get_nodes_domain(self) -> str:
+        """Get the network domain for the nodes in the cluster."""
+        return self._controlling_node_fqdn.split(".", 1)[-1]
+
+    def change_controlling_node(self) -> None:
+        """Change the current node being used to interact with the cluster for another one."""
+        current_monitor_name = self._controlling_node_fqdn.split(".", 1)[0]
+        nodes = self.get_nodes()
+        another_monitor = next(
+            node_host for node_name, node_host in nodes["mon"].items() if node_name != current_monitor_name
+        )[0]
+        self._controlling_node_fqdn = f"{another_monitor}.{self.get_nodes_domain()}"
+        self._controlling_node = self._remote.query(f"D{{{self._controlling_node_fqdn}}}", use_sudo=True)
+        LOGGER.info("Changed to node %s to control the CEPH cluster.", self._controlling_node_fqdn)
+
+    def get_cluster_status(self) -> CephClusterSatus:
+        """Get the current cluster status."""
+        raw_cluster_status = next(self._controlling_node.run_sync("ceph status -f json"))[1].message().decode()
+        return CephClusterSatus(status_dict=json.loads(raw_cluster_status))
+
+    def set_osdmap_flag(self, flag_name: str) -> None:
+        """Set one of the osdmap flags."""
+        set_osdmap_flag_result = next(
+            self._controlling_node.run_sync(f"ceph osd set {flag_name}")
+        )[1].message().decode()
+        if set_osdmap_flag_result != f"{flag_name} is set":
+            raise FlagSetError(f"Unable to set `{flag_name}` on the cluster: {set_osdmap_flag_result}")
+
+    def unset_osdmap_flag(self, flag_name: str) -> None:
+        """Unset one of the osdmap flags."""
+        unset_osdmap_flag_result = (
+            next(self._controlling_node.run_sync(f"ceph osd unset {flag_name}"))[1].message().decode()
+        )
+        if unset_osdmap_flag_result != f"{flag_name} is unset":
+            raise FlagSetError(f"Unable to unset `{flag_name}` on the cluster: {unset_osdmap_flag_result}")
+
+    def set_maintenance(self, force: bool = False) -> None:
+        """Set maintenance."""
+        cluster_status = self.get_cluster_status()
+        if cluster_status.is_cluster_status_just_maintenance():
+            LOGGER.info("Cluster already in maintenance status.")
+            return
+
+        try:
+            cluster_status.check_healthy()
+
+        except ClusterUnhealthy:
+            if not force:
+                LOGGER.warning(
+                    "Cluster is not in a healthy status, putting it in maintenance might stop any recovery processes. "
+                    "Use --force to ignore this message and set the cluster in maintenance mode anyhow."
+                )
+                raise
+
+            LOGGER.info(
+                (
+                    "Cluster is not in a healthy status, putting it in maintenance might stop any recovery processes. "
+                    "Continuing as --force was specified. Current status:\n%s"
+                ),
+                json.dumps(cluster_status.status_dict['health'], indent=4),
+            )
+
+        self.set_osdmap_flag(flag_name="noout")
+        self.set_osdmap_flag(flag_name="norebalance")
+
+    def unset_maintenance(self, force: bool = False) -> None:
+        """Unset maintenance."""
+        cluster_status = self.get_cluster_status()
+        try:
+            cluster_status.check_healthy(consider_maintenance_healthy=True)
+
+        except ClusterUnhealthy:
+            if not force:
+                LOGGER.warning(
+                    "Cluster is not in a healthy status, getting it out of maintenance might have undesirable "
+                    "effects. Use --force to ignore this message and unset the cluster maintenance mode anyhow."
+                )
+                raise
+
+            LOGGER.info(
+                (
+                    "Cluster is not in a healthy status, getting it out of maintenance might have undesirable "
+                    "state. Continuing as --force was specified. Current status: \n%s"
+                ),
+                json.dumps(cluster_status.status_dict['health'], indent=4),
+            )
+
+        if cluster_status.is_cluster_status_just_maintenance():
+            self.unset_osdmap_flag(flag_name="noout")
+            self.unset_osdmap_flag(flag_name="norebalance")
+
+        else:
+            LOGGER.info("Cluster already out of maintenance status.")
+
+    def wait_for_cluster_healthy(self, consider_maintenance_healthy: bool = False, timeout_seconds: int = 300) -> None:
+        """Wait until a cluster becomes healthy."""
+        check_interval_seconds = 10
+        start_time = time.time()
+        cur_time = start_time
+        while cur_time - start_time < timeout_seconds:
+            try:
+                self.get_cluster_status().check_healthy(consider_maintenance_healthy=consider_maintenance_healthy)
+                return
+
+            except ClusterUnhealthy:
+                LOGGER.info(
+                    "Cluster still not healthy, waiting another %d (timeout=%d)...",
+                    check_interval_seconds,
+                    timeout_seconds,
+                )
+
+            time.sleep(check_interval_seconds)
+            cur_time = time.time()
+
+        cluster_status = self.get_cluster_status()
+        raise ClusterUnhealthy(
+            f"Waited {timeout_seconds} for the cluster to become healthy, but it never did, current state:\n"
+            f"\n{json.dumps(cluster_status.status_dict['health'], indent=4)}"
+        )
 
 
 def simple_create_file(
