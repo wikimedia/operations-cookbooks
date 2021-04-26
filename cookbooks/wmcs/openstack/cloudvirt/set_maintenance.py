@@ -10,9 +10,9 @@ import argparse
 import logging
 from typing import Optional
 
-from spicerack import Spicerack, ICINGA_DOMAIN
+from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.remote import RemoteHosts
+from spicerack.icinga import Icinga, ICINGA_DOMAIN
 
 from cookbooks.wmcs import OpenstackAPI, NotFound
 
@@ -73,30 +73,10 @@ class SetMaintenanceRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point."""
-        my_spicerack = self.spicerack
-
-        class SudoIcingaSpicerackWrapper(Spicerack):
-            """Dummy wrapper class to allow sudo icinga."""
-
-            def __init__(self):  # pylint: disable-msg=super-init-not-called
-                """Init."""
-
-            @property
-            def icinga_master_host(self) -> RemoteHosts:
-                """Icinga master host."""
-                new_host = self.remote().query(
-                    query_string=self.dns().resolve_cname(ICINGA_DOMAIN),
-                    use_sudo=True,
-                )
-                return new_host
-
-            def __getattr__(self, what):
-                return getattr(my_spicerack, what)
-
-            def __setattr__(self, what, value):
-                return setattr(my_spicerack, what, value)
-
-        SudoIcingaSpicerackWrapper().icinga().downtime_hosts(
+        icinga = Icinga(
+            icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True)
+        )
+        icinga.downtime_hosts(
             hosts=[self.fqdn],
             reason=self.spicerack.admin_reason('Setting maintenance mode.')
         )
