@@ -15,14 +15,24 @@ from spicerack.remote import Remote, RemoteHosts
 LOGGER = logging.getLogger(__name__)
 PHABRICATOR_BOT_CONFIG_FILE = "/etc/phabricator_ops-monitoring-bot.conf"
 DIGIT_RE = re.compile("([0-9]+)")
+MINUTES_IN_HOUR = 60
+SECONDS_IN_MINUTE = 60
 
 
 OpenstackID = str
 OpenstackName = str
 
 
-class NotFound(Exception):
+class OpenstackError(Exception):
+    """Parent class for all openstack related errors."""
+
+
+class NotFound(OpenstackError):
     """Thrown when trying to get an element from Openstack gets no results."""
+
+
+class MigrationError(OpenstackError):
+    """Thrown when there's an issue with migration."""
 
 
 class RuleDirection(Enum):
@@ -249,6 +259,21 @@ class OpenstackAPI:
             raise NotFound(
                 f"Node {host_name} was not found in aggregate {aggregate_name}, did you try using the hostname "
                 "instead of the fqdn?"
+            )
+
+    def drain_hypervisor(self, hypervisor_name: OpenstackName) -> None:
+        """Drain a hypervisor."""
+        command = Command(
+            command=f"bash -c 'source /root/novaenv.sh && wmcs-drain-hypervisor {hypervisor_name}'",
+            timeout=SECONDS_IN_MINUTE * MINUTES_IN_HOUR * 2,
+        )
+        try:
+            next(self._control_node.run_sync(command, is_safe=False))
+
+        except StopIteration:
+            raise MigrationError(
+                f"Got no result when running {command} on {self.control_node_fqdn}, was expecting some output at "
+                "least."
             )
 
 
