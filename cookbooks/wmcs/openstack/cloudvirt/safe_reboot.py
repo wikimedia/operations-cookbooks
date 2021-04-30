@@ -1,12 +1,15 @@
-"""WMCS openstack - Drain a cloudvirt node
+"""WMCS openstack - Safely reboot a cloudvirt node.
 
-Usage example: wmcs.openstack.drain_cloudvirt \
+This icludes putting in maintenance, draining, and unsetting maintenance.
+
+Usage example: wmcs.openstack.cloudvirt.safe_reboot \
     --control-node-fqdn cloudcontrol1003.eqiad.wmnet
     --fqdn cloudvirt1013.eqiad.wmnet
 
 """
 # pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
+from datetime import datetime
 import logging
 from typing import Optional
 
@@ -14,13 +17,14 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import OpenstackAPI
-from cookbooks.wmcs.openstack.cloudvirt.set_maintenance import SetMaintenance
+from cookbooks.wmcs.openstack.cloudvirt.drain import Drain
+from cookbooks.wmcs.openstack.cloudvirt.unset_maintenance import UnsetMaintenance
 
 LOGGER = logging.getLogger(__name__)
 
 
-class DrainCloudvirt(CookbookBase):
-    """WMCS Openstack cookbook to drain a cloudvirt node."""
+class SafeReboot(CookbookBase):
+    """WMCS Openstack cookbook to safe reboot a cloudvirt node."""
 
     __title__ = __doc__
 
@@ -39,22 +43,22 @@ class DrainCloudvirt(CookbookBase):
         parser.add_argument(
             "--fqdn",
             required=True,
-            help="FQDN of the cloudvirt to drain.",
+            help="FQDN of the cloudvirt to SafeReboot.",
         )
 
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return DrainCloudvirtRunner(
+        return SafeRebootRunner(
             fqdn=args.fqdn,
             control_node_fqdn=args.control_node_fqdn,
             spicerack=self.spicerack,
         )
 
 
-class DrainCloudvirtRunner(CookbookRunnerBase):
-    """Runner for DrainCloudvirt"""
+class SafeRebootRunner(CookbookRunnerBase):
+    """Runner for SafeReboot"""
 
     def __init__(
         self,
@@ -73,9 +77,9 @@ class DrainCloudvirtRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        set_maintenance_cookbook = SetMaintenance(spicerack=self.spicerack)
-        set_maintenance_cookbook.get_runner(
-            args=set_maintenance_cookbook.argument_parser().parse_args(
+        drain_cookbook = Drain(spicerack=self.spicerack)
+        drain_cookbook.get_runner(
+            args=drain_cookbook.argument_parser().parse_args(
                 args=[
                     "--control-node-fqdn",
                     self.control_node_fqdn,
@@ -84,5 +88,21 @@ class DrainCloudvirtRunner(CookbookRunnerBase):
                 ],
             )
         ).run()
-        hypervisor_name = self.fqdn.split('.', 1)[0]
-        self.openstack_api.drain_hypervisor(hypervisor_name=hypervisor_name)
+
+        remote_host = self.spicerack.remote().query(f"D{{{self.fqdn}}}", use_sudo=True)
+        reboot_time = datetime.utcnow()
+        LOGGER.info("Rebooting and waiting for %s up", remote_host)
+        remote_host.reboot()
+        remote_host.wait_reboot_since(reboot_time)
+
+        unset_maintenance_cookbook = UnsetMaintenance(spicerack=self.spicerack)
+        unset_maintenance_cookbook.get_runner(
+            args=unset_maintenance_cookbook.argument_parser().parse_args(
+                args=[
+                    "--control-node-fqdn",
+                    self.control_node_fqdn,
+                    "--fqdn",
+                    self.fqdn,
+                ],
+            )
+        ).run()
