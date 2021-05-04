@@ -10,7 +10,6 @@ Usage example:
 # pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import base64
-import json
 import logging
 import time
 from typing import List, Optional
@@ -89,7 +88,7 @@ def _fix_apiserver_yaml(node: RemoteHosts, etcd_members: List[str]):
                 return
 
             command_args[index] = new_etcd_members_arg
-            apiserver_config_str = json.dumps(apiserver_config)
+            apiserver_config_str = yaml.dump(apiserver_config)
             simple_create_file(
                 remote_path=apiserver_config_file,
                 dst_node=node,
@@ -120,12 +119,12 @@ def _remove_node_from_kubeadm_configmap(k8s_control_node: RemoteHosts, etcd_fqdn
         LOGGER.info("Kubeadm configmap %s/%s was already ok.", namespace, configmap)
         return ""
 
-    kubeadm_config["data"]["ClusterConfiguration"] = json.dumps(cluster_config)
+    kubeadm_config["data"]["ClusterConfiguration"] = yaml.dump(cluster_config)
     kubeadm_config["metadata"] = {
         "name": configmap,
         "namespace": namespace,
     }
-    kubeadm_config_str = json.dumps(kubeadm_config)
+    kubeadm_config_str = yaml.dump(kubeadm_config)
     # avoid quoting/bash escaping issues
     kubeadm_config_base64 = base64.b64encode(kubeadm_config_str.encode("utf8"))
     return (
