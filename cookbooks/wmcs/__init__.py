@@ -3,9 +3,11 @@
 """Cloud Services Cookbooks"""
 __title__ = __doc__
 import base64
+import getpass
 import json
 import logging
 import re
+import socket
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Union
 
@@ -305,3 +307,33 @@ def simple_create_file(
 def natural_sort_key(element: str) -> List[Union[str, int]]:
     """Changes "name-12.something.com" into ["name-", 12, ".something.com"]."""
     return [int(mychunk) if mychunk.isdigit() else mychunk for mychunk in DIGIT_RE.split(element)]
+
+
+def dologmsg(
+    message: str,
+    project: str,
+    task_id: Optional[str] = None,
+    channel: str = "#wikimedia-cloud",
+    host: str = "wm-bot.wm-bot.wmcloud.org",
+    port: int = 64834,
+):
+    """Log a message to the given irc channel for stashbot to pick up and register in SAL."""
+    postfix = f"- cookbook ran by {getpass.getuser()}@{socket.gethostname()}"
+    if task_id is not None:
+        postfix = f"({task_id}) {postfix}"
+
+    payload = f"{channel} !log {project} {message} {postfix}\n"
+    # try all the possible addresses for that host (ip4/ip6/etc.)
+    for family, s_type, proto, _, sockaddr in socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP):
+        my_socket = socket.socket(family, s_type, proto)
+        my_socket.connect(sockaddr)
+        try:
+            my_socket.send(payload.encode("utf-8"))
+            return
+        # pylint: disable=broad-except
+        except Exception as error:
+            LOGGER.warning("Error trying to send a message to %s: %s", str(sockaddr), str(error))
+        finally:
+            my_socket.close()
+
+    raise Exception(f"Unable to send log message to {host}:{port}, see previous logs for details")
