@@ -71,4 +71,4 @@ class RemoveDowntimeRunner(CookbookRunnerBase):
     def run(self):
         """Required by Spicerack API."""
         logging.info('Removing downtime for %s', self.hosts)
-        self.icinga_hosts.remove_downtime(self.hosts)
+        self.icinga_hosts.remove_downtime()
