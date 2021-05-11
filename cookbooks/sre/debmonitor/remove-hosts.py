@@ -3,8 +3,8 @@ import argparse
 import logging
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from wmflib.interactive import confirm_on_failure
-
+from spicerack.remote import NodeSet
+from wmflib.interactive import confirm_on_failure, ask_confirmation
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,14 @@ class RemoveHostsRunner(CookbookRunnerBase):
         self.removed_hosts = 0
         self.username = spicerack.username
         if not self.hosts:
-            raise RuntimeError('No host found for query "{query}"'.format(query=args.query))
+            query_hosts = NodeSet(args.query)
+            ask_confirmation(
+                'Your query did not match any hosts. This can happen if the host\n'
+                'record was already removed from Puppetdb, but persists in\n'
+                'DebMonitor. Do you want to proceed? The following {l} hosts will be\n'
+                'affected: {query_hosts}\n'.
+                format(l=len(query_hosts), query_hosts=query_hosts))
+            self.hosts = query_hosts
 
         if args.task_id is not None:
             self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
