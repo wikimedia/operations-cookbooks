@@ -28,6 +28,7 @@ KERBEROS_KADMIN_CUMIN_ALIAS = 'A:kerberos-kadmin'
 PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'
 PUPPET_PRIVATE_REPO_PATH = '/srv/private'
 COMMON_STEPS_KEY = 'COMMON_STEPS'
+DEPLOYMENT_CHARTS_REPO_PATH = '/srv/deployment-charts'
 
 
 def check_patterns_in_repo(host_paths, patterns):
@@ -382,6 +383,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
             (self.puppet_master, PUPPET_REPO_PATH),
             (self.puppet_master, PUPPET_PRIVATE_REPO_PATH),
             (self.deployment_host, MEDIAWIKI_CONFIG_REPO_PATH),
+            (self.deployment_host, DEPLOYMENT_CHARTS_REPO_PATH),
         ), self.patterns)
 
         find_kerberos_credentials(self.kerberos_kadmin, self.decom_hosts)
