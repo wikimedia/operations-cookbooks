@@ -40,12 +40,11 @@ def check_patterns_in_repo(host_paths, patterns):
         patterns (sequence): a sequence of patterns to check.
 
     """
-    grep_command = "git grep -E '({patterns})'".format(patterns='|'.join(patterns))
+    grep_command = "git -C '{{path}}' grep -E '({patterns})'".format(patterns='|'.join(patterns))
     ask = False
     for remote_host, path in host_paths:
         logger.info('Looking for matches in %s:%s', remote_host, path)
-        command = 'cd {path} && {grep}'.format(path=path, grep=grep_command)
-        for _nodeset, _output in remote_host.run_sync(Command(command, ok_codes=[])):
+        for _nodeset, _output in remote_host.run_sync(Command(grep_command.format(path=path), ok_codes=[])):
             ask = True
 
     if ask:

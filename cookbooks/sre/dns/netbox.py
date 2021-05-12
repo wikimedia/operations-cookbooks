@@ -111,13 +111,14 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
 
     passive_netbox_hosts = remote.query(str(netbox_hosts.hosts - netbox_host.hosts))
     logger.info('Updating the Netbox passive copies of the repository on %s', passive_netbox_hosts)
-    passive_netbox_hosts.run_sync('cd {path} && runuser -u {user} -- git fetch {host} master:master'.format(
+    passive_netbox_hosts.run_sync('runuser -u {user} -- git -C "{path}" fetch {host} master:master'.format(
         path=NETBOX_BARE_REPO_PATH, user=NETBOX_USER, host=netbox_hostname))
 
     authdns_hosts = remote.query(AUTHDNS_HOSTS_QUERY)
     logger.info('Updating the authdns copies of the repository on %s', authdns_hosts)
-    authdns_hosts.run_sync('cd {path} && runuser -u {user} -- git fetch && git merge --ff-only {sha1}'.format(
-        path=AUTHDNS_NETBOX_CHECKOUT_PATH, user=AUTHDNS_USER, sha1=sha1))
+    authdns_hosts.run_sync(
+        'runuser -u {user} -- git -C "{path}" fetch && git -C "{path}" merge --ff-only {sha1}'.format(
+            path=AUTHDNS_NETBOX_CHECKOUT_PATH, user=AUTHDNS_USER, sha1=sha1))
 
     if args.skip_authdns_update:
         logger.warning(('ATTENTION! Skipping deploy of the updated zonefiles. The next manual authdns-update or '
