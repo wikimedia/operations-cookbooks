@@ -78,9 +78,11 @@ class DeployRunner(CookbookRunnerBase):
 
     def run(self):
         """Required by Spicerack API."""
-        self.deployment_host.run_sync(f'/usr/bin/git -C "/srv/deployment/{self.project}/deploy" update-server-info')
+        self.deployment_host.run_sync(
+            f'runuser -u mwdeploy -- /usr/bin/git -C "/srv/deployment/{self.project}/deploy" update-server-info')
         for remote_host in self.remote_hosts.split(len(self.remote_hosts)):  # Do one host at a time
-            confirm_on_failure(remote_host.run_sync, f'/usr/local/bin/python-deploy-venv {self.project}')
+            confirm_on_failure(remote_host.run_sync,
+                               f'runuser -u deploy-{self.project} -- /usr/local/bin/python-deploy-venv {self.project}')
 
         if self.phabricator is not None:
             self.phabricator.task_comment(self.task_id, f'Deployed {self.message}')
