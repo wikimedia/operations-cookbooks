@@ -304,8 +304,8 @@ class DecommissionHostRunner(CookbookRunnerBase):
                 can_connect = True
             except RemoteExecutionError as e:
                 self.spicerack.actions[fqdn].failure(
-                    '**Unable to connect to the host, wipe of bootloaders will not be performed**: {e}'
-                    .format(e=e))
+                    '**Unable to connect to the host, wipe of swraid, partition-table and '
+                    'filesystem signatures will not be performed**: {e}'.format(e=e))
                 can_connect = False
 
             if can_connect:
@@ -314,11 +314,11 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     remote_host.run_sync((r"lsblk --all --output 'NAME,TYPE' --paths | "
                                           r"awk '/^\/.* disk$/{ print $1 }' | "
                                           r"xargs -I % bash -c '/sbin/wipefs --all --force %*'"))
-                    self.spicerack.actions[fqdn].success('Wiped bootloaders')
+                    self.spicerack.actions[fqdn].success('Wiped all swraid, partition-table and filesystem signatures')
                 except RemoteExecutionError as e:
                     self.spicerack.actions[fqdn].failure(
-                        '**Failed to wipe bootloaders, manual intervention required to make '
-                        'it unbootable**: {e}'.format(e=e))
+                        '**Failed to wipe swraid, partition-table and filesystem signatures, manual '
+                        'intervention required to make it unbootable**: {e}'.format(e=e))
 
             try:
                 ipmi.command(mgmt, ['chassis', 'power', 'off'])
