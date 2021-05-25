@@ -103,7 +103,7 @@ def run(args, spicerack):
 
     # Safety checks
     if hdfs_nn_sleep < 600:
-        ask_confirmation('The HDFS Namenode restart sleep is less than 120s, are you sure?')
+        ask_confirmation('The HDFS Namenode restart sleep is less than 600s, are you sure?')
     if yarn_rm_sleep < 60:
         ask_confirmation('The Yarn Resourcemanager restart sleep is less than 60s, are you sure?')
 
