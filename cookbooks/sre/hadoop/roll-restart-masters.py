@@ -47,25 +47,25 @@ def print_hadoop_service_state(
     if hdfs:
         logger.info("\nMaster status for HDFS:")
         remote_handle.run_sync(
-            'sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs haadmin -getServiceState ' +
+            'kerberos-run-command hdfs hdfs haadmin -getServiceState ' +
             hadoop_master_service_name)
 
     if yarn:
         logger.info("\nMaster status for Yarn:")
         remote_handle.run_sync(
-            'sudo -u hdfs kerberos-run-command hdfs yarn rmadmin -getServiceState ' +
+            'kerberos-run-command yarn yarn rmadmin -getServiceState ' +
             hadoop_master_service_name)
 
     if hdfs:
         logger.info("\nStandby status for HDFS:")
         remote_handle.run_sync(
-            'sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs haadmin -getServiceState ' +
+            'kerberos-run-command hdfs hdfs haadmin -getServiceState ' +
             hadoop_standby_service_name)
 
     if yarn:
         logger.info("\nStandby status for Yarn:")
         remote_handle.run_sync(
-            'sudo -u hdfs kerberos-run-command hdfs yarn rmadmin -getServiceState ' +
+            'kerberos-run-command yarn yarn rmadmin -getServiceState ' +
             hadoop_standby_service_name)
 
 
@@ -75,7 +75,7 @@ def run_hdfs_namenode_failover(remote_handle, active_hadoop_service, standby_had
         "Run manual HDFS Namenode failover from %s to %s.",
         active_hadoop_service, standby_hadoop_service)
     remote_handle.run_sync(
-        "sudo -u hdfs kerberos-run-command hdfs /usr/bin/hdfs haadmin -failover {} {}"
+        "kerberos-run-command hdfs hdfs haadmin -failover {} {}"
         .format(active_hadoop_service, standby_hadoop_service))
 
 
