@@ -3,3 +3,4 @@ host=gerrit.wikimedia.org
 port=29418
 project=operations/cookbooks.git
 track=1
+defaultbranch=wmcs
