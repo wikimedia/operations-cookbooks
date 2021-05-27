@@ -1,7 +1,7 @@
 """WMCS openstack - set a cloudvirt node in maintenance
 
 Usage example: wmcs.openstack.cloudvirt.set_maintenance \
-    --control-node-fqdn cloudcontrol1003.eqiad.wmnet
+    --control-node-fqdn cloudcontrol1003.wikimedia.org
     --fqdn cloudvirt1013.eqiad.wmnet
 
 """
@@ -33,7 +33,8 @@ class SetMaintenance(CookbookBase):
         )
         parser.add_argument(
             "--control-node-fqdn",
-            required=True,
+            required=False,
+            default="cloudcontrol1003.wikimedia.org",
             help="FQDN of the control node to orchestrate from.",
         )
         parser.add_argument(
