@@ -5,7 +5,12 @@ from spicerack.ganeti import CLUSTERS_AND_ROWS
 
 
 def get_locations():
-    """Generate short location names with datacenter and row for all Ganeti clusters."""
+    """Generate short location names with datacenter and row for all Ganeti clusters.
+
+    In the edge DCs the Ganeti servers are in a single row (and the location name is
+    identical to the data centre name), but for eqiad/codfw it's a combination of
+    DC name and row, e.g. "eqiad_D".
+    """
     locations = {}
     for cluster, rows in CLUSTERS_AND_ROWS.items():
         dc = cluster.split('.')[2]
