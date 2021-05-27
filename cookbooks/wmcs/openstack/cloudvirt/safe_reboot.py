@@ -100,6 +100,8 @@ class SafeRebootRunner(CookbookRunnerBase):
                     self.control_node_fqdn,
                     "--fqdn",
                     self.fqdn,
+                    "--task-id",
+                    self.task_id,
                 ],
             )
         ).run()
@@ -118,6 +120,8 @@ class SafeRebootRunner(CookbookRunnerBase):
                     self.control_node_fqdn,
                     "--fqdn",
                     self.fqdn,
+                    "--task-id",
+                    self.task_id,
                 ],
             )
         ).run()

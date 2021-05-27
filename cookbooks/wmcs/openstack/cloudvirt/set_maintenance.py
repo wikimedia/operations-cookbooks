@@ -14,7 +14,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.icinga import Icinga, ICINGA_DOMAIN
 
-from cookbooks.wmcs import OpenstackAPI, NotFound
+from cookbooks.wmcs import OpenstackAPI, NotFound, dologmsg
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +42,12 @@ class SetMaintenance(CookbookBase):
             required=True,
             help="FQDN of the cloudvirt to set in maintenance.",
         )
+        parser.add_argument(
+            "--task-id",
+            required=False,
+            default=None,
+            help="Id of the task related to this reboot (ex. T123456)",
+        )
 
         return parser
 
@@ -50,6 +56,7 @@ class SetMaintenance(CookbookBase):
         return SetMaintenanceRunner(
             fqdn=args.fqdn,
             control_node_fqdn=args.control_node_fqdn,
+            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
@@ -62,10 +69,12 @@ class SetMaintenanceRunner(CookbookRunnerBase):
         fqdn: str,
         control_node_fqdn: str,
         spicerack: Spicerack,
+        task_id: Optional[str] = None,
     ):
         """Init."""
         self.fqdn = fqdn
         self.control_node_fqdn = control_node_fqdn
+        self.task_id = task_id
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
             control_node_fqdn=control_node_fqdn,
@@ -74,6 +83,11 @@ class SetMaintenanceRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point."""
+        dologmsg(
+            project="admin",
+            message=f"Setting cloudvirt '{self.fqdn}' maintenance.",
+            task_id=self.task_id,
+        )
         icinga = Icinga(
             icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True)
         )
@@ -92,4 +106,9 @@ class SetMaintenanceRunner(CookbookRunnerBase):
         except NotFound as error:
             logging.info("%s", error)
 
+        dologmsg(
+            project="admin",
+            message=f"Set cloudvirt '{self.fqdn}' maintenance.",
+            task_id=self.task_id,
+        )
         LOGGER.info("Host %s now in maintenance mode. No new VMs will be scheduled in it.", self.fqdn)
