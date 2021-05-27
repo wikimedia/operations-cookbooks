@@ -85,5 +85,7 @@ class LiveUpgradeRunner(CookbookRunnerBase):
         node_to_upgrade.run_sync("run-puppet-agent")
         node_to_upgrade.run_sync("systemctl restart nova-compute")
         node_to_upgrade.run_sync("journalctl -n 500")
-        LOGGER.info("Those were the last lines of the journal, make sure everyting looks ok before continuing.")
+        LOGGER.info(
+            "Those were the last lines of the journal, make sure everyting looks ok before upgrading the next host."
+        )
         LOGGER.info(f"{self.fqdn_to_upgrade} Done!!! \\o/")
