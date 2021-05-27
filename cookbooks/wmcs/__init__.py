@@ -539,7 +539,7 @@ def dologmsg(
     task_id: Optional[str] = None,
     channel: str = "#wikimedia-cloud",
     host: str = "wm-bot.wm-bot.wmcloud.org",
-    port: int = 64834,
+    port: int = 64835,
 ):
     """Log a message to the given irc channel for stashbot to pick up and register in SAL."""
     postfix = f"- cookbook ran by {getpass.getuser()}@{socket.gethostname()}"
