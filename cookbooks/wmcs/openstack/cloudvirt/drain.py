@@ -1,7 +1,7 @@
 """WMCS openstack - Drain a cloudvirt node
 
 Usage example: wmcs.openstack.cloudvirt.drain \
-    --control-node-fqdn cloudcontrol1003.eqiad.wmnet
+    --control-node-fqdn cloudcontrol1003.wikimedia.org \
     --fqdn cloudvirt1013.eqiad.wmnet
 
 """
@@ -33,7 +33,8 @@ class Drain(CookbookBase):
         )
         parser.add_argument(
             "--control-node-fqdn",
-            required=True,
+            required=False,
+            default="cloudcontrol1003.wikimedia.org",
             help="FQDN of the control node to orchestrate from.",
         )
         parser.add_argument(

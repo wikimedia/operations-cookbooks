@@ -3,7 +3,7 @@
 This icludes putting in maintenance, draining, and unsetting maintenance.
 
 Usage example: wmcs.openstack.cloudvirt.safe_reboot \
-    --control-node-fqdn cloudcontrol1003.eqiad.wmnet
+    --control-node-fqdn cloudcontrol1003.wikimedia.org \
     --fqdn cloudvirt1013.eqiad.wmnet
 
 """
@@ -37,7 +37,8 @@ class SafeReboot(CookbookBase):
         )
         parser.add_argument(
             "--control-node-fqdn",
-            required=True,
+            required=False,
+            default="cloudcontrol1003.wikimedia.org",
             help="FQDN of the control node to orchestrate from.",
         )
         parser.add_argument(
