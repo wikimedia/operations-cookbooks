@@ -87,10 +87,6 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
         icinga = Icinga(
             icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True)
         )
-        icinga.downtime_hosts(
-            hosts=[self.fqdn],
-            reason=self.spicerack.admin_reason('Setting maintenance mode.')
-        )
         icinga.remove_downtime(
             hosts=[self.fqdn],
         )
