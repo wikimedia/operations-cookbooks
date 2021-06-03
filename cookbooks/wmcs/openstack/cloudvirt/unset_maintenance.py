@@ -12,9 +12,9 @@ from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.icinga import Icinga, ICINGA_DOMAIN
+from spicerack.icinga import ICINGA_DOMAIN, Icinga
 
-from cookbooks.wmcs import OpenstackAPI, NotFound, dologmsg
+from cookbooks.wmcs import AGGREGATES_FILE_PATH, NotFound, OpenstackAPI, dologmsg
 
 LOGGER = logging.getLogger(__name__)
 
@@ -43,6 +43,15 @@ class UnsetMaintenance(CookbookBase):
             help="FQDN of the cloudvirt to unset maintenance of.",
         )
         parser.add_argument(
+            "--aggregates",
+            required=False,
+            default=None,
+            help=(
+                "Comma separated list of aggregate names to put the host in (by default will try to "
+                f"use {AGGREGATES_FILE_PATH} if it exists, and fail otherwise). A safe choice would be just `ceph`"
+            ),
+        )
+        parser.add_argument(
             "--task-id",
             required=False,
             default=None,
@@ -56,6 +65,7 @@ class UnsetMaintenance(CookbookBase):
         return UnsetMaintenanceRunner(
             fqdn=args.fqdn,
             control_node_fqdn=args.control_node_fqdn,
+            aggregates=args.aggregates,
             task_id=args.task_id,
             spicerack=self.spicerack,
         )
@@ -69,6 +79,7 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
         fqdn: str,
         control_node_fqdn: str,
         spicerack: Spicerack,
+        aggregates: Optional[str] = None,
         task_id: Optional[str] = None,
     ):
         """Init."""
@@ -79,6 +90,7 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
             remote=spicerack.remote(),
             control_node_fqdn=control_node_fqdn,
         )
+        self.aggregates = aggregates
         self.spicerack = spicerack
 
     def run(self) -> Optional[int]:
@@ -88,16 +100,27 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
             message=f"Unsetting cloudvirt '{self.fqdn}' maintenance.",
             task_id=self.task_id,
         )
-        hostname = self.fqdn.split('.', 1)[0]
+        hostname = self.fqdn.split(".", 1)[0]
         try:
             self.openstack_api.aggregate_remove_host(aggregate_name="maintenance", host_name=hostname)
         except NotFound as error:
             logging.info("%s", error)
 
-        try:
-            self.openstack_api.aggregate_add_host(aggregate_name="ceph", host_name=hostname)
-        except NotFound as error:
-            logging.info("%s", error)
+        if self.aggregates:
+            aggregates_to_add = [aggregate.strip() for aggregate in self.aggregates.split(',')]
+        else:
+            aggregates_to_add = [
+                aggregate["name"]
+                for aggregate in self.openstack_api.aggregate_load_from_host(
+                    host=self.spicerack.remote().query(self.fqdn)
+                )
+            ]
+
+        for aggregate_name in aggregates_to_add:
+            try:
+                self.openstack_api.aggregate_add_host(aggregate_name=aggregate_name, host_name=hostname)
+            except NotFound as error:
+                logging.info("%s", error)
 
         icinga = Icinga(
             icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True)
@@ -110,4 +133,8 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
             message=f"Unset cloudvirt '{self.fqdn}' maintenance.",
             task_id=self.task_id,
         )
-        LOGGER.info("Host %s now in out of maintenance mode. New VMs will be scheduled in it.", self.fqdn)
+        LOGGER.info(
+            "Host %s now in out of maintenance mode. New VMs will be scheduled in it (aggregates: %s).",
+            self.fqdn,
+            ','.join(aggregates_to_add),
+        )

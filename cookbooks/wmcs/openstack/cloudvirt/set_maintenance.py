@@ -12,9 +12,9 @@ from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.icinga import Icinga, ICINGA_DOMAIN
+from spicerack.icinga import ICINGA_DOMAIN, Icinga
 
-from cookbooks.wmcs import OpenstackAPI, NotFound, dologmsg
+from cookbooks.wmcs import NotFound, OpenstackAPI, dologmsg
 
 LOGGER = logging.getLogger(__name__)
 
@@ -91,11 +91,10 @@ class SetMaintenanceRunner(CookbookRunnerBase):
         icinga = Icinga(
             icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True)
         )
-        icinga.downtime_hosts(
-            hosts=[self.fqdn],
-            reason=self.spicerack.admin_reason('Setting maintenance mode.')
-        )
-        hostname = self.fqdn.split('.', 1)[0]
+        icinga.downtime_hosts(hosts=[self.fqdn], reason=self.spicerack.admin_reason("Setting maintenance mode."))
+        hostname = self.fqdn.split(".", 1)[0]
+        self.openstack_api.aggregate_persist_on_host(host=self.spicerack.remote().query(self.fqdn))
+
         try:
             self.openstack_api.aggregate_remove_host(aggregate_name="ceph", host_name=hostname)
         except NotFound as error:

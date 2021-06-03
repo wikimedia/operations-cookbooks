@@ -14,12 +14,14 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Set, Union
 
+import yaml
 from cumin.transports import Command
 from spicerack import ICINGA_DOMAIN, Spicerack
 from spicerack.remote import Remote, RemoteHosts
 
 LOGGER = logging.getLogger(__name__)
 PHABRICATOR_BOT_CONFIG_FILE = "/etc/phabricator_ops-monitoring-bot.conf"
+AGGREGATES_FILE_PATH = "/etc/wmcs_host_aggregates.yaml"
 DIGIT_RE = re.compile("([0-9]+)")
 MINUTES_IN_HOUR = 60
 SECONDS_IN_MINUTE = 60
@@ -152,6 +154,20 @@ class OpenstackAPI:
             name,
         )
 
+    def server_get_aggregates(self, name: OpenstackName) -> List[Dict[str, Any]]:
+        """Get all the aggregates for the given server."""
+        # NOTE: this currently does a bunch of requests making it slow, can be simplified
+        # once the following gets released:
+        #  https://review.opendev.org/c/openstack/python-openstackclient/+/794237
+        current_aggregates = self.aggregate_list()
+        server_aggregates: List[Dict[str, any]] = []
+        for aggregate in current_aggregates:
+            aggregate_details = self.aggregate_show(aggregate=aggregate["Name"])
+            if name in aggregate_details.get("hosts", []):
+                server_aggregates.append(aggregate_details)
+
+        return server_aggregates
+
     def security_group_list(self) -> List[Dict[str, Any]]:
         """Retrieve the list of security groups."""
         return self._run("security", "group", "list", is_safe=True)
@@ -249,6 +265,14 @@ class OpenstackAPI:
 
         raise NotFound(f"Unable to find a server group with name {name}")
 
+    def aggregate_list(self) -> List[Dict[str, Any]]:
+        """Get the simplified list of aggregates."""
+        return self._run("aggregate", "list", "--long", is_safe=True)
+
+    def aggregate_show(self, aggregate: Union[OpenstackName, OpenstackID]) -> List[Dict[str, Any]]:
+        """Get the details of a given aggregate."""
+        return self._run("aggregate", "show", aggregate, is_safe=True)
+
     def aggregate_remove_host(self, aggregate_name: OpenstackName, host_name: OpenstackName) -> None:
         """Remove the given host from the aggregate."""
         result = self._run("aggregate", "remove", "host", aggregate_name, host_name, capture_errors=True)
@@ -266,6 +290,30 @@ class OpenstackAPI:
                 f"Node {host_name} was not found in aggregate {aggregate_name}, did you try using the hostname "
                 "instead of the fqdn?"
             )
+
+    def aggregate_persist_on_host(self, host: RemoteHosts) -> None:
+        """Creates a file in the host with it's current list of aggregates.
+
+        For later usage, for example, when moving the host temporarily to another aggregate.
+        """
+        hostname = str(host).split(".", 1)[0]
+        current_aggregates = self.server_get_aggregates(name=hostname)
+        simple_create_file(
+            dst_node=host,
+            contents=yaml.dump(current_aggregates, indent=4),
+            remote_path=AGGREGATES_FILE_PATH,
+        )
+
+    @staticmethod
+    def aggregate_load_from_host(host: RemoteHosts) -> None:
+        """Loads the persisted list of aggregates from the host."""
+        try:
+            result = next(host.run_sync(f"cat {AGGREGATES_FILE_PATH}", is_safe=True))[1].message().decode()
+
+        except Exception as error:
+            raise NotFound(f"Unable to cat the file {AGGREGATES_FILE_PATH} on host {host}") from error
+
+        return yaml.safe_load(result)
 
     def drain_hypervisor(self, hypervisor_name: OpenstackName) -> None:
         """Drain a hypervisor."""
