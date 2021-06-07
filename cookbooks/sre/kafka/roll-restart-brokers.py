@@ -1,15 +1,12 @@
 """Restart all Kafka broker daemons in a cluster.
 
-This cookbook it is really simple, but it should be a good first step
-in automating Kafka restarts. The cookbook executes the following for
-each host in the cluster:
-  1) Stop the kafka-mirror and kafka processes
-  1) Reboot the node
+The cookbook executes the following for each Kafka broker host in the cluster:
+  1) Restart the kafka broker processes
   2) Wait 900s to make sure that any unbalanced/under-replicated/etc.. partition recovers.
   3) Force a prefered-replica-election to make sure that partition leaders are balanced
      before the next broker is restarted. This is not strictly needed since they should
      auto-rebalance, but there are rare use cases in which it might not happen.
-  4) Sleep for args.batch_sleep_seconds before the next restart
+  4) Sleep for args.batch_sleep_seconds before the next kafka broker restart
 """
 import logging
 
