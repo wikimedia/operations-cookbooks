@@ -11,11 +11,10 @@ import importlib
 import logging
 from typing import Optional
 
-from spicerack import ICINGA_DOMAIN, Spicerack
+from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.remote import RemoteHosts
 
-from cookbooks.wmcs import CephController
+from cookbooks.wmcs import CephController, wrap_with_sudo_icinga
 
 # Ugly hack to work around the fact that the module has a non-valid identifier
 # file name
@@ -91,32 +90,6 @@ class UpgradeCephNodeRunner(CookbookRunnerBase):
         if not self.skip_maintenance:
             controller.set_maintenance(force=self.force)
 
-        # we have to patch the master host to allow sudo, all this weirdness is
-        # because icinga_master_host is an @property and can't be patched on
-        # the original instance
-        my_spicerack = self.spicerack
-
-        class SudoIcingaSpicerackWrapper(Spicerack):
-            """Dummy wrapper class to allow sudo icinga."""
-
-            def __init__(self):  # pylint: disable-msg=super-init-not-called
-                """Init."""
-
-            @property
-            def icinga_master_host(self) -> RemoteHosts:
-                """Icinga master host."""
-                new_host = self.remote().query(
-                    query_string=self.dns().resolve_cname(ICINGA_DOMAIN),
-                    use_sudo=True,
-                )
-                return new_host
-
-            def __getattr__(self, what):
-                return getattr(my_spicerack, what)
-
-            def __setattr__(self, what, value):
-                return setattr(my_spicerack, what, value)
-
         upgrade_and_reboot.run(
             args=upgrade_and_reboot.argument_parser().parse_args(
                 [
@@ -130,7 +103,7 @@ class UpgradeCephNodeRunner(CookbookRunnerBase):
                     "--use-sudo",
                 ]
             ),
-            spicerack=SudoIcingaSpicerackWrapper(),
+            spicerack=wrap_with_sudo_icinga(my_spicerack=self.spicerack),
         )
 
         controller.wait_for_cluster_healthy(consider_maintenance_healthy=True, timeout_seconds=300)

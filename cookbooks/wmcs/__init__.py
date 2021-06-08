@@ -7,14 +7,15 @@ import getpass
 import json
 import logging
 import re
-import time
 import socket
+import time
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Set, Union
 
 from cumin.transports import Command
+from spicerack import ICINGA_DOMAIN, Spicerack
 from spicerack.remote import Remote, RemoteHosts
 
 LOGGER = logging.getLogger(__name__)
@@ -533,6 +534,38 @@ def natural_sort_key(element: str) -> List[Union[str, int]]:
     return [int(mychunk) if mychunk.isdigit() else mychunk for mychunk in DIGIT_RE.split(element)]
 
 
+def wrap_with_sudo_icinga(my_spicerack: Spicerack) -> Spicerack:
+    """Wrap spicerack icinga to allow sudo.
+
+    We have to patch the master host to allow sudo, all this weirdness is
+    because icinga_master_host is an @property and can't be patched on
+    the original instance
+    """
+
+    class SudoIcingaSpicerackWrapper(Spicerack):
+        """Dummy wrapper class to allow sudo icinga."""
+
+        def __init__(self):  # pylint: disable-msg=super-init-not-called
+            """Init."""
+
+        @property
+        def icinga_master_host(self) -> RemoteHosts:
+            """Icinga master host."""
+            new_host = self.remote().query(
+                query_string=self.dns().resolve_cname(ICINGA_DOMAIN),
+                use_sudo=True,
+            )
+            return new_host
+
+        def __getattr__(self, what):
+            return getattr(my_spicerack, what)
+
+        def __setattr__(self, what, value):
+            return setattr(my_spicerack, what, value)
+
+    return SudoIcingaSpicerackWrapper()
+
+
 def dologmsg(
     message: str,
     project: str,
@@ -553,6 +586,7 @@ def dologmsg(
         my_socket.connect(sockaddr)
         try:
             my_socket.send(payload.encode("utf-8"))
+            LOGGER.info(message)
             return
         # pylint: disable=broad-except
         except Exception as error:
