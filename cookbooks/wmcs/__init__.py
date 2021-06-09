@@ -378,9 +378,9 @@ class CephController:
         self._controlling_node = self._remote.query(f"D{{{self._controlling_node_fqdn}}}", use_sudo=True)
 
     def get_nodes(self) -> Dict[str, Any]:
-        """Change the current monitor being used to interact with the cluster for another one."""
-        # There's usually a couple empty lines before the json data
+        """Get the nodes currently in the cluster."""
         raw_output = next(self._controlling_node.run_sync("ceph node ls -f json"))[1].message().decode()
+        # There's usually a couple empty lines before the json data
         return json.loads(raw_output.splitlines()[-1])
 
     def get_nodes_domain(self) -> str:
