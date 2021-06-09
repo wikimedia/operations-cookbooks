@@ -1,7 +1,7 @@
-"""WMCS Ceph - Rolling reboot of all the osd nodes.
+"""WMCS Ceph - Rolling reboot of all the mon nodes.
 
 Usage example:
-    cookbook wmcs.ceph.reboot_osds \
+    cookbook wmcs.ceph.reboot_mons \
         --controlling-node-fqdn cloudcephmon2001-dev.codfw.wmnet
 
 """
@@ -19,8 +19,8 @@ from cookbooks.wmcs.ceph.reboot_node import RebootNode
 LOGGER = logging.getLogger(__name__)
 
 
-class RebootOsds(CookbookBase):
-    """WMCS Ceph cookbook to rolling reboot all osds."""
+class RebootMons(CookbookBase):
+    """WMCS Ceph cookbook to rolling reboot all mons."""
 
     title = __doc__
 
@@ -53,7 +53,7 @@ class RebootOsds(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return RebootOsdsRunner(
+        return RebootMonsRunner(
             controlling_node_fqdn=args.controlling_node_fqdn,
             task_id=args.task_id,
             force=args.force,
@@ -61,8 +61,8 @@ class RebootOsds(CookbookBase):
         )
 
 
-class RebootOsdsRunner(CookbookRunnerBase):
-    """Runner for RebootOsds"""
+class RebootMonsRunner(CookbookRunnerBase):
+    """Runner for RebootMons"""
 
     def __init__(
         self,
@@ -80,21 +80,24 @@ class RebootOsdsRunner(CookbookRunnerBase):
     def run(self) -> Optional[int]:
         """Main entry point"""
         controller = CephController(remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn)
-        osd_nodes = list(controller.get_nodes()["osd"].keys())
+        mon_nodes = list(controller.get_nodes()["mon"].keys())
 
-        dologmsg(project="admin", message=f"Rebooting the nodes {','.join(osd_nodes)}", task_id=self.task_id)
+        dologmsg(project="admin", message=f"Rebooting the nodes {','.join(mon_nodes)}", task_id=self.task_id)
 
         controller.set_maintenance()
 
         reboot_node_cookbook = RebootNode(spicerack=self.spicerack)
-        for index, osd_node in enumerate(osd_nodes):
-            LOGGER.info("Rebooting node %s, %d done, %d to go", osd_node, index, len(osd_nodes) - index)
+        for index, mon_node in enumerate(mon_nodes):
+            if mon_node == self.controlling_node_fqdn:
+                controller.change_controlling_node()
+
+            LOGGER.info("Rebooting node %s, %d done, %d to go", mon_node, index, len(mon_nodes) - index)
             args = [
                 "--skip-maintenance",
                 "--controlling-node-fqdn",
                 self.controlling_node_fqdn,
                 "--fqdn-to-reboot",
-                f"{osd_node}.{controller.get_nodes_domain()}",
+                f"{mon_node}.{controller.get_nodes_domain()}",
             ]
             if self.force:
                 args.append("--force")
@@ -104,12 +107,12 @@ class RebootOsdsRunner(CookbookRunnerBase):
             reboot_node_cookbook.get_runner(args=reboot_node_cookbook.argument_parser().parse_args(args)).run()
             LOGGER.info(
                 "Rebooted node %s, %d done, %d to go, waiting for cluster to stabilize...",
-                osd_node,
+                mon_node,
                 index + 1,
-                len(osd_nodes) - index - 1,
+                len(mon_nodes) - index - 1,
             )
             controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
             LOGGER.info("Cluster stable, continuing")
 
         controller.unset_maintenance()
-        dologmsg(project="admin", message=f"Finished rebooting the nodes {osd_nodes}", task_id=self.task_id)
+        dologmsg(project="admin", message=f"Finished rebooting the nodes {mon_nodes}", task_id=self.task_id)

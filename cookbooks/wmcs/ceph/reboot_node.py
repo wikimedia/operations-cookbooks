@@ -1,8 +1,9 @@
-"""WMCS Ceph - Reboot a single osd node.
+"""WMCS Ceph - Reboot a single ceph node.
 
 Usage example:
-    cookbook wmcs.ceph.reboot_osd \
+    cookbook wmcs.ceph.reboot_node \
         --controlling-node-fqdn cloudcephmon2001-dev.codfw.wmnet
+        --fqdn-to-reboot cloudcephosd2001-dev.codfw.wmnet
 
 """
 # pylint: disable=unsubscriptable-object,too-many-arguments
@@ -19,8 +20,8 @@ from cookbooks.wmcs import CephController, dologmsg, wrap_with_sudo_icinga
 LOGGER = logging.getLogger(__name__)
 
 
-class RebootOsd(CookbookBase):
-    """WMCS Ceph cookbook to reboot an osd."""
+class RebootNode(CookbookBase):
+    """WMCS Ceph cookbook to a node of the cluster."""
 
     title = __doc__
 
@@ -39,7 +40,7 @@ class RebootOsd(CookbookBase):
         parser.add_argument(
             "--controlling-node-fqdn",
             required=True,
-            help="FQDN of one of the nodes to manage the cluster.",
+            help="FQDN of one of the node to manage the cluster.",
         )
         parser.add_argument(
             "--skip-maintenance",
@@ -65,7 +66,7 @@ class RebootOsd(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return RebootOsdRunner(
+        return RebootNodeRunner(
             fqdn_to_reboot=args.fqdn_to_reboot,
             controlling_node_fqdn=args.controlling_node_fqdn,
             task_id=args.task_id,
@@ -75,8 +76,8 @@ class RebootOsd(CookbookBase):
         )
 
 
-class RebootOsdRunner(CookbookRunnerBase):
-    """Runner for RebootOsd"""
+class RebootNodeRunner(CookbookRunnerBase):
+    """Runner for RebootNode"""
 
     def __init__(
         self,
