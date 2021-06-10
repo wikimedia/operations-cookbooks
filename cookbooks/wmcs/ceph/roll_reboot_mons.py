@@ -1,7 +1,7 @@
 """WMCS Ceph - Rolling reboot of all the mon nodes.
 
 Usage example:
-    cookbook wmcs.ceph.reboot_mons \
+    cookbook wmcs.ceph.roll_reboot_mons \
         --controlling-node-fqdn cloudcephmon2001-dev.codfw.wmnet
 
 """
@@ -19,7 +19,7 @@ from cookbooks.wmcs.ceph.reboot_node import RebootNode
 LOGGER = logging.getLogger(__name__)
 
 
-class RebootMons(CookbookBase):
+class RollRebootMons(CookbookBase):
     """WMCS Ceph cookbook to rolling reboot all mons."""
 
     title = __doc__
@@ -53,7 +53,7 @@ class RebootMons(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return RebootMonsRunner(
+        return RollRebootMonsRunner(
             controlling_node_fqdn=args.controlling_node_fqdn,
             task_id=args.task_id,
             force=args.force,
@@ -61,8 +61,8 @@ class RebootMons(CookbookBase):
         )
 
 
-class RebootMonsRunner(CookbookRunnerBase):
-    """Runner for RebootMons"""
+class RollRebootMonsRunner(CookbookRunnerBase):
+    """Runner for RollRebootMons"""
 
     def __init__(
         self,

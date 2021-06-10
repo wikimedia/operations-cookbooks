@@ -1,7 +1,7 @@
 """WMCS Ceph - Rolling reboot of all the osd nodes.
 
 Usage example:
-    cookbook wmcs.ceph.reboot_osds \
+    cookbook wmcs.ceph.roll_reboot_osds \
         --controlling-node-fqdn cloudcephmon2001-dev.codfw.wmnet
 
 """
@@ -19,7 +19,7 @@ from cookbooks.wmcs.ceph.reboot_node import RebootNode
 LOGGER = logging.getLogger(__name__)
 
 
-class RebootOsds(CookbookBase):
+class RollRebootOsds(CookbookBase):
     """WMCS Ceph cookbook to rolling reboot all osds."""
 
     title = __doc__
@@ -53,7 +53,7 @@ class RebootOsds(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return RebootOsdsRunner(
+        return RollRebootOsdsRunner(
             controlling_node_fqdn=args.controlling_node_fqdn,
             task_id=args.task_id,
             force=args.force,
@@ -61,8 +61,8 @@ class RebootOsds(CookbookBase):
         )
 
 
-class RebootOsdsRunner(CookbookRunnerBase):
-    """Runner for RebootOsds"""
+class RollRebootOsdsRunner(CookbookRunnerBase):
+    """Runner for RollRebootOsds"""
 
     def __init__(
         self,
