@@ -108,9 +108,8 @@ class RebootNodeRunner(CookbookRunnerBase):
             controller.set_maintenance()
 
         node = self.spicerack.remote().query(f"D{{{self.fqdn_to_reboot}}}", use_sudo=True)
-        icinga = wrap_with_sudo_icinga(my_spicerack=self.spicerack).icinga()
-        icinga.downtime_hosts(
-            hosts=node.hosts,
+        icinga_hosts = wrap_with_sudo_icinga(my_spicerack=self.spicerack).icinga_hosts(target_hosts=node.hosts)
+        icinga_hosts.downtime_hosts(
             reason=self.spicerack.admin_reason(
                 reason="Rebooting at user request through cookbook", task_id=self.task_id
             ),
@@ -131,5 +130,5 @@ class RebootNodeRunner(CookbookRunnerBase):
         if not self.skip_maintenance:
             controller.unset_maintenance()
 
-        icinga.remove_downtime(hosts=node.hosts)
+        icinga_hosts.remove_downtime()
         dologmsg(project="admin", message=f"Finished rebooting node {self.fqdn_to_reboot}", task_id=self.task_id)
