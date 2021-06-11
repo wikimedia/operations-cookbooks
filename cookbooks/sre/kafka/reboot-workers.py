@@ -29,11 +29,17 @@ class RebootKafkaWorkers(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        return parse_kafka_arguments(description=self.__doc__,
-                                     # logging-eqiad and logging-codfw are running elasticsearch
-                                     # as well as Kafka, so to reboot them safely we'd have to account
-                                     # for that.
-                                     cluster_choices=['main-eqiad', 'jumbo', 'main-codfw', 'test'])
+        return parse_kafka_arguments(
+            description=self.__doc__,
+            cluster_choices=[
+                'main-eqiad', 'main-codfw', 'jumbo-eqiad',
+                'test-eqiad', 'logging-eqiad',
+                # TODO: allow logging-codfw once
+                # https://phabricator.wikimedia.org/T279342 is complete
+                # (and elasticsearch is no longer colocated kafka logging clusters)
+                # 'logging-codfw'
+            ]
+        )
 
     def get_runner(self, args):
         """As specified by Spicerack API."""

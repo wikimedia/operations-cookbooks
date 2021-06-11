@@ -9,6 +9,15 @@ Every time a component of a Consumer Group fails its heartbeat with the Kafka
 Broker that coordinates the group, a rebalance is issued (to reassign orphaned
 partitions to the other members).
 
+We colocate Kafka MirrorMaker processes on the target Kafka cluster brokers.
+I.e. MirrorMaker that handles main-eqiad -> jumbo-eqiad mirroring
+lives on all jumbo-eqiad brokers.
+
+NOTE: If we ever mirror from multiple cluster into one, that target cluster may
+have multiple 'cluster instances' of MirrorMaker running on the same host,
+e.g. logging-eqiad -> jumbo-eqiad + main-eqiad -> jumbo-eqiad.  As of
+2021-06, this is not the case anywhere, but it may change, so be aware.
+(We should probably move MirrorMaker into k8s anyway).
 """
 import argparse
 import logging
@@ -26,7 +35,7 @@ def argument_parser():
     """As specified by Spicerack API."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
     parser.add_argument('cluster', help='The name of the Kafka Mirror Maker cluster to work on.',
-                        choices=['main-eqiad', 'jumbo', 'main-codfw'])
+                        choices=['main-eqiad', 'jumbo-eqiad', 'main-codfw', 'test-eqiad'])
     parser.add_argument('--batch-sleep-seconds', type=float, default=120.0,
                         help="Seconds to sleep between each restart.")
     return parser
