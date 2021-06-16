@@ -109,7 +109,7 @@ class RebootNodeRunner(CookbookRunnerBase):
 
         node = self.spicerack.remote().query(f"D{{{self.fqdn_to_reboot}}}", use_sudo=True)
         icinga_hosts = wrap_with_sudo_icinga(my_spicerack=self.spicerack).icinga_hosts(target_hosts=node.hosts)
-        icinga_hosts.downtime_hosts(
+        icinga_hosts.downtime(
             reason=self.spicerack.admin_reason(
                 reason="Rebooting at user request through cookbook", task_id=self.task_id
             ),
