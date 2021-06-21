@@ -1,4 +1,4 @@
-"""Reduce TTL for various DNS Discovery entries"""
+"""Restore TTL for various DNS Discovery entries"""
 import logging
 
 from cookbooks.sre.switchdc.services import argument_parser_base, load_services, post_process_args
