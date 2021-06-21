@@ -29,10 +29,14 @@ def run(args, spicerack):
     ask_confirmation('Are you sure to warmup caches in {dc}?'.format(dc=datacenter))
 
     warmup_dir = '/var/lib/mediawiki-cache-warmup'
-    memc_warmup = "nodejs {dir}/warmup.js {dir}/urls-cluster.txt spread appservers.svc.{dc}.wmnet".format(
-        dir=warmup_dir, dc=datacenter)
-    appserver_warmup = "nodejs {dir}/warmup.js {dir}/urls-server.txt clone appserver {dc}".format(
-        dir=warmup_dir, dc=datacenter)
+    # urls-cluster is only running against appservers since is for shared resources behind the
+    # servers themselves
+    warmups = ["nodejs {dir}/warmup.js {dir}/urls-cluster.txt spread appservers.svc.{dc}.wmnet".format(
+        dir=warmup_dir, dc=datacenter)]
+    for cluster in ["appserver", "api_appserver"]:
+        # urls-server runs against both appserver and API clusters since it's for each individual server
+        warmups.append("nodejs {dir}/warmup.js {dir}/urls-server.txt clone {cluster} {dc}".format(
+            dir=warmup_dir, dc=datacenter, cluster=cluster))
 
     maintenance_host = spicerack.mediawiki().get_maintenance_host(datacenter)
     # It takes multiple executions of the warmup script to fully warm up the appserver caches. The second run is faster
@@ -44,7 +48,7 @@ def run(args, spicerack):
     for i in itertools.count(1):
         logger.info('Running warmup script, take %d', i)
         start_time = datetime.datetime.utcnow()
-        maintenance_host.run_sync(memc_warmup, appserver_warmup)
+        maintenance_host.run_sync(*warmups)
         duration = datetime.datetime.utcnow() - start_time
         logger.info('Warmup completed in %s', duration)
         # We stop looping as soon as the warmup script takes more than 95% as long as the previous run. That is, keep
