@@ -79,13 +79,14 @@ class RollingOperation(CookbookBase):
 
         return RollingOperationRunner(
             self.spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
-            nodes_per_run, with_lvs, wait_for_green, upgrade, reboot, write_queue_datacenters)
+            nodes_per_run, with_lvs, wait_for_green, upgrade, reboot)
 
 
 class RollingOperationRunner(CookbookRunnerBase):
     def __init__(self, spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
-                 nodes_per_run, with_lvs, wait_for_green, upgrade, reboot, write_queue_datacenters):
+                 nodes_per_run, with_lvs, wait_for_green, upgrade, reboot):
         self.spicerack = spicerack
+
         self.elasticsearch_clusters = elasticsearch_clusters
         self.clustergroup = clustergroup
         self.reason = reason
@@ -93,9 +94,9 @@ class RollingOperationRunner(CookbookRunnerBase):
         self.with_lvs = with_lvs
         self.wait_for_green = wait_for_green
         self.nodes_per_run = nodes_per_run
+
         self.upgrade = upgrade
         self.reboot = reboot
-        self.write_queue_datacenters = write_queue_datacenters
 
     @property
     def runtime_description(self):
@@ -106,39 +107,37 @@ class RollingOperationRunner(CookbookRunnerBase):
         batch_size = "{} nodes at a time".format(self.nodes_per_run)
         return "{} ({}) for ElasticSearch cluster {}: {}".format(operation, batch_size, self.clustergroup, self.reason)
 
+    def rolling_operation(self, nodes):
+        """
+        Performs rolling Elasticsearch service restarts across the cluster.
+        Optionally upgrade Elasticsearch plugins before proceeding to restart/reboot.
+        Optionally performs a full reboot as opposed to just restarting services.
+        """
+        start_time = datetime.utcnow()
+        logger.info("Starting rolling_operation at time {}"
+                     " with (upgrade, reboot) = ({}, {})".format(start_time, self.upgrade, self.reboot))
+
+        # Don't bother checking the reboot flag because elasticsearch will have to stop later anyway if rebooting
+        nodes.stop_elasticsearch()
+
+        if self.upgrade:
+            # TODO: implement a generic and robust package upgrade mechanism in spicerack
+            upgrade_cmd = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
+                          options='-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
+                          packages=' '.join(['elasticsearch-oss', 'wmf-elasticsearch-search-plugins']))
+            nodes.get_remote_hosts().run_sync(upgrade_cmd)  # pylint: disable=protected-access
+
+        if self.reboot:
+            nodes.get_remote_hosts().reboot(batch_size=self.nodes_per_run)
+            nodes.get_remote_hosts().wait_reboot_since(start_time)
+        else:
+            nodes.start_elasticsearch()
+
     def run(self):
         """Required by Spicerack API."""
-        # Unpack needed self variables for inclusion in the closure
-        upgrade, reboot = self.upgrade, self.reboot
-
-        def rolling_operation(nodes):
-            """
-            Performs rolling Elasticsearch service restarts across the cluster.
-            Optionally upgrade Elasticsearch plugins before proceeding to restart/reboot.
-            Optionally performs a full reboot as opposed to just restarting services.
-            """
-            start_time = datetime.utcnow()
-            logger.info("Starting rolling_operation at time {}"
-                         " with (upgrade, reboot) = ({}, {})".format(start_time, upgrade, reboot))
-
-            # Don't bother checking the reboot flag because elasticsearch will have to stop later anyway if rebooting
-            nodes.stop_elasticsearch()
-
-            if upgrade:
-                # TODO: implement a generic and robust package upgrade mechanism in spicerack
-                upgrade_cmd = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
-                              options='-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
-                              packages=' '.join(['elasticsearch-oss', 'wmf-elasticsearch-search-plugins']))
-                nodes.get_remote_hosts().run_sync(upgrade_cmd)  # pylint: disable=protected-access
-
-            if reboot:
-                nodes.get_remote_hosts().reboot(batch_size=3)
-                nodes.get_remote_hosts().wait_reboot_since(start_time)
-            else:
-                nodes.start_elasticsearch()
 
         execute_on_clusters(
             self.elasticsearch_clusters, self.reason, self.spicerack, self.nodes_per_run,
             self.clustergroup, self.start_datetime, self.with_lvs, self.wait_for_green,
-            rolling_operation
+            self.rolling_operation
         )
