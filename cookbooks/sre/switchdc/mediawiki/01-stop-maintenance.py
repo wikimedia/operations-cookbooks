@@ -17,5 +17,11 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     post_process_args(args)
 
-    logger.info('Stopping MediaWiki maintenance jobs in %s', args.dc_from)
-    spicerack.mediawiki().stop_cronjobs(args.dc_from)
+    datacenters = [args.dc_from]
+    if args.live_test:
+        logger.info("Skipping disable of maintenance jobs in %s (active DC)", args.dc_to)
+    else:
+        datacenters.append(args.dc_to)
+    logger.info('Stopping MediaWiki maintenance jobs in %s', ', '.join(datacenters))
+    for datacenter in datacenters:
+        spicerack.mediawiki().stop_periodic_jobs(datacenter)
