@@ -1,5 +1,6 @@
 """Reduce TTL for various DNS Discovery entries"""
 import logging
+import time
 
 from cookbooks.sre.switchdc.mediawiki import argument_parser_base, DNS_SHORT_TTL, post_process_args
 
@@ -20,5 +21,7 @@ def run(args, spicerack):
     records = ('api-ro', 'api-rw', 'appservers-ro', 'appservers-rw', 'jobrunner', 'videoscaler', 'parsoid-php')
     logger.info('Reducing DNS Discovery TTL to %d for records: %s', DNS_SHORT_TTL, records)
     discovery = spicerack.discovery(*records)
+    old_ttl_sec = max(record.ttl for record in discovery.resolve())
     discovery.update_ttl(DNS_SHORT_TTL)
-    # TODO: add sleep for previous TTL, skipped for now because the warmup step is longer than that
+    logger.info('Sleeping for the old TTL (%d seconds) to allow the old records to expire...', old_ttl_sec)
+    time.sleep(old_ttl_sec)
