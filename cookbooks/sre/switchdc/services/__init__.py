@@ -11,7 +11,6 @@ __title__ = __doc__
 EXCLUDED_SERVICES = {
     'blubberoid',  # blubberoid needs to follow swift replica for the docker registry
     'docker-registry',  # swift replica goes codfw => eqiad and needs manual switching
-    'helm-charts',  # non-load-balanced service, will need some ad-hoc changes.
     'thanos-query',  # not a "service", strictly speaking, thus excluded.
     'thanos-swift',  # ditto
     'releases',  # ditto
