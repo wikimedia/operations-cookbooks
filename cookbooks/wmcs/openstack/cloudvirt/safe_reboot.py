@@ -9,8 +9,8 @@ Usage example: wmcs.openstack.cloudvirt.safe_reboot \
 """
 # pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
-from datetime import datetime
 import logging
+from datetime import datetime
 from typing import Optional
 
 from spicerack import Spicerack

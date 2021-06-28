@@ -107,7 +107,7 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
             logging.info("%s", error)
 
         if self.aggregates:
-            aggregates_to_add = [aggregate.strip() for aggregate in self.aggregates.split(',')]
+            aggregates_to_add = [aggregate.strip() for aggregate in self.aggregates.split(",")]
         else:
             aggregates_to_add = [
                 aggregate["name"]
@@ -136,5 +136,5 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
         LOGGER.info(
             "Host %s now in out of maintenance mode. New VMs will be scheduled in it (aggregates: %s).",
             self.fqdn,
-            ','.join(aggregates_to_add),
+            ",".join(aggregates_to_add),
         )

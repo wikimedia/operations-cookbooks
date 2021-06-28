@@ -99,7 +99,7 @@ class DrainRunner(CookbookRunnerBase):
                 ],
             )
         ).run()
-        hypervisor_name = self.fqdn.split('.', 1)[0]
+        hypervisor_name = self.fqdn.split(".", 1)[0]
         self.openstack_api.drain_hypervisor(hypervisor_name=hypervisor_name)
         dologmsg(
             project="admin",

@@ -9,10 +9,9 @@ import argparse
 import logging
 from typing import Optional
 
+from cumin.transports import Command
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from cumin.transports import Command
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,15 +64,15 @@ class LiveUpgradeRunner(CookbookRunnerBase):
         node_to_upgrade.run_sync(Command("run-puppet-agent", ok_codes=list(range(255))))
         node_to_upgrade.run_sync("apt update")
         node_to_upgrade.run_sync(
-            'DEBIAN_FRONTEND=noninteractive apt-get install -y python3-libvirt python3-os-vif nova-compute '
-            'neutron-common nova-compute-kvm neutron-linuxbridge-agent python3-neutron  python3-eventlet '
-            'python3-oslo.messaging python3-taskflow python3-tooz python3-keystoneauth1 python3-positional '
-            'python3-requests python3-urllib3 '
+            "DEBIAN_FRONTEND=noninteractive apt-get install -y python3-libvirt python3-os-vif nova-compute "
+            "neutron-common nova-compute-kvm neutron-linuxbridge-agent python3-neutron  python3-eventlet "
+            "python3-oslo.messaging python3-taskflow python3-tooz python3-keystoneauth1 python3-positional "
+            "python3-requests python3-urllib3 "
             '-o "Dpkg::Options::=--force-confdef" '
             '-o "Dpkg::Options::=--force-confold"'
         )
         node_to_upgrade.run_sync(
-            'DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y --allow-downgrades '
+            "DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y --allow-downgrades "
             '-o "Dpkg::Options::=--force-confdef" '
             '-o "Dpkg::Options::=--force-confold"'
         )
