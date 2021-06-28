@@ -24,7 +24,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
 from wmflib.decorators import retry
 
-from cookbooks.wmcs import OpenstackAPI, natural_sort_key
+from cookbooks.wmcs import OpenstackAPI, OpenstackServerGroupPolicy, natural_sort_key
 
 LOGGER = logging.getLogger(__name__)
 
@@ -89,9 +89,19 @@ class StartInstanceWithPrefix(CookbookBase):
             "--server-group",
             required=False,
             help=(
-                "Server group to start the instance in. If it does not exist, it well create it with anti-affinity "
-                "policy, will use the same as '--prefix' by default (ex. toolsbeta-test-k8s-etcd)."
+                "Server group to start the instance in. If it does not exist, it will create it with the given "
+                "server-group-policy, will use the same as '--prefix' by default (ex. toolsbeta-test-k8s-etcd)."
             ),
+        )
+        parser.add_argument(
+            "--server-group-policy",
+            required=False,
+            help=(
+                "Server group policy to start the instance in. If it does not exist, it will create it with "
+                "anti-affinity policy, will use the same as '--prefix' by default (ex. toolsbeta-test-k8s-etcd)."
+            ),
+            choices=[policy.name for policy in OpenstackServerGroupPolicy],
+            default=OpenstackServerGroupPolicy.anti_affinity.name,
         )
 
         return parser
@@ -101,6 +111,7 @@ class StartInstanceWithPrefix(CookbookBase):
         return StartInstanceWithPrefixRunner(
             security_group=args.security_group,
             server_group=args.server_group,
+            server_group_policy=args.server_group_policy,
             project=args.project,
             prefix=args.prefix,
             flavor=args.flavor,
@@ -118,6 +129,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         project: str,
         prefix: str,
         spicerack: Spicerack,
+        server_group_policy: str,
         server_group: Optional[str] = None,
         security_group: Optional[str] = None,
         flavor: Optional[str] = None,
@@ -126,7 +138,9 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
     ):
         """Init"""
         self.openstack_api = OpenstackAPI(
-            remote=spicerack.remote(), control_node_fqdn="cloudcontrol1003.wikimedia.org", project=project
+            remote=spicerack.remote(),
+            control_node_fqdn="cloudcontrol1003.wikimedia.org",
+            project=project,
         )
         self.project = project
         self.prefix = prefix
@@ -134,6 +148,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         self.network = network
         self.image = image
         self.server_group = server_group or self.prefix
+        self.server_group_policy = server_group_policy
         self.spicerack = spicerack
         self.security_group = security_group or f"{self.project}-k8s-full-connectivity"
 
@@ -143,7 +158,10 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
             security_group=self.security_group,
             description="This group provides full access from its members to its members.",
         )
-        self.openstack_api.server_group_ensure(server_group=self.server_group)
+        self.openstack_api.server_group_ensure(
+            server_group=self.server_group,
+            policy=OpenstackServerGroupPolicy[self.server_group_policy],
+        )
 
         all_project_servers = self.openstack_api.server_list()
         other_prefix_members = list(
