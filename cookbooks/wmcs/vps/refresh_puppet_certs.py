@@ -9,11 +9,57 @@ import argparse
 import logging
 from typing import Optional
 
-from spicerack import Spicerack
+from cumin.transports import Command
+from spicerack import RemoteHosts, Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts, PuppetMaster
+from spicerack.remote import RemoteExecutionError
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _get_puppetmaster(spicerack: Spicerack, remote_host: RemoteHosts, puppetmaster: str) -> PuppetMaster:
+    puppetmaster_fqdn = puppetmaster
+    if puppetmaster_fqdn == "puppet":
+        puppetmaster_fqdn = (
+            next(remote_host.run_sync("dig +short -x $(dig +short puppet)"))[1].message().decode().strip()
+        )
+        # remove the extra dot that dig appends
+        puppetmaster_fqdn = puppetmaster_fqdn[:-1]
+
+    return PuppetMaster(
+        master_host=spicerack.remote().query(
+            f"D{{{puppetmaster_fqdn}}}",
+            use_sudo=True,
+        )
+    )
+
+
+def _refresh_cert(
+    spicerack: Spicerack,
+    remote_host: RemoteHosts,
+) -> None:
+    """Takes care of the dance to remove and regenerate a cert on the host and it's puppetmaster."""
+    node_to_bootstrap = PuppetHosts(remote_hosts=remote_host)
+    fqdn = str(remote_host)
+    puppetmasters = node_to_bootstrap.get_ca_servers()
+    puppetmaster = _get_puppetmaster(
+        spicerack=spicerack,
+        remote_host=remote_host,
+        puppetmaster=puppetmasters[fqdn],
+    )
+    puppetmaster.destroy(hostname=fqdn)
+    cert_fingerprint = node_to_bootstrap.regenerate_certificate()[fqdn]
+    cert = puppetmaster.get_certificate_metadata(hostname=fqdn)
+    if cert["state"] == PuppetMaster.PUPPET_CERT_STATE_SIGNED:
+        # the cert exists and is already signed
+        return
+
+    puppetmaster.sign(
+        hostname=fqdn,
+        fingerprint=cert_fingerprint,
+        allow_alt_names=True,
+    )
 
 
 class RefreshPuppetCerts(CookbookBase):
@@ -33,6 +79,16 @@ class RefreshPuppetCerts(CookbookBase):
             required=True,
             help="FQDN of the to bootstrap (ex. toolsbeta-test-k8s-etcd-9.toolsbeta.eqiad1.wikimedia.cloud)",
         )
+        parser.add_argument(
+            "--pre-run-puppet",
+            action="store_true",
+            help="If passed, will force a puppet run (ignoring the results) before refreshing the certs.",
+        )
+        parser.add_argument(
+            "--ignore-failures",
+            action="store_true",
+            help="If passed, will ignore any failures when running puppet.",
+        )
 
         return parser
 
@@ -40,6 +96,8 @@ class RefreshPuppetCerts(CookbookBase):
         """Get runner"""
         return RefreshPuppetCertsRunner(
             fqdn=args.fqdn,
+            pre_run_puppet=args.pre_run_puppet,
+            ignore_failures=args.ignore_failures,
             spicerack=self.spicerack,
         )
 
@@ -50,35 +108,57 @@ class RefreshPuppetCertsRunner(CookbookRunnerBase):
     def __init__(
         self,
         fqdn: str,
+        pre_run_puppet: bool,
+        ignore_failures: bool,
         spicerack: Spicerack,
     ):
         """Init"""
         self.fqdn = fqdn
+        self.pre_run_puppet = pre_run_puppet
+        self.ignore_failures = ignore_failures
         self.spicerack = spicerack
 
     def run(self) -> Optional[int]:
-        """Main entry point"""
-        node_to_bootsrap = PuppetHosts(
-            remote_hosts=self.spicerack.remote().query(
-                f"D{{{self.fqdn}}}",
-                use_sudo=True,
-            ),
-        )
-        puppetmasters = node_to_bootsrap.get_ca_servers()
-        puppetmaster_fqdn = puppetmasters[self.fqdn]
-        puppetmaster = PuppetMaster(
-            master_host=self.spicerack.remote().query(
-                f"D{{{puppetmaster_fqdn}}}",
-                use_sudo=True,
-            )
-        )
+        """Main entry point.
 
-        puppetmaster.destroy(hostname=self.fqdn)
+        Basic process:
+            Refresh certs on current puppetmaster (in case the fqdn already existed)
+            Try to run puppet (pulls new puppetmaster if needed, might fail)
+            If there's new puppetmasters, refresh certs on those
+            If there was new puppetmasters or the first puppet run failed, run puppet again
+        """
+        remote_host = self.spicerack.remote().query(f"D{{{self.fqdn}}}", use_sudo=True)
+        node_to_bootstrap = PuppetHosts(remote_hosts=remote_host)
+        pre_run_passed = False
 
-        cert_fingerprint = node_to_bootsrap.regenerate_certificate()[self.fqdn]
-        puppetmaster.sign(
-            hostname=self.fqdn,
-            fingerprint=cert_fingerprint,
-            allow_alt_names=True,
-        )
-        node_to_bootsrap.run()
+        # For the first run, make sure that the current master has no cert with this fqdn
+        pre_puppetmasters = node_to_bootstrap.get_ca_servers()
+        _refresh_cert(spicerack=self.spicerack, remote_host=remote_host)
+
+        if self.pre_run_puppet:
+            try:
+                node_to_bootstrap.run()
+                pre_run_passed = True
+            except RemoteExecutionError:
+                if self.ignore_failures:
+                    pass
+                else:
+                    raise
+
+        else:
+            # We have to make sure in any case that the puppet config is refreshed to do the puppetmaster switch.
+            # The tag makes only run the puppet config related manifests.
+            remote_host.run_sync(Command("puppet agent --test --tags base::puppet", ok_codes=list(range(255))))
+
+        post_puppetmasters = node_to_bootstrap.get_ca_servers()
+        if post_puppetmasters != pre_puppetmasters:
+            _refresh_cert(spicerack=self.spicerack, remote_host=remote_host)
+
+        if post_puppetmasters == pre_puppetmasters or not pre_run_passed:
+            try:
+                node_to_bootstrap.run()
+            except RemoteExecutionError:
+                if self.ignore_failures:
+                    pass
+                else:
+                    raise
