@@ -60,7 +60,9 @@ class ServerGroupPolicy(Enum):
 class OpenstackAPI:
     """Class to interact with the Openstack API (undirectly for now)."""
 
-    def __init__(self, remote: Remote, control_node_fqdn: str, project: OpenstackName = ""):
+    def __init__(
+        self, remote: Remote, control_node_fqdn: str = "cloudcontrol1003.wikimedia.org", project: OpenstackName = ""
+    ):
         """Init."""
         self.project = project
         self.control_node_fqdn = control_node_fqdn
