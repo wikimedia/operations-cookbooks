@@ -14,7 +14,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.icinga import ICINGA_DOMAIN, Icinga
 
-from cookbooks.wmcs import NotFound, OpenstackAPI, dologmsg
+from cookbooks.wmcs import OpenstackAPI, OpenstackNotFound, dologmsg
 
 LOGGER = logging.getLogger(__name__)
 
@@ -97,12 +97,12 @@ class SetMaintenanceRunner(CookbookRunnerBase):
 
         try:
             self.openstack_api.aggregate_remove_host(aggregate_name="ceph", host_name=hostname)
-        except NotFound as error:
+        except OpenstackNotFound as error:
             logging.info("%s", error)
 
         try:
             self.openstack_api.aggregate_add_host(aggregate_name="maintenance", host_name=hostname)
-        except NotFound as error:
+        except OpenstackNotFound as error:
             logging.info("%s", error)
 
         dologmsg(

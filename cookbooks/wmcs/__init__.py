@@ -35,22 +35,22 @@ class OpenstackError(Exception):
     """Parent class for all openstack related errors."""
 
 
-class NotFound(OpenstackError):
+class OpenstackNotFound(OpenstackError):
     """Thrown when trying to get an element from Openstack gets no results."""
 
 
-class MigrationError(OpenstackError):
+class OpenstackMigrationError(OpenstackError):
     """Thrown when there's an issue with migration."""
 
 
-class RuleDirection(Enum):
+class OpenstackRuleDirection(Enum):
     """Directior for the security group roule."""
 
     ingress = auto()
     egress = auto()
 
 
-class ServerGroupPolicy(Enum):
+class OpenstackServerGroupPolicy(Enum):
     """Affinity for the server group."""
 
     anti_affinity = "anti-affinity"
@@ -179,7 +179,10 @@ class OpenstackAPI:
         self._run("security", "group", "create", name, "--description", description)
 
     def security_group_rule_create(
-        self, direction: RuleDirection, remote_group: OpenstackName, security_group: OpenstackName
+        self,
+        direction: OpenstackRuleDirection,
+        remote_group: OpenstackName,
+        security_group: OpenstackName,
     ) -> None:
         """Create a rule inside the given security group."""
         self._run(
@@ -203,23 +206,27 @@ class OpenstackAPI:
             self.security_group_by_name(name=security_group)
             LOGGER.info("Security group %s already exists, not creating.", security_group)
 
-        except NotFound:
+        except OpenstackNotFound:
             LOGGER.info("Creating security group %s...", security_group)
             self.security_group_create(
                 name=security_group,
                 description=description,
             )
             self.security_group_rule_create(
-                direction=RuleDirection.egress, remote_group=security_group, security_group=security_group
+                direction=OpenstackRuleDirection.egress,
+                remote_group=security_group,
+                security_group=security_group,
             )
             self.security_group_rule_create(
-                direction=RuleDirection.ingress, remote_group=security_group, security_group=security_group
+                direction=OpenstackRuleDirection.ingress,
+                remote_group=security_group,
+                security_group=security_group,
             )
 
     def security_group_by_name(self, name: OpenstackName) -> Optional[Dict[str, Any]]:
         """Retrieve the security group info given a name.
 
-        Raises NotFound if there's no security group found for the given name in the current project.
+        Raises OpenstackNotFound if there's no security group found for the given name in the current project.
         """
         existing_security_groups = self.security_group_list()
         for security_group in existing_security_groups:
@@ -227,7 +234,7 @@ class OpenstackAPI:
                 if security_group["Name"] == name:
                     return security_group
 
-        raise NotFound(f"Unable to find a security group with name {name}")
+        raise OpenstackNotFound(f"Unable to find a security group with name {name}")
 
     def server_group_list(self) -> List[Dict[str, Any]]:
         """Get the list of server groups.
@@ -236,7 +243,7 @@ class OpenstackAPI:
         """
         return self._run("server", "group", "list", is_safe=True)
 
-    def server_group_create(self, name: OpenstackName, policy: ServerGroupPolicy) -> None:
+    def server_group_create(self, name: OpenstackName, policy: OpenstackServerGroupPolicy) -> None:
         """Create a server group."""
         self._run(
             "server",
@@ -252,20 +259,20 @@ class OpenstackAPI:
         try:
             self.server_group_by_name(name=server_group)
             LOGGER.info("Server group %s already exists, not creating.", server_group)
-        except NotFound:
-            self.server_group_create(policy=ServerGroupPolicy.anti_affinity, name=server_group)
+        except OpenstackNotFound:
+            self.server_group_create(policy=OpenstackServerGroupPolicy.anti_affinity, name=server_group)
 
     def server_group_by_name(self, name: OpenstackName) -> Optional[Dict[str, Any]]:
         """Retrieve the server group info given a name.
 
-        Raises NotFound if thereś no server group found with the given name.
+        Raises OpenstackNotFound if thereś no server group found with the given name.
         """
         all_server_groups = self.server_group_list()
         for server_group in all_server_groups:
             if server_group.get("Name", "") == name:
                 return server_group
 
-        raise NotFound(f"Unable to find a server group with name {name}")
+        raise OpenstackNotFound(f"Unable to find a server group with name {name}")
 
     def aggregate_list(self) -> List[Dict[str, Any]]:
         """Get the simplified list of aggregates."""
@@ -279,7 +286,7 @@ class OpenstackAPI:
         """Remove the given host from the aggregate."""
         result = self._run("aggregate", "remove", "host", aggregate_name, host_name, capture_errors=True)
         if "HTTP 404" in result:
-            raise NotFound(
+            raise OpenstackNotFound(
                 f"Node {host_name} was not found in aggregate {aggregate_name}, did you try using the hostname "
                 "instead of the fqdn?"
             )
@@ -288,7 +295,7 @@ class OpenstackAPI:
         """Add the given host to the aggregate."""
         result = self._run("aggregate", "add", "host", aggregate_name, host_name, capture_errors=True)
         if "HTTP 404" in result:
-            raise NotFound(
+            raise OpenstackNotFound(
                 f"Node {host_name} was not found in aggregate {aggregate_name}, did you try using the hostname "
                 "instead of the fqdn?"
             )
@@ -313,7 +320,7 @@ class OpenstackAPI:
             result = next(host.run_sync(f"cat {AGGREGATES_FILE_PATH}", is_safe=True))[1].message().decode()
 
         except Exception as error:
-            raise NotFound(f"Unable to cat the file {AGGREGATES_FILE_PATH} on host {host}") from error
+            raise OpenstackNotFound(f"Unable to cat the file {AGGREGATES_FILE_PATH} on host {host}") from error
 
         return yaml.safe_load(result)
 
@@ -327,7 +334,7 @@ class OpenstackAPI:
             next(self._control_node.run_sync(command, is_safe=False))
 
         except StopIteration:
-            raise MigrationError(
+            raise OpenstackMigrationError(
                 f"Got no result when running {command} on {self.control_node_fqdn}, was expecting some output at "
                 "least."
             )
@@ -337,16 +344,12 @@ class CephException(Exception):
     """Parent exception for all ceph related issues."""
 
 
-class ClusterUnhealthy(CephException):
+class CephClusterUnhealthy(CephException):
     """Risen when trying to act on an unhealthy cluster."""
 
 
-class FlagSetError(CephException):
+class CephFlagSetError(CephException):
     """Risen when something failed when setting a flag in the cluster."""
-
-
-class FlagUnSetError(CephException):
-    """Risen when something failed when unsetting a flag in the cluster."""
 
 
 @dataclass(frozen=True)
@@ -413,7 +416,7 @@ class CephClusterSatus:
             return
 
         if temp_status["health"]["status"] != "HEALTH_OK":
-            raise ClusterUnhealthy(
+            raise CephClusterUnhealthy(
                 f"The cluster is currently in an unhealthy status: \n{json.dumps(self.status_dict['health'], indent=4)}"
             )
 
@@ -459,7 +462,7 @@ class CephController:
             next(self._controlling_node.run_sync(f"ceph osd set {flag_name}"))[1].message().decode()
         )
         if set_osdmap_flag_result != f"{flag_name} is set":
-            raise FlagSetError(f"Unable to set `{flag_name}` on the cluster: {set_osdmap_flag_result}")
+            raise CephFlagSetError(f"Unable to set `{flag_name}` on the cluster: {set_osdmap_flag_result}")
 
     def unset_osdmap_flag(self, flag_name: str) -> None:
         """Unset one of the osdmap flags."""
@@ -467,7 +470,7 @@ class CephController:
             next(self._controlling_node.run_sync(f"ceph osd unset {flag_name}"))[1].message().decode()
         )
         if unset_osdmap_flag_result != f"{flag_name} is unset":
-            raise FlagSetError(f"Unable to unset `{flag_name}` on the cluster: {unset_osdmap_flag_result}")
+            raise CephFlagSetError(f"Unable to unset `{flag_name}` on the cluster: {unset_osdmap_flag_result}")
 
     def set_maintenance(self, force: bool = False) -> None:
         """Set maintenance."""
@@ -479,7 +482,7 @@ class CephController:
         try:
             cluster_status.check_healthy()
 
-        except ClusterUnhealthy:
+        except CephClusterUnhealthy:
             if not force:
                 LOGGER.warning(
                     "Cluster is not in a healthy status, putting it in maintenance might stop any recovery processes. "
@@ -504,7 +507,7 @@ class CephController:
         try:
             cluster_status.check_healthy(consider_maintenance_healthy=True)
 
-        except ClusterUnhealthy:
+        except CephClusterUnhealthy:
             if not force:
                 LOGGER.warning(
                     "Cluster is not in a healthy status, getting it out of maintenance might have undesirable "
@@ -537,7 +540,7 @@ class CephController:
                 self.get_cluster_status().check_healthy(consider_maintenance_healthy=consider_maintenance_healthy)
                 return
 
-            except ClusterUnhealthy:
+            except CephClusterUnhealthy:
                 LOGGER.info(
                     "Cluster still not healthy, waiting another %d (timeout=%d)...",
                     check_interval_seconds,
@@ -548,7 +551,7 @@ class CephController:
             cur_time = time.time()
 
         cluster_status = self.get_cluster_status()
-        raise ClusterUnhealthy(
+        raise CephClusterUnhealthy(
             f"Waited {timeout_seconds} for the cluster to become healthy, but it never did, current state:\n"
             f"\n{json.dumps(cluster_status.status_dict['health'], indent=4)}"
         )
