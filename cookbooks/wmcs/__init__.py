@@ -31,6 +31,11 @@ OpenstackID = str
 OpenstackName = str
 
 
+def _quote(mystr: str) -> str:
+    """Wraps the given string in single quotes."""
+    return f"'{mystr}'"
+
+
 class OpenstackError(Exception):
     """Parent class for all openstack related errors."""
 
@@ -144,11 +149,11 @@ class OpenstackAPI:
             "server",
             "create",
             "--flavor",
-            flavor,
+            _quote(flavor),
             "--image",
-            image,
+            _quote(image),
             "--network",
-            network,
+            _quote(network),
             "--hint",
             f"group={server_group_id}",
             "--wait",
