@@ -58,8 +58,10 @@ class OpenstackRuleDirection(Enum):
 class OpenstackServerGroupPolicy(Enum):
     """Affinity for the server group."""
 
+    soft_anti_affinity = "soft-anti-affinity"
     anti_affinity = "anti-affinity"
     affinity = "affinity"
+    soft_affinity = "soft-affinity"
 
 
 class OpenstackAPI:
@@ -251,6 +253,7 @@ class OpenstackAPI:
     def server_group_create(self, name: OpenstackName, policy: OpenstackServerGroupPolicy) -> None:
         """Create a server group."""
         self._run(
+            "--os-compute-api-version=2.15",  # needed to be 2.15 or higher for soft-* policies
             "server",
             "group",
             "create",
@@ -259,13 +262,15 @@ class OpenstackAPI:
             name,
         )
 
-    def server_group_ensure(self, server_group: OpenstackName) -> None:
+    def server_group_ensure(
+        self, server_group: OpenstackName, policy: OpenstackServerGroupPolicy = OpenstackServerGroupPolicy.anti_affinity
+    ) -> None:
         """Make sure that the given server group exists, create it if not there."""
         try:
             self.server_group_by_name(name=server_group)
             LOGGER.info("Server group %s already exists, not creating.", server_group)
         except OpenstackNotFound:
-            self.server_group_create(policy=OpenstackServerGroupPolicy.anti_affinity, name=server_group)
+            self.server_group_create(policy=policy, name=server_group)
 
     def server_group_by_name(self, name: OpenstackName) -> Optional[Dict[str, Any]]:
         """Retrieve the server group info given a name.
