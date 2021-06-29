@@ -47,6 +47,12 @@ class Drain(CookbookBase):
             required=True,
             help="Hostname (without domain) of the node to drain.",
         )
+        parser.add_argument(
+            "--task-id",
+            required=False,
+            default=None,
+            help="Id of the task related to this operation (ex. T123456)",
+        )
 
         return parser
 
@@ -56,6 +62,7 @@ class Drain(CookbookBase):
             hostname_to_drain=args.hostname_to_drain,
             control_node_fqdn=args.control_node_fqdn,
             project=args.project,
+            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
@@ -68,6 +75,7 @@ class DrainRunner(CookbookRunnerBase):
         hostname_to_drain: str,
         control_node_fqdn: str,
         project: str,
+        task_id: str,
         spicerack: Spicerack,
     ):
         """Init"""
@@ -75,11 +83,12 @@ class DrainRunner(CookbookRunnerBase):
         self.hostname_to_drain = hostname_to_drain
         self.spicerack = spicerack
         self.project = project
+        self.task_id = task_id
 
     def run(self) -> Optional[int]:
         """Main entry point"""
         remote = self.spicerack.remote()
-        dologmsg(message=f"Draining node {self.hostname_to_drain}...", project=self.project)
+        dologmsg(message=f"Draining node {self.hostname_to_drain}...", project=self.project, task_id=self.task_id)
         kubectl = KubernetesController(remote=remote, controlling_node_fqdn=self.control_node_fqdn)
         kubectl.drain_node(node_hostname=self.hostname_to_drain)
 
@@ -108,4 +117,4 @@ class DrainRunner(CookbookRunnerBase):
             )
             time.sleep(30)
 
-        dologmsg(message=f"Drained node {self.hostname_to_drain}.", project=self.project)
+        dologmsg(message=f"Drained node {self.hostname_to_drain}.", project=self.project, task_id=self.task_id)

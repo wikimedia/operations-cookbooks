@@ -53,6 +53,12 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
             default=None,
             help=("Prefix for the k8s worker nodes, default is <project>-k8s-worker"),
         )
+        parser.add_argument(
+            "--task-id",
+            required=False,
+            default=None,
+            help="Id of the task related to this operation (ex. T123456)",
+        )
 
         return parser
 
@@ -63,6 +69,7 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
             fqdn_to_remove=args.fqdn_to_remove,
             control_node_fqdn=args.control_node_fqdn,
             project=args.project,
+            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
@@ -76,6 +83,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         control_node_fqdn: str,
         fqdn_to_remove: str,
         project: str,
+        task_id: str,
         spicerack: Spicerack,
     ):
         """Init"""
@@ -83,6 +91,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         self.fqdn_to_remove = fqdn_to_remove
         self.control_node_fqdn = control_node_fqdn
         self.project = project
+        self.task_id = task_id
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
@@ -141,6 +150,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         dologmsg(
             message=f"Depooling and removing worker {self.fqdn_to_remove or ', will pick the oldest'}.",
             project=self.project,
+            task_id=self.task_id,
         )
         remote = self.spicerack.remote()
         k8s_worker_prefix = self.k8s_worker_prefix if self.k8s_worker_prefix is not None else f"{self.project}-k8s-etcd"
@@ -157,18 +167,17 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
             control_node_fqdn = self.control_node_fqdn
 
         drain_cookbook = Drain(spicerack=self.spicerack)
-        drain_cookbook.get_runner(
-            args=drain_cookbook.argument_parser().parse_args(
-                [
-                    "--project",
-                    self.project,
-                    "--hostname-to-drain",
-                    fqdn_to_remove.split(".", 1)[0],
-                    "--control-node-fqdn",
-                    control_node_fqdn,
-                ]
-            )
-        ).run()
+        drain_args = [
+            "--project",
+            self.project,
+            "--hostname-to-drain",
+            fqdn_to_remove.split(".", 1)[0],
+            "--control-node-fqdn",
+            control_node_fqdn,
+        ]
+        if self.task_id:
+            drain_args.extend(["--task-id", self.task_id])
+        drain_cookbook.get_runner(args=drain_cookbook.argument_parser().parse_args(args=drain_args)).run()
 
         kubectl = KubernetesController(remote=remote, controlling_node_fqdn=control_node_fqdn)
         kubectl.delete_node(fqdn_to_remove.split(".", 1)[0])
@@ -189,4 +198,5 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         dologmsg(
             message=f"Depooled and removed worker {fqdn_to_remove}.",
             project=self.project,
+            task_id=self.task_id,
         )

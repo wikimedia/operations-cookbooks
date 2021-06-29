@@ -42,6 +42,12 @@ class ToolforgeAddK8sWorkerNode(CookbookBase):
             help="Openstack project where the toolforge installation resides.",
         )
         parser.add_argument(
+            "--task-id",
+            required=False,
+            default=None,
+            help="Id of the task related to this operation (ex. T123456)",
+        )
+        parser.add_argument(
             "--k8s-worker-prefix",
             required=False,
             default=None,
@@ -82,6 +88,7 @@ class ToolforgeAddK8sWorkerNode(CookbookBase):
             project=args.project,
             image=args.image,
             flavor=args.flavor,
+            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
@@ -94,6 +101,7 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         k8s_worker_prefix: Optional[str],
         k8s_control_prefix: Optional[str],
         project: str,
+        task_id: str,
         spicerack: Spicerack,
         image: Optional[str] = None,
         flavor: Optional[str] = None,
@@ -102,13 +110,14 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         self.k8s_worker_prefix = k8s_worker_prefix
         self.k8s_control_prefix = k8s_control_prefix
         self.project = project
+        self.task_id = task_id
         self.spicerack = spicerack
         self.image = image
         self.flavor = flavor
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        dologmsg(project=self.project, message="Adding a new k8s worker node")
+        dologmsg(project=self.project, message="Adding a new k8s worker node", task_id=self.task_id)
         k8s_worker_prefix = (
             self.k8s_worker_prefix if self.k8s_worker_prefix is not None else f"{self.project}-k8s-worker"
         )
@@ -199,4 +208,5 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         dologmsg(
             project=self.project,
             message=f"Added a new k8s worker {new_member_fqdn} to the worker pool",
+            task_id=self.task_id,
         )
