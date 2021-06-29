@@ -22,6 +22,10 @@ from spicerack.remote import Remote, RemoteHosts
 LOGGER = logging.getLogger(__name__)
 PHABRICATOR_BOT_CONFIG_FILE = "/etc/phabricator_ops-monitoring-bot.conf"
 AGGREGATES_FILE_PATH = "/etc/wmcs_host_aggregates.yaml"
+K8S_SYSTEM_NAMESPACES = [
+    "kube-system",
+    "metrics",
+]
 DIGIT_RE = re.compile("([0-9]+)")
 MINUTES_IN_HOUR = 60
 SECONDS_IN_MINUTE = 60
@@ -565,6 +569,269 @@ class CephController:
             f"Waited {timeout_seconds} for the cluster to become healthy, but it never did, current state:\n"
             f"\n{json.dumps(cluster_status.status_dict['health'], indent=4)}"
         )
+
+
+class KubernetesError(Exception):
+    """Parent class for all kubernetes related errors."""
+
+
+class KubernetesMalformedCluterInfo(KubernetesError):
+    """Risen when the gotten cluster info is not formatted as expected."""
+
+
+class KubernetesNodeNotFound(KubernetesError):
+    """Risen when the given node does not exist."""
+
+
+class KubernetesNodeStatusError(KubernetesError):
+    """Risen when the given node status is not recognized."""
+
+
+@dataclass(frozen=True)
+class KubernetesClusterInfo:
+    """Kubernetes cluster info."""
+
+    master_url: str
+    dns_url: str
+    metrics_url: str
+
+    @classmethod
+    def form_cluster_info_output(cls, raw_output: str) -> "KubernetesClusterInfo":
+        """Create the object from the cli 'kubectl cluster-info' output.
+
+        Example of output:
+        ```
+        Kubernetes master is running at https://k8s.toolsbeta.eqiad1.wikimedia.cloud:6443  # noqa: E501
+        KubeDNS is running at https://k8s.toolsbeta.eqiad1.wikimedia.cloud:6443/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy  # noqa: E501
+        Metrics-server is running at https://k8s.toolsbeta.eqiad1.wikimedia.cloud:6443/api/v1/namespaces/kube-system/services/https:metrics-server:/proxy  # noqa: E501
+
+        To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
+        ```
+        """
+        master_url = None
+        dns_url = None
+        metrics_url = None
+        for line in raw_output.splitlines():
+            # get rid of the terminal colors
+            line = line.replace("\x1b[0;33m", "").replace("\x1b[0;32m", "").replace("\x1b[0m", "")
+            # k8s <1.20 uses "master", >=1.20 uses "control plane":
+            #   https://github.com/kubernetes/kubernetes/commit/ab129349acadb4539cc8c584e4f9a43dd8b45761
+            if line.startswith("Kubernetes master") or line.startswith("Kubernetes control plane"):
+                master_url = line.rsplit(" ", 1)[-1]
+            elif line.startswith("KubeDNS"):
+                dns_url = line.rsplit(" ", 1)[-1]
+            elif line.startswith("Metrics-server"):
+                metrics_url = line.rsplit(" ", 1)[-1]
+
+        if master_url is None or dns_url is None or metrics_url is None:
+            raise KubernetesMalformedCluterInfo(f"Unable to parse cluster info:\n{raw_output}")
+
+        return cls(
+            master_url=master_url,
+            dns_url=dns_url,
+            metrics_url=metrics_url,
+        )
+
+
+class KubernetesController:
+    """Controller for a kubernetes cluster."""
+
+    def __init__(self, remote: Remote, controlling_node_fqdn: str):
+        """Init."""
+        self._remote = remote
+        self.controlling_node_fqdn = controlling_node_fqdn
+        self._controlling_node = self._remote.query(f"D{{{self.controlling_node_fqdn}}}", use_sudo=True)
+
+    def get_nodes_domain(self) -> str:
+        """Get the network domain for the nodes in the cluster."""
+        return self.controlling_node_fqdn.split(".", 1)[-1]
+
+    def get_cluster_info(self) -> KubernetesClusterInfo:
+        """Get cluster info."""
+        raw_output = (
+            # cluster-info does not support json output format (there's a dump
+            # command, but it's too verbose)
+            next(self._controlling_node.run_sync("kubectl cluster-info"))[1]
+            .message()
+            .decode()
+        )
+        return KubernetesClusterInfo.form_cluster_info_output(raw_output=raw_output)
+
+    def get_nodes(self, selector: Optional[str] = None) -> Dict[str, Any]:
+        """Get the nodes currently in the cluster."""
+        if selector:
+            selector_cli = f"--selector='{selector}'"
+        else:
+            selector_cli = ""
+
+        raw_output = (
+            next(self._controlling_node.run_sync(f"kubectl get nodes --output=json {selector_cli}"))[1]
+            .message()
+            .decode()
+        )
+        return json.loads(raw_output)["items"]
+
+    def get_node(self, node_hostname: str) -> Dict[str, Any]:
+        """Get only info for the the given node."""
+        return self.get_nodes(selector=f"kubernetes.io/hostname={node_hostname}")
+
+    def get_pods(self, field_selector: Optional[str] = None) -> Dict[str, Any]:
+        """Get pods."""
+        if field_selector:
+            field_selector_cli = f"--field-selector='{field_selector}'"
+        else:
+            field_selector_cli = ""
+
+        raw_output = (
+            next(self._controlling_node.run_sync(f"kubectl get pods --output=json {field_selector_cli}"))[1]
+            .message()
+            .decode()
+        )
+        return json.loads(raw_output)["items"]
+
+    def get_pods_for_node(self, node_hostname: str) -> Dict[str, Any]:
+        """Get pods for node."""
+        return self.get_pods(field_selector=f"spec.nodeName={node_hostname}")
+
+    def drain_node(self, node_hostname: str) -> Dict[str, Any]:
+        """Drain a node, it does not wait for the containers to be stopped though."""
+        self._controlling_node.run_sync(f"kubectl drain --ignore-daemonsets --delete-local-data {node_hostname}")
+
+    def delete_node(self, node_hostname: str) -> Dict[str, Any]:
+        """Delete a node, it does not drain it, see drain_node for that."""
+        current_nodes = self.get_nodes(selector=f"kubernetes.io/hostname={node_hostname}")
+        if not current_nodes:
+            LOGGER.info("Node %s was not part of this kubernetes cluster, ignoring", node_hostname)
+
+        self._controlling_node.run_sync(f"kubectl delete node {node_hostname}")
+
+    def is_node_ready(self, node_hostname: str) -> bool:
+        """Ready means in 'Ready' status."""
+        node_info = self.get_node(node_hostname=node_hostname)
+        if not node_info:
+            raise KubernetesNodeNotFound("Unable to find node {node_hostname} in the cluster.")
+
+        try:
+            return next(
+                condition["status"] == "True"
+                for condition in node_info[0]["status"]["conditions"]
+                if condition["type"] == "Ready"
+            )
+        except StopIteration:
+            raise KubernetesNodeStatusError(
+                f"Unable to get 'Ready' condition of node {node_hostname}, got conditions:\n"
+                f"{node_info[0]['conditions']}"
+            )
+
+
+class KubeadmError(Exception):
+    """Parent class for all kubeadm related errors."""
+
+
+class KubeadmDeleteTokenError(KubeadmError):
+    """Raised when there was an error deleting a token."""
+
+
+class KubeadmCreateTokenError(KubeadmError):
+    """Raised when there was an error creating a token."""
+
+
+class KubeadmTimeoutForNodeReady(KubeadmError):
+    """Raised when a node did not get to Ready status on time."""
+
+
+class KubeadmController:
+    """Controller for a Kubeadmin managed kubernetes cluster."""
+
+    def __init__(self, remote: Remote, controlling_node_fqdn: str):
+        """Init."""
+        self._remote = remote
+        self._controlling_node_fqdn = controlling_node_fqdn
+        self._controlling_node = self._remote.query(f"D{{{self._controlling_node_fqdn}}}", use_sudo=True)
+
+    def get_nodes_domain(self) -> str:
+        """Get the network domain for the nodes in the cluster."""
+        return self._controlling_node_fqdn.split(".", 1)[-1]
+
+    def get_new_token(self) -> str:
+        """Creates a new bootstrap token."""
+        raw_output = next(self._controlling_node.run_sync("kubeadm token create"))[1].message().decode()
+        output = raw_output.splitlines()[-1].strip()
+        if not output:
+            raise KubeadmCreateTokenError(f"Error creating a new token:\nOutput:{raw_output}")
+
+        return output
+
+    def delete_token(self, token: str) -> str:
+        """Removes the given bootstrap token."""
+        raw_output = next(self._controlling_node.run_sync(f"kubeadm token delete {token}"))[1].message().decode()
+        if "deleted" not in raw_output:
+            raise KubeadmDeleteTokenError(f"Error deleting token {token}:\nOutput:{raw_output}")
+
+        return raw_output.strip()
+
+    def get_ca_cert_hash(self) -> str:
+        """Retrieves the CA cert hash to use when bootstrapping."""
+        raw_output = (
+            next(
+                self._controlling_node.run_sync(
+                    "openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt "
+                    "| openssl rsa -pubin -outform der 2>/dev/null "
+                    "| openssl dgst -sha256 -hex "
+                    "| sed 's/^.* //'"
+                )
+            )[1]
+            .message()
+            .decode()
+        )
+        return raw_output.strip()
+
+    def join(
+        self,
+        kubernetes_controller: KubernetesController,
+        wait_for_ready: bool = True,
+        timeout_seconds: int = 600,
+    ) -> None:
+        """Join this node to the kubernetes cluster controlled by the given controller."""
+        control_kubeadm = KubeadmController(
+            remote=self._remote,
+            controlling_node_fqdn=kubernetes_controller.controlling_node_fqdn,
+        )
+        cluster_info = kubernetes_controller.get_cluster_info()
+        # kubeadm does not want the protocol part https?://
+        join_address = cluster_info.master_url.split("//", 1)[-1]
+        ca_cert_hash = control_kubeadm.get_ca_cert_hash()
+        new_token = control_kubeadm.get_new_token()
+        try:
+            self._controlling_node.run_sync(
+                f"kubeadm join {join_address} "
+                f"--token {new_token} "
+                f"--discovery-token-ca-cert-hash sha256:{ca_cert_hash}"
+            )
+
+            if not wait_for_ready:
+                return
+
+            new_node_hostname = self._controlling_node_fqdn.split(".", 1)[0]
+            check_interval_seconds = 10
+            start_time = time.time()
+            cur_time = start_time
+            while cur_time - start_time < timeout_seconds:
+                if kubernetes_controller.is_node_ready(node_hostname=new_node_hostname):
+                    return
+
+                time.sleep(check_interval_seconds)
+                cur_time = time.time()
+
+            cur_conditions = kubernetes_controller.get_node(node_hostname=new_node_hostname)[0]["conditions"]
+            raise KubeadmTimeoutForNodeReady(
+                f"Waited {timeout_seconds} for the node {new_node_hostname} to "
+                "become healthy, but it never did. Current conditions:\n"
+                f"{json.dumps(cur_conditions, indent=4)}"
+            )
+
+        finally:
+            control_kubeadm.delete_token(token=new_token)
 
 
 def simple_create_file(
