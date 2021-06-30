@@ -14,7 +14,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephController, wrap_with_sudo_icinga
+from cookbooks.wmcs import CephClusterController, wrap_with_sudo_icinga
 
 # Ugly hack to work around the fact that the module has a non-valid identifier
 # file name
@@ -83,7 +83,7 @@ class UpgradeCephNodeRunner(CookbookRunnerBase):
     def run(self) -> Optional[int]:
         """Main entry point"""
         LOGGER.info("Upgrading ceph node %s", self.to_upgrade_fqdn)
-        controller = CephController(remote=self.spicerack.remote(), controlling_node_fqdn=self.to_upgrade_fqdn)
+        controller = CephClusterController(remote=self.spicerack.remote(), controlling_node_fqdn=self.to_upgrade_fqdn)
         # make sure we make cluster info commands on another node
         controller.change_controlling_node()
 

@@ -13,7 +13,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephController
+from cookbooks.wmcs import CephClusterController
 from cookbooks.wmcs.ceph.upgrade_ceph_node import UpgradeCephNode
 
 LOGGER = logging.getLogger(__name__)
@@ -70,7 +70,9 @@ class UpgradeMonsRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        controller = CephController(remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn)
+        controller = CephClusterController(
+            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn
+        )
         controller.set_maintenance()
 
         upgrade_ceph_node_cookbook = UpgradeCephNode(spicerack=self.spicerack)

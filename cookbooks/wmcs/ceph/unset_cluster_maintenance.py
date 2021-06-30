@@ -13,7 +13,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephController
+from cookbooks.wmcs import CephClusterController
 
 LOGGER = logging.getLogger(__name__)
 
@@ -69,5 +69,5 @@ class UnSetClusterInMaintenanceRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        controller = CephController(remote=self.spicerack.remote(), controlling_node_fqdn=self.monitor_node_fqdn)
+        controller = CephClusterController(remote=self.spicerack.remote(), controlling_node_fqdn=self.monitor_node_fqdn)
         controller.unset_maintenance(force=self.force)

@@ -15,7 +15,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephController, dologmsg, wrap_with_sudo_icinga
+from cookbooks.wmcs import CephClusterController, dologmsg, wrap_with_sudo_icinga
 
 LOGGER = logging.getLogger(__name__)
 
@@ -100,7 +100,9 @@ class RebootNodeRunner(CookbookRunnerBase):
         """Main entry point"""
         dologmsg(project="admin", message=f"Rebooting node {self.fqdn_to_reboot}", task_id=self.task_id)
 
-        controller = CephController(remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn)
+        controller = CephClusterController(
+            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn
+        )
         if not self.force:
             controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
 

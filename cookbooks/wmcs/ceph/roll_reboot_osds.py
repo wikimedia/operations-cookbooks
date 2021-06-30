@@ -13,7 +13,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephController, dologmsg
+from cookbooks.wmcs import CephClusterController, dologmsg
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
 
 LOGGER = logging.getLogger(__name__)
@@ -79,7 +79,9 @@ class RollRebootOsdsRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        controller = CephController(remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn)
+        controller = CephClusterController(
+            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn
+        )
         osd_nodes = list(controller.get_nodes()["osd"].keys())
 
         dologmsg(project="admin", message=f"Rebooting the nodes {','.join(osd_nodes)}", task_id=self.task_id)

@@ -435,7 +435,7 @@ class CephClusterSatus:
             )
 
 
-class CephController:
+class CephClusterController:
     """Controller for a CEPH cluster."""
 
     def __init__(self, remote: Remote, controlling_node_fqdn: str):
