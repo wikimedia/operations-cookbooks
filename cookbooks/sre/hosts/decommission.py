@@ -250,7 +250,6 @@ class DecommissionHostRunner(CookbookRunnerBase):
     def _decommission_host(self, fqdn):  # noqa: MC0001
         """Perform all the decommissioning actions on a single host and return its switch if physical."""
         hostname = fqdn.split('.')[0]
-        icinga = self.spicerack.icinga()
         puppet_master = self.spicerack.puppet_master()
         debmonitor = self.spicerack.debmonitor()
         netbox = self.spicerack.netbox(read_write=True)
@@ -262,7 +261,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
 
         # Downtime on Icinga both the host and the mgmt host (later below), they will be removed by Puppet
         try:
-            icinga.downtime_hosts([fqdn], self.reason)
+            self.spicerack.icinga_hosts([fqdn]).downtime(self.reason)
             self.spicerack.actions[fqdn].success('Downtimed host on Icinga')
         except RemoteExecutionError:
             self.spicerack.actions[fqdn].warning(
@@ -292,7 +291,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
 
         else:  # Physical host
             try:
-                icinga.downtime_hosts([mgmt], self.reason)
+                self.spicerack.icinga_hosts([mgmt]).downtime(self.reason)
                 self.spicerack.actions[fqdn].success(
                     'Downtimed management interface on Icinga')
             except RemoteExecutionError:

@@ -50,7 +50,7 @@ class RenewCertRunner(CookbookRunnerBase):
             raise RuntimeError('Only a single server can be rebooted')
 
         self.host = str(hosts.hosts[0])
-        self.icinga = spicerack.icinga()
+        self.icinga_hosts = spicerack.icinga_hosts(hosts)
         self.puppet = spicerack.puppet(hosts)
         self.puppet_master = spicerack.puppet_master()
         self.reason = spicerack.admin_reason('Renew puppet certificate')
@@ -62,7 +62,7 @@ class RenewCertRunner(CookbookRunnerBase):
 
     def run(self):
         """Renew the certificate"""
-        with self.icinga.hosts_downtimed([self.host], self.reason, duration=timedelta(minutes=20)):
+        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
             self.puppet_master.destroy(self.host)
             self.puppet.disable(self.reason)
             fingerprints = self.puppet.regenerate_certificate()

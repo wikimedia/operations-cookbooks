@@ -82,7 +82,7 @@ def check_http_responses(host):
 def run(args, spicerack):
     """Required by Spicerack API."""
     remote_host = spicerack.remote().query(args.host)
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(remote_host.hosts)
     puppet = spicerack.puppet(remote_host)
 
     action = "Upgrading"
@@ -91,7 +91,7 @@ def run(args, spicerack):
 
     reason = spicerack.admin_reason("{} Varnish".format(action))
 
-    icinga.downtime_hosts(remote_host.hosts, reason, duration=timedelta(minutes=20))
+    icinga_hosts.downtime(reason, duration=timedelta(minutes=20))
 
     if not args.hiera_merged:
         # Check that puppet is not already disabled. We skip this check if
@@ -148,5 +148,5 @@ def run(args, spicerack):
 
     # Repool and cancel Icinga downtime
     remote_host.run_sync("pool")
-    icinga.remove_downtime(remote_host.hosts)
+    icinga_hosts.remove_downtime()
     return 0

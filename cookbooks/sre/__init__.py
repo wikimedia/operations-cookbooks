@@ -11,7 +11,6 @@ from collections import namedtuple
 import attr
 
 from cumin import NodeSet
-from spicerack.decorators import retry
 from spicerack.icinga import IcingaError
 from spicerack.puppet import PuppetHostsCheckError
 from spicerack.remote import RemoteCheckError, RemoteExecutionError
@@ -112,35 +111,23 @@ class Results:
         return 1
 
 
-# TODO: move it to the spicerack.icinga module
-@retry(tries=20, delay=timedelta(seconds=3), backoff_mode='linear', exceptions=(IcingaError,))
-def wait_for_icinga_optimal(icinga, remote_host):
-    """Waits for an icinga optimal status, else raises an exception."""
-    status = icinga.get_status(remote_host.hosts)
-    if not status.optimal:
-        failed = ["{}:{}".format(k, ','.join(v)) for k, v in status.failed_services.items()]
-        raise IcingaError('Not all services are recovered: {}'.format(' '.join(failed)))
-
-
 def reboot_set(spicerack, hosts_set, results):
     """Reboot a set of hosts with downtime"""
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(hosts_set.hosts)
     puppet = spicerack.puppet(hosts_set)
     reason = spicerack.admin_reason('Rebooting {}'.format(hosts_set))
     try:
-        with icinga.hosts_downtimed(
-            hosts_set.hosts, reason, duration=timedelta(minutes=20)
-        ):
+        with icinga_hosts.downtimed(reason, duration=timedelta(minutes=20)):
             reboot_time = datetime.utcnow()
             hosts_set.reboot(batch_size=len(hosts_set))
             hosts_set.wait_reboot_since(reboot_time)
             puppet.wait_since(reboot_time)
             # First let's try to check if icinga is already in optimal state.
-            # If not, we require a recheck all service, then
+            # If not, we require a recheck all services, then
             # wait a grace period before declaring defeat.
-            if not icinga.get_status(hosts_set.hosts).optimal:
-                icinga.recheck_all_services(hosts_set.hosts)
-                wait_for_icinga_optimal(icinga, hosts_set)
+            if not icinga_hosts.get_status().optimal:
+                icinga_hosts.recheck_all_services()
+                icinga_hosts.wait_for_optimal()
         results.success(hosts_set.hosts)
     except IcingaError as e:
         logger.warning(e)

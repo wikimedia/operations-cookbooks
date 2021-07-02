@@ -69,7 +69,7 @@ class DowntimeRunner(CookbookRunnerBase):
             raise RuntimeError('No host found for query "{query}"'.format(query=args.query))
 
         self.task_id = args.task_id
-        self.icinga = spicerack.icinga()
+        self.icinga_hosts = spicerack.icinga_hosts(self.hosts)
         self.reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
         if args.force_puppet:
@@ -106,7 +106,7 @@ class DowntimeRunner(CookbookRunnerBase):
             self.puppet.run(quiet=True, attempts=30)
 
         logging.info('Downtiming %s', self.runtime_description)
-        self.icinga.downtime_hosts(self.hosts, self.reason, duration=self.duration)
+        self.icinga_hosts.downtime(self.reason, duration=self.duration)
 
         if self.phabricator is not None:
             self.phabricator.task_comment(self.task_id, self.long_message)

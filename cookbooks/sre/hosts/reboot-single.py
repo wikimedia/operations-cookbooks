@@ -7,7 +7,6 @@ import time
 from datetime import datetime, timedelta
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.decorators import retry
 from spicerack.icinga import IcingaError
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
@@ -63,7 +62,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
         if len(self.remote_host) != 1:
             raise RuntimeError('Only a single server can be rebooted')
 
-        self.icinga = spicerack.icinga()
+        self.icinga_hosts = spicerack.icinga_hosts(self.remote_host.hosts)
         self.puppet = spicerack.puppet(self.remote_host)
         self.reason = spicerack.admin_reason('Rebooting host' if not args.reason else args.reason)
 
@@ -77,14 +76,6 @@ class RebootSingleHostRunner(CookbookRunnerBase):
 
         self.depool = args.depool
 
-    @retry(tries=20, delay=timedelta(seconds=3), backoff_mode='linear', exceptions=(IcingaError,))
-    def _wait_for_icinga_optimal(self):
-        """Waits for an icinga optimal status, else raises an exception."""
-        status = self.icinga.get_status(self.remote_host.hosts)
-        if not status.optimal:
-            failed = ["{}:{}".format(k, ','.join(v)) for k, v in status.failed_services.items()]
-            raise IcingaError('Not all services are recovered: {}'.format(' '.join(failed)))
-
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
@@ -92,8 +83,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
 
     def run(self):
         """Reboot the host"""
-        with self.icinga.hosts_downtimed(
-                self.remote_host.hosts, self.reason, duration=timedelta(minutes=20)):
+        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
             if self.phabricator is not None:
                 self.phabricator.task_comment(self.task_id, self.message)
 
@@ -109,11 +99,11 @@ class RebootSingleHostRunner(CookbookRunnerBase):
             # First let's try to check if icinga is already in optimal state.
             # If not, we require a recheck all service, then
             # wait a grace period before declaring defeat.
-            icinga_ok = self.icinga.get_status(self.remote_host.hosts).optimal
+            icinga_ok = self.icinga_hosts.get_status().optimal
             if not icinga_ok:
-                self.icinga.recheck_all_services(self.remote_host.hosts)
+                self.icinga_hosts.recheck_all_services()
                 try:
-                    self._wait_for_icinga_optimal()
+                    self.icinga_hosts.wait_for_optimal()
                     icinga_ok = True
                 except IcingaError:
                     logger.error(
