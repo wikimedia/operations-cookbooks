@@ -95,7 +95,7 @@ def run(args, spicerack):
 
     hadoop_master = spicerack.remote().query(hadoop_master_cumin_alias)
     hadoop_standby = spicerack.remote().query(hadoop_standby_cumin_alias)
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(hadoop_master.hosts | hadoop_standby.hosts)
     reason = spicerack.admin_reason('Restart of jvm daemons.')
 
     yarn_rm_sleep = args.yarn_rm_sleep_seconds
@@ -120,8 +120,7 @@ def run(args, spicerack):
 
     ask_confirmation('Please make sure that the active/standby nodes are correct.')
 
-    with icinga.hosts_downtimed(hadoop_master.hosts | hadoop_standby.hosts, reason,
-                                duration=timedelta(minutes=120)):
+    with icinga_hosts.downtimed(reason, duration=timedelta(minutes=120)):
         logger.info("Restarting Yarn Resourcemanager on Master.")
         hadoop_master.run_sync('systemctl restart hadoop-yarn-resourcemanager')
         logger.info("Sleeping %s seconds.", yarn_rm_sleep)

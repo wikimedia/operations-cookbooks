@@ -36,7 +36,7 @@ def run(args, spicerack):
     ensure_shell_is_durable()
 
     kafka_brokers = spicerack.remote().query(cluster_cumin_alias)
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(kafka_brokers.hosts)
     reason = spicerack.admin_reason('Roll restart of jvm daemons for openjdk upgrade.')
 
     ask_confirmation(
@@ -55,8 +55,7 @@ def run(args, spicerack):
             'is less than 900 seconds. The broker needs some time to recover after a restart. '
             'Are you sure?')
 
-    with icinga.hosts_downtimed(kafka_brokers.hosts, reason,
-                                duration=timedelta(minutes=240)):
+    with icinga_hosts.downtimed(reason, duration=timedelta(minutes=240)):
         commands = [
             'systemctl restart kafka',
             'sleep ' + str(args.sleep_before_pref_replica_election),

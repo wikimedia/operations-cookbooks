@@ -28,15 +28,14 @@ def run(args, spicerack):
     confctl = spicerack.confctl('node')
     aqs_canary = remote.query('A:' + args.cluster + '-canary')
     aqs_workers = remote.query('A:' + args.cluster)
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(aqs_workers.hosts)
     reason = spicerack.admin_reason('Roll restart of all AQS\'s nodejs daemons.')
 
     ask_confirmation(
         'If a config change is being rolled-out, please run puppet on all hosts '
         'before proceeding.')
 
-    with icinga.hosts_downtimed(aqs_workers.hosts, reason,
-                                duration=timedelta(minutes=60)):
+    with icinga_hosts.downtimed(reason, duration=timedelta(minutes=60)):
         logger.info("Depool and test on canary: %s", aqs_canary.hosts)
         aqs_canary.run_sync(
             'depool',

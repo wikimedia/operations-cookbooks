@@ -50,7 +50,7 @@ class RebootDruidWorkersRunner(CookbookRunnerBase):
         """Reboot Druid on a given cluster."""
         ensure_shell_is_durable()
 
-        self.icinga = spicerack.icinga()
+        self.icinga_hosts = spicerack.icinga_hosts  # Store the method to be called on each host
         self.puppet = spicerack.puppet
         self.spicerack = spicerack
         self.reason = spicerack.admin_reason('Reboot Druid nodes')
@@ -81,7 +81,7 @@ class RebootDruidWorkersRunner(CookbookRunnerBase):
 
         duration = timedelta(minutes=120)
 
-        with self.icinga.hosts_downtimed([host], self.reason, duration=duration):
+        with self.icinga_hosts([host]).downtimed(self.reason, duration=duration):
             with puppet.disabled(self.reason):
                 logger.info('Stopping active zookeeper on host %s', host)
                 node.run_sync('systemctl --quiet is-active zookeeper && systemctl stop zookeeper || exit 0')

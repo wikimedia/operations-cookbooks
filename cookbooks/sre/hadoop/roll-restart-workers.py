@@ -59,7 +59,7 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     hadoop_workers = spicerack.remote().query(cluster_cumin_alias)
     hadoop_hdfs_journal_workers = spicerack.remote().query(hdfs_jn_cumin_alias)
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(hadoop_workers.hosts)
     reason = spicerack.admin_reason('Roll restart of jvm daemons for openjdk upgrade.')
 
     yarn_nm_batch_size = args.yarn_nm_batch_size
@@ -84,8 +84,7 @@ def run(args, spicerack):
     if yarn_nm_sleep < 20:
         ask_confirmation('The Yarn Nodemanager sleep between each batch is less than 20s, are you sure?')
 
-    with icinga.hosts_downtimed(hadoop_workers.hosts, reason,
-                                duration=timedelta(minutes=120)):
+    with icinga_hosts.downtimed(reason, duration=timedelta(minutes=120)):
         logger.info("Restarting Yarn Nodemanagers with batch size %s and sleep %s..",
                     yarn_nm_batch_size, yarn_nm_sleep)
         hadoop_workers.run_sync(

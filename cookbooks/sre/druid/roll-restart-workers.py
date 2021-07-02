@@ -64,7 +64,7 @@ class RestartDruidWorkersRunner(CookbookRunnerBase):
             self.need_depool = True
         self.cluster = args.cluster
         self.druid_workers = spicerack.remote().query(cluster_cumin_alias)
-        self.icinga = spicerack.icinga()
+        self.icinga_hosts = spicerack.icinga_hosts(self.druid_workers.hosts)
         self.reason = spicerack.admin_reason('Roll restart of Druid\'s jvm daemons.')
         self.daemons = args.daemons
         ensure_shell_is_durable()
@@ -76,8 +76,7 @@ class RestartDruidWorkersRunner(CookbookRunnerBase):
 
     def run(self):
         """Restart all Druid jvm daemons on a given cluster"""
-        with self.icinga.hosts_downtimed(self.druid_workers.hosts, self.reason,
-                                         duration=timedelta(minutes=60)):
+        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=60)):
             logger.info(
                 'Restarting daemons (%s), one host at the time.', ','.join(self.daemons))
             commands = []

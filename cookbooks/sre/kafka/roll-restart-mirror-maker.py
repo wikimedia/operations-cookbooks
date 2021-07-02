@@ -47,11 +47,10 @@ def run(args, spicerack):
 
     """Required by Spicerack API."""
     kafka_mirror_makers = spicerack.remote().query(cluster_cumin_alias)
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(kafka_mirror_makers.hosts)
     reason = spicerack.admin_reason('Roll restart of jvm daemons.')
 
-    with icinga.hosts_downtimed(kafka_mirror_makers.hosts, reason,
-                                duration=timedelta(minutes=120)):
+    with icinga_hosts.downtimed(reason, duration=timedelta(minutes=120)):
 
         kafka_mirror_makers.run_sync(
             'systemctl restart kafka-mirror.service', batch_size=1, batch_sleep=args.batch_sleep_seconds)

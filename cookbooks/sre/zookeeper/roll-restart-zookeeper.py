@@ -42,7 +42,7 @@ def run(args, spicerack):
     ensure_shell_is_durable()
 
     zookeeper = spicerack.remote().query(cluster_cumin_alias)
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(zookeeper.hosts)
     reason = spicerack.admin_reason('Roll restart of jvm daemons.')
 
     zookeeper.run_sync('echo stats | nc -q 1 localhost 2181')
@@ -52,9 +52,7 @@ def run(args, spicerack):
         'Please check the status of Zookeeper before proceeding.'
         'There must be only one leader and the rest must be followers.')
 
-    with icinga.hosts_downtimed(zookeeper.hosts, reason,
-                                duration=timedelta(minutes=120)):
-
+    with icinga_hosts.downtimed(reason, duration=timedelta(minutes=120)):
         zookeeper.run_sync('systemctl restart zookeeper', batch_size=1, batch_sleep=args.batch_sleep_seconds)
 
     logger.info('All Zookeeper restarts completed!')

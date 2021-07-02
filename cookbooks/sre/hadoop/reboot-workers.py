@@ -88,7 +88,6 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
         self.cluster = args.cluster
         self.spicerack_remote = spicerack.remote()
         self.spicerack = spicerack
-        self.icinga = spicerack.icinga()
         self.reboot_batch_size = args.batch_size
         self.yarn_nm_sleep_seconds = args.yarn_nm_sleep_seconds
         self.workers_cumin_query = args.workers_cumin_query
@@ -101,8 +100,8 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
 
     def _reboot_hadoop_workers(self, hadoop_workers_batch, stop_journal_daemons=False):
         """Reboot a batch of Hadoop workers"""
-        with self.icinga.hosts_downtimed(hadoop_workers_batch.hosts, self.reason,
-                                         duration=timedelta(minutes=60)):
+        with self.spicerack.icinga_hosts(hadoop_workers_batch.hosts).downtimed(
+                self.reason, duration=timedelta(minutes=60)):
             puppet = self.spicerack.puppet(hadoop_workers_batch)
             puppet.disable(self.reason)
             logger.info('Stopping the Yarn Nodemanagers...')
