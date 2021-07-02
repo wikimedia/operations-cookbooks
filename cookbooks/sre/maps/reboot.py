@@ -55,12 +55,11 @@ def run(args, spicerack):
         raise ValueError("All hosts from query: {query} must be member of A:maps-all")
 
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
-    icinga = spicerack.icinga()
 
     fail_for_replicate_osm_process(remote_hosts)
 
     for remote_host in remote_hosts.split(len(remote_hosts)):
-        with icinga.hosts_downtimed(remote_host.hosts, reason, duration=timedelta(hours=args.downtime)):
+        with spicerack.icinga_hosts(remote_host.hosts).downtimed(reason, duration=timedelta(hours=args.downtime)):
             if args.depool:
                 logger.info("Depool %s and wait for current requests to terminate", remote_host)
                 remote_host.run_sync('depool', 'sleep 180')

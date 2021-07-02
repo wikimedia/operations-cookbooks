@@ -42,7 +42,7 @@ def run(args, spicerack):
     ensure_shell_is_durable()
 
     cassandra_nodes = spicerack.remote().query(query)
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(cassandra_nodes.hosts)
     reason = spicerack.admin_reason(args.reason)
 
     logger.info('Checking that all Cassandra nodes are reported up by their systemd unit status.')
@@ -54,8 +54,7 @@ def run(args, spicerack):
             """
     cassandra_nodes.run_sync(status_cmd)
 
-    with icinga.hosts_downtimed(cassandra_nodes.hosts, reason,
-                                duration=timedelta(minutes=240)):
+    with icinga_hosts.downtimed(reason, duration=timedelta(minutes=240)):
         cassandra_nodes.run_sync(
             'c-foreach-restart -d ' + str(args.instance_sleep_seconds) + ' -a 20 -r 12',
             batch_size=1,

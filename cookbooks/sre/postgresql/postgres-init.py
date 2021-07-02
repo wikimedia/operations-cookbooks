@@ -37,11 +37,11 @@ def run(args, spicerack):
         raise ValueError("Please select one node at a time. Querying for '{replica}' returns {total} node(s)".format(
             replica=args.replica, total=len(replica)
         ))
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(replica.hosts)
     puppet = spicerack.puppet(replica)
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
-    with icinga.hosts_downtimed(replica.hosts, reason, duration=timedelta(hours=args.downtime)):
+    with icinga_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
         with puppet.disabled(reason):
             if args.depool:
                 replica.run_sync('depool', 'sleep 180')
