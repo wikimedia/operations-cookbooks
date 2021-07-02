@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# pylint: disable=unsubscriptable-object,too-many-arguments
+# pylint: disable=unsubscriptable-object,too-many-arguments,too-many-lines
 """Cloud Services Cookbooks"""
 __title__ = __doc__
 import base64
@@ -18,6 +18,7 @@ import yaml
 from cumin.transports import Command
 from spicerack import ICINGA_DOMAIN, Spicerack
 from spicerack.remote import Remote, RemoteHosts
+from wmflib.interactive import ask_confirmation
 
 LOGGER = logging.getLogger(__name__)
 PHABRICATOR_BOT_CONFIG_FILE = "/etc/phabricator_ops-monitoring-bot.conf"
@@ -362,6 +363,10 @@ class CephClusterUnhealthy(CephException):
     """Risen when trying to act on an unhealthy cluster."""
 
 
+class CephTimeout(CephException):
+    """Risen when trying to act on an unhealthy cluster."""
+
+
 class CephFlagSetError(CephException):
     """Risen when something failed when setting a flag in the cluster."""
 
@@ -413,7 +418,7 @@ class CephClusterSatus:
 
         if "OSDMAP_FLAGS" in temp_status["health"]["checks"] and len(temp_status["health"]["checks"]) == 1:
             current_flags = self.get_osdmap_set_flags()
-            return current_flags == {"noout", "norebalance"}
+            return current_flags.issubset({"noout", "norebalance"})
 
         return False
 
@@ -433,6 +438,61 @@ class CephClusterSatus:
             raise CephClusterUnhealthy(
                 f"The cluster is currently in an unhealthy status: \n{json.dumps(self.status_dict['health'], indent=4)}"
             )
+
+    def get_in_progress(self) -> None:
+        """Get the current in-progress events."""
+        return self.status_dict.get("progress_events", {})
+
+
+class CephOSDController:
+    """Controller for a CEPH node."""
+
+    SYSTEM_DEVICES = ["sda", "sdb"]
+
+    def __init__(self, remote: Remote, node_fqdn: str):
+        """Init."""
+        self._remote = remote
+        self._node_fqdn = node_fqdn
+        self._node = self._remote.query(f"D{{{self._node_fqdn}}}", use_sudo=True)
+
+    @classmethod
+    def _is_device_available(cls, device_info: Dict[str, Any]) -> bool:
+        return (
+            device_info["name"] not in cls.SYSTEM_DEVICES
+            and not device_info.get("children")
+            and device_info.get("type") == "disk"
+            and not device_info.get("mountpoint")
+        )
+
+    def get_available_devices(self) -> None:
+        """Get the current available devices in the node."""
+        raw_output = next(self._node.run_sync("lsblk --json"))[1].message().decode()
+        structured_output = json.loads(raw_output)
+        return [
+            f"/dev/{device_info['name']}"
+            for device_info in structured_output.get("blockdevices")
+            if self._is_device_available(device_info=device_info)
+        ]
+
+    def zap_device(self, device_path: str) -> None:
+        """Zap the given device.
+
+        NOTE: this destroys all the information in the device!
+        """
+        self._node.run_sync(f"ceph-volume lvm zap {device_path}")
+
+    def initialize_and_start_osd(self, device_path: str) -> None:
+        """Setup and start a new osd on the given device."""
+        self._node.run_sync(f"ceph-volume lvm create --bluestore --data {device_path}")
+
+    def add_all_available_devices(self, interactive: bool = True) -> None:
+        """Discover and add all the available devices of the node as new OSDs."""
+        for device_path in self.get_available_devices():
+            if interactive:
+                ask_confirmation(f"I'm going to destroy and create a new OSD on {self._node_fqdn}:{device_path}.")
+
+            self.zap_device(device_path=device_path)
+            self.initialize_and_start_osd(device_path=device_path)
 
 
 class CephClusterController:
@@ -543,6 +603,37 @@ class CephClusterController:
 
         else:
             LOGGER.info("Cluster already out of maintenance status.")
+
+    def wait_for_in_progress_events(self, timeout_seconds: int = 600) -> None:
+        """Wait until a cluster in progress events have finished."""
+        check_interval_seconds = 10
+        start_time = time.time()
+        cur_time = start_time
+        while cur_time - start_time < timeout_seconds:
+            cluster_status = self.get_cluster_status()
+            in_progress_events = cluster_status.get_in_progress()
+            if not in_progress_events:
+                return
+
+            mean_progress = sum(
+                event["progress"]
+                for event in in_progress_events.values()
+            ) * 100 / len(in_progress_events)
+            LOGGER.info(
+                "Cluster still has (%d) in-progress events, %.2f%% done, waiting another %d (timeout=%d)...",
+                len(in_progress_events),
+                mean_progress,
+                check_interval_seconds,
+                timeout_seconds,
+            )
+
+            time.sleep(check_interval_seconds)
+            cur_time = time.time()
+
+        raise CephTimeout(
+            f"Waited {timeout_seconds} for the cluster to finish in-progress events, but it never did, current state:\n"
+            f"\n{json.dumps(cluster_status.get_in_progress(), indent=4)}"
+        )
 
     def wait_for_cluster_healthy(self, consider_maintenance_healthy: bool = False, timeout_seconds: int = 600) -> None:
         """Wait until a cluster becomes healthy."""
