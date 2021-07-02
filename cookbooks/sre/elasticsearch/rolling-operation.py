@@ -77,16 +77,14 @@ class RollingOperation(CookbookBase):
         upgrade = args.upgrade
         reboot = args.reboot
 
-        icinga = self.spicerack.icinga()
-
         return RollingOperationRunner(
             self.spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
-            nodes_per_run, with_lvs, wait_for_green, upgrade, reboot, write_queue_datacenters, icinga)
+            nodes_per_run, with_lvs, wait_for_green, upgrade, reboot, write_queue_datacenters)
 
 
 class RollingOperationRunner(CookbookRunnerBase):
     def __init__(self, spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
-                 nodes_per_run, with_lvs, wait_for_green, upgrade, reboot, write_queue_datacenters, icinga):
+                 nodes_per_run, with_lvs, wait_for_green, upgrade, reboot, write_queue_datacenters):
         self.spicerack = spicerack
         self.elasticsearch_clusters = elasticsearch_clusters
         self.clustergroup = clustergroup
@@ -98,7 +96,6 @@ class RollingOperationRunner(CookbookRunnerBase):
         self.upgrade = upgrade
         self.reboot = reboot
         self.write_queue_datacenters = write_queue_datacenters
-        self.icinga = icinga
 
     @property
     def runtime_description(self):
@@ -141,7 +138,7 @@ class RollingOperationRunner(CookbookRunnerBase):
                 nodes.start_elasticsearch()
 
         execute_on_clusters(
-            self.elasticsearch_clusters, self.icinga, self.reason, self.spicerack, self.nodes_per_run,
+            self.elasticsearch_clusters, self.reason, self.spicerack, self.nodes_per_run,
             self.clustergroup, self.start_datetime, self.with_lvs, self.wait_for_green,
             rolling_operation
         )

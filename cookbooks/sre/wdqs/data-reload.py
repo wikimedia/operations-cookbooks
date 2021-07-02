@@ -197,7 +197,7 @@ def run(args, spicerack):
         raise ValueError("Only one host is needed. Not {total}({source})".
                          format(total=len(remote_host), source=remote_host))
 
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(remote_host.hosts)
     puppet = spicerack.puppet(remote_host)
     prometheus = spicerack.prometheus()
     confctl = spicerack.confctl('node')
@@ -222,7 +222,7 @@ def run(args, spicerack):
     else:
         depool_host = noop_change_and_revert
 
-    with icinga.hosts_downtimed(remote_host.hosts, reason, duration=timedelta(hours=args.downtime)):
+    with icinga_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
         with depool_host():
             remote_host.run_sync('sleep 180')
             if 'categories' in data_to_reload:

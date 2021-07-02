@@ -26,7 +26,7 @@ def valid_datetime_type(datetime_str):
         raise argparse.ArgumentTypeError(msg)
 
 
-def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # pylint: disable=too-many-arguments
+def execute_on_clusters(elasticsearch_clusters, reason, spicerack,  # pylint: disable=too-many-arguments
                         nodes_per_run, clustergroup, start_datetime, nodes_have_lvs,
                         wait_for_green, action):
     """Executes an action on a whole cluster, taking care of alerting, puppet, etc...
@@ -46,7 +46,7 @@ def execute_on_clusters(elasticsearch_clusters, icinga, reason, spicerack,  # py
         remote_hosts = nodes.get_remote_hosts()
         puppet = spicerack.puppet(remote_hosts)
 
-        with icinga.hosts_downtimed(remote_hosts.hosts, reason, duration=timedelta(minutes=30)):
+        with spicerack.icinga_hosts(remote_hosts.hosts).downtimed(reason, duration=timedelta(minutes=30)):
             with puppet.disabled(reason):
 
                 with elasticsearch_clusters.frozen_writes(reason):

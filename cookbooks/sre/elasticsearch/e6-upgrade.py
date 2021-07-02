@@ -50,7 +50,6 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     if args.start_datetime is None:
         args.start_datetime = datetime.utcnow()
-    icinga = spicerack.icinga()
     elasticsearch_clusters = spicerack.elasticsearch_clusters(args.clustergroup, args.write_queue_datacenters)
     reason = spicerack.admin_reason(args.admin_reason, task_id=args.task_id)
 
@@ -104,6 +103,6 @@ def run(args, spicerack):
         )
 
     execute_on_clusters(
-        elasticsearch_clusters, icinga, reason, spicerack, args.nodes_per_run,
+        elasticsearch_clusters, reason, spicerack, args.nodes_per_run,
         args.clustergroup, args.start_datetime, args.with_lvs, args.wait_for_green, upgrade_elasticsearch
     )

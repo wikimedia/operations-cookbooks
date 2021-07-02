@@ -36,11 +36,11 @@ def run(args, spicerack):
     remote_hosts = remote.query(args.query)
     check_host_is_wdqs(remote_hosts, remote)
 
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(remote_hosts.hosts)
     puppet = spicerack.puppet(remote_hosts)
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
-    with icinga.hosts_downtimed(remote_hosts.hosts, reason, duration=timedelta(hours=args.downtime)):
+    with icinga_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
         with puppet.disabled(reason):
             base_commands = [
                 'systemctl stop wdqs-updater',

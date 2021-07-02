@@ -129,7 +129,7 @@ def run(args, spicerack):
     remote_hosts = remote.query("{source},{dest}".format(source=args.source, dest=args.dest))
     check_host_is_wdqs(remote_hosts, remote)
 
-    icinga = spicerack.icinga()
+    icinga_hosts = spicerack.icinga_hosts(remote_hosts.hosts)
     puppet = spicerack.puppet(remote_hosts)
     prometheus = spicerack.prometheus()
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
@@ -152,7 +152,7 @@ def run(args, spicerack):
     services.reverse()
     start_services_cmd = " && sleep 10 && ".join(["systemctl start " + service for service in services])
 
-    with icinga.hosts_downtimed(remote_hosts.hosts, reason, duration=timedelta(hours=args.downtime)):
+    with icinga_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
         with puppet.disabled(reason):
             if args.with_lvs:
                 logger.info('depooling %s', remote_hosts)

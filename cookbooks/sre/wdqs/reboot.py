@@ -46,12 +46,11 @@ def run(args, spicerack):
     check_host_is_wdqs(remote_hosts, remote)
 
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
-    icinga = spicerack.icinga()
 
     for host in remote_hosts.hosts:
         remote_host = remote.query(host)
 
-        with icinga.hosts_downtimed(remote_host.hosts, reason, duration=timedelta(hours=args.downtime)):
+        with spicerack.icinga_hosts(remote_host.hosts).downtimed(reason, duration=timedelta(hours=args.downtime)):
             if args.depool:
                 remote_host.run_sync('depool', 'sleep 180')
 
