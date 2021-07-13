@@ -42,7 +42,7 @@ class RestartDruidWorkers(CookbookBase):
         parser = argparse.ArgumentParser(
             description=self.__doc__, formatter_class=ArgparseFormatter)
         parser.add_argument('cluster', help='The name of the Druid cluster to work on.',
-                            choices=['public', 'analytics'])
+                            choices=['public', 'analytics', 'test'])
         parser.add_argument('--daemons', help='The daemons to restart.', nargs='+',
                             default=DRUID_DAEMONS,
                             choices=DRUID_DAEMONS)
