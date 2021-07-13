@@ -30,7 +30,7 @@ class Logout(CookbookBase):
         )
         # TODO: We should only need to require one of theses and then use ldap to get the other
         parser.add_argument('-u', '--uid', help='The uid to act upon', required=True)
-        parser.add_argument('-c', '--cn', help='The uid to act upon', required=True)
+        parser.add_argument('-c', '--cn', help='The cn to act upon', required=True)
         parser.add_argument(
             'services',
             nargs='*',
