@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 class RollRestart(CookbookBase):
     """Roll restart all the nodejs service daemons on the AQS cluster.
 
-    - Optionally set the name of the AQS cluster to work on.
+    - Requires a single argument which sets the name of the AQS cluster to work on.
 
     Usage example:
-        cookbook.sre.aqs.roll_restart --cluster aqs
+        cookbook.sre.aqs.roll_restart aqs
 
     """
 
@@ -40,6 +40,7 @@ class RollRestartRunner(CookbookRunnerBase):
     def __init__(self, args, spicerack):
         """Initialize the runner."""
         ensure_shell_is_durable()
+        self.cluster = args.cluster
         self.remote = spicerack.remote()
         self.confctl = spicerack.confctl('node')
         self.aqs_canary = self.remote.query('A:' + args.cluster + '-canary')
@@ -50,7 +51,7 @@ class RollRestartRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for AQS {} cluster: {}'.format(self.aqs_workers, self.reason)
+        return 'for AQS {} cluster: {}'.format(self.cluster, self.reason)
 
     def run(self):
         """Required by Spicerack API."""
@@ -69,10 +70,10 @@ class RollRestartRunner(CookbookRunnerBase):
             self.aqs_canary.run_sync('pool')
 
             aqs_lbconfig = self.remote.query_confctl(
-                self.confctl, cluster=self.aqs_workers,
+                self.confctl, cluster=self.cluster,
                 name=r'(?!' + self.aqs_canary.hosts[0] + ').*')
 
-            logger.info('Restarting remaining daemons (one host at the time).')
+            logger.info('Restarting remaining daemons (one host at a time).')
             aqs_lbconfig.run(
                 'systemctl restart aqs', svc_to_depool=['aqs'],
                 batch_size=1, max_failed_batches=2,
