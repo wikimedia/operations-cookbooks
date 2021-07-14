@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 from logging import getLogger
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from wmflib.interactive import ask_confirmation, confirm_on_failure
+from wmflib.interactive import ask_confirmation
 
 from cookbooks import ArgparseFormatter
 
@@ -31,9 +31,6 @@ class Logout(CookbookBase):
         # TODO: We should only need to require one of theses and then use ldap to get the other
         parser.add_argument('-u', '--uid', help='The uid to act upon', required=True)
         parser.add_argument('-c', '--cn', help='The cn to act upon', required=True)
-        parser.add_argument('--success_threshold', type=float, default=0.98,
-                            help="Expected success threshold when executing the logout command."
-                                 "1.0 indicates that all hosts are expected to be reachable.")
 
         parser.add_argument(
             'services',
@@ -68,8 +65,6 @@ class LogoutRunner(CookbookRunnerBase):
             services_message = 'all services'
             services_args = ''
 
-        self.threshold = args.success_threshold
-
         hosts_message = f'{len(self.remote_hosts)} hosts'
         self.message = f'Logging {args.cn} out of {services_message} on: {hosts_message}'
         self.command = f'/usr/local/sbin/wmf-run-logout-scripts {services_args} logout --uid {args.uid} --cn {args.cn}'
@@ -82,5 +77,4 @@ class LogoutRunner(CookbookRunnerBase):
     def run(self):
         """Required by Spicerack API."""
         ask_confirmation(self.message)
-        confirm_on_failure(self.remote_hosts.run_sync, self.command,
-                           success_threshold=self.threshold)
+        self.remote_hosts.run_sync(self.command)
