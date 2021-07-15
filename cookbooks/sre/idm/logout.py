@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 from logging import getLogger
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.remote import RemoteExecutionError
 from wmflib.interactive import ask_confirmation
 
 from cookbooks import ArgparseFormatter
@@ -77,4 +78,7 @@ class LogoutRunner(CookbookRunnerBase):
     def run(self):
         """Required by Spicerack API."""
         ask_confirmation(self.message)
-        self.remote_hosts.run_sync(self.command)
+        try:
+            self.remote_hosts.run_sync(self.command)
+        except RemoteExecutionError:
+            logger.error('Some hosts were not reachable, see the list above. Typically caused by hardware maintenance.')
