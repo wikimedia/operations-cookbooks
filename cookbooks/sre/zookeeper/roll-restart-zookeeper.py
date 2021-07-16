@@ -1,58 +1,79 @@
-"""Restart all Zookeeper daemons in a cluster
-
-Zoookeeper can run stand-alone or in a cluster for distributed coordination.
-It is used by a lot of Apache projects like Kafka, Hadoop, Druid, etc..
-
-There is always one master in a cluster, the other daemons are acting as
-followers (ready to take the leadership role if needed).
-
-The idea of this cookbook is to carefully check the status of all daemons
-in a cluster before restarting each of them.
-
-"""
+"""Restart all Zookeeper daemons in a cluster"""
 import argparse
 import logging
 
 from datetime import timedelta
 
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
 
-
-__title__ = 'Roll restart all the Zookeeper daemons on a cluster'
 logger = logging.getLogger(__name__)
 
 
-def argument_parser():
-    """As specified by Spicerack API."""
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
-    parser.add_argument('cluster', help='The name of the Zookeeper cluster to work on.',
-                        choices=['main-eqiad', 'main-codfw', 'druid-public',
-                                 'druid-analytics', 'analytics'])
-    parser.add_argument('--batch-sleep-seconds', type=float, default=120.0,
-                        help="Seconds to sleep between each restart.")
-    return parser
+class RollRestartZookeeper(CookbookBase):
+    """Restart all Zookeeper daemons in a cluster
+
+    Zoookeeper can run stand-alone or in a cluster for distributed coordination.
+    It is used by a lot of Apache projects like Kafka, Hadoop, Druid, etc..
+
+    There is always one master in a cluster, the other daemons are acting as
+    followers (ready to take the leadership role if needed).
+
+    The idea of this cookbook is to carefully check the status of all daemons
+    in a cluster before restarting each of them.
+
+    Usage example:
+        cookbook sre.zookeeper.roll-restart-zookeeper analytics
+        cookbook sre.zookeeper.roll-restart-zookeeper --batch-sleep-seconds 180 main-eqiad
+
+    """
+
+    def argument_parser(self):
+        """As specified by Spicerack API."""
+        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser.add_argument('cluster', help='The name of the Zookeeper cluster to work on.',
+                            choices=['main-eqiad', 'main-codfw', 'druid-public',
+                                     'druid-analytics', 'analytics'])
+        parser.add_argument('--batch-sleep-seconds', type=float, default=120.0,
+                            help="Seconds to sleep between each restart.")
+        return parser
+
+    def get_runner(self, args):
+        """As specified by Spicerack API."""
+        return RollRestartZookeeperRunner(args, self.spicerack)
 
 
-def run(args, spicerack):
-    """Restart all Zookeeper daemons on a given cluster"""
-    cluster_cumin_alias = "A:zookeeper-" + args.cluster
+class RollRestartZookeeperRunner(CookbookRunnerBase):
+    """Zookeeper Roll Restart cookbook runner class"""
 
-    ensure_shell_is_durable()
+    def __init__(self, args, spicerack):
+        """Initialize the runner"""
+        ensure_shell_is_durable()
 
-    zookeeper = spicerack.remote().query(cluster_cumin_alias)
-    icinga_hosts = spicerack.icinga_hosts(zookeeper.hosts)
-    reason = spicerack.admin_reason('Roll restart of jvm daemons.')
+        self.cluster_cumin_alias = "A:zookeeper-" + args.cluster
+        self.zookeeper = spicerack.remote().query(self.cluster_cumin_alias)
+        self.icinga_hosts = spicerack.icinga_hosts(self.zookeeper.hosts)
+        self.reason = spicerack.admin_reason('Roll restart of jvm daemons.')
+        self.batch_sleep_seconds = args.batch_sleep_seconds
 
-    zookeeper.run_sync('echo stats | nc -q 1 localhost 2181')
+        # Safety checks
+        self.zookeeper.run_sync('echo stats | nc -q 1 localhost 2181')
 
-    logger.info('\n=========================================\n')
-    ask_confirmation(
-        'Please check the status of Zookeeper before proceeding.'
-        'There must be only one leader and the rest must be followers.')
+        logger.info('\n=========================================\n')
+        ask_confirmation(
+            'Please check the status of Zookeeper before proceeding.'
+            'There must be only one leader and the rest must be followers.')
 
-    with icinga_hosts.downtimed(reason, duration=timedelta(minutes=120)):
-        zookeeper.run_sync('systemctl restart zookeeper', batch_size=1, batch_sleep=args.batch_sleep_seconds)
+    @property
+    def runtime_description(self):
+        """Return a nicely formatted string that represents the cookbook action."""
+        return 'for Zookeeper {} cluster: {}'.format(self.cluster_cumin_alias, self.reason)
 
-    logger.info('All Zookeeper restarts completed!')
+    def run(self):
+        """Restart all Zookeeper daemons on a given cluster"""
+        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=120)):
+            self.zookeeper.run_sync('systemctl restart zookeeper', batch_size=1, batch_sleep=self.batch_sleep_seconds)
+
+        logger.info('All Zookeeper restarts completed!')
