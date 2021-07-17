@@ -82,7 +82,7 @@ def run(args, spicerack):
 
             result = callback(
                 args.services,
-                POOLS,  # on each server, we depool all the the pools we declared
+                POOLS,  # on each server, we depool all the pools we declared
                 batch_size=batch_size,
                 batch_sleep=args.batch_sleep
             )

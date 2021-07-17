@@ -35,7 +35,7 @@ class RebootHadoopWorkers(CookbookBase):
     - disable puppet
     - stop the Yarn Namenode, to avoid any job to schedule jvm containers on the host
       (a sort of hacky drain procedure).
-    - wait some minutes to give a chance to the the jvm containers to finish (if they
+    - wait some minutes to give a chance to the jvm containers to finish (if they
       don't it is not a big problem, jobs in Hadoop can be rescheduled).
     - stop the HDFS datanode on the host (safer that abruptively reboot, from the point
       of view of corrupted HDFS blocks).
