@@ -23,7 +23,7 @@ NETBOX_USER = 'netbox'
 NETBOX_HOSTS_QUERY = 'A:netbox'
 AUTHDNS_NETBOX_CHECKOUT_PATH = '/srv/git/netbox_dns_snippets'
 AUTHDNS_USER = 'netboxdns'
-AUTHDNS_HOSTS_QUERY = 'A:dns-auth'
+AUTHDNS_HOSTS_QUERY = 'A:dns-auth and not P{authdns2001.wikimedia.org}'
 AUTHDNS_DNS_CHECKOUT_PATH = '/srv/authdns/git'
 
 
