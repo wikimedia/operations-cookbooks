@@ -4,6 +4,9 @@ import logging
 
 from datetime import timedelta
 
+from cumin import NodeSet
+from wmflib.interactive import ask_confirmation
+
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -22,6 +25,7 @@ class Downtime(CookbookBase):
       cookbook sre.hosts.downtime --days 5 -r 'some reason' 'somehost1001*'
       cookbook sre.hosts.downtime --minutes 20 -r 'some reason' somehost1001.eqiad.wmnet
       cookbook sre.hosts.downtime --minutes 20 -r 'some reason' 'O:some::role'
+      cookbook sre.hosts.downtime --minutes 20 -r 'some reason' --force 'somehost100[1-5].mgmt,192.168.1.1'
 
     """
 
@@ -45,6 +49,10 @@ class Downtime(CookbookBase):
                             help='For how many days the downtime should last. [optional, default=0]')
         parser.add_argument('--force-puppet', action='store_true',
                             help='Force a Puppet run on the Icinga host to pick up new hosts or services.')
+        parser.add_argument('--force', action='store_true',
+                            help=('Override the check that use a Cumin query to validate the given hosts. Useful when '
+                                  'you want to remove a downtime from a Icinga "host" that is not a real host or '
+                                  'not anymore queryable via Cumin.'))
 
         return parser
 
@@ -59,17 +67,22 @@ class Downtime(CookbookBase):
 
 
 class DowntimeRunner(CookbookRunnerBase):
-    """Donwtime cookbook runner class."""
+    """Downtime cookbook runner class."""
 
     def __init__(self, args, spicerack):
         """Initialize the runner."""
         self.duration = timedelta(days=args.days, hours=args.hours, minutes=args.minutes)
-        self.hosts = spicerack.remote().query(args.query).hosts
-        if not self.hosts:
-            raise RuntimeError('No host found for query "{query}"'.format(query=args.query))
+        if args.force:
+            self.hosts = NodeSet(args.query)
+            ask_confirmation(f'Will remove downtime for {len(self.hosts)} unverified hosts: {self.hosts}')
+        else:
+            self.hosts = spicerack.remote().query(args.query).hosts
+            if not self.hosts:
+                raise RuntimeError(f'No host found for query "{args.query}". Use --force targeting Icinga hosts that '
+                                   'are not real hosts.')
 
         self.task_id = args.task_id
-        self.icinga_hosts = spicerack.icinga_hosts(self.hosts)
+        self.icinga_hosts = spicerack.icinga_hosts(self.hosts, verbatim_hosts=args.force)
         self.reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
         if args.force_puppet:
