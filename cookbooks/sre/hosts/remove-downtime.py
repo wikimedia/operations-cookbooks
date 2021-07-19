@@ -32,7 +32,7 @@ class RemoveDowntime(CookbookBase):
                                            'be used verbatim even if not mathing any host from a Cumin query.'))
         parser.add_argument('--force', action='store_true',
                             help=('Override the check that use a Cumin query to validate the given hosts. Useful when '
-                                  'you want to remove a donwtime from a Icinga "host" that is not a real host or '
+                                  'you want to remove a downtime from a Icinga "host" that is not a real host or '
                                   'not anymore queryable via Cumin.'))
 
         return parser
@@ -43,7 +43,7 @@ class RemoveDowntime(CookbookBase):
 
 
 class RemoveDowntimeRunner(CookbookRunnerBase):
-    """Remove donwtime cookbook runner class."""
+    """Remove downtime cookbook runner class."""
 
     def __init__(self, args, spicerack):
         """Initialize the runner."""
