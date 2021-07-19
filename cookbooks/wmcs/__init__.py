@@ -371,13 +371,48 @@ class CephFlagSetError(CephException):
     """Risen when something failed when setting a flag in the cluster."""
 
 
+class CephOSDFlag(Enum):
+    """Possible OSD flags."""
+
+    # cluster marked as full and stops serving writes
+    full = "full"
+    # stop serving writes and reads
+    pause = "pause"
+    # avoid marking osds as up (serving traffic)
+    noup = "noup"
+    # avoid marking osds as down (stop serving traffic)
+    nodown = "nodown"
+    # avoid marking osds as out (get out of the cluster, would trigger
+    # rebalancing)
+    noout = "noout"
+    # avoid marking osds as in (get in the cluster, would trigger rebalancing)
+    noin = "noin"
+    # avoid backfills (asynchronous recovery from journal log)
+    nobackfill = "nobackfill"
+    # avoid rebalancing (data rebalancing will stop)
+    norebalance = "norebalance"
+    # avoid recovery (synchronous recovery of raw data)
+    norecover = "norecover"
+    # avoid running any scrub job (independent from deep scrubs)
+    noscrub = "noscrub"
+    # avoid running any deep scrub job
+    nodeep_scrub = "nodeep-scrub"
+    # avoid cache tiering activity
+    notieragent = "notieragent"
+    # avoid snapshot trimming (async deletion of objects from deleted
+    # snapshots)
+    nosnaptrim = "nosnaptrim"
+    # explitic hard limit the pg log (don't use, deprecated feature)
+    pglog_hardlimit = "pglog_hardlimit"
+
+
 @dataclass(frozen=True)
 class CephClusterSatus:
     """Status of a CEPH cluster."""
 
     status_dict: Dict[str, Any]
 
-    def get_osdmap_set_flags(self) -> Set[str]:
+    def get_osdmap_set_flags(self) -> Set[CephOSDFlag]:
         """Get osdmap set flags."""
         osd_maps = self.status_dict["health"]["checks"].get("OSDMAP_FLAGS")
         if not osd_maps:
@@ -389,7 +424,7 @@ class CephClusterSatus:
 
         # ex: "noout,norebalance flag(s) set"
         flags = raw_flags_line.split(" ")[0].split(",")
-        return set(flags)
+        return set(CephOSDFlag(flag) for flag in flags)
 
     @staticmethod
     def _filter_out_octopus_upgrade_warns(status: Dict[str, Any]) -> Dict[str, Any]:
@@ -418,7 +453,7 @@ class CephClusterSatus:
 
         if "OSDMAP_FLAGS" in temp_status["health"]["checks"] and len(temp_status["health"]["checks"]) == 1:
             current_flags = self.get_osdmap_set_flags()
-            return current_flags.issubset({"noout", "norebalance"})
+            return current_flags.issubset({CephOSDFlag("noout"), CephOSDFlag("norebalance")})
 
         return False
 
@@ -530,21 +565,21 @@ class CephClusterController:
         raw_cluster_status = next(self._controlling_node.run_sync("ceph status -f json"))[1].message().decode()
         return CephClusterSatus(status_dict=json.loads(raw_cluster_status))
 
-    def set_osdmap_flag(self, flag_name: str) -> None:
+    def set_osdmap_flag(self, flag: CephOSDFlag) -> None:
         """Set one of the osdmap flags."""
         set_osdmap_flag_result = (
-            next(self._controlling_node.run_sync(f"ceph osd set {flag_name}"))[1].message().decode()
+            next(self._controlling_node.run_sync(f"ceph osd set {flag.value}"))[1].message().decode()
         )
-        if set_osdmap_flag_result != f"{flag_name} is set":
-            raise CephFlagSetError(f"Unable to set `{flag_name}` on the cluster: {set_osdmap_flag_result}")
+        if set_osdmap_flag_result != f"{flag.value} is set":
+            raise CephFlagSetError(f"Unable to set `{flag.value}` on the cluster: {set_osdmap_flag_result}")
 
-    def unset_osdmap_flag(self, flag_name: str) -> None:
+    def unset_osdmap_flag(self, flag: CephOSDFlag) -> None:
         """Unset one of the osdmap flags."""
         unset_osdmap_flag_result = (
-            next(self._controlling_node.run_sync(f"ceph osd unset {flag_name}"))[1].message().decode()
+            next(self._controlling_node.run_sync(f"ceph osd unset {flag.value}"))[1].message().decode()
         )
-        if unset_osdmap_flag_result != f"{flag_name} is unset":
-            raise CephFlagSetError(f"Unable to unset `{flag_name}` on the cluster: {unset_osdmap_flag_result}")
+        if unset_osdmap_flag_result != f"{flag.value} is unset":
+            raise CephFlagSetError(f"Unable to unset `{flag.value}` on the cluster: {unset_osdmap_flag_result}")
 
     def set_maintenance(self, force: bool = False) -> None:
         """Set maintenance."""
@@ -572,8 +607,8 @@ class CephClusterController:
                 json.dumps(cluster_status.status_dict["health"], indent=4),
             )
 
-        self.set_osdmap_flag(flag_name="noout")
-        self.set_osdmap_flag(flag_name="norebalance")
+        self.set_osdmap_flag(flag=CephOSDFlag("noout"))
+        self.set_osdmap_flag(flag=CephOSDFlag("norebalance"))
 
     def unset_maintenance(self, force: bool = False) -> None:
         """Unset maintenance."""
@@ -598,8 +633,8 @@ class CephClusterController:
             )
 
         if cluster_status.is_cluster_status_just_maintenance():
-            self.unset_osdmap_flag(flag_name="noout")
-            self.unset_osdmap_flag(flag_name="norebalance")
+            self.unset_osdmap_flag(flag=CephOSDFlag("noout"))
+            self.unset_osdmap_flag(flag=CephOSDFlag("norebalance"))
 
         else:
             LOGGER.info("Cluster already out of maintenance status.")

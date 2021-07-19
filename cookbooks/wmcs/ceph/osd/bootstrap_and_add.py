@@ -15,7 +15,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import CephClusterController, CephOSDController, dologmsg
+from cookbooks.wmcs import CephClusterController, CephOSDController, CephOSDFlag, dologmsg
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
 
 LOGGER = logging.getLogger(__name__)
@@ -130,7 +130,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
             remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn
         )
         # this avoids rebalancing after each osd is added
-        cluster_controller.set_osdmap_flag("norebalance")
+        cluster_controller.set_osdmap_flag(CephOSDFlag("norebalance"))
 
         for index, new_osd_fqdn in enumerate(self.new_osd_fqdns):
             dologmsg(
@@ -165,7 +165,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
             )
 
         # Now we start rebalancing once all are in
-        cluster_controller.unset_osdmap_flag("norebalance")
+        cluster_controller.unset_osdmap_flag(CephOSDFlag("norebalance"))
         dologmsg(
             project="admin",
             message=f"Added {len(self.new_osd_fqdns)} new OSDs {self.new_osd_fqdns}",
