@@ -12,6 +12,7 @@ import time
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, auto
+from itertools import chain
 from typing import Any, Dict, List, Optional, Set, Union
 
 import yaml
@@ -419,7 +420,7 @@ class CephClusterSatus:
             return []
 
         raw_flags_line = osd_maps["summary"]["message"]
-        if "flag" not in raw_flags_line:
+        if "flag(s) set" not in raw_flags_line:
             return []
 
         # ex: "noout,norebalance flag(s) set"
@@ -431,13 +432,16 @@ class CephClusterSatus:
         # ignore temporary alert for octopus upgrade
         # https://docs.ceph.com/en/latest/security/CVE-2021-20288/#recommendations
         new_status = deepcopy(status)
+        there_were_health_checks = bool(len(new_status["health"]["checks"]) > 0)
+
         if "AUTH_INSECURE_GLOBAL_ID_RECLAIM" in new_status["health"]["checks"]:
             del new_status["health"]["checks"]["AUTH_INSECURE_GLOBAL_ID_RECLAIM"]
 
         if "AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED" in new_status["health"]["checks"]:
             del new_status["health"]["checks"]["AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED"]
 
-        if len(new_status["health"]["checks"]) == 0:
+        # if there were no health checks to start with, something was very wrong in the cluster.
+        if there_were_health_checks and len(new_status["health"]["checks"]) == 0:
             new_status["health"]["status"] = "HEALTH_OK"
 
         return new_status
@@ -1051,3 +1055,82 @@ def dologmsg(
             my_socket.close()
 
     raise Exception(f"Unable to send log message to {host}:{port}, see previous logs for details")
+
+
+# Poor man's namespace to compensate for the restriction to not create modules
+@dataclass(frozen=True)
+class TestUtils:
+    """Generic testing utilities."""
+
+    @staticmethod
+    def to_parametrize(
+        test_cases: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Union[str, List[Any]]]:
+        """Helper for parametrized tests.
+
+        Use like:
+        @pytest.mark.parametrize(**_to_parametrize(
+            {
+                "Test case 1": {"param1": "value1", "param2": "value2"},
+                # will set the value of the missing params as `None`
+                "Test case 2": {"param1": "value1"},
+                ...
+            }
+        ))
+        """
+        _param_names = set(chain(*[list(params.keys()) for params in test_cases.values()]))
+
+        def _fill_up_params(test_case_params):
+            # {
+            #    'key': value,
+            #    'key2': value2,
+            # }
+            end_params = []
+            for must_param in _param_names:
+                end_params.append(test_case_params.get(must_param, None))
+
+            return end_params
+
+        if len(_param_names) == 1:
+            argvalues = [
+                _fill_up_params(test_case_params)[0]
+                for test_case_params in test_cases.values()
+            ]
+
+        else:
+            argvalues = [
+                _fill_up_params(test_case_params)
+                for test_case_params in test_cases.values()
+            ]
+
+        return {
+            "argnames": ",".join(_param_names),
+            "argvalues": argvalues,
+            "ids": list(test_cases.keys()),
+        }
+
+
+# Poor man's namespace to compensate for the restriction to not create modules
+@dataclass(frozen=True)
+class CephTestUtils(TestUtils):
+    """Utils to test ceph related code."""
+
+    @staticmethod
+    def get_status_dict(overrides: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Generate a stub status dict to use when creating CephStatus"""
+        status_dict = {
+            "health": {"status": {}, "checks": {}},
+        }
+
+        def _merge_dict(to_update, source_dict):
+            if not source_dict:
+                return
+
+            for key, value in source_dict.items():
+                if key in to_update and isinstance(value, dict):
+                    _merge_dict(to_update[key], value)
+                else:
+                    to_update[key] = value
+
+        _merge_dict(to_update=status_dict, source_dict=overrides)
+        return status_dict
