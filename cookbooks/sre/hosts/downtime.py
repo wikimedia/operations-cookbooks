@@ -98,14 +98,12 @@ class DowntimeRunner(CookbookRunnerBase):
         if len(self.hosts) <= 5:
             hosts_message = str(self.hosts)
         else:
-            hosts_message = '{num} hosts'.format(num=len(self.hosts))
+            hosts_message = f'{len(self.hosts)} hosts'
 
-        self.short_message = ('for {duration} on {hosts_message} with reason: {reason}').format(
-            duration=self.duration, hosts_message=hosts_message, reason=args.reason)
+        self.short_message = f'for {self.duration} on {hosts_message} with reason: {args.reason}'
 
-        self.long_message = ('Icinga downtime set by {owner} for {s.duration} {num} host(s) and their services '
-                             'with reason: {reason}\n```\n{s.hosts}\n```').format(
-                                 owner=self.reason.owner, s=self, num=len(self.hosts), reason=args.reason)
+        self.long_message = (f'Icinga downtime set by {self.reason.owner} for {self.duration} {len(self.hosts)} '
+                             f'host(s) and their services with reason: {args.reason}\n```\n{self.hosts}\n```')
 
     @property
     def runtime_description(self):
