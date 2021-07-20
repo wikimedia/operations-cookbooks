@@ -12,7 +12,7 @@ from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.icinga import ICINGA_DOMAIN, Icinga
+from spicerack.icinga import ICINGA_DOMAIN, IcingaHosts
 
 from cookbooks.wmcs import AGGREGATES_FILE_PATH, OpenstackAPI, OpenstackNotFound, dologmsg
 
@@ -122,12 +122,11 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
             except OpenstackNotFound as error:
                 logging.info("%s", error)
 
-        icinga = Icinga(
-            icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True)
+        icinga_hosts = IcingaHosts(
+            icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True),
+            target_hosts=[self.fqdn],
         )
-        icinga.remove_downtime(
-            hosts=[self.fqdn],
-        )
+        icinga_hosts.remove_downtime()
         dologmsg(
             project="admin",
             message=f"Unset cloudvirt '{self.fqdn}' maintenance.",
