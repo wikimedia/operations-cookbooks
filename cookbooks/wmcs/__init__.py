@@ -408,7 +408,7 @@ class CephOSDFlag(Enum):
 
 
 @dataclass(frozen=True)
-class CephClusterSatus:
+class CephClusterStatus:
     """Status of a CEPH cluster."""
 
     status_dict: Dict[str, Any]
@@ -564,10 +564,10 @@ class CephClusterController:
         self._controlling_node = self._remote.query(f"D{{{self._controlling_node_fqdn}}}", use_sudo=True)
         LOGGER.info("Changed to node %s to control the CEPH cluster.", self._controlling_node_fqdn)
 
-    def get_cluster_status(self) -> CephClusterSatus:
+    def get_cluster_status(self) -> CephClusterStatus:
         """Get the current cluster status."""
         raw_cluster_status = next(self._controlling_node.run_sync("ceph status -f json"))[1].message().decode()
-        return CephClusterSatus(status_dict=json.loads(raw_cluster_status))
+        return CephClusterStatus(status_dict=json.loads(raw_cluster_status))
 
     def set_osdmap_flag(self, flag: CephOSDFlag) -> None:
         """Set one of the osdmap flags."""

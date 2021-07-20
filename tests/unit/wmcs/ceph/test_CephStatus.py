@@ -1,5 +1,5 @@
 from cookbooks.wmcs import (
-    CephClusterSatus,
+    CephClusterStatus,
     CephClusterUnhealthy,
     CephOSDFlag,
     CephTestUtils,
@@ -62,7 +62,7 @@ from typing import Dict, Any, Optional, List
 def test_check_healthy_happy_path(
     status_dict: Dict[str, Any], consider_maintenance_healthy: Optional[bool]
 ):
-    my_status = CephClusterSatus(status_dict=status_dict)
+    my_status = CephClusterStatus(status_dict=status_dict)
     if consider_maintenance_healthy is not None:
         my_status.check_healthy(
             consider_maintenance_healthy=consider_maintenance_healthy
@@ -135,7 +135,7 @@ def test_check_healthy_happy_path(
 def test_check_healthy_unhappy_path(
     status_dict: Dict[str, Any], consider_maintenance_healthy: Optional[bool]
 ):
-    my_status = CephClusterSatus(status_dict=status_dict)
+    my_status = CephClusterStatus(status_dict=status_dict)
 
     with pytest.raises(CephClusterUnhealthy):
         if consider_maintenance_healthy is not None:
@@ -191,7 +191,7 @@ def test_check_healthy_unhappy_path(
 def test_get_osndmap_set_flags_happy_path(
     status_dict: Dict[str, Any], expected_flags: List[CephOSDFlag]
 ):
-    my_status = CephClusterSatus(status_dict=status_dict)
+    my_status = CephClusterStatus(status_dict=status_dict)
 
     gotten_flags = my_status.get_osdmap_set_flags()
 
@@ -226,7 +226,7 @@ def test_get_osndmap_set_flags_happy_path(
 def test_in_progress_happy_path(
     status_dict: Dict[str, Any], expected_in_progress: Dict[str, Any]
 ):
-    my_status = CephClusterSatus(status_dict=status_dict)
+    my_status = CephClusterStatus(status_dict=status_dict)
 
     gotten_in_progress = my_status.get_in_progress()
 
@@ -332,7 +332,7 @@ def test_in_progress_happy_path(
 def test_in_is_cluster_status_just_maintenance_happy_path(
     status_dict: Dict[str, Any], expected_return: bool
 ):
-    my_status = CephClusterSatus(status_dict=status_dict)
+    my_status = CephClusterStatus(status_dict=status_dict)
 
     gotten_return = my_status.is_cluster_status_just_maintenance()
 
