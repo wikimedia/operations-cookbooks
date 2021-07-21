@@ -51,7 +51,7 @@ class Downtime(CookbookBase):
                             help='Force a Puppet run on the Icinga host to pick up new hosts or services.')
         parser.add_argument('--force', action='store_true',
                             help=('Override the check that use a Cumin query to validate the given hosts. Useful when '
-                                  'you want to remove a downtime from a Icinga "host" that is not a real host or '
+                                  'you want to downtime an Icinga "host" that is not a real host or '
                                   'not anymore queryable via Cumin.'))
 
         return parser
@@ -74,7 +74,7 @@ class DowntimeRunner(CookbookRunnerBase):
         self.duration = timedelta(days=args.days, hours=args.hours, minutes=args.minutes)
         if args.force:
             self.hosts = NodeSet(args.query)
-            ask_confirmation(f'Will remove downtime for {len(self.hosts)} unverified hosts: {self.hosts}')
+            ask_confirmation(f'Will downtime {len(self.hosts)} unverified hosts: {self.hosts}')
         else:
             self.hosts = spicerack.remote().query(args.query).hosts
             if not self.hosts:
