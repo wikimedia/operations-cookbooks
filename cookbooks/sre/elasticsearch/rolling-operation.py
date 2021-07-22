@@ -3,11 +3,11 @@
 import argparse
 import logging
 from cookbooks import ArgparseFormatter
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from spicerack.constants import CORE_DATACENTERS
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from cookbooks.sre.elasticsearch import CLUSTERGROUPS, execute_on_clusters, valid_datetime_type
+from cookbooks.sre.elasticsearch import CLUSTERGROUPS, valid_datetime_type
 
 logger = logging.getLogger(__name__)
 
@@ -90,11 +90,13 @@ class RollingOperationRunner(CookbookRunnerBase):
         self.elasticsearch_clusters = elasticsearch_clusters
         self.clustergroup = clustergroup
         self.reason = reason
+
         self.start_datetime = start_datetime
         self.with_lvs = with_lvs
         self.wait_for_green = wait_for_green
         self.nodes_per_run = nodes_per_run
 
+        # TODO: Refactor this into a set of enums with operations for (restart, reboot, upgrade)
         self.upgrade = upgrade
         self.reboot = reboot
 
@@ -135,9 +137,57 @@ class RollingOperationRunner(CookbookRunnerBase):
 
     def run(self):
         """Required by Spicerack API."""
+        while True:
+            if self.wait_for_green:
+                self.elasticsearch_clusters.wait_for_green()
 
-        execute_on_clusters(
-            self.elasticsearch_clusters, self.reason, self.spicerack, self.nodes_per_run,
-            self.clustergroup, self.start_datetime, self.with_lvs, self.wait_for_green,
-            self.rolling_operation
-        )
+            logger.info('Fetch %d node(s) from %s to perform rolling restart on', self.nodes_per_run, self.clustergroup)
+            nodes = self.elasticsearch_clusters.get_next_clusters_nodes(self.start_datetime, self.nodes_per_run)
+            if nodes is None:
+                break
+
+            remote_hosts = self.nodes.get_remote_hosts()
+            puppet = self.spicerack.puppet(remote_hosts)
+
+            with self.spicerack.icinga_hosts(remote_hosts.hosts).downtimed(self.reason, duration=timedelta(minutes=30)):
+                with puppet.disabled(self.reason):
+
+                    with self.elasticsearch_clusters.frozen_writes(self.reason):
+                        logger.info('Wait for a minimum time of 60sec to make sure all CirrusSearch writes are terminated')
+                        sleep(60)
+
+                        logger.info('Stopping elasticsearch replication in a safe way on %s', self.clustergroup)
+                        with self.elasticsearch_clusters.stopped_replication():
+                            self.elasticsearch_clusters.flush_markers()
+
+                            # TODO: remove this condition when a better implementation is found.
+                            if self.with_lvs:
+                                nodes.depool_nodes()
+                                sleep(20)
+
+                            self.rolling_operation(nodes)
+
+                            nodes.wait_for_elasticsearch_up(timedelta(minutes=10))
+
+                            # let's wait a bit to make sure everything has time to settle down
+                            sleep(20)
+
+                            # TODO: remove this condition when a better implementation is found.
+                            # NOTE: we repool nodes before thawing writes and re-enabling replication since they
+                            #       can already serve traffic at this point.
+                            if self.with_lvs:
+                                nodes.pool_nodes()
+
+                        logger.info('wait for green on all clusters before thawing writes. If not green, still thaw writes')
+                        try:
+                            self.elasticsearch_clusters.wait_for_green(timedelta(minutes=5))
+                        except ElasticsearchClusterCheckError:
+                            logger.info('Cluster not yet green, thawing writes and resume waiting for green')
+                        # TODO: inspect the back pressure on the kafka queue so that nothing
+                        #       is attempted if it's too high.
+
+            logger.info('Wait for green in %s before fetching next set of nodes', self.clustergroup)
+            self.elasticsearch_clusters.wait_for_green()
+
+            logger.info('Allow time to consume write queue')
+            self.elasticsearch_clusters.wait_for_all_write_queues_empty()
