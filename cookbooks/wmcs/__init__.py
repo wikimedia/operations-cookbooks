@@ -14,8 +14,10 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from itertools import chain
 from typing import Any, Dict, List, Optional, Set, Union
+from unittest import mock
 
 import yaml
+from ClusterShell.MsgTree import MsgTreeElem
 from cumin.transports import Command
 from spicerack import ICINGA_DOMAIN, Spicerack
 from spicerack.remote import Remote, RemoteHosts
@@ -372,6 +374,10 @@ class CephFlagSetError(CephException):
     """Risen when something failed when setting a flag in the cluster."""
 
 
+class CephNoControllerNode(CephException):
+    """Risen when there was no other controlling node found."""
+
+
 class CephOSDFlag(Enum):
     """Possible OSD flags."""
 
@@ -557,9 +563,11 @@ class CephClusterController:
         """Change the current node being used to interact with the cluster for another one."""
         current_monitor_name = self._controlling_node_fqdn.split(".", 1)[0]
         nodes = self.get_nodes()
-        another_monitor = next(
-            node_host for node_name, node_host in nodes["mon"].items() if node_name != current_monitor_name
-        )[0]
+        try:
+            another_monitor = next(node_host for node_host in nodes["mon"].keys() if node_host != current_monitor_name)
+        except StopIteration:
+            raise CephNoControllerNode(f"Unable to find any other mon node to control the cluster, got nodes: {nodes}")
+
         self._controlling_node_fqdn = f"{another_monitor}.{self.get_nodes_domain()}"
         self._controlling_node = self._remote.query(f"D{{{self._controlling_node_fqdn}}}", use_sudo=True)
         LOGGER.info("Changed to node %s to control the CEPH cluster.", self._controlling_node_fqdn)
@@ -575,7 +583,7 @@ class CephClusterController:
             next(self._controlling_node.run_sync(f"ceph osd set {flag.value}"))[1].message().decode()
         )
         if set_osdmap_flag_result != f"{flag.value} is set":
-            raise CephFlagSetError(f"Unable to set `{flag.value}` on the cluster: {set_osdmap_flag_result}")
+            raise CephFlagSetError(f"Unable to set `{flag.value}` on the cluster, got output: {set_osdmap_flag_result}")
 
     def unset_osdmap_flag(self, flag: CephOSDFlag) -> None:
         """Unset one of the osdmap flags."""
@@ -583,7 +591,9 @@ class CephClusterController:
             next(self._controlling_node.run_sync(f"ceph osd unset {flag.value}"))[1].message().decode()
         )
         if unset_osdmap_flag_result != f"{flag.value} is unset":
-            raise CephFlagSetError(f"Unable to unset `{flag.value}` on the cluster: {unset_osdmap_flag_result}")
+            raise CephFlagSetError(
+                f"Unable to unset `{flag.value}` on the cluster, got output: {unset_osdmap_flag_result}"
+            )
 
     def set_maintenance(self, force: bool = False) -> None:
         """Set maintenance."""
@@ -654,10 +664,9 @@ class CephClusterController:
             if not in_progress_events:
                 return
 
-            mean_progress = sum(
-                event["progress"]
-                for event in in_progress_events.values()
-            ) * 100 / len(in_progress_events)
+            mean_progress = (
+                sum(event["progress"] for event in in_progress_events.values()) * 100 / len(in_progress_events)
+            )
             LOGGER.info(
                 "Cluster still has (%d) in-progress events, %.2f%% done, waiting another %d (timeout=%d)...",
                 len(in_progress_events),
@@ -1063,9 +1072,7 @@ class TestUtils:
     """Generic testing utilities."""
 
     @staticmethod
-    def to_parametrize(
-        test_cases: Dict[str, Dict[str, Any]]
-    ) -> Dict[str, Union[str, List[Any]]]:
+    def to_parametrize(test_cases: Dict[str, Dict[str, Any]]) -> Dict[str, Union[str, List[Any]]]:
         """Helper for parametrized tests.
 
         Use like:
@@ -1092,22 +1099,37 @@ class TestUtils:
             return end_params
 
         if len(_param_names) == 1:
-            argvalues = [
-                _fill_up_params(test_case_params)[0]
-                for test_case_params in test_cases.values()
-            ]
+            argvalues = [_fill_up_params(test_case_params)[0] for test_case_params in test_cases.values()]
 
         else:
-            argvalues = [
-                _fill_up_params(test_case_params)
-                for test_case_params in test_cases.values()
-            ]
+            argvalues = [_fill_up_params(test_case_params) for test_case_params in test_cases.values()]
 
         return {
             "argnames": ",".join(_param_names),
             "argvalues": argvalues,
             "ids": list(test_cases.keys()),
         }
+
+    @staticmethod
+    def get_fake_remote(responses=List[str]) -> mock.MagicMock:
+        """Create a fake remote.
+
+        It will return a RemoteHosts that will return the given responses when run_sync is called in them.
+        """
+        fake_hosts = mock.create_autospec(spec=RemoteHosts, spec_set=True)
+        fake_remote = mock.create_autospec(spec=Remote, spec_set=True)
+
+        fake_remote.query.return_value = fake_hosts
+
+        def _get_fake_msg_tree(response: str):
+            fake_msg_tree = mock.create_autospec(spec=MsgTreeElem, spec_set=True)
+            fake_msg_tree.message.return_value = response.encode()
+            return fake_msg_tree
+
+        # the return type of run_sync is Iterator[Tuple[NodeSet, MsgTreeElem]]
+        fake_hosts.run_sync.return_value = ((None, _get_fake_msg_tree(response=response)) for response in responses)
+
+        return fake_remote
 
 
 # Poor man's namespace to compensate for the restriction to not create modules
@@ -1134,3 +1156,43 @@ class CephTestUtils(TestUtils):
 
         _merge_dict(to_update=status_dict, source_dict=overrides)
         return status_dict
+
+    @classmethod
+    def get_maintenance_status_dict(cls):
+        """Generate a stub maintenance status dict to use when creating CephStatus"""
+        maintenance_status_dict = {
+            "health": {
+                "status": "HEALTH_WARN",
+                "checks": {
+                    "OSDMAP_FLAGS": {
+                        "summary": {
+                            "message": "noout,norebalance flag(s) set",
+                        },
+                    }
+                },
+            },
+        }
+
+        return cls.get_status_dict(maintenance_status_dict)
+
+    @classmethod
+    def get_ok_status_dict(cls):
+        """Generate a stub maintenance status dict to use when creating CephStatus"""
+        ok_status_dict = {
+            "health": {
+                "status": "HEALTH_OK",
+            },
+        }
+
+        return cls.get_status_dict(ok_status_dict)
+
+    @classmethod
+    def get_warn_status_dict(cls):
+        """Generate a stub maintenance status dict to use when creating CephStatus"""
+        warn_status_dict = {
+            "health": {
+                "status": "HEALTH_WARN",
+            },
+        }
+
+        return cls.get_status_dict(warn_status_dict)
