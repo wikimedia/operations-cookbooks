@@ -1007,7 +1007,7 @@ def wrap_with_sudo_icinga(my_spicerack: Spicerack) -> Spicerack:
     """Wrap spicerack icinga to allow sudo.
 
     We have to patch the master host to allow sudo, all this weirdness is
-    because icinga_master_host is an @property and can't be patched on
+    because icinga_master_host is a @property and can't be patched on
     the original instance
     """
 
