@@ -8,6 +8,7 @@ from wmflib.interactive import ask_confirmation
 from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args
 
 
+MINIMUM_ITERATIONS = 6  # How many loops to do, at minimum
 __title__ = __doc__
 logger = logging.getLogger(__name__)
 
@@ -51,10 +52,10 @@ def run(args, spicerack):
         maintenance_host.run_sync(*warmups)
         duration = datetime.datetime.utcnow() - start_time
         logger.info('Warmup completed in %s', duration)
-        # We stop looping as soon as the warmup script takes more than 95% as long as the previous run. That is, keep
-        # looping as long as it keeps going faster than before, but with a 5% margin of error, allowing us to stop
-        # early. At that point, any further reduction is probably just noise, and we don't need to wait for it.
-        if duration > 0.95 * last_duration:
+        # After we've done a minimum number of iterations, we stop looping as soon as the warmup script takes more
+        # than 95% as long as the previous run. That is, keep looping as long as it keeps going faster than before,
+        # but with a 5% margin of error. At that point, any further reduction is probably just noise.
+        if i >= MINIMUM_ITERATIONS and duration > 0.95 * last_duration:
             break
         last_duration = duration
     logger.info('Execution time converged, warmup complete.')
