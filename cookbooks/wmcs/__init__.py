@@ -378,6 +378,10 @@ class CephNoControllerNode(CephException):
     """Risen when there was no other controlling node found."""
 
 
+class CephMalformedInfo(CephException):
+    """Risen when the output of a command is not what was expected."""
+
+
 class CephOSDFlag(Enum):
     """Possible OSD flags."""
 
@@ -509,13 +513,16 @@ class CephOSDController:
             and not device_info.get("mountpoint")
         )
 
-    def get_available_devices(self) -> None:
+    def get_available_devices(self) -> List[str]:
         """Get the current available devices in the node."""
         raw_output = next(self._node.run_sync("lsblk --json"))[1].message().decode()
         structured_output = json.loads(raw_output)
+        if "blockdevices" not in structured_output:
+            raise CephMalformedInfo(f"Missing 'blockdevices' on lsblk output: {raw_output}")
+
         return [
             f"/dev/{device_info['name']}"
-            for device_info in structured_output.get("blockdevices")
+            for device_info in structured_output["blockdevices"]
             if self._is_device_available(device_info=device_info)
         ]
 
@@ -1111,10 +1118,11 @@ class TestUtils:
         }
 
     @staticmethod
-    def get_fake_remote(responses=List[str]) -> mock.MagicMock:
+    def get_fake_remote(responses: List[str] = None, side_effect: Optional[List[Any]] = None) -> mock.MagicMock:
         """Create a fake remote.
 
         It will return a RemoteHosts that will return the given responses when run_sync is called in them.
+        If side_effect is passed, it will override the responses and set that as side_effect of the mock on run_sync.
         """
         fake_hosts = mock.create_autospec(spec=RemoteHosts, spec_set=True)
         fake_remote = mock.create_autospec(spec=Remote, spec_set=True)
@@ -1126,8 +1134,11 @@ class TestUtils:
             fake_msg_tree.message.return_value = response.encode()
             return fake_msg_tree
 
-        # the return type of run_sync is Iterator[Tuple[NodeSet, MsgTreeElem]]
-        fake_hosts.run_sync.return_value = ((None, _get_fake_msg_tree(response=response)) for response in responses)
+        if side_effect is not None:
+            fake_hosts.run_sync.side_effect = side_effect
+        else:
+            # the return type of run_sync is Iterator[Tuple[NodeSet, MsgTreeElem]]
+            fake_hosts.run_sync.return_value = ((None, _get_fake_msg_tree(response=response)) for response in responses)
 
         return fake_remote
 
@@ -1196,3 +1207,26 @@ class CephTestUtils(TestUtils):
         }
 
         return cls.get_status_dict(warn_status_dict)
+
+    @staticmethod
+    def get_available_device(
+        name: str = f"{CephOSDController.SYSTEM_DEVICES[0]}_non_matching_part",
+        device_type: str = 'disk',
+        children: Optional[List[Any]] = None,
+        mountpoint: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Get a device that is considered available.
+
+        If you pass any value, it will not ensure that it's still considered available.
+        """
+        available_device = {
+            "name":  name,
+            "type": device_type,
+        }
+        if children is not None:
+            available_device["children"] = children
+
+        if mountpoint is not None:
+            available_device["mountpoint"] = mountpoint
+
+        return available_device
