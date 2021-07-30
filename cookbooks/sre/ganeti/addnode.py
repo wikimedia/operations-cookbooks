@@ -81,7 +81,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         print('Ready to add Ganeti node {} in the {} cluster'.format(self.fqdn, self.master))
         ask_confirmation('Is this correct?')
 
-        if str(self.remote_host) not in self.remote.query('A:ganeti').hosts:
+        if str(self.remote_host) not in self.remote.query('A:ganeti-all').hosts:
             raise RuntimeError(
                 '{} does have not have the Ganeti role applied. Please fix and re-run the cookbook'
                 .format(self.fqdn)
