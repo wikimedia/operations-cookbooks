@@ -178,7 +178,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
         def get_vm(netbox):
             vm = netbox.api.virtualization.virtual_machines.get(name=self.hostname)
             if not vm:
-                raise RuntimeError
+                raise RuntimeError('VM {host} not yet found on Netbox'.format(host=self.hostname))
 
             return vm
 
