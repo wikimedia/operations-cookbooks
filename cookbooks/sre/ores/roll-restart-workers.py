@@ -1,7 +1,6 @@
 """Restart ORES daemons in a cluster"""
 import argparse
 import logging
-import time
 
 from datetime import timedelta
 
@@ -9,7 +8,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
-from cookbooks.sre.ores import ORES_DAEMONS
+from cookbooks.sre.ores import ORES_CLUSTERS, ORES_DAEMONS
 
 
 logger = logging.getLogger(__name__)
@@ -33,7 +32,7 @@ class RestartOresWorkers(CookbookBase):
         parser = argparse.ArgumentParser(
             description=self.__doc__, formatter_class=ArgparseFormatter)
         parser.add_argument('cluster', help='The name of the ORES cluster to work on.',
-                            choices=['eqiad', 'codfw', 'canary'])
+                            choices=ORES_CLUSTERS)
         parser.add_argument('--daemons', help='The daemons to restart.', nargs='+',
                             default=ORES_DAEMONS,
                             choices=ORES_DAEMONS)
@@ -69,12 +68,7 @@ class RestartOresWorkersRunner(CookbookRunnerBase):
         with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=60)):
             logger.info(
                 'Restarting daemons (%s), one host at the time.', ','.join(self.daemons))
-            for host in self.ores_workers.hosts:
-                with self.confctl.change_and_revert('pooled', 'yes', 'no', name=host):
-                    remote_host = self.spicerack.remote().query('D{{{h}}}'.format(h=str(host)))
-                    for daemon in self.daemons:
-                        logger.info('Restarting %s on %s', daemon, str(host))
-                        remote_host.run_sync('systemctl restart ' + daemon)
-                        time.sleep(60)
-
+            lbconfig = self.spicerack.remote().LBConfig(self.ores_workers)
+            lbconfig.restart_services(ORES_DAEMONS, ['ores'],
+                                      batch_size=1, batch_sleep=120)
         logger.info("All ORES restarts completed!")
