@@ -68,7 +68,9 @@ class RestartOresWorkersRunner(CookbookRunnerBase):
         with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=60)):
             logger.info(
                 'Restarting daemons (%s), one host at the time.', ','.join(self.daemons))
-            lbconfig = self.spicerack.remote().LBRemoteCluster(self.ores_workers)
+
+            lbconfig = self.spicerack.remote().query_confctl(self.confctl, dc=self.cluster,
+                                                             cluster="ores", service="ores")
             lbconfig.restart_services(ORES_DAEMONS, ['ores'],
                                       batch_size=1, batch_sleep=120)
         logger.info("All ORES restarts completed!")
