@@ -11,6 +11,7 @@ __title__ = __doc__
 EXCLUDED_SERVICES = {
     'blubberoid',  # blubberoid needs to follow swift replica for the docker registry
     'docker-registry',  # swift replica goes codfw => eqiad and needs manual switching
+    'helm-charts',  # Doesn't have a service IP (T285707)
     'releases',  # not a "service", strictly speaking, thus excluded.
     'puppetdb-api',  # ditto
 }
