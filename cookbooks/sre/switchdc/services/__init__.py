@@ -14,6 +14,7 @@ EXCLUDED_SERVICES = {
     'helm-charts',  # Doesn't have a service IP (T285707)
     'releases',  # not a "service", strictly speaking, thus excluded.
     'puppetdb-api',  # ditto
+    'toolhub',  # T288685: needs to match m5 database cluster replication
 }
 
 # These are services that are not effectively active-active /right now/, but will be in the future
