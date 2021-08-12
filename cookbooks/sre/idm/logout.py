@@ -68,7 +68,8 @@ class LogoutRunner(CookbookRunnerBase):
 
         hosts_message = f'{len(self.remote_hosts)} hosts'
         self.message = f'Logging {args.cn} out of {services_message} on: {hosts_message}'
-        self.command = f'/usr/local/sbin/wmf-run-logout-scripts {services_args} logout --uid {args.uid} --cn {args.cn}'
+        self.command = '/usr/local/sbin/wmf-run-logout-scripts '
+        self.command += f'{services_args} logout --uid "{args.uid}" --cn "{args.cn}"'
 
     @property
     def runtime_description(self):
