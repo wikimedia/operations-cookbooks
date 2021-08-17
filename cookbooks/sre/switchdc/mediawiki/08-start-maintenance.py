@@ -22,9 +22,6 @@ def run(args, spicerack):
     mw_maintenance.run_sync('run-puppet-agent --enable "{message}"'.format(message=PUPPET_REASON))
 
     mediawiki = spicerack.mediawiki()
-    # Verify cronjobs and timers are enabled in primary DC
+    # Verify timers are enabled in both DCs
     mediawiki.check_periodic_jobs_enabled(args.dc_to)
-    # Verify timers are enabled in passive DC
-    mediawiki.check_systemd_timers_enabled(args.dc_from)
-    # Verify cronjobs are disabled in passive DC
-    mediawiki.check_cronjobs_disabled(args.dc_from)
+    mediawiki.check_periodic_jobs_enabled(args.dc_from)
