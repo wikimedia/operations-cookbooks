@@ -1,13 +1,13 @@
 """WMCS Wikireplicas add wiki cookbook
 
 Usage example:
-    cookbook wmcs.wikireplicas.add_wiki --task-id T12345 zhuwikisource
+    cookbook sre.wikireplicas.add-wiki --task-id T12345 zhuwikisource
 
 """
 import argparse
 import logging
 
-__title__ = "WMCS wikireplicas wiki adding cookbook"
+__title__ = "WMCS wikireplicas add wiki"
 logger = logging.getLogger(__name__)
 
 
