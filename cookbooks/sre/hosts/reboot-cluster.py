@@ -43,8 +43,8 @@ def check_percentage(arg):
     """Type checker for a percentage between 0 and 100."""
     try:
         int_arg = int(arg)
-    except ValueError:
-        raise argparse.ArgumentTypeError("Percentage must be an integer.")
+    except ValueError as e:
+        raise argparse.ArgumentTypeError("Percentage must be an integer.") from e
     if int_arg < 1 or int_arg > 100:
         raise argparse.ArgumentTypeError("Percentage must be between 1 and 100")
     return int_arg

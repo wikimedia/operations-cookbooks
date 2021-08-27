@@ -18,6 +18,6 @@ def valid_datetime_type(datetime_str):
         if dt.tzinfo is not None and dt.tzinfo.utcoffset(dt) is not None:
             raise argparse.ArgumentTypeError('datetime should be naive (without timezone information)')
         return dt
-    except ValueError:
+    except ValueError as e:
         msg = "Error reading datetime ({0})!".format(datetime_str)
-        raise argparse.ArgumentTypeError(msg)
+        raise argparse.ArgumentTypeError(msg) from e

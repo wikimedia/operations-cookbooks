@@ -136,7 +136,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
         # Generate the IPv6 address embedding the IPv4 address, for example from an IPv4 address 10.0.0.1 and an
         # IPv6 prefix 2001:db8:3c4d:15::/64 the mapped IPv6 address 2001:db8:3c4d:15:10:0:0:1/64 is generated.
         prefix_v6_base, prefix_v6_mask = str(prefix_v6).split("/")
-        mapped_v4 = str(ip_v4).split('/')[0].replace(".", ":")
+        mapped_v4 = str(ip_v4).split('/', maxsplit=1)[0].replace(".", ":")
         ipv6_address = '{prefix}:{mapped}/{mask}'.format(
             prefix=prefix_v6_base.rstrip(':'), mapped=mapped_v4, mask=prefix_v6_mask)
         if self.skip_v6:

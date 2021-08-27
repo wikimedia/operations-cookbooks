@@ -195,12 +195,12 @@ def get_pdu_ips(netbox, query):
     if 'all' in _query[0]:
         if len(_query) > 1:
             logger.warning('`all` passed as a query argument all other values will be ignored')
-        pdus = set(str(device.primary_ip).split('/')[0] for device in devices
+        pdus = set(str(device.primary_ip).split('/', maxsplit=1)[0] for device in devices
                    if device.primary_ip is not None)
     else:
         for device in devices:
             if device.primary_ip is not None:
-                primary_ip = str(device.primary_ip).split('/')[0]
+                primary_ip = str(device.primary_ip).split('/', maxsplit=1)[0]
                 if primary_ip in _query:
                     pdus.add(primary_ip)
                     _query.remove(primary_ip)
