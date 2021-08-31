@@ -108,7 +108,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return 'for new host {}'.format(self.fqdn)
 
-    def run(self):  # pylint: disable=too-many-locals,too-many-statements
+    def run(self):  # pylint: disable=too-many-locals
         """Create a new Ganeti VM as specified."""
         netbox = self.spicerack.netbox(read_write=True)
         # Pre-allocate IPs

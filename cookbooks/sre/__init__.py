@@ -51,7 +51,6 @@ logger = logging.getLogger(__name__)
 
 # Silence some CI sillyness
 # pylint: disable-msg=too-many-arguments
-# pylint: disable-msg=too-many-locals
 # pylint: disable-msg=broad-except
 
 

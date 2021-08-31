@@ -372,7 +372,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
                 '**Failed to force sync of VMs in Ganeti cluster {cluster} to Netbox**: {e}'
                 .format(cluster=virtual_machine.cluster, e=e))
 
-    def run(self):  # pylint: disable=too-many-locals
+    def run(self):
         """Required by Spicerack API."""
         has_failures = False
         # Check for references in the Puppet and mediawiki-config repositories.
