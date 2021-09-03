@@ -12,6 +12,7 @@ from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
+from spicerack.icinga import IcingaStatusNotFoundError
 from spicerack.ipmi import IpmiError
 from spicerack.puppet import get_puppet_ca_hostname
 from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError
@@ -263,9 +264,12 @@ class DecommissionHostRunner(CookbookRunnerBase):
         try:
             self.spicerack.icinga_hosts([fqdn]).downtime(self.reason)
             self.spicerack.actions[fqdn].success('Downtimed host on Icinga')
+        except IcingaStatusNotFoundError:
+            self.spicerack.actions[fqdn].warning(
+                '**Host not found on Icinga, unable to downtme it**')
         except RemoteExecutionError:
             self.spicerack.actions[fqdn].warning(
-                '**Failed downtime host on Icinga (likely already removed)**')
+                '**Failed to downtime host on Icinga**')
 
         netbox_data = netbox.fetch_host_detail(hostname)
         is_virtual = netbox_data['is_virtual']
