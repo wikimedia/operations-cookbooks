@@ -14,6 +14,9 @@ MEDIAWIKI_SERVICES = ('api-rw', 'appservers-rw', 'jobrunner', 'mwdebug',
 # Read-only mediawiki services that are active-active by default and won't be touched by this switchover.
 # Please note: we're still not adding the k8s services as they are not used enough to be significant caching-wise.
 MEDIAWIKI_RO_SERVICES = ("api-ro", "appservers-ro")
+# Regex matching services to downtime, when disabling read-only checks on the MariaDB primaries. The blank is for the
+# section name, e.g. "MariaDB read only s1 #page".
+READ_ONLY_SERVICE_RE = r"MariaDB read only \S+ #page"
 
 
 def argument_parser_base(name, title):

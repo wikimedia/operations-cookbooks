@@ -1,4 +1,5 @@
-"""Run Puppet on all DB masters"""
+"""Downtime read-only checks on MariaDB primaries changed in Phase 3 so they don't page."""
+import datetime
 import logging
 
 from cumin import nodeset
@@ -22,12 +23,10 @@ def run(args, spicerack):
     hosts = mysql.get_core_dbs(replication_role="master", excludes=ACTIVE_ACTIVE_SECTIONS)
     icinga_hosts = spicerack.icinga_hosts(nodeset(str(hosts)))
 
-    logger.info('Running Puppet on all DB masters')
-    spicerack.remote().query('A:db-role-master').run_sync('run-puppet-agent', batch_size=5)
-
-    logger.info('Rechecking services on Icinga, and waiting for recovery before un-downtiming read-only checks.')
-    icinga_hosts.recheck_failed_services()
-    icinga_hosts.wait_for_optimal()
-
-    logger.info('Un-downtiming read-only checks.')
-    icinga_hosts.remove_service_downtimes(READ_ONLY_SERVICE_RE)
+    logger.info("Downtiming read-only checks on MariaDB primaries in both DCs.")
+    if args.live_test:
+        reason = spicerack.admin_reason("MediaWiki DC switchover live test")
+    else:
+        reason = spicerack.admin_reason("MediaWiki DC switchover")
+    # We'll delete the downtime in 09-run-puppet-on-db-masters, but set a six-hour duration in case that's skipped.
+    icinga_hosts.downtime_services(READ_ONLY_SERVICE_RE, reason=reason, duration=datetime.timedelta(hours=6))
