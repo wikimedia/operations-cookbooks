@@ -254,6 +254,8 @@ class DecommissionHostRunner(CookbookRunnerBase):
         puppet_master = self.spicerack.puppet_master()
         debmonitor = self.spicerack.debmonitor()
         netbox = self.spicerack.netbox(read_write=True)
+        netbox_server = self.spicerack.netbox_server(hostname)
+        netbox_data = netbox_server.as_dict()
         ganeti = self.spicerack.ganeti()
         switches = set()
 
@@ -271,17 +273,10 @@ class DecommissionHostRunner(CookbookRunnerBase):
             self.spicerack.actions[fqdn].warning(
                 '**Failed to downtime host on Icinga**')
 
-        netbox_data = netbox.fetch_host_detail(hostname)
-        is_virtual = netbox_data['is_virtual']
-        if is_virtual:
-            virtual_machine = ganeti.instance(fqdn, cluster=netbox_data['ganeti_cluster'])
+        if netbox_server.virtual:
+            virtual_machine = ganeti.instance(fqdn, cluster=netbox_data['cluster']['name'])
             self.spicerack.actions[fqdn].success('Found Ganeti VM')
-        else:
-            ipmi = self.spicerack.ipmi(cached=True)
-            mgmt = self.spicerack.management().get_fqdn(fqdn)
-            self.spicerack.actions[fqdn].success('Found physical host')
 
-        if is_virtual:
             try:
                 virtual_machine.shutdown()
                 self.spicerack.actions[fqdn].success('VM shutdown')
@@ -294,8 +289,11 @@ class DecommissionHostRunner(CookbookRunnerBase):
             self.sync_ganeti(fqdn, virtual_machine)
 
         else:  # Physical host
+            ipmi = self.spicerack.ipmi(cached=True)
+            self.spicerack.actions[fqdn].success('Found physical host')
+
             try:
-                self.spicerack.icinga_hosts([mgmt]).downtime(self.reason)
+                self.spicerack.icinga_hosts([netbox_server.mgmt_fqdn]).downtime(self.reason)
                 self.spicerack.actions[fqdn].success(
                     'Downtimed management interface on Icinga')
             except IcingaError:
@@ -324,9 +322,17 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     self.spicerack.actions[fqdn].failure(
                         '**Failed to wipe swraid, partition-table and filesystem signatures, manual '
                         'intervention required to make it unbootable**: {e}'.format(e=e))
+            try:
+                self.dns.resolve_ips(netbox_server.mgmt_fqdn)
+                ipmi_host = netbox_server.mgmt_fqdn
+            except DnsNotFound:
+                ipmi_host = netbox_server.asset_tag_fqdn
+                self.spicerack.actions[fqdn].warning((
+                    '**No DNS record found for the mgmt interface {mgmt}, trying the asset tag '
+                    'one: {ipmi_host}').format(mgmt=netbox_server.mgmt_fqdn, ipmi_host=ipmi_host))
 
             try:
-                ipmi.command(mgmt, ['chassis', 'power', 'off'])
+                ipmi.command(ipmi_host, ['chassis', 'power', 'off'])
                 self.spicerack.actions[fqdn].success('Powered off')
             except IpmiError as e:
                 self.spicerack.actions[fqdn].failure(
@@ -347,7 +353,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
         puppet_master.delete(fqdn)
         self.spicerack.actions[fqdn].success('Removed from Puppet master and PuppetDB')
 
-        if is_virtual:
+        if netbox_server.virtual:
             logger.info('Issuing Ganeti remove command, it can take up to 15 minutes...')
             try:
                 virtual_machine.remove()
