@@ -298,9 +298,11 @@ class DecommissionHostRunner(CookbookRunnerBase):
                 self.spicerack.icinga_hosts([mgmt]).downtime(self.reason)
                 self.spicerack.actions[fqdn].success(
                     'Downtimed management interface on Icinga')
+            except IcingaError:
+                self.spicerack.actions[fqdn].warning(
+                    '**Management interface not found on Icinga, unable to downtme it**')
             except RemoteExecutionError:
-                self.spicerack.actions[fqdn].failure(
-                    'Skipped downtime management interface on Icinga (likely already removed)')
+                self.spicerack.actions[fqdn].warning('**Failed to downtime management interface on Icinga**')
 
             try:
                 remote_host.run_sync('true')
