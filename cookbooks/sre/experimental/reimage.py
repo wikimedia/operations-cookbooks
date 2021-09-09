@@ -115,7 +115,11 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         # The same as above but using the SSH key valid only during installation before the first Puppet run
         self.remote_installer = spicerack.remote(installer=True).query(self.fqdn)
         # Get a Puppet instance for the current cumin host to update the known hosts file
-        self.puppet_localhost = spicerack.puppet(self.remote.query(self.reason.hostname))
+        remote_localhost = self.remote.query(f'{self.reason.hostname}.*')
+        if len(remote_localhost) != 1:
+            raise RuntimeError(f'Localhost matched the wrong number of hosts ({len(remote_localhost)}) for '
+                               f'query "{self.reason.hostname}.*": {remote_localhost}')
+        self.puppet_localhost = spicerack.puppet(remote_localhost)
         self.puppet = spicerack.puppet(self.remote_host)
         # The same as above but using the SSH key valid only during installation before the first Puppet run
         self.puppet_installer = spicerack.puppet(self.remote_installer)
