@@ -289,7 +289,6 @@ class DecommissionHostRunner(CookbookRunnerBase):
             self.sync_ganeti(fqdn, virtual_machine)
 
         else:  # Physical host
-            ipmi = self.spicerack.ipmi(cached=True)
             self.spicerack.actions[fqdn].success('Found physical host')
 
             try:
@@ -322,6 +321,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     self.spicerack.actions[fqdn].failure(
                         '**Failed to wipe swraid, partition-table and filesystem signatures, manual '
                         'intervention required to make it unbootable**: {e}'.format(e=e))
+
             try:
                 self.dns.resolve_ips(netbox_server.mgmt_fqdn)
                 ipmi_host = netbox_server.mgmt_fqdn
@@ -331,8 +331,9 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     '**No DNS record found for the mgmt interface {mgmt}, trying the asset tag '
                     'one: {ipmi_host}').format(mgmt=netbox_server.mgmt_fqdn, ipmi_host=ipmi_host))
 
+            ipmi = self.spicerack.ipmi(ipmi_host)
             try:
-                ipmi.command(ipmi_host, ['chassis', 'power', 'off'])
+                ipmi.command(['chassis', 'power', 'off'])
                 self.spicerack.actions[fqdn].success('Powered off')
             except IpmiError as e:
                 self.spicerack.actions[fqdn].failure(
