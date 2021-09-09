@@ -2,15 +2,15 @@
 import argparse
 import logging
 import os
-import subprocess
 import time
 
-from datetime import datetime, timedelta
-from tempfile import NamedTemporaryFile
+from datetime import datetime
 
-import yaml
+import requests
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.decorators import retry
+from spicerack.exceptions import SpicerackError
 from spicerack.puppet import PuppetMasterError
 from spicerack.remote import RemoteExecutionError
 from wmflib.interactive import confirm_on_failure, ensure_shell_is_durable
@@ -212,40 +212,28 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.remote_installer.wait_reboot_since(di_reboot_time)
         self.host_actions.success('Host up (new fresh OS)')
 
-    def _compile_catalog_with_facts(self):
-        """Get the Puppet facts from the newly installed OS and compile the Puppet catalog."""
-        facter_result = self.remote_installer.run_sync('facter -p -y --show-legacy')
-        for _, output in facter_result:
-            facts = output.message().decode()
+    def _populate_puppetdb(self):
+        """Run Puppet in noop mode to populate the exported resources in PuppetDB to downtime it on Icinga."""
+        self.remote_installer.run_sync('puppet agent -t --noop &> /dev/null')
+        self.host_actions.success('Run Puppet in NOOP mode to populate exported resources in PuppetDB')
 
-        vardir_result = self.puppet_master.master_host.run_sync('puppet config print vardir')
-        for _, output in vardir_result:
-            vardir = output.message().decode()
+        @retry(tries=10, backoff_mode='linear')
+        def poll_puppetdb():
+            """Poll PuppetDB until we find the Nagios_host resource for the newly installed host."""
+            response = requests.post(
+                f'https://puppetdb-api.discovery.wmnet/pdb/query/v4/resources/Nagios_host/{self.host}')
+            json_response = response.json()
+            if not json_response:  # PuppetDB returns empty list for non-matching results
+                raise SpicerackError(f'Nagios_host resource with title {self.host} not found yet')
 
-        now = datetime.utcnow()
-        exp = now + timedelta(minutes=30)
-        content = {
-            'name': self.fqdn,
-            'values': yaml.safe_load(facts),
-            'timestamp': f'{now.isoformat()}000+00:00',  # Expected format 2021-09-01T16:51:57.757884123+00:00
-            'expiration': f'{exp.isoformat()}000+00:00',
-        }
+            if len(json_response) != 1:
+                raise RuntimeError(f'Expected 1 result from PuppetDB got {len(json_response)}')
+            if json_response[0]['exported'] is not True:
+                raise RuntimeError(
+                    f'Expected the Nagios_host resource to be exported, got: {json_response[0]["exported"]}')
 
-        scp_env = dict(os.environ)
-        scp_env['SSH_AUTH_SOCK'] = '/run/keyholder/proxy.sock'
-
-        with NamedTemporaryFile(mode='w') as f:
-            f.write(f'--- !ruby/object:Puppet::Node::Facts\n{yaml.safe_dump(content)}')
-            subprocess.run([
-                '/usr/bin/scp',
-                f.name,
-                f'{self.puppet_master.master_host.hosts}:{vardir}/yaml/facts/{self.fqdn}.yaml'
-            ], check=True, env=scp_env)
-
-        self.host_actions.success('Exported host facts to the Puppetmaster')
-        self.puppet_master.master_host.run_sync(
-            f'puppet master compile --no-daemonize --logdest console --compile {self.fqdn} > /dev/null')
-        self.host_actions.success('Compiled Puppet catalog to get exported resources')
+        poll_puppetdb()
+        self.host_actions.success('Found Nagios_host resource for this host in PuppetDB')
 
     def _mask_units(self):
         """Mask systemd units."""
@@ -315,7 +303,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.puppet_master.sign(self.fqdn, fingerprint)
         self.host_actions.success('Signed new Puppet certificate')
 
-        self._compile_catalog_with_facts()
+        self._populate_puppetdb()
         downtime_args = ['--force-puppet', '--reason', 'host reimage', '--hours', '2', self.host]
         self.downtime.get_runner(self.downtime.argument_parser().parse_args(downtime_args)).run()
         self.host_actions.success('Downtimed the new host on Icinga')
