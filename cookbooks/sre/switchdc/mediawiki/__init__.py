@@ -9,6 +9,8 @@ PUPPET_REASON = __name__
 DNS_SHORT_TTL = 10  # DNS short TTL in seconds to use during the switchdc
 DEFAULT_READ_ONLY_REASON = ("You can't edit now. This is because of maintenance. Copy and save your text and try again "
                             "in a few minutes.")
+MEDIAWIKI_SERVICES = ('api-ro', 'api-rw', 'appservers-ro', 'appservers-rw', 'jobrunner', 'mwdebug',
+                      'parsoid-php', 'videoscaler')
 
 
 def argument_parser_base(name, title):

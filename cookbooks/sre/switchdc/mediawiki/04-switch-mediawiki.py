@@ -2,7 +2,7 @@
 import logging
 import time
 
-from cookbooks.sre.switchdc.mediawiki import argument_parser_base, DNS_SHORT_TTL, post_process_args
+from cookbooks.sre.switchdc.mediawiki import argument_parser_base, DNS_SHORT_TTL, MEDIAWIKI_SERVICES, post_process_args
 
 
 __title__ = __doc__
@@ -19,8 +19,7 @@ def run(args, spicerack):
     post_process_args(args)
     logger.info('Switch MediaWiki active datacenter to %s', args.dc_to)
 
-    records = ('api-ro', 'api-rw', 'appservers-ro', 'appservers-rw', 'jobrunner', 'videoscaler', 'parsoid-php')
-    dnsdisc_records = spicerack.discovery(*records)
+    dnsdisc_records = spicerack.discovery(*MEDIAWIKI_SERVICES)
     mediawiki = spicerack.mediawiki()
 
     # Pool DNS discovery records on the new dc.
@@ -35,7 +34,7 @@ def run(args, spicerack):
     dnsdisc_records.depool(args.dc_from)
 
     # Verify that the IP of the records matches the expected one
-    for record in records:
+    for record in MEDIAWIKI_SERVICES:
         # Converting the name of the discovery -rw into the LVS svc record name. This will strip -rw and -ro
         # services to the same record, so we'll check it twice, which is unnecessary but harmless. We also
         # strip -php, because parsoid-php has a conftool entry but not a DNS record of its own.

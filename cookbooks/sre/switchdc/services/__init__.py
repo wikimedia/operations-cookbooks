@@ -24,6 +24,7 @@ EXCLUDED_SERVICES = {
 MEDIAWIKI_SERVICES = {
     'api-ro',
     'appservers-ro',
+    'mwdebug',
 }
 
 
