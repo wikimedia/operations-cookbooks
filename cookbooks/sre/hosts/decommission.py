@@ -268,10 +268,10 @@ class DecommissionHostRunner(CookbookRunnerBase):
             self.spicerack.actions[fqdn].success('Downtimed host on Icinga')
         except IcingaError:
             self.spicerack.actions[fqdn].warning(
-                '**Host not found on Icinga, unable to downtme it**')
+                '//Host not found on Icinga, unable to downtme it//')
         except RemoteExecutionError:
             self.spicerack.actions[fqdn].warning(
-                '**Failed to downtime host on Icinga**')
+                '//Failed to downtime host on Icinga//')
 
         if netbox_server.virtual:
             virtual_machine = ganeti.instance(fqdn, cluster=netbox_data['cluster']['name'])
@@ -297,9 +297,9 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     'Downtimed management interface on Icinga')
             except IcingaError:
                 self.spicerack.actions[fqdn].warning(
-                    '**Management interface not found on Icinga, unable to downtme it**')
+                    '//Management interface not found on Icinga, unable to downtme it//')
             except RemoteExecutionError:
-                self.spicerack.actions[fqdn].warning('**Failed to downtime management interface on Icinga**')
+                self.spicerack.actions[fqdn].warning('//Failed to downtime management interface on Icinga//')
 
             try:
                 remote_host.run_sync('true')
@@ -328,8 +328,8 @@ class DecommissionHostRunner(CookbookRunnerBase):
             except DnsNotFound:
                 ipmi_host = netbox_server.asset_tag_fqdn
                 self.spicerack.actions[fqdn].warning((
-                    '**No DNS record found for the mgmt interface {mgmt}, trying the asset tag '
-                    'one: {ipmi_host}').format(mgmt=netbox_server.mgmt_fqdn, ipmi_host=ipmi_host))
+                    '//No DNS record found for the mgmt interface {mgmt}, trying the asset tag '
+                    'one: {ipmi_host}//').format(mgmt=netbox_server.mgmt_fqdn, ipmi_host=ipmi_host))
 
             ipmi = self.spicerack.ipmi(ipmi_host)
             try:
