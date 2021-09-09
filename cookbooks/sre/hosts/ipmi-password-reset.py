@@ -80,15 +80,16 @@ def run(args, spicerack):
     spicerack.irc_logger.info(reason)
     host_status = {'success': NodeSet(), 'fail_dns': NodeSet(), 'fail_ipmi': NodeSet()}
     for host in remote_hosts:
-        ipmi = spicerack.ipmi()
         try:
             mgmt_host = mgmt.get_fqdn(host)
         except ManagementError as error:
             logger.warning('unable to resolve the mgmt address for %s: %s', host, error)
             host_status['fail_dns'].add(host)
             continue
+
+        ipmi = spicerack.ipmi(mgmt_host)
         try:
-            ipmi.reset_password(mgmt_host, 'root', new_password)
+            ipmi.reset_password('root', new_password)
         except (IpmiCheckError, IpmiError) as error:
             logger.error('IPMI error encountered %s: %s', host, error)
             host_status['fail_ipmi'].add(host)
