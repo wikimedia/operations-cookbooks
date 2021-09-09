@@ -234,16 +234,13 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         scp_env = dict(os.environ)
         scp_env['SSH_AUTH_SOCK'] = '/run/keyholder/proxy.sock'
 
-        tmpfile = NamedTemporaryFile(delete=False)  # pylint: disable=consider-using-with
-        try:
-            tmpfile.write(f'--- !ruby/object:Puppet::Node::Facts\n{yaml.safe_dump(content)}')
+        with NamedTemporaryFile(mode='w') as f:
+            f.write(f'--- !ruby/object:Puppet::Node::Facts\n{yaml.safe_dump(content)}')
             subprocess.run([
                 '/usr/bin/scp',
-                tmpfile.name,
+                f.name,
                 f'{self.puppet_master.master_host.hosts}:{vardir}/yaml/facts/{self.fqdn}.yaml'
             ], check=True, env=scp_env)
-        finally:
-            tmpfile.close()
 
         self.host_actions.success('Exported host facts to the Puppetmaster')
         self.puppet_master.master_host.run_sync(
