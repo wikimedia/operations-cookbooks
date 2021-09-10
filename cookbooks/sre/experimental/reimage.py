@@ -8,6 +8,7 @@ from datetime import datetime
 
 import requests
 
+from cumin.transports import Command
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.exceptions import SpicerackError
@@ -214,7 +215,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
     def _populate_puppetdb(self):
         """Run Puppet in noop mode to populate the exported resources in PuppetDB to downtime it on Icinga."""
-        self.remote_installer.run_sync('puppet agent -t --noop &> /dev/null')
+        self.remote_installer.run_sync(Command('puppet agent -t --noop &> /dev/null', ok_codes=[]))
         self.host_actions.success('Run Puppet in NOOP mode to populate exported resources in PuppetDB')
 
         @retry(tries=10, backoff_mode='linear')
