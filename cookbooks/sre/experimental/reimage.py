@@ -256,7 +256,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
     def _httpbb(self):
         """Run the httpbb tests."""
-        if not self.args.httpb:
+        if not self.args.httpbb:
             return
 
         command = f'httpbb /srv/deployment/httpbb-tests/appserver/* --host={self.fqdn}'
