@@ -305,7 +305,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.host_actions.success('Signed new Puppet certificate')
 
         self._populate_puppetdb()
-        downtime_args = ['--force-puppet', '--reason', 'host reimage', '--hours', '2', self.host]
+        downtime_args = ['--force-puppet', '--reason', 'host reimage', '--hours', '2', self.fqdn]
         self.downtime.get_runner(self.downtime.argument_parser().parse_args(downtime_args)).run()
         self.host_actions.success('Downtimed the new host on Icinga')
 
