@@ -278,7 +278,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             return
 
         commands = '\n'.join(f'systemctl unmask {service}.service\n' for service in self.args.mask)
-        self.host_actions.warning(f'The masked units are not automatically unmasked. To unmask them run:\n{commands}')
+        self.host_actions.warning('The masked units might not have been automatically unmasked by Puppet. '
+                                  f'To unmask them run:\n{commands}')
 
     def _httpbb(self):
         """Run the httpbb tests."""
