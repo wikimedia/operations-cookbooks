@@ -196,7 +196,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if not self.confctl_services:
             return
 
-        services = '\n'.join(service.tags for service in self.confctl_services)
+        services = '\n'.join(str(service.tags) for service in self.confctl_services)
         self.host_actions.warning(f'The following services were pooled before the reimage. '
                                   f'The repool is currently left to the user:\n{services}')
 
@@ -262,10 +262,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if not self.args.httpbb:
             return
 
-        command = f'httpbb /srv/deployment/httpbb-tests/appserver/* --host={self.fqdn}'
+        command = Command(f'httpbb /srv/deployment/httpbb-tests/appserver/* --host={self.fqdn}', timeout=120)
         deployment_host = self.remote.query(self.dns.resolve_cname('deployment.eqiad.wmnet'))
         try:
-            deployment_host.run_sync(command, timeout=120)
+            deployment_host.run_sync(command)
             self.host_actions.success('Run of httpbb tests was successful')
         except RemoteExecutionError:
             # We don't want to fail upon this failure, this is just a validation test for the user.
