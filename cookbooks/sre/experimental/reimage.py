@@ -12,6 +12,7 @@ from cumin.transports import Command
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.exceptions import SpicerackError
+from spicerack.icinga import IcingaError
 from spicerack.puppet import PuppetMasterError
 from spicerack.remote import RemoteExecutionError
 from wmflib.interactive import confirm_on_failure, ensure_shell_is_durable
@@ -291,6 +292,16 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             # We don't want to fail upon this failure, this is just a validation test for the user.
             self.host_actions.warning('Failed to run httpbb tests')
 
+    def _check_icinga(self):
+        """Best effort attempt to wait for Icinga to be optimal, do not fail if not."""
+        self.icinga_host.recheck_all_services()
+        self.host_actions.success('Forced a re-check of all Icinga services for the host')
+        try:
+            self.icinga_host.wait_for_optimal()
+            self.host_actions.success('Icinga status is optimal')
+        except IcingaError:  # Do not fail here, just report it to the user, not all hosts are optimal upon reimage
+            self.host_actions.warning('Icinga status is not optimal')
+
     def run(self):
         """Execute the reimage."""
         if self.phabricator is not None:
@@ -351,6 +362,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         self._httpbb()
         self._unmask_units()
+        self._check_icinga()
         self._repool()
 
         # Comment on the Phabricator task
