@@ -179,11 +179,14 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
     def _depool(self):
         """Depool all the pooled services for the host."""
+        if not self.args.conftool:
+            return
+
         logger.info('Depooling services')
         self.confctl_services = list(self.confctl.filter_objects({'pooled': 'yes'}, name=self.fqdn))
-        self.confctl.update_objects({'pooled': False}, self.confctl_services)
+        self.confctl.update_objects({'pooled': self.args.conftool_value}, self.confctl_services)
         self.rollback_depool = True
-        updated = '\n'.join(service.tags for service in self.confctl_services)
+        updated = '\n'.join(str(service.tags) for service in self.confctl_services)
         self.host_actions.success(f'Depooled the following services from confctl:\n{updated}')
         logger.info('Waiting for 3 minutes to allow for any in-flight connection to complete')
         time.sleep(180)
@@ -280,9 +283,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 confirm_on_failure(self.icinga_host.downtime, self.reason)
                 self.host_actions.success('Downtimed on Icinga')
 
-            if self.args.conftool:
-                self._depool()
-
+            self._depool()
             try:
                 self.puppet.disable(self.reason)
                 self.host_actions.success('Disabled Puppet')
