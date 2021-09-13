@@ -151,8 +151,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self._repool()
 
         self.host_actions.failure('The reimage failed, see the cookbook logs for the details')
+        logger.error('Reimage executed with errors:\n{self.actions}\n')
         if self.phabricator is not None:
-            self.phabricator.task_comment(self.args.task_id, f'Cookbook {__name__} executed:\n{self.actions}\n')
+            self.phabricator.task_comment(
+                self.args.task_id, f'Cookbook {__name__} executed with errors:\n{self.actions}\n')
 
     def _get_output_filename(self, username):
         """Return the absolute path of the file to use for the cumin output."""
@@ -366,6 +368,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self._repool()
 
         # Comment on the Phabricator task
+        logger.info('Reimage completed:\n{self.actions}\n')
         if self.phabricator is not None:
             self.phabricator.task_comment(self.args.task_id, f'Cookbook {__name__} completed:\n{self.actions}\n')
 
