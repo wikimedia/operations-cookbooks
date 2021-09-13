@@ -183,11 +183,16 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             return
 
         logger.info('Depooling services')
-        self.confctl_services = list(self.confctl.filter_objects({'pooled': 'yes'}, name=self.fqdn))
-        self.confctl.update_objects({'pooled': self.args.conftool_value}, self.confctl_services)
+        self.confctl_services = list(self.confctl.filter_objects({}, name=self.fqdn))  # Get a copy for later usage
+        confctl_services = self.confctl.filter_objects({}, name=self.fqdn)  # Use this copy for the update
+        if not self.confctl_services:
+            raise RuntimeError(f'-c/--conftool was set but no objects were found on confctl for name={self.fqdn}')
+
+        self.confctl.update_objects({'pooled': self.args.conftool_value}, confctl_services)
         self.rollback_depool = True
-        updated = '\n'.join(str(service.tags) for service in self.confctl_services)
-        self.host_actions.success(f'Depooled the following services from confctl:\n{updated}')
+        services_lines = '\n'.join(str(service) for service in self.confctl_services)
+        self.host_actions.success(
+            f'Set pooled={self.args.conftool_value} for the following services on confctl:\n{services_lines}')
         logger.info('Waiting for 3 minutes to allow for any in-flight connection to complete')
         time.sleep(180)
 
@@ -196,9 +201,24 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if not self.confctl_services:
             return
 
-        services = '\n'.join(str(service.tags) for service in self.confctl_services)
-        self.host_actions.warning(f'The following services were pooled before the reimage. '
-                                  f'The repool is currently left to the user:\n{services}')
+        commands = []
+        weights = []
+        for obj in self.confctl_services:
+            if obj.pooled == self.args.conftool_value:
+                continue  # Nothing to do
+            tags = ','.join(f'{k}={v}' for k, v in obj.tags.items())
+            commands.append(f"sudo confctl select '{tags}' set/pooled={obj.pooled}")
+            if obj.weight <= 0:
+                weights.append("sudo confctl select '{tags}' set/weight=NN")
+
+        if weights:
+            weights_lines = '\n'.join(weights)
+            self.host_actions.warning(
+                f'Some services have a zero weight, you have to set a weight with:\n{weights_lines}')
+
+        commands_lines = '\n'.join(commands)
+        self.host_actions.warning('Services in confctl are not automatically pooled, to restore the previous '
+                                  f'state you have to run the following commands:\n{commands_lines}')
 
     def _install_os(self):
         """Perform the OS reinstall."""
