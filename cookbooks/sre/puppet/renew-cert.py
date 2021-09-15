@@ -18,16 +18,23 @@ class RenewCert(CookbookBase):
     * validate the puppet master see's the new certificate on the puppet master
     * sign the new certificate on the puppet master
     * run puppet on the host to ensure everything works as expected
+    * optionally allow for alternative names in the Puppet certificate
+    * optionally use the installer key for hosts upgraded in place instead of reimaged
 
     Usage example:
         cookbook sre.hosts.renew-cert sretest1001.eqiad.wmnet
+        cookbook sre.hosts.renew-cert --allow-alt-names --installer sretest1001.eqiad.wmnet
     """
 
     def argument_parser(self):
         """Parse arguments"""
         parser = ArgumentParser(description=self.__doc__, formatter_class=RawDescriptionHelpFormatter)
         parser.add_argument('query', help='A single host whose puppet certificate should be renewed')
-        parser.add_argument('--allow-alt-names', action='store_true')
+        parser.add_argument('--allow-alt-names', action='store_true', help='To allow SAN in the Puppet certificate')
+        parser.add_argument('--installer', action='store_true',
+                            help=('To use the installer SSH key to connect to the host, the one set by the Debian '
+                                  'installer and valid until the first Puppet run. Needed for example when '
+                                  'reinstalling in place instead of using the reimage cookbook.'))
         return parser
 
     def get_runner(self, args):
@@ -40,14 +47,15 @@ class RenewCertRunner(CookbookRunnerBase):
 
     def __init__(self, args, spicerack):
         """Initialize the runner."""
-        hosts = spicerack.remote().query(args.query)
         self.allow_alt_names = args.allow_alt_names
+        self.installer = args.installer
 
+        hosts = spicerack.remote(installer=self.installer).query(args.query)
         if not hosts:
-            raise RuntimeError('No host found for query "{query}"'.format(query=args.query))
+            raise RuntimeError(f'No host found for query "{args.query}"')
 
         if len(hosts) != 1:
-            raise RuntimeError('Only a single server can be rebooted')
+            raise RuntimeError(f'Only a single server should match the query, got {len(hosts)}')
 
         self.host = str(hosts.hosts[0])
         self.icinga_hosts = spicerack.icinga_hosts(hosts.hosts)
@@ -58,14 +66,21 @@ class RenewCertRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for {s.host}: {s.reason}'.format(s=self)
+        return f'for {self.host}: {self.reason}'
 
     def run(self):
         """Renew the certificate"""
-        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
-            self.puppet_master.destroy(self.host)
-            self.puppet.disable(self.reason)
-            fingerprints = self.puppet.regenerate_certificate()
-            self.puppet_master.wait_for_csr(self.host)
-            self.puppet_master.sign(self.host, fingerprints[self.host], self.allow_alt_names)
-            self.puppet.run(enable_reason=self.reason, quiet=True)
+        if self.installer:
+            self._run()
+        else:
+            with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
+                self._run()
+
+    def _run(self):
+        """Run all the actual steps to renew the certificate."""
+        self.puppet_master.destroy(self.host)
+        self.puppet.disable(self.reason)
+        fingerprints = self.puppet.regenerate_certificate()
+        self.puppet_master.wait_for_csr(self.host)
+        self.puppet_master.sign(self.host, fingerprints[self.host], self.allow_alt_names)
+        self.puppet.run(enable_reason=self.reason, quiet=True)
