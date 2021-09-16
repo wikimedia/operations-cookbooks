@@ -79,7 +79,8 @@ class RenewCertRunner(CookbookRunnerBase):
     def _run(self):
         """Run all the actual steps to renew the certificate."""
         self.puppet_master.destroy(self.host)
-        self.puppet.disable(self.reason)
+        if not self.installer:  # On a freshly reinstalled system we don't have disable-puppet yet
+            self.puppet.disable(self.reason)
         fingerprints = self.puppet.regenerate_certificate()
         self.puppet_master.wait_for_csr(self.host)
         self.puppet_master.sign(self.host, fingerprints[self.host], self.allow_alt_names)
