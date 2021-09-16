@@ -84,4 +84,5 @@ class RenewCertRunner(CookbookRunnerBase):
         fingerprints = self.puppet.regenerate_certificate()
         self.puppet_master.wait_for_csr(self.host)
         self.puppet_master.sign(self.host, fingerprints[self.host], self.allow_alt_names)
-        self.puppet.run(enable_reason=self.reason, quiet=True)
+        if not self.installer:
+            self.puppet.run(enable_reason=self.reason, quiet=True)
