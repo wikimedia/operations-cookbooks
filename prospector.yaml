@@ -29,6 +29,7 @@ pep257:
 pylint:
   disable:
     - pointless-string-statement  # used as documentation for class attributes
+    - consider-using-f-string  # Most cookbooks still use format(), disable for now
   options:
     ignore: vulture_whitelist.py
     max-line-length: 120
