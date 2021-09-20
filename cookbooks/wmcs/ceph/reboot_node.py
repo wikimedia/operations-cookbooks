@@ -6,7 +6,7 @@ Usage example:
         --fqdn-to-reboot cloudcephosd2001-dev.codfw.wmnet
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
+# pylint: disable=too-many-arguments
 import argparse
 import datetime
 import logging

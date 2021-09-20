@@ -5,7 +5,6 @@ Usage example:
         --control-node-fqdn toolsbeta-test-control-5.toolsbeta.eqiad1.wikimedia.cloud \
         --hostname-to-drain toolsbeta-test-worker-4
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import json
 import logging

@@ -5,7 +5,6 @@ Usage example: wmcs.do_log_msg \
     --task-id T424242
 
 """
-# pylint: disable=unsubscriptable-object
 import argparse
 import logging
 from typing import Optional

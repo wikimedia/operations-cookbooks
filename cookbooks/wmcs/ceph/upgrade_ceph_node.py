@@ -5,7 +5,6 @@ Usage example:
         --to-upgrade-fqdn cloudcephosd2001-dev.codfw.wmnet
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import importlib
 import logging

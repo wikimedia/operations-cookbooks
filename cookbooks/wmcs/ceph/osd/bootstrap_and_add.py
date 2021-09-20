@@ -6,7 +6,7 @@ Usage example:
         --task-id T12345
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
+# pylint: disable=too-many-arguments
 import argparse
 import logging
 from typing import List, Optional

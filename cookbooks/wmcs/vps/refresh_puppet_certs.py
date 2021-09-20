@@ -4,7 +4,6 @@ Usage example: wmcs.vps.refresh_puppet_certs \
     --fqdn tools-host.tools.eqiad1.wikimedia.cloud
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import logging
 from typing import Optional

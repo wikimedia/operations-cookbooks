@@ -6,7 +6,7 @@ Usage example:
         --worker-prefix toolsbeta-k8s-test-worker
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
+# pylint: disable=too-many-arguments
 import argparse
 import datetime
 import logging
@@ -137,7 +137,7 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
             "--server-group",
             self.k8s_worker_prefix,
             "--server-group-policy",
-            OpenstackServerGroupPolicy.soft_anti_affinity.name,
+            OpenstackServerGroupPolicy.SOFT_ANTI_AFFINITY.value,
         ]
         if self.image:
             start_args.extend(["--image", self.image])

@@ -6,7 +6,7 @@ Usage example:
         --etcd-prefix toolsbeta-k8s-test-etcd
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
+# pylint: disable=too-many-arguments
 import argparse
 import logging
 from typing import Optional

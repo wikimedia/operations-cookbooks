@@ -5,7 +5,6 @@ Usage example:
         --monitor-node-fqdn cloudcephosd2001-dev.codfw.wmnet
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import logging
 from typing import Optional

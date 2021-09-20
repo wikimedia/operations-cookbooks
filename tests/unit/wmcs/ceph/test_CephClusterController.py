@@ -126,7 +126,7 @@ def test_get_cluster_status_happy_path(status_command_output: str, expected_stat
 @parametrize(
     {
         "Passes if flag was set (output has the correct format)": {
-            "set_flag_command_output": f"{CephOSDFlag.norebalance.value} is set",
+            "set_flag_command_output": f"{CephOSDFlag.NOREBALANCE.value} is set",
         },
     },
 )
@@ -136,15 +136,15 @@ def test_set_osdmap_flag_happy_path(set_flag_command_output: str):
         controlling_node_fqdn="monhost1.local",
     )
 
-    my_controller.set_osdmap_flag(flag=CephOSDFlag.norebalance)
+    my_controller.set_osdmap_flag(flag=CephOSDFlag.NOREBALANCE)
 
-    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd set {CephOSDFlag.norebalance.value}")
+    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd set {CephOSDFlag.NOREBALANCE.value}")
 
 
 @parametrize(
     {
         "Raises CephFlagSetError if the set command does not return the correct output": {
-            "set_flag_command_output": f"some error happend when setting {CephOSDFlag.norebalance.value}",
+            "set_flag_command_output": f"some error happend when setting {CephOSDFlag.NOREBALANCE.value}",
         },
     },
 )
@@ -155,15 +155,15 @@ def test_set_osdmap_flag_raising(set_flag_command_output: str):
     )
 
     with pytest.raises(CephFlagSetError):
-        my_controller.set_osdmap_flag(flag=CephOSDFlag.norebalance)
+        my_controller.set_osdmap_flag(flag=CephOSDFlag.NOREBALANCE)
 
-    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd set {CephOSDFlag.norebalance.value}")
+    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd set {CephOSDFlag.NOREBALANCE.value}")
 
 
 @parametrize(
     {
         "Passes if flag was unset (output has the correct format)": {
-            "unset_flag_command_output": f"{CephOSDFlag.norebalance.value} is unset",
+            "unset_flag_command_output": f"{CephOSDFlag.NOREBALANCE.value} is unset",
         },
     },
 )
@@ -173,15 +173,15 @@ def test_unset_osdmap_flag_happy_path(unset_flag_command_output: str):
         controlling_node_fqdn="monhost1.local",
     )
 
-    my_controller.unset_osdmap_flag(flag=CephOSDFlag.norebalance)
+    my_controller.unset_osdmap_flag(flag=CephOSDFlag.NOREBALANCE)
 
-    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd unset {CephOSDFlag.norebalance.value}")
+    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd unset {CephOSDFlag.NOREBALANCE.value}")
 
 
 @parametrize(
     {
         "Raises CephFlagSetError if the unset command does not return the correct output": {
-            "unset_flag_command_output": f"some error happend when unsetting {CephOSDFlag.norebalance.value}",
+            "unset_flag_command_output": f"some error happend when unsetting {CephOSDFlag.NOREBALANCE.value}",
         },
     },
 )
@@ -192,9 +192,9 @@ def test_unset_osdmap_flag_raising(unset_flag_command_output: str):
     )
 
     with pytest.raises(CephFlagSetError):
-        my_controller.unset_osdmap_flag(flag=CephOSDFlag.norebalance)
+        my_controller.unset_osdmap_flag(flag=CephOSDFlag.NOREBALANCE)
 
-    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd unset {CephOSDFlag.norebalance.value}")
+    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd unset {CephOSDFlag.NOREBALANCE.value}")
 
 
 @parametrize(

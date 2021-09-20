@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# pylint: disable=unsubscriptable-object,too-many-arguments,too-many-lines
+# pylint: disable=too-many-arguments,too-many-lines
 """Cloud Services Cookbooks"""
 __title__ = __doc__
 import base64
@@ -59,17 +59,17 @@ class OpenstackMigrationError(OpenstackError):
 class OpenstackRuleDirection(Enum):
     """Directior for the security group roule."""
 
-    ingress = auto()
-    egress = auto()
+    INGRESS = auto()
+    EGRESS = auto()
 
 
 class OpenstackServerGroupPolicy(Enum):
     """Affinity for the server group."""
 
-    soft_anti_affinity = "soft-anti-affinity"
-    anti_affinity = "anti-affinity"
-    affinity = "affinity"
-    soft_affinity = "soft-affinity"
+    SOFT_ANTI_AFFINITY = "soft-anti-affinity"
+    ANTI_AFFINITY = "anti-affinity"
+    AFFINITY = "affinity"
+    SOFT_AFFINITY = "soft-affinity"
 
 
 class OpenstackAPI:
@@ -228,12 +228,12 @@ class OpenstackAPI:
                 description=description,
             )
             self.security_group_rule_create(
-                direction=OpenstackRuleDirection.egress,
+                direction=OpenstackRuleDirection.EGRESS,
                 remote_group=security_group,
                 security_group=security_group,
             )
             self.security_group_rule_create(
-                direction=OpenstackRuleDirection.ingress,
+                direction=OpenstackRuleDirection.INGRESS,
                 remote_group=security_group,
                 security_group=security_group,
             )
@@ -271,7 +271,7 @@ class OpenstackAPI:
         )
 
     def server_group_ensure(
-        self, server_group: OpenstackName, policy: OpenstackServerGroupPolicy = OpenstackServerGroupPolicy.anti_affinity
+        self, server_group: OpenstackName, policy: OpenstackServerGroupPolicy = OpenstackServerGroupPolicy.ANTI_AFFINITY
     ) -> None:
         """Make sure that the given server group exists, create it if not there."""
         try:
@@ -351,11 +351,11 @@ class OpenstackAPI:
         try:
             next(self._control_node.run_sync(command, is_safe=False))
 
-        except StopIteration:
+        except StopIteration as error:
             raise OpenstackMigrationError(
                 f"Got no result when running {command} on {self.control_node_fqdn}, was expecting some output at "
                 "least."
-            )
+            ) from error
 
 
 class CephException(Exception):
@@ -386,35 +386,35 @@ class CephOSDFlag(Enum):
     """Possible OSD flags."""
 
     # cluster marked as full and stops serving writes
-    full = "full"
+    FULL = "full"
     # stop serving writes and reads
-    pause = "pause"
+    PAUSE = "pause"
     # avoid marking osds as up (serving traffic)
-    noup = "noup"
+    NOUP = "noup"
     # avoid marking osds as down (stop serving traffic)
-    nodown = "nodown"
+    NODOWN = "nodown"
     # avoid marking osds as out (get out of the cluster, would trigger
     # rebalancing)
-    noout = "noout"
+    NOOUT = "noout"
     # avoid marking osds as in (get in the cluster, would trigger rebalancing)
-    noin = "noin"
+    NOIN = "noin"
     # avoid backfills (asynchronous recovery from journal log)
-    nobackfill = "nobackfill"
+    NOBACKFILL = "nobackfill"
     # avoid rebalancing (data rebalancing will stop)
-    norebalance = "norebalance"
+    NOREBALANCE = "norebalance"
     # avoid recovery (synchronous recovery of raw data)
-    norecover = "norecover"
+    NORECOVER = "norecover"
     # avoid running any scrub job (independent from deep scrubs)
-    noscrub = "noscrub"
+    NOSCRUB = "noscrub"
     # avoid running any deep scrub job
-    nodeep_scrub = "nodeep-scrub"
+    NODEEP_SCRUB = "nodeep-scrub"
     # avoid cache tiering activity
-    notieragent = "notieragent"
+    NOTIERAGENT = "notieragent"
     # avoid snapshot trimming (async deletion of objects from deleted
     # snapshots)
-    nosnaptrim = "nosnaptrim"
+    NOSNAPTRIM = "nosnaptrim"
     # explitic hard limit the pg log (don't use, deprecated feature)
-    pglog_hardlimit = "pglog_hardlimit"
+    PGLOG_HARDLIMIT = "pglog_hardlimit"
 
 
 @dataclass(frozen=True)
@@ -572,8 +572,10 @@ class CephClusterController:
         nodes = self.get_nodes()
         try:
             another_monitor = next(node_host for node_host in nodes["mon"].keys() if node_host != current_monitor_name)
-        except StopIteration:
-            raise CephNoControllerNode(f"Unable to find any other mon node to control the cluster, got nodes: {nodes}")
+        except StopIteration as error:
+            raise CephNoControllerNode(
+                f"Unable to find any other mon node to control the cluster, got nodes: {nodes}"
+            ) from error
 
         self._controlling_node_fqdn = f"{another_monitor}.{self.get_nodes_domain()}"
         self._controlling_node = self._remote.query(f"D{{{self._controlling_node_fqdn}}}", use_sudo=True)
@@ -863,11 +865,11 @@ class KubernetesController:
                 for condition in node_info[0]["status"]["conditions"]
                 if condition["type"] == "Ready"
             )
-        except StopIteration:
+        except StopIteration as error:
             raise KubernetesNodeStatusError(
                 f"Unable to get 'Ready' condition of node {node_hostname}, got conditions:\n"
                 f"{node_info[0]['conditions']}"
-            )
+            ) from error
 
 
 class KubeadmError(Exception):

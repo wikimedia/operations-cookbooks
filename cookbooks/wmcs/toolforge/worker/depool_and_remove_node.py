@@ -7,7 +7,7 @@ Usage example:
         --hostname-to-drain toolsbeta-test-worker-4
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
+# pylint: disable=too-many-arguments
 import argparse
 import logging
 from typing import Optional

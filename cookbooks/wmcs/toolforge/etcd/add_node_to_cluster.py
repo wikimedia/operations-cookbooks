@@ -9,7 +9,6 @@ Usage example:
         --fqdn-to-add toolsbeta-k8s-
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import base64
 import logging

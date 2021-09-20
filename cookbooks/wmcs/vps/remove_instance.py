@@ -6,7 +6,6 @@ Usage example:
         --server-name toolsbeta-k8s-test-etcd-08
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import logging
 from typing import Optional

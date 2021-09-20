@@ -7,7 +7,6 @@ Usage example:
         --etcd-prefix toolsbeta-test-etcd
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import base64
 import logging

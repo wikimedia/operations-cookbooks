@@ -13,7 +13,7 @@ Usage example:
         --security-group toolsbeta-k8s-full-connectivity
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments,no-value-for-parameter
+# pylint: disable=too-many-arguments,no-value-for-parameter
 import argparse
 import logging
 from datetime import timedelta
@@ -100,8 +100,8 @@ class StartInstanceWithPrefix(CookbookBase):
                 "Server group policy to start the instance in. If it does not exist, it will create it with "
                 "anti-affinity policy, will use the same as '--prefix' by default (ex. toolsbeta-test-k8s-etcd)."
             ),
-            choices=[policy.name for policy in OpenstackServerGroupPolicy],
-            default=OpenstackServerGroupPolicy.anti_affinity.name,
+            choices=[policy.value for policy in OpenstackServerGroupPolicy],
+            default=OpenstackServerGroupPolicy.ANTI_AFFINITY.value,
         )
 
         return parser
@@ -160,7 +160,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         )
         self.openstack_api.server_group_ensure(
             server_group=self.server_group,
-            policy=OpenstackServerGroupPolicy[self.server_group_policy],
+            policy=OpenstackServerGroupPolicy(self.server_group_policy),
         )
 
         all_project_servers = self.openstack_api.server_list()

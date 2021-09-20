@@ -7,7 +7,6 @@ Usage example:
         --k8s-worker-prefix toolsbeta-test-k8s-worker
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import logging
 
 from cookbooks.wmcs.toolforge.worker.depool_and_remove_node import ToolforgeDepoolAndRemoveNode

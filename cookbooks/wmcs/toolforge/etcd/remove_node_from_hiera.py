@@ -13,7 +13,6 @@ Usage examples:
         --fqdn-to-remove toolsbeta-test-k8s-etcd-09.toolsbeta.eqiad1.wikimedia.cloud
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import json
 import logging
