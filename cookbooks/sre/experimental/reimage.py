@@ -241,7 +241,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
     def _populate_puppetdb(self):
         """Run Puppet in noop mode to populate the exported resources in PuppetDB to downtime it on Icinga."""
-        self.remote_installer.run_sync(Command('puppet agent -t --noop &> /dev/null', ok_codes=[]))
+        self.remote_installer.run_sync(Command('puppet agent -t --noop &> /dev/null', ok_codes=[]),
+                                       print_progress_bars=False)
         self.host_actions.success('Run Puppet in NOOP mode to populate exported resources in PuppetDB')
 
         @retry(tries=10, backoff_mode='linear')
@@ -268,7 +269,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             return
 
         commands = [f'systemctl mask {service}.service' for service in self.args.mask]
-        self.remote_installer.run_sync(*commands)
+        self.remote_installer.run_sync(*commands, print_progress_bars=False)
         self.rollback_masks = True
         self.host_actions.success(f'Masked systemd units: {self.args.mask}')
 
@@ -288,8 +289,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         command = Command(f'httpbb /srv/deployment/httpbb-tests/appserver/* --host={self.fqdn}', timeout=120)
         deployment_host = self.remote.query(self.dns.resolve_cname('deployment.eqiad.wmnet'))
+        logger.info('Running httpbb tests')
         try:
-            deployment_host.run_sync(command)
+            deployment_host.run_sync(command, print_progress_bars=False)
             self.host_actions.success('Run of httpbb tests was successful')
         except RemoteExecutionError:
             # We don't want to fail upon this failure, this is just a validation test for the user.
