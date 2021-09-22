@@ -151,7 +151,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self._repool()
 
         self.host_actions.failure('The reimage failed, see the cookbook logs for the details')
-        logger.error('Reimage executed with errors:\n{self.actions}\n')
+        logger.error('Reimage executed with errors:\n%s\n', self.actions)
         if self.phabricator is not None:
             self.phabricator.task_comment(
                 self.args.task_id, f'Cookbook {__name__} executed with errors:\n{self.actions}\n')
@@ -371,7 +371,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self._repool()
 
         # Comment on the Phabricator task
-        logger.info('Reimage completed:\n{self.actions}\n')
+        logger.info('Reimage completed:\n%s\n', self.actions)
         if self.phabricator is not None:
             self.phabricator.task_comment(self.args.task_id, f'Cookbook {__name__} completed:\n{self.actions}\n')
 
