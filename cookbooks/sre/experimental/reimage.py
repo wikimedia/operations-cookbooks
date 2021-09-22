@@ -232,11 +232,11 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.host_actions.success('Forced PXE for next reboot')
         self.ipmi.reboot()
         self.host_actions.success('Host rebooted via IPMI')
-        self.remote_installer.wait_reboot_since(pxe_reboot_time)
+        self.remote_installer.wait_reboot_since(pxe_reboot_time, print_progress_bars=False)
         self.host_actions.success('Host up (Debian installer)')
         time.sleep(30)  # Avoid race conditions, the host is in the d-i, need to wait anyway
         di_reboot_time = datetime.utcnow()
-        self.remote_installer.wait_reboot_since(di_reboot_time)
+        self.remote_installer.wait_reboot_since(di_reboot_time, print_progress_bars=False)
         self.host_actions.success('Host up (new fresh OS)')
 
     def _populate_puppetdb(self):
@@ -360,7 +360,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         reboot_time = datetime.utcnow()
         self.remote_host.reboot()
-        self.remote_host.wait_reboot_since(reboot_time)
+        self.remote_host.wait_reboot_since(reboot_time, print_progress_bars=False)
         self.host_actions.success('Rebooted')
         self.puppet.wait_since(reboot_time)
         self.host_actions.success('Automatic Puppet run was successful')
