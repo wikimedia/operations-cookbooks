@@ -150,7 +150,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if self.rollback_depool:
             self._repool()
 
-        self.host_actions.failure('The reimage failed, see the cookbook logs for the details')
+        self.host_actions.failure('**The reimage failed, see the cookbook logs for the details**')
         logger.error('Reimage executed with errors:\n%s\n', self.actions)
         if self.phabricator is not None:
             self.phabricator.task_comment(
@@ -217,11 +217,11 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if weights:
             weights_lines = '\n'.join(weights)
             self.host_actions.warning(
-                f'Some services have a zero weight, you have to set a weight with:\n{weights_lines}')
+                f'//Some services have a zero weight, you have to set a weight with//:\n{weights_lines}')
 
         commands_lines = '\n'.join(commands)
-        self.host_actions.warning('Services in confctl are not automatically pooled, to restore the previous '
-                                  f'state you have to run the following commands:\n{commands_lines}')
+        self.host_actions.warning('//Services in confctl are not automatically pooled, to restore the previous '
+                                  f'state you have to run the following commands://\n{commands_lines}')
 
     def _install_os(self):
         """Perform the OS reinstall."""
@@ -279,8 +279,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             return
 
         commands = '\n'.join(f'systemctl unmask {service}.service\n' for service in self.args.mask)
-        self.host_actions.warning('The masked units might not have been automatically unmasked by Puppet. '
-                                  f'To unmask them run:\n{commands}')
+        self.host_actions.warning('//The masked units might not have been automatically unmasked by Puppet. '
+                                  f'To unmask them run://\n{commands}')
 
     def _httpbb(self):
         """Run the httpbb tests."""
@@ -295,7 +295,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.host_actions.success('Run of httpbb tests was successful')
         except RemoteExecutionError:
             # We don't want to fail upon this failure, this is just a validation test for the user.
-            self.host_actions.warning('Failed to run httpbb tests')
+            self.host_actions.warning('//Failed to run httpbb tests//')
 
     def _check_icinga(self):
         """Best effort attempt to wait for Icinga to be optimal, do not fail if not."""
@@ -305,7 +305,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.icinga_host.wait_for_optimal()
             self.host_actions.success('Icinga status is optimal')
         except IcingaError:  # Do not fail here, just report it to the user, not all hosts are optimal upon reimage
-            self.host_actions.warning('Icinga status is not optimal')
+            self.host_actions.warning('//Icinga status is not optimal//')
 
     def run(self):
         """Execute the reimage."""
@@ -324,7 +324,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 self.puppet.disable(self.reason)
                 self.host_actions.success('Disabled Puppet')
             except RemoteExecutionError:
-                self.host_actions.warning('Unabled to disable Puppet, the host may have been unreachable')
+                self.host_actions.warning('//Unable to disable Puppet, the host may have been unreachable//')
 
             self.puppet_master.destroy(self.fqdn)
             self.host_actions.success('Removed from Puppet and PuppetDB')
@@ -347,7 +347,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.host_actions.success('Downtimed the new host on Icinga')
 
         puppet_first_run = confirm_on_failure(self.puppet_installer.first_run)
-        self.host_actions.success('First Puppet run')
+        self.host_actions.success(f'First Puppet run (log in {self.output_filename}')
         with open(self.output_filename, 'w', encoding='utf8') as output_file:
             for _, output in puppet_first_run:
                 output_file.write(output.message().decode())
