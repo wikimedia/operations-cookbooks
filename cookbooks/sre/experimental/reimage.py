@@ -347,7 +347,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.host_actions.success('Downtimed the new host on Icinga')
 
         puppet_first_run = confirm_on_failure(self.puppet_installer.first_run)
-        self.host_actions.success(f'First Puppet run (log in {self.output_filename}')
+        self.host_actions.success(f'First Puppet run completed and logged in {self.output_filename}')
         with open(self.output_filename, 'w', encoding='utf8') as output_file:
             for _, output in puppet_first_run:
                 output_file.write(output.message().decode())
@@ -371,7 +371,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self._repool()
 
         # Comment on the Phabricator task
-        logger.info('Reimage completed:\n%s\n', self.actions)
+        logger.info('Reimage started by {self.reason.owner} for host {self.fqdn} completed:\n%s\n', self.actions)
         if self.phabricator is not None:
             self.phabricator.task_comment(self.args.task_id, f'Cookbook {__name__} completed:\n{self.actions}\n')
 
