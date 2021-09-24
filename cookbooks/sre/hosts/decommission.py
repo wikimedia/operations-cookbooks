@@ -268,7 +268,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
             self.spicerack.actions[fqdn].success('Downtimed host on Icinga')
         except IcingaError:
             self.spicerack.actions[fqdn].warning(
-                '//Host not found on Icinga, unable to downtme it//')
+                '//Host not found on Icinga, unable to downtime it//')
         except RemoteExecutionError:
             self.spicerack.actions[fqdn].warning(
                 '//Failed to downtime host on Icinga//')
@@ -297,7 +297,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     'Downtimed management interface on Icinga')
             except IcingaError:
                 self.spicerack.actions[fqdn].warning(
-                    '//Management interface not found on Icinga, unable to downtme it//')
+                    '//Management interface not found on Icinga, unable to downtime it//')
             except RemoteExecutionError:
                 self.spicerack.actions[fqdn].warning('//Failed to downtime management interface on Icinga//')
 
