@@ -11,6 +11,7 @@ import requests
 from cumin.transports import Command
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
+from spicerack.dhcp import DHCPConfOpt82
 from spicerack.exceptions import SpicerackError
 from spicerack.icinga import IcingaError
 from spicerack.puppet import PuppetMasterError
@@ -23,6 +24,7 @@ from cookbooks.sre.hosts.downtime import Downtime
 
 
 logger = logging.getLogger(__name__)
+OS_VERSIONS = ('buster', 'bullseye')
 
 
 class Reimage(CookbookBase):
@@ -72,6 +74,7 @@ class Reimage(CookbookBase):
                   'starts/enable a production service before the host is ready.'))
         parser.add_argument('--httpbb', action='store_true',
                             help='run HTTP tests (httpbb) on the host after the reimage.')
+        parser.add_argument('--os', choices=OS_VERSIONS, help='the Debian version to install. One of %(choices)s')
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         parser.add_argument('host', help='Short hostname of the host to be reimaged, not FQDN')
 
@@ -90,8 +93,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         ensure_shell_is_durable()
         self.args = args
 
-        self.netbox = spicerack.netbox(read_write=True)
+        self.netbox = spicerack.netbox()
         self.netbox_server = self.netbox.get_server(self.args.host)
+        self.netbox_data = self.netbox_server.as_dict()
 
         # Shortcut variables
         self.host = self.args.host
@@ -126,6 +130,12 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         # The same as above but using the SSH key valid only during installation before the first Puppet run
         self.puppet_installer = spicerack.puppet(self.remote_installer)
         self.downtime = Downtime(spicerack)
+
+        # DHCP automation
+        self.dhcp_hosts = self.remote.query(f'A:installserver-light and A:{self.netbox_data["site"]["slug"]}')
+        self.dhcp = spicerack.dhcp(self.dhcp_hosts)
+        self.dhcp_config = self._get_dhcp_config()
+        self.is_dhcp_automated = self._is_dhcp_automated()
 
         self._validate()
 
@@ -180,6 +190,19 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 else:
                     raise
 
+        if self.is_dhcp_automated and not self.args.os:
+            raise RuntimeError(f'The DHCP hardcoded record for host {self.host} is missing, assuming automated DHCP '
+                               'but --os is not set. Please pass the --os parameter.')
+
+    def _is_dhcp_automated(self):
+        """Detect if the host has been already migrated to the automatic DHCP."""
+        try:
+            self.dhcp_hosts.run_sync(f'grep -q {self.fqdn} /etc/dhcp/linux-host-entries.ttyS?-115200',
+                                     print_output=False, print_progress_bars=False, is_safe=True)
+            return False
+        except RemoteExecutionError:
+            return True
+
     def _depool(self):
         """Depool all the pooled services for the host."""
         if not self.args.conftool:
@@ -223,10 +246,23 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.host_actions.warning('//Services in confctl are not automatically pooled, to restore the previous '
                                   f'state you have to run the following commands://\n{commands_lines}')
 
+    def _get_dhcp_config(self):
+        """Instantiate a DHCP configuration to be used for the reimage."""
+        netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
+        switch_iface = netbox_host.primary_ip.assigned_object.connected_endpoint
+
+        return DHCPConfOpt82(
+            hostname=self.host,
+            fqdn=self.fqdn,
+            switch_hostname=switch_iface.device.virtual_chassis.name.split('.')[0],
+            switch_iface=f'{switch_iface}.0',  # In Netbox we have just the main interface
+            vlan=switch_iface.untagged_vlan.name,
+            ttys=1,
+            distro=self.args.os,
+        )
+
     def _install_os(self):
         """Perform the OS reinstall."""
-        self.debmonitor.host_delete(self.fqdn)
-        self.host_actions.success('Removed from Debmonitor')
         pxe_reboot_time = datetime.utcnow()
         self.ipmi.force_pxe()
         self.host_actions.success('Forced PXE for next reboot')
@@ -328,11 +364,17 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
             self.puppet_master.destroy(self.fqdn)
             self.host_actions.success('Removed from Puppet and PuppetDB')
+            self.debmonitor.host_delete(self.fqdn)
+            self.host_actions.success('Removed from Debmonitor')
 
         if self.args.no_pxe:
             logger.info('Skipping PXE reboot and associated steps as --no-pxe is set. Assuming new OS is in place.')
         else:
-            self._install_os()
+            if self.is_dhcp_automated:
+                with self.dhcp.config(self.dhcp_config):
+                    self._install_os()
+            else:
+                self._install_os()
 
         self._mask_units()
         fingerprint = self.puppet_installer.regenerate_certificate()[self.fqdn]
