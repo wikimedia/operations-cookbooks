@@ -16,7 +16,7 @@ from spicerack.exceptions import SpicerackError
 from spicerack.icinga import IcingaError
 from spicerack.puppet import PuppetMasterError
 from spicerack.remote import RemoteExecutionError
-from wmflib.interactive import confirm_on_failure, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -274,10 +274,22 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.ipmi.reboot()
         self.host_actions.success('Host rebooted via IPMI')
         self.remote_installer.wait_reboot_since(pxe_reboot_time, print_progress_bars=False)
+        try:
+            self.remote_installer.run_sync('[[ -d "/target" ]]')
+        except RemoteExecutionError:
+            ask_confirmation('Unable to verify that the host is inside the Debian installer, please verify manually '
+                             f'with: sudo install_console {self.fqdn}')
+
         self.host_actions.success('Host up (Debian installer)')
         time.sleep(30)  # Avoid race conditions, the host is in the d-i, need to wait anyway
         di_reboot_time = datetime.utcnow()
         self.remote_installer.wait_reboot_since(di_reboot_time, print_progress_bars=False)
+        try:
+            self.remote_installer.run_sync('[[ ! -d "/target" ]]')
+        except RemoteExecutionError:
+            ask_confirmation('Unable to verify that the host rebooted into the new OS, it might still be into the '
+                             f'Debian installer, please verify manually with: sudo install_console {self.fqdn}')
+
         self.host_actions.success('Host up (new fresh OS)')
 
     def _populate_puppetdb(self):
