@@ -286,7 +286,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                                        print_progress_bars=False)
         self.host_actions.success('Run Puppet in NOOP mode to populate exported resources in PuppetDB')
 
-        @retry(tries=10, backoff_mode='linear')
+        @retry(tries=50, backoff_mode='linear')
         def poll_puppetdb():
             """Poll PuppetDB until we find the Nagios_host resource for the newly installed host."""
             puppetdb_host = self.dns.resolve_ptr(self.dns.resolve_ipv4('puppetdb-api.discovery.wmnet')[0])[0]
