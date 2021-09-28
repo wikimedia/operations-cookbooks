@@ -24,7 +24,7 @@ from cookbooks.sre.hosts.downtime import Downtime
 
 
 logger = logging.getLogger(__name__)
-OS_VERSIONS = ('buster', 'bullseye')
+OS_VERSIONS = ('stretch', 'buster', 'bullseye')
 
 
 class Reimage(CookbookBase):
