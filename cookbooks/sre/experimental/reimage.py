@@ -340,8 +340,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         try:
             self.icinga_host.wait_for_optimal()
             self.host_actions.success('Icinga status is optimal')
+            self.icinga_host.remove_downtime()
+            self.host_actions.success('Icinga downtime removed')
         except IcingaError:  # Do not fail here, just report it to the user, not all hosts are optimal upon reimage
-            self.host_actions.warning('//Icinga status is not optimal//')
+            self.host_actions.warning('//Icinga status is not optimal, downtime not removed//')
 
     def run(self):
         """Execute the reimage."""
