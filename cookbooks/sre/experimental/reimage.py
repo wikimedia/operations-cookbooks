@@ -390,7 +390,19 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.downtime.get_runner(self.downtime.argument_parser().parse_args(downtime_args)).run()
         self.host_actions.success('Downtimed the new host on Icinga')
 
-        puppet_first_run = confirm_on_failure(self.puppet_installer.first_run)
+        def _first_puppet_run():
+            """Print a nicer message on failure."""
+            # TODO: remove once Cumin returns partial output on failure
+            try:
+                return self.puppet_installer.first_run()
+            except RemoteExecutionError:
+                logger.error(('First Puppet run failed:\n'
+                              'Check the logs at https://puppetboard.wikimedia.org/node/%s\n'
+                              'Inspect the host with: sudo install_console %s'), self.fqdn, self.fqdn)
+                self.host_actions.failure('**First Puppet run failed, asking the operator what to do**')
+                raise
+
+        puppet_first_run = confirm_on_failure(_first_puppet_run)
         self.host_actions.success(f'First Puppet run completed and logged in {self.output_filename}')
         with open(self.output_filename, 'w', encoding='utf8') as output_file:
             for _, output in puppet_first_run:
