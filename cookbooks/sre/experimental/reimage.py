@@ -52,7 +52,7 @@ class Reimage(CookbookBase):
                   'after the timeout hence the run failed.'))
         parser.add_argument(
             '--new', action='store_true',
-            help=('for first imaging of new hosts that are not in yet in Puppet and this is their first'
+            help=('for first imaging of new hosts that are not in yet in Puppet and this is their first '
                   'imaging. Skips some steps prior to the reimage, includes --no-verify.'))
         parser.add_argument(
             '-c', '--conftool', action='store_true',
@@ -117,8 +117,13 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.debmonitor = spicerack.debmonitor()
         self.confctl = spicerack.confctl('node')
         self.remote = spicerack.remote()
-        self.remote_host = self.remote.query(self.fqdn)
-        # The same as above but using the SSH key valid only during installation before the first Puppet run
+        if self.args.new:  # The host is not in PuppetDB use the Direct backend
+            remote_query = f'D{{{self.fqdn}}}'
+        else:
+            remote_query = self.fqdn
+
+        self.remote_host = self.remote.query(remote_query)
+        # The same as self.remote_host but using the SSH key valid only during installation before the first Puppet run
         self.remote_installer = spicerack.remote(installer=True).query(self.fqdn)
         # Get a Puppet instance for the current cumin host to update the known hosts file
         remote_localhost = self.remote.query(f'{self.reason.hostname}.*')
@@ -127,7 +132,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                                f'query "{self.reason.hostname}.*": {remote_localhost}')
         self.puppet_localhost = spicerack.puppet(remote_localhost)
         self.puppet = spicerack.puppet(self.remote_host)
-        # The same as above but using the SSH key valid only during installation before the first Puppet run
+        # The same as self.puppet but using the SSH key valid only during installation before the first Puppet run
         self.puppet_installer = spicerack.puppet(self.remote_installer)
         self.downtime = Downtime(spicerack)
 
