@@ -281,7 +281,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         di_reboot_time = datetime.utcnow()
         env_command = 'grep -q "BOOT_IMAGE=debian-installer" /proc/cmdline'
         try:
-            self.remote_installer.run_sync(env_command)
+            self.remote_installer.run_sync(env_command, print_output=False, print_progress_bars=False)
         except RemoteExecutionError:
             ask_confirmation('Unable to verify that the host is inside the Debian installer, please verify manually '
                              f'with: sudo install_console {self.fqdn}')
@@ -289,7 +289,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.host_actions.success('Host up (Debian installer)')
         self.remote_installer.wait_reboot_since(di_reboot_time, print_progress_bars=False)
         try:
-            self.remote_installer.run_sync(f'! {env_command}')
+            self.remote_installer.run_sync(f'! {env_command}', print_output=False, print_progress_bars=False)
         except RemoteExecutionError:
             ask_confirmation('Unable to verify that the host rebooted into the new OS, it might still be into the '
                              f'Debian installer, please verify manually with: sudo install_console {self.fqdn}')
