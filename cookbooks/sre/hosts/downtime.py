@@ -5,9 +5,11 @@ import logging
 from datetime import timedelta
 
 from cumin import NodeSet
+from wmflib.decorators import retry
 from wmflib.interactive import ask_confirmation
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.icinga import IcingaStatusNotFoundError
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
@@ -115,9 +117,22 @@ class DowntimeRunner(CookbookRunnerBase):
         if self.puppet is not None:
             logging.info('Forcing a Puppet run on the Icinga server')
             self.puppet.run(quiet=True, attempts=30)
+            logging.info('Polling Icinga status to wait for all hosts to be known to Icinga')
+            self._poll_status()
 
         logging.info('Downtiming %s', self.runtime_description)
         self.icinga_hosts.downtime(self.reason, duration=self.duration)
 
         if self.phabricator is not None:
             self.phabricator.task_comment(self.task_id, self.long_message)
+
+    @retry(  # pylint: disable=no-value-for-parameter
+        tries=10,
+        delay=timedelta(seconds=10),
+        backoff_mode='constant',
+        failure_message='Missing hosts from Icinga status, keep polling',
+        exceptions=(IcingaStatusNotFoundError,),
+    )
+    def _poll_status(self):
+        """Poll Icinga until all the hosts are known, raises IcingaStatusNotFoundError if any is missing."""
+        self.icinga_hosts.get_status()
