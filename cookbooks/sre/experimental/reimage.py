@@ -14,8 +14,7 @@ from spicerack.decorators import retry
 from spicerack.dhcp import DHCPConfOpt82
 from spicerack.exceptions import SpicerackError
 from spicerack.icinga import IcingaError
-from spicerack.puppet import PuppetMasterError
-from spicerack.remote import RemoteExecutionError
+from spicerack.remote import RemoteError, RemoteExecutionError
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
 from cookbooks import ArgparseFormatter
@@ -40,9 +39,6 @@ class Reimage(CookbookBase):
         """As specified by Spicerack API."""
         parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
         parser.add_argument(
-            '--no-verify', action='store_true',
-            help='do not fail if hosts verification fails, just log it. It is included if --new is also set.')
-        parser.add_argument(
             '--no-downtime', action='store_true',
             help=('do not set the host in downtime on Icinga before the reimage. Included if --new is set. The host '
                   'will be downtimed after the reimage in any case.'))
@@ -53,7 +49,7 @@ class Reimage(CookbookBase):
         parser.add_argument(
             '--new', action='store_true',
             help=('for first imaging of new hosts that are not in yet in Puppet and this is their first '
-                  'imaging. Skips some steps prior to the reimage, includes --no-verify.'))
+                  'imaging. Skips some steps prior to the reimage.'))
         parser.add_argument(
             '-c', '--conftool', action='store_true',
             help=("Depool the host via Conftool with the value of the --conftool-value option. "
@@ -117,12 +113,20 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.debmonitor = spicerack.debmonitor()
         self.confctl = spicerack.confctl('node')
         self.remote = spicerack.remote()
-        if self.args.new:  # The host is not in PuppetDB use the Direct backend
-            remote_query = f'D{{{self.fqdn}}}'
-        else:
-            remote_query = self.fqdn
 
-        self.remote_host = self.remote.query(remote_query)
+        try:
+            self.remote_host = self.remote.query(self.fqdn)
+            if self.args.new:
+                ask_confirmation(
+                    f'Host {self.fqdn} was found in PuppetDB but --new was set. Are you sure you want to proceed?')
+                self.args.new = False  # Unset --new
+        except RemoteError as e:
+            self.remote_host = self.remote.query(f'D{{{self.fqdn}}}')  # Use the Direct backend instead
+            if not self.args.new:
+                raise RuntimeError(f'Host {self.fqdn} was not found in PuppetDB but --new was not set. Check that the '
+                                   'FQDN is correct. If the host is new or has disappeared from PuppetDB because down '
+                                   'for too long use --new.') from e
+
         # The same as self.remote_host but using the SSH key valid only during installation before the first Puppet run
         self.remote_installer = spicerack.remote(installer=True).query(self.fqdn)
         # Get a Puppet instance for the current cumin host to update the known hosts file
@@ -188,16 +192,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         self.ipmi.check_connection()  # Will raise if unable to connect
 
-        # Validate that the host has a signed Puppet certificate
-        if not self.args.new:
-            try:
-                self.puppet_master.verify(self.fqdn)
-            except PuppetMasterError:
-                if self.args.no_verify:
-                    logger.warning('No valid certificate for %s, but --no-verify is set.', self.fqdn)
-                else:
-                    raise
-
         if self.is_dhcp_automated and not self.args.os:
             raise RuntimeError(f'The DHCP hardcoded record for host {self.host} is missing, assuming automated DHCP '
                                'but --os is not set. Please pass the --os parameter.')
@@ -205,7 +199,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
     def _is_dhcp_automated(self):
         """Detect if the host has been already migrated to the automatic DHCP."""
         try:
-            self.dhcp_hosts.run_sync(f'grep -q {self.fqdn} /etc/dhcp/linux-host-entries.ttyS?-115200',
+            self.dhcp_hosts.run_sync(f'grep -q {self.fqdn} /etc/dhcp/linux-host-entries.ttyS1-115200',
                                      print_output=False, print_progress_bars=False, is_safe=True)
             return False
         except RemoteExecutionError:
@@ -366,7 +360,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         except IcingaError:  # Do not fail here, just report it to the user, not all hosts are optimal upon reimage
             self.host_actions.warning('//Icinga status is not optimal, downtime not removed//')
 
-    def run(self):
+    def run(self):  # pylint: disable=too-many-statements
         """Execute the reimage."""
         if self.phabricator is not None:
             self.phabricator.task_comment(
@@ -385,10 +379,12 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             except RemoteExecutionError:
                 self.host_actions.warning('//Unable to disable Puppet, the host may have been unreachable//')
 
-            self.puppet_master.destroy(self.fqdn)
-            self.host_actions.success('Removed from Puppet and PuppetDB')
-            self.debmonitor.host_delete(self.fqdn)
-            self.host_actions.success('Removed from Debmonitor')
+        self.puppet_master.delete(self.fqdn)
+        self.host_actions.success('Removed from Puppet and PuppetDB if present')
+        self.puppet_master.destroy(self.fqdn)
+        self.host_actions.success('Deleted any existing Puppet certificate')
+        self.debmonitor.host_delete(self.fqdn)
+        self.host_actions.success('Removed from Debmonitor if present')
 
         if self.args.no_pxe:
             logger.info('Skipping PXE reboot and associated steps as --no-pxe is set. Assuming new OS is in place.')
