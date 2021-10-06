@@ -13,6 +13,7 @@ install_requires = [
     # spicerack. 1.16.0 is currently in buster and 2.0.0 changed a lot, so I'm
     # pinning this here to have the right version with local tox.
     'dnspython==1.16.0',
+    'defusedxml',
 ]
 
 # Extra dependencies

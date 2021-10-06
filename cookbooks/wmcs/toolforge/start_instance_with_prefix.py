@@ -254,8 +254,8 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
             ]
             if missing_params:
                 message = (
-                    "As there's no other prefix members, I can't add a new member without explicitly specifying the "
-                    f"missing {', '.join(missing_params)} options."
+                    f"As there's no other prefix members (prefix={self.prefix}), I can't add a new member without "
+                    f"explicitly specifying the missing {', '.join(missing_params)} options."
                 )
                 LOGGER.error(message)
                 raise Exception(message)
