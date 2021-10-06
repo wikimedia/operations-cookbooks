@@ -361,6 +361,40 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         except IcingaError:  # Do not fail here, just report it to the user, not all hosts are optimal upon reimage
             self.host_actions.warning('//Icinga status is not optimal, downtime not removed//')
 
+    def _update_netbox_data(self):
+        """Update Netbox data from PuppetDB running the Netbox script."""
+        # Apparently pynetbox doesn't allow to execute a Netbox script
+        url = self.netbox.api.extras.scripts.get('interface_automation.ImportPuppetDB').url
+        headers = {'Authorization': f'Token {self.netbox.api.token}'}
+        data = {'data': {'device': self.host}, 'commit': 1}
+
+        @retry(tries=10, backoff_mode='constant', exceptions=(ValueError, requests.exceptions.RequestException))
+        def _poll_netbox_job(url):
+            """Poll Netbox to get the result of the script run."""
+            result = requests.get(url, headers=headers)
+            result.raise_for_status()
+            data = result.json()['data']
+            if data is None:
+                raise ValueError(f'No data from job result {url}')
+
+            for line in data['log']:
+                logger.info('[%s] %s', line['status'], line['message'])
+
+        try:
+            result = requests.post(url, headers=headers, json=data)
+            result.raise_for_status()
+            self.host_actions.success('Updated Netbox data from PuppetDB')
+        except requests.exceptions.RequestException:
+            self.host_actions.failure(f'**Failed to execute Netbox script, try manually**: {url}')
+            logger.error(result.text)
+        else:
+            job_url = result.json()['result']['url']
+            try:
+                _poll_netbox_job(job_url)
+            except (ValueError, requests.exceptions.RequestException) as e:
+                logger.error(e)
+                self.host_actions.failure(f'**Failed to get Netbox script results, try manually**: {job_url}')
+
     def run(self):  # pylint: disable=too-many-statements
         """Execute the reimage."""
         if self.phabricator is not None:
@@ -443,6 +477,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self._unmask_units()
         self._check_icinga()
         self._repool()
+        self._update_netbox_data()
 
         # Comment on the Phabricator task
         logger.info('Reimage completed:\n%s\n', self.actions)
