@@ -16,8 +16,9 @@ Usage example:
 # pylint: disable=too-many-arguments,no-value-for-parameter
 import argparse
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
-from typing import Optional, Callable
+from typing import Optional, Callable, List
 from functools import partial
 
 from spicerack import Spicerack
@@ -25,9 +26,33 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
 from wmflib.decorators import retry
 
-from cookbooks.wmcs import OpenstackAPI, OpenstackServerGroupPolicy, natural_sort_key
+from cookbooks.wmcs import OpenstackAPI, OpenstackServerGroupPolicy, natural_sort_key, OpenstackIdentifier
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class InstanceCreationOpts:
+    """Instance creation options."""
+
+    prefix: Optional[str] = None
+    flavor: Optional[OpenstackIdentifier] = None
+    image: Optional[OpenstackIdentifier] = None
+    network: Optional[OpenstackIdentifier] = None
+
+    def to_cli_args(self) -> List[str]:
+        """Helper to unwrap the options for use with argument parsers."""
+        args = []
+        if self.prefix:
+            args.extend(["--prefix", self.prefix])
+        if self.flavor:
+            args.extend(["--flavor", self.flavor])
+        if self.image:
+            args.extend(["--image", self.image])
+        if self.network:
+            args.extend(["--network", self.network])
+
+        return args
 
 
 def add_instance_creation_options(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
@@ -91,13 +116,13 @@ def with_instance_creation_options(args: argparse.Namespace, runner: CookbookRun
     For a full Cookbook example, see cookbooks.wmcs.toolforge.start_instance_with_prefix.StartInstanceWithPrefix.
 
     """
-    return partial(
-        runner,
+    instance_creation_opts = InstanceCreationOpts(
         prefix=args.prefix,
         flavor=args.flavor,
         image=args.image,
         network=args.network,
     )
+    return partial(runner, instance_creation_opts=instance_creation_opts)
 
 
 class StartInstanceWithPrefix(CookbookBase):
@@ -165,14 +190,11 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
     def __init__(
         self,
         project: str,
-        prefix: str,
         spicerack: Spicerack,
+        instance_creation_opts: InstanceCreationOpts,
         server_group_policy: str,
         server_group: Optional[str] = None,
         security_group: Optional[str] = None,
-        flavor: Optional[str] = None,
-        image: Optional[str] = None,
-        network: Optional[str] = None,
     ):
         """Init"""
         self.openstack_api = OpenstackAPI(
@@ -181,10 +203,10 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
             project=project,
         )
         self.project = project
-        self.prefix = prefix
-        self.flavor = flavor
-        self.network = network
-        self.image = image
+        self.prefix = instance_creation_opts.prefix
+        self.flavor = instance_creation_opts.flavor
+        self.network = instance_creation_opts.network
+        self.image = instance_creation_opts.image
         self.server_group = server_group or self.prefix
         self.server_group_policy = server_group_policy
         self.spicerack = spicerack
