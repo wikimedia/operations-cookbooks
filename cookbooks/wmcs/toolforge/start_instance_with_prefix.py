@@ -152,7 +152,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.security_group = security_group or f"{self.project}-k8s-full-connectivity"
 
-    def run(self) -> Optional[int]:  # pylint: disable-msg=too-many-locals
+    def run(self) -> Optional[int]:
         """Main entry point"""
         self.openstack_api.security_group_ensure(
             security_group=self.security_group,
@@ -184,8 +184,13 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
 
             last_prefix_member_id = 0
 
-        last_prefix_member_name = other_prefix_members[-1]["Name"]
-        last_prefix_member_id = int(last_prefix_member_name.rsplit("-", 1)[-1])
+        else:
+            # the trimming by length of the prefix allows prefixes with trailing integers (ex. tools-sgeexec-09)
+            # so 1 will be extracted as id, instead of 901 for tools-sgexec-0901
+            last_prefix_member_id = max(
+                int(member['Name'][len(self.prefix):].rsplit("-", 1)[-1])
+                for member in other_prefix_members
+            )
 
         new_prefix_member_name = f"{self.prefix}-{last_prefix_member_id + 1}"
         maybe_security_group = self.openstack_api.security_group_by_name(name=self.security_group)
