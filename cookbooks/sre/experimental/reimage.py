@@ -6,6 +6,7 @@ import os
 import time
 
 from datetime import datetime
+from pathlib import Path
 
 import requests
 
@@ -184,7 +185,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         start = datetime.utcnow().strftime('%Y%m%d%H%M')
         pid = os.getpid()
         host = self.host.replace('.', '_')
-        return f'/var/log/wmf-auto-reimage/{start}_{username}_{pid}_{host}.out'
+        base_dir = Path('/var/log/spicerack/sre/hosts/reimage/')
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        return base_dir / f'{start}_{username}_{pid}_{host}.out'
 
     def _validate(self):
         """Perform all pre-reimage validation steps."""
