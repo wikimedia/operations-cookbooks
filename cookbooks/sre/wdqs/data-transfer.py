@@ -16,9 +16,10 @@ from random import SystemRandom
 from textwrap import dedent
 from time import sleep
 
+from spicerack.kafka import ConsumerDefinition
 from spicerack.remote import RemoteExecutionError
 
-from cookbooks.sre.wdqs import check_host_is_wdqs, wait_for_updater
+from cookbooks.sre.wdqs import check_host_is_wdqs, wait_for_updater, get_site, get_hostname, MUTATION_TOPIC
 
 BLAZEGRAPH_INSTANCES = {
     'categories': {
@@ -114,15 +115,7 @@ def _generate_pass():
     return ''.join([sysrand.choice(passwd_charset) for _ in range(32)])
 
 
-def site(host):
-    """Hacky way to get the site in which a host is located."""
-    if 'eqiad' in str(host):
-        return 'eqiad'
-    if 'codfw' in str(host):
-        return 'codfw'
-    raise ValueError('Site is unknown for {host}.'.format(host=host))
-
-
+# pylint:disable=too-many-locals
 def run(args, spicerack):
     """Required by Spicerack API."""
     remote = spicerack.remote()
@@ -174,10 +167,21 @@ def run(args, spicerack):
                 logger.info('Reloading nginx to load new categories mapping.')
                 dest.run_sync('systemctl reload nginx')
 
+            logger.info('Transferring Kafka offsets')
+            kafka = spicerack.kafka()
+
+            source_hostname = get_hostname(args.source)
+            dest_hostname = get_hostname(args.dest)
+            kafka.transfer_consumer_position([MUTATION_TOPIC],
+                                             ConsumerDefinition(get_site(source_hostname, spicerack), 'main',
+                                                                source_hostname),
+                                             ConsumerDefinition(get_site(dest_hostname, spicerack), 'main',
+                                                                dest_hostname))
+
             logger.info('Starting services [%s]', start_services_cmd)
             remote_hosts.run_sync(start_services_cmd)
-            wait_for_updater(prometheus, site(source), source)
-            wait_for_updater(prometheus, site(dest), dest)
+            wait_for_updater(prometheus, get_site(source_hostname, spicerack), source)
+            wait_for_updater(prometheus, get_site(dest_hostname, spicerack), dest)
 
             if args.with_lvs:
                 logger.info('pooling %s', remote_hosts)

@@ -11,9 +11,10 @@ import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
+from spicerack.kafka import ConsumerDefinition
 from spicerack.remote import RemoteExecutionError
 
-from cookbooks.sre.wdqs import check_host_is_wdqs, wait_for_updater
+from cookbooks.sre.wdqs import check_host_is_wdqs, wait_for_updater, get_site, MUTATION_TOPIC, get_hostname
 
 __title__ = "WDQS data reload cookbook"
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ def argument_parser():
     parser.add_argument('--reload-data', default='all', choices=RELOAD_TYPES.keys(),
                         help='Type of data to reload')
     parser.add_argument('--skolemize', action='store_true', help='Skolemize blank nodes when munging')
+    parser.add_argument('--kafka-timestamp', type=int, help='Timestamp to use for kafka consumer topic reset (in ms)')
 
     return parser
 
@@ -124,7 +126,7 @@ def munge(remote_host, skolemize):
         logger.info('munging %s completed in %s', dump['munge_path'], stop_watch.elapsed())
 
 
-def reload_wikidata(remote_host, puppet, reason):
+def reload_wikidata(remote_host, puppet, kafka, timestamps, consumer_definition, reason):
     """Execute commands on host to reload wikidata data."""
     logger.info('Prepare to load wikidata data for blazegraph')
     with puppet.disabled(reason):
@@ -146,7 +148,7 @@ def reload_wikidata(remote_host, puppet, reason):
         )
     )
     logger.info('Wikidata dump loaded in %s', watch.elapsed())
-
+    kafka.set_consumer_position_by_timestamp(consumer_definition, timestamps)
     logger.info('Loading lexeme dump')
     watch.reset()
     remote_host.run_sync(
@@ -155,7 +157,6 @@ def reload_wikidata(remote_host, puppet, reason):
         )
     )
     logger.info('Lexeme dump loaded in %s', watch.elapsed())
-
     logger.info('Performing final steps')
     remote_host.run_sync(
         'touch /srv/wdqs/data_loaded',
@@ -229,7 +230,10 @@ def run(args, spicerack):
                 reload_categories(remote_host, puppet, reason)
 
             if 'wikidata' in data_to_reload:
-                reload_wikidata(remote_host, puppet, reason)
+                hostname = get_hostname(args.host)
+                consumer_definition = ConsumerDefinition(get_site(hostname, spicerack), 'main', hostname)
+                reload_wikidata(remote_host, puppet, spicerack.kafka(), {MUTATION_TOPIC: args.kafka_timestamp},
+                                consumer_definition, reason)
 
                 logger.info('Data reload for blazegraph is complete. Waiting for updater to catch up')
                 watch = StopWatch()
