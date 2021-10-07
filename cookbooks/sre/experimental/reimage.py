@@ -72,7 +72,8 @@ class Reimage(CookbookBase):
                   'starts/enable a production service before the host is ready.'))
         parser.add_argument('--httpbb', action='store_true',
                             help='run HTTP tests (httpbb) on the host after the reimage.')
-        parser.add_argument('--os', choices=OS_VERSIONS, help='the Debian version to install. One of %(choices)s')
+        parser.add_argument('--os', choices=OS_VERSIONS, required=True,
+                            help='the Debian version to install. One of %(choices)s')
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         parser.add_argument('host', help='Short hostname of the host to be reimaged, not FQDN')
 
@@ -146,7 +147,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.dhcp_hosts = self.remote.query(f'A:installserver-light and A:{self.netbox_data["site"]["slug"]}')
         self.dhcp = spicerack.dhcp(self.dhcp_hosts)
         self.dhcp_config = self._get_dhcp_config()
-        self.is_dhcp_automated = self._is_dhcp_automated()
 
         self._validate()
 
@@ -196,19 +196,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.dns.resolve_ips(dns_name)  # Will raise if not valid
 
         self.ipmi.check_connection()  # Will raise if unable to connect
-
-        if self.is_dhcp_automated and not self.args.os:
-            raise RuntimeError(f'The DHCP hardcoded record for host {self.host} is missing, assuming automated DHCP '
-                               'but --os is not set. Please pass the --os parameter.')
-
-    def _is_dhcp_automated(self):
-        """Detect if the host has been already migrated to the automatic DHCP."""
-        try:
-            self.dhcp_hosts.run_sync(f'grep -q {self.fqdn} /etc/dhcp/linux-host-entries.ttyS1-115200',
-                                     print_output=False, print_progress_bars=False, is_safe=True)
-            return False
-        except RemoteExecutionError:
-            return True
 
     def _depool(self):
         """Depool all the pooled services for the host."""
@@ -428,10 +415,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if self.args.no_pxe:
             logger.info('Skipping PXE reboot and associated steps as --no-pxe is set. Assuming new OS is in place.')
         else:
-            if self.is_dhcp_automated:
-                with self.dhcp.config(self.dhcp_config):
-                    self._install_os()
-            else:
+            with self.dhcp.config(self.dhcp_config):
                 self._install_os()
 
         self._mask_units()
