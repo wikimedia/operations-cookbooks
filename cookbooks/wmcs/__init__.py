@@ -37,6 +37,7 @@ SECONDS_IN_MINUTE = 60
 
 OpenstackID = str
 OpenstackName = str
+OpenstackIdentifier = Union[OpenstackID, OpenstackName]
 
 
 def _quote(mystr: str) -> str:
@@ -141,9 +142,9 @@ class OpenstackAPI:
     def server_create(
         self,
         name: OpenstackName,
-        flavor: Union[OpenstackID, OpenstackName],
-        image: Union[OpenstackID, OpenstackName],
-        network: Union[OpenstackID, OpenstackName],
+        flavor: OpenstackIdentifier,
+        image: OpenstackIdentifier,
+        network: OpenstackIdentifier,
         server_group_id: OpenstackID,
         security_group_ids: List[OpenstackID],
     ) -> None:
@@ -296,7 +297,7 @@ class OpenstackAPI:
         """Get the simplified list of aggregates."""
         return self._run("aggregate", "list", "--long", is_safe=True)
 
-    def aggregate_show(self, aggregate: Union[OpenstackName, OpenstackID]) -> List[Dict[str, Any]]:
+    def aggregate_show(self, aggregate: OpenstackIdentifier) -> List[Dict[str, Any]]:
         """Get the details of a given aggregate."""
         return self._run("aggregate", "show", aggregate, is_safe=True)
 
