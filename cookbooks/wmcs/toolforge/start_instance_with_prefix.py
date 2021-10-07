@@ -17,7 +17,8 @@ Usage example:
 import argparse
 import logging
 from datetime import timedelta
-from typing import Optional
+from typing import Optional, Callable
+from functools import partial
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -27,6 +28,76 @@ from wmflib.decorators import retry
 from cookbooks.wmcs import OpenstackAPI, OpenstackServerGroupPolicy, natural_sort_key
 
 LOGGER = logging.getLogger(__name__)
+
+
+def add_instance_creation_options(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """Adds the common instance creation option to a parser."""
+    parser.add_argument(
+        "--prefix",
+        required=False,
+        default=None,
+        help="Prefix for the instance (ex. toolsbeta-test-k8s-etcd).",
+    )
+    parser.add_argument(
+        "--flavor",
+        required=False,
+        default=None,
+        help=(
+            "Flavor for the new instance (will use the same as the latest existing one by default, ex. "
+            "g2.cores4.ram8.disk80, ex. 06c3e0a1-f684-4a0c-8f00-551b59a518c8)."
+        ),
+    )
+    parser.add_argument(
+        "--image",
+        required=False,
+        default=None,
+        help=(
+            "Image for the new instance (will use the same as the latest existing one by default, ex. "
+            "debian-10.0-buster, ex. 64351116-a53e-4a62-8866-5f0058d89c2b)"
+        ),
+    )
+    parser.add_argument(
+        "--network",
+        required=False,
+        default=None,
+        help=(
+            "Network for the new instance (will use the same as the latest existing one by default, ex. "
+            "lan-flat-cloudinstances2b, ex. a69bdfad-d7d2-4cfa-8231-3d6d3e0074c9)"
+        ),
+    )
+    return parser
+
+
+def with_instance_creation_options(args: argparse.Namespace, runner: CookbookRunnerBase) -> Callable:
+    """Wraps a CookbookRunnerBase to pass to it the intance creation options.
+
+    This allows to fully encapsulate the instance creation options and avoid the need to change anything in the code
+    that uses them (ex. if you add a new option to the creation options).
+
+    Example:
+    >> class MyCookbook(CookbookBase):
+    >>     def agrument_parser(self) -> argparse.ArgumentParser:
+    >>         my_parser = add_instance_creation_options(ArgumentParser(...))
+    >>         # Add your options/arguments
+    >>         my_parser.add_argument("--my-option1", default=None)
+    >>         return my_parser
+    >>
+    >>     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    >>         return with_instance_creation_options(
+    >>             args=args, runner=MyCookbookRunner
+    >>         )(my_option1=args.my_option1, spicerack=self.spicerack)
+    >>
+
+    For a full Cookbook example, see cookbooks.wmcs.toolforge.start_instance_with_prefix.StartInstanceWithPrefix.
+
+    """
+    return partial(
+        runner,
+        prefix=args.prefix,
+        flavor=args.flavor,
+        image=args.image,
+        network=args.network,
+    )
 
 
 class StartInstanceWithPrefix(CookbookBase):
@@ -42,39 +113,7 @@ class StartInstanceWithPrefix(CookbookBase):
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         )
         parser.add_argument("--project", required=True, help="Openstack project to manage.")
-        parser.add_argument(
-            "--prefix",
-            required=False,
-            default=None,
-            help="Prefix for the instance (ex. toolsbeta-test-k8s-etcd).",
-        )
-        parser.add_argument(
-            "--flavor",
-            required=False,
-            default=None,
-            help=(
-                "Flavor for the new instance (will use the same as the latest existing one by default, ex. "
-                "g2.cores4.ram8.disk80, ex. 06c3e0a1-f684-4a0c-8f00-551b59a518c8)."
-            ),
-        )
-        parser.add_argument(
-            "--image",
-            required=False,
-            default=None,
-            help=(
-                "Image for the new instance (will use the same as the latest existing one by default, ex. "
-                "debian-10.0-buster, ex. 64351116-a53e-4a62-8866-5f0058d89c2b)"
-            ),
-        )
-        parser.add_argument(
-            "--network",
-            required=False,
-            default=None,
-            help=(
-                "Network for the new instance (will use the same as the latest existing one by default, ex. "
-                "lan-flat-cloudinstances2b, ex. a69bdfad-d7d2-4cfa-8231-3d6d3e0074c9)"
-            ),
-        )
+        add_instance_creation_options(parser)
         parser.add_argument(
             "--security-group",
             required=False,
@@ -108,15 +147,14 @@ class StartInstanceWithPrefix(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return StartInstanceWithPrefixRunner(
+        return with_instance_creation_options(
+            args,
+            StartInstanceWithPrefixRunner,
+        )(
             security_group=args.security_group,
             server_group=args.server_group,
             server_group_policy=args.server_group_policy,
             project=args.project,
-            prefix=args.prefix,
-            flavor=args.flavor,
-            image=args.image,
-            network=args.network,
             spicerack=self.spicerack,
         )
 
