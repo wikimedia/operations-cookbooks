@@ -5,6 +5,7 @@ import logging
 from cookbooks import ArgparseFormatter
 from datetime import datetime, timedelta
 from enum import Enum, auto
+from time import sleep
 
 from spicerack.constants import CORE_DATACENTERS
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
