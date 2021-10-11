@@ -162,7 +162,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
     @property
     def runtime_description(self):
         """Runtime description for the IRC/SAL logging."""
-        return f'for host {self.fqdn}'
+        return f'for host {self.fqdn} with OS {self.args.os}'
 
     def rollback(self):
         """Update the Phabricator task with the failure."""
