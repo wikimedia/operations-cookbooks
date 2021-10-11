@@ -176,8 +176,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if self.phabricator is not None:
             self.phabricator.task_comment(
                 self.args.task_id,
-                (f'Cookbook {__name__} started by {self.reason.owner} for host {self.fqdn} executed with errors:\n'
-                 f'{self.actions}\n'),
+                (f'Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} executed with errors:'
+                 f'\n{self.actions}\n'),
             )
 
     def _get_output_filename(self, username):
@@ -280,7 +280,16 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             ask_confirmation('Unable to verify that the host rebooted into the new OS, it might still be into the '
                              f'Debian installer, please verify manually with: sudo install_console {self.fqdn}')
 
-        self.host_actions.success('Host up (new fresh OS)')
+        result = self.remote_installer.run_sync('lsb_release -sc', print_output=False, print_progress_bars=False)
+        for _, output in result:
+            distro = output.message().decode()
+
+        if distro != self.args.os:
+            message = f'New OS is {distro} but {self.args.os} was requested'
+            self.host_actions.failure(message)
+            raise RuntimeError(message)
+
+        self.host_actions.success(f'Host up (new fresh {distro} OS)')
 
     def _populate_puppetdb(self):
         """Run Puppet in noop mode to populate the exported resources in PuppetDB to downtime it on Icinga."""
@@ -391,7 +400,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if self.phabricator is not None:
             self.phabricator.task_comment(
                 self.args.task_id,
-                f'Cookbook {__name__} was started by {self.reason.owner} for host {self.fqdn}')
+                f'Cookbook {__name__} was started by {self.reason.owner} {self.runtime_description}')
 
         if not self.args.new:
             if not self.args.no_downtime:
@@ -472,7 +481,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if self.phabricator is not None:
             self.phabricator.task_comment(
                 self.args.task_id,
-                (f'Cookbook {__name__} started by {self.reason.owner} for host {self.fqdn} completed:\n'
+                (f'Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} completed:\n'
                  f'{self.actions}\n'),
             )
 
