@@ -93,7 +93,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.args = args
 
         self.netbox = spicerack.netbox()
-        self.netbox_server = self.netbox.get_server(self.args.host)
+        self.netbox_server = self.netbox.get_server(self.args.host, read_write=True)
         self.netbox_data = self.netbox_server.as_dict()
 
         # Shortcut variables
@@ -475,6 +475,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self._check_icinga()
         self._repool()
         self._update_netbox_data()
+        if self.netbox_server.status == 'planned':
+            self.netbox_server.status = 'staged'
+            self.host_actions.success('Updated Netbox status planned -> staged')
 
         # Comment on the Phabricator task
         logger.info('Reimage completed:\n%s\n', self.actions)
