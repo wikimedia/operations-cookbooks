@@ -75,7 +75,7 @@ class GanetiMakeVM(CookbookBase):
         return GanetiMakeVMRunner(args, self.spicerack)
 
 
-class GanetiMakeVMRunner(CookbookRunnerBase):
+class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
     """Create a new Virtual Machine in Ganeti runner"""
 
     def __init__(self, args, spicerack):
@@ -92,6 +92,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
         self.fqdn = make_fqdn(self.hostname, self.network, self.datacenter)
         self.allocated = []  # Store allocated IPs to rollback them on failure
         self.dns_propagated = False  # Whether to run the DNS cookbook on rollback
+        self.need_netbox_sync = False  # Whether to sync the VM to Netbox on rollback
 
         print('Ready to create Ganeti VM {a.fqdn} in the {a.cluster} cluster on row {a.row} with {a.vcpus} vCPUs, '
               '{a.memory}GB of RAM, {a.disk}GB of disk in the {a.network} network.'.format(a=self))
@@ -114,11 +115,22 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
         if self.dns_propagated:
             self._propagate_dns('Remove')
 
+        if self.need_netbox_sync:
+            self._ganeti_netbox_sync()
+
     def _propagate_dns(self, prefix):
         """Run the sre.dns.netbox cookbook to propagate the DNS records."""
         dns_netbox_args = dns_netbox_argparse().parse_args([f'{prefix} records for VM {self.fqdn}'])
         dns_netbox_run(dns_netbox_args, self.spicerack)
         self.dns_propagated = True
+
+    def _ganeti_netbox_sync(self):
+        """Perform a sync from Ganeti to Netbox in the affected DC."""
+        logger.info('Syncing VMs in DC %s to Netbox', self.datacenter)
+        self.spicerack.netbox_master_host.run_sync(
+            'systemctl start netbox_ganeti_{dc}_sync.service'
+            .format(dc=self.datacenter))
+        self.need_netbox_sync = False
 
     def run(self):  # pylint: disable=too-many-locals
         """Create a new Ganeti VM as specified."""
@@ -167,6 +179,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
 
         logger.info('The Ganeti\'s command output will be printed at the end.')
 
+        self.need_netbox_sync = True
         instance.add(
             row=self.row, vcpus=self.vcpus, memory=self.memory,
             disk=self.disk, link=self.network)
@@ -177,11 +190,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
             mac = ganeti.rapi(self.cluster).fetch_instance_mac(self.fqdn)
             logger.info('MAC address for %s is: %s', self.fqdn, mac)
 
-        # Force a run of the ganeti sync
-        logger.info('Syncing VMs in DC %s to Netbox', self.datacenter)
-        self.spicerack.netbox_master_host.run_sync(
-            'systemctl start netbox_ganeti_{dc}_sync.service'
-            .format(dc=self.datacenter))
+        self._ganeti_netbox_sync()
 
         # Get the synced VM
         @retry(tries=20, backoff_mode='linear', exceptions=(RuntimeError,))
