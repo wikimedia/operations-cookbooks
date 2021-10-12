@@ -4,6 +4,7 @@ import argparse
 import logging
 import re
 
+from wmflib.constants import DATACENTER_NUMBERING_PREFIX
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from spicerack.constants import CORE_DATACENTERS
@@ -17,14 +18,6 @@ from cookbooks.sre.ganeti import get_locations
 
 logger = logging.getLogger(__name__)
 PRIMARY_INTERFACE_NAME = '##PRIMARY##'
-# TODO: use from pywmflib when available
-DATACENTER_NUMBERING_PREFIX = {
-    'eqiad': '1',
-    'codfw': '2',
-    'esams': '3',
-    'ulsfo': '4',
-    'eqsin': '5',
-}
 
 
 class GanetiMakeVM(CookbookBase):
@@ -95,7 +88,10 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
         self.disk = args.disk
         self.skip_v6 = args.skip_v6
         self.spicerack = spicerack
+        self.netbox = self.spicerack.netbox(read_write=True)
         self.fqdn = make_fqdn(self.hostname, self.network, self.datacenter)
+        self.allocated = []  # Store allocated IPs to rollback them on failure
+        self.dns_propagated = False  # Whether to run the DNS cookbook on rollback
 
         print('Ready to create Ganeti VM {a.fqdn} in the {a.cluster} cluster on row {a.row} with {a.vcpus} vCPUs, '
               '{a.memory}GB of RAM, {a.disk}GB of disk in the {a.network} network.'.format(a=self))
@@ -108,24 +104,40 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return 'for new host {}'.format(self.fqdn)
 
+    def rollback(self):
+        """Rollback IP and DNS assignments on failure."""
+        for address in self.allocated:
+            ip = self.netbox.api.ipam.ip_addresses.get(address=address)
+            logger.info('Deleting assigned IP %s', ip)
+            ip.delete()
+
+        if self.dns_propagated:
+            self._propagate_dns('Remove')
+
+    def _propagate_dns(self, prefix):
+        """Run the sre.dns.netbox cookbook to propagate the DNS records."""
+        dns_netbox_args = dns_netbox_argparse().parse_args([f'{prefix} records for VM {self.fqdn}'])
+        dns_netbox_run(dns_netbox_args, self.spicerack)
+        self.dns_propagated = True
+
     def run(self):  # pylint: disable=too-many-locals
         """Create a new Ganeti VM as specified."""
-        netbox = self.spicerack.netbox(read_write=True)
         # Pre-allocate IPs
         if self.datacenter in CORE_DATACENTERS:
             vlan_name = '{a.network}1-{row}-{a.datacenter}'.format(a=self, row=self.row.lower())
         else:
             vlan_name = '{a.network}1-{a.datacenter}'.format(a=self)
 
-        vlan = netbox.api.ipam.vlans.get(name=vlan_name, status='active')
+        vlan = self.netbox.api.ipam.vlans.get(name=vlan_name, status='active')
         if not vlan:
             raise RuntimeError('Failed to find VLAN with name {}'.format(vlan_name))
 
-        prefix_v4 = netbox.api.ipam.prefixes.get(vlan_id=vlan.id, family=4)
-        prefix_v6 = netbox.api.ipam.prefixes.get(vlan_id=vlan.id, family=6)
+        prefix_v4 = self.netbox.api.ipam.prefixes.get(vlan_id=vlan.id, family=4)
+        prefix_v6 = self.netbox.api.ipam.prefixes.get(vlan_id=vlan.id, family=6)
         ip_v4_data = prefix_v4.available_ips.create({})
+        self.allocated.append(ip_v4_data['address'])
         logger.info('Allocated IPv4 %s', ip_v4_data['address'])
-        ip_v4 = netbox.api.ipam.ip_addresses.get(address=ip_v4_data['address'])
+        ip_v4 = self.netbox.api.ipam.ip_addresses.get(address=ip_v4_data['address'])
         ip_v4.dns_name = self.fqdn
         if not ip_v4.save():
             raise RuntimeError(
@@ -143,13 +155,11 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
             dns_name_v6 = ''
         else:
             dns_name_v6 = self.fqdn
-        ip_v6 = netbox.api.ipam.ip_addresses.create(address=ipv6_address, status='active', dns_name=dns_name_v6)
+        ip_v6 = self.netbox.api.ipam.ip_addresses.create(address=ipv6_address, status='active', dns_name=dns_name_v6)
+        self.allocated.append(ip_v6.address)
         logger.info('Allocated IPv6 %s with DNS name %s', ip_v6, dns_name_v6)
 
-        # Run the sre.dns.netbox cookbook to generate the DNS records
-        dns_netbox_args = dns_netbox_argparse().parse_args(
-            ['Created records for VM {vm}'.format(vm=self.fqdn)])
-        dns_netbox_run(dns_netbox_args, self.spicerack)
+        self._propagate_dns('Add')
 
         # Create the VM
         ganeti = self.spicerack.ganeti()
@@ -183,8 +193,8 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
             return vm
 
         # Update Netbox
-        vm = get_vm(netbox)
-        iface = netbox.api.virtualization.interfaces.create(
+        vm = get_vm(self.netbox)
+        iface = self.netbox.api.virtualization.interfaces.create(
             virtual_machine=vm.id, name=PRIMARY_INTERFACE_NAME, type='virtual')
         logger.info('Created interface %s on VM %s', PRIMARY_INTERFACE_NAME, vm)
 
@@ -208,8 +218,6 @@ class GanetiMakeVMRunner(CookbookRunnerBase):
         logger.info(
             'Attached IPv4 %s and IPv6 %s to VM %s and marked as primary IPs',
             ip_v4, ip_v6, vm)
-
-        # TODO: run the Netbox import script for the VM after the first Puppet run to import all interfaces
 
 
 def make_fqdn(hostname: str, network: str, datacenter: str) -> str:
