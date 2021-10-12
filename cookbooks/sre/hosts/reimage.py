@@ -93,7 +93,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.args = args
 
         self.netbox = spicerack.netbox()
-        self.netbox_server = self.netbox.get_server(self.args.host, read_write=True)
+        self.netbox_server = spicerack.netbox_server(self.args.host, read_write=True)
         self.netbox_data = self.netbox_server.as_dict()
 
         # Shortcut variables
