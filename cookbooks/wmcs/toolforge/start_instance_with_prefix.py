@@ -167,6 +167,16 @@ class StartInstanceWithPrefix(CookbookBase):
             choices=[policy.value for policy in OpenstackServerGroupPolicy],
             default=OpenstackServerGroupPolicy.ANTI_AFFINITY.value,
         )
+        parser.add_argument(
+            "--ssh-retries",
+            required=False,
+            default=15,
+            type=int,
+            help=(
+                "Number of time that it will try to ssh to the new instance after starting it up, it will wait for "
+                "1min between tries."
+            ),
+        )
 
         return parser
 
@@ -180,6 +190,7 @@ class StartInstanceWithPrefix(CookbookBase):
             server_group=args.server_group,
             server_group_policy=args.server_group_policy,
             project=args.project,
+            ssh_retries=args.ssh_retries,
             spicerack=self.spicerack,
         )
 
@@ -195,6 +206,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         server_group_policy: str,
         server_group: Optional[str] = None,
         security_group: Optional[str] = None,
+        ssh_retries: int = 15
     ):
         """Init"""
         self.openstack_api = OpenstackAPI(
@@ -211,6 +223,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         self.server_group_policy = server_group_policy
         self.spicerack = spicerack
         self.security_group = security_group or f"{self.project}-k8s-full-connectivity"
+        self.ssh_retries = ssh_retries
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -290,7 +303,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         new_prefix_node = self.spicerack.remote().query(f"D{{{new_instance_fqdn}}}", use_sudo=True)
 
         @retry(
-            tries=15,
+            tries=self.ssh_retries,
             delay=timedelta(minutes=1),
             backoff_mode="constant",
             exceptions=(RemoteExecutionError,),
