@@ -48,7 +48,7 @@ class Results:
 
     action: str
     hosts: NodeSet
-    successful: nodeset = field(default_factory=nodeset)
+    successful: NodeSet = field(default_factory=nodeset)
     failed: NodeSet = field(default_factory=nodeset)
 
     def fail(self, nodes: NodeSet) -> None:
@@ -74,7 +74,7 @@ class Results:
     def report(self) -> int:
         """Report on results."""
         if not self.failed:
-            logger.info('All reboots were successful')
+            logger.info('All %s were successful', self.action)
             return 0
 
         logger.info('%s were successful for: %s', self.action, self.successful)
@@ -111,8 +111,10 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
         )
         targets.add_argument(
             '--query',
-            help=('A Cumin query addressing a more narrow set of servers.'
-                  ' This parameter requires queries to be formatted using the global grammar'),
+            help=(
+                'A Cumin query addressing a more narrow set of servers.'
+                ' This parameter requires queries to be formatted using the global grammar'
+            ),
         )
         parser.add_argument(
             '--batchsize',
@@ -131,6 +133,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
         parser.add_argument(
             '--grace-sleep',
             type=int,
+            default=1,
             help='the amount of time to sleep in seconds between each batch',
         )
         parser.add_argument(
@@ -180,18 +183,18 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             raise ValueError(f'Cumin query ({self.query}) matched zero hosts')
 
         self.number_of_batches = ceil(len(self.hosts.hosts) / args.batchsize)
-        self.results = Results(action=args.action, hosts=self.hosts)
+        self.results = Results(action=args.action, hosts=self.hosts.hosts)
 
         reason = f'{args.action} {self.hosts.hosts}: {args.reason}'
         self.reason = spicerack.admin_reason(reason, args.task_id)
-        self.icinga = spicerack.icinga()
+        self.icinga_hosts = spicerack.icinga_hosts(self.hosts.hosts)
         self._spicerack = spicerack
         self.logger = getLogger('.'.join((self.__module__, self.__class__.__name__)))
 
     @property
     def runtime_description(self) -> str:
         """Required by spicerack api."""
-        return f'rolling {self.action} on {self.query}'
+        return f'rolling {self._args.action} on {self.query}'
 
     def _query(self) -> str:
         """Return the formatted query"""
@@ -231,11 +234,11 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             hosts (`RemoteHosts`): A list of hosts to action
 
         """
-        systemd_cmd = '/bin/systemdctl'
+        systemd_cmd = '/bin/systemctl'
         if self._args.ignore_restart_errors:
             # Only restart services which are active
             restart_cmds = [
-                f'{systemd_cmd} --quiet {daemon} && {systemd_cmd} restart {daemon} || /bin/true'
+                f'{systemd_cmd} --quiet is-active {daemon} && {systemd_cmd} restart {daemon} || /bin/true'
                 for daemon in self.restart_daemons
             ]
         else:
@@ -244,17 +247,12 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         puppet = self._spicerack.puppet(hosts)
         try:
             duration = timedelta(minutes=20)
-            with self.icinga.hosts_downtimed(
-                hosts.hosts, self.reason, duration=duration
-            ):
+            with self.icinga_hosts.downtimed(self.reason, duration=duration):
                 now = datetime.utcnow()
                 confirm_on_failure(hosts.run_sync, *restart_cmds)
-                puppet.run()
+                puppet.run(quiet=True)
                 puppet.wait_since(now)
-                if not self.icinga.get_status(hosts.hosts).optimal:
-                    # TODO: switch to icinga.recheck_failed when available
-                    self.icinga.recheck_all_services(hosts.hosts)
-                    self.icinga.wait_for_optimal(hosts.hosts)
+                self.icinga_hosts.wait_for_optimal()
             self.results.success(hosts.hosts)
         except IcingaError as error:
             ask_confirmation(f'Failed to dowtime hosts: {error}')
@@ -280,19 +278,13 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         puppet = self._spicerack.puppet(hosts)
         try:
             duration = timedelta(minutes=20)
-            with self.icinga.hosts_downtimed(
-                hosts.hosts, self.reason, duration=duration
-            ):
+            with self.icinga_hosts.downtimed(self.reason, duration=duration):
                 reboot_time = datetime.utcnow()
                 confirm_on_failure(hosts.reboot, batch_size=len(hosts))
-                hosts.wait_reboot_since(reboot_time)
+                hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
+                puppet.run(quiet=True)
                 puppet.wait_since(reboot_time)
-                # First let's try to check if icinga is already in optimal state.
-                # If not, we require a recheck all service, then
-                # wait a grace period before declaring defeat.
-                if not self.icinga.get_status(hosts.hosts).optimal:
-                    self.icinga.recheck_all_services(hosts.hosts)
-                    self.icinga.wait_for_optimal(hosts)
+                self.icinga_hosts.wait_for_optimal()
             self.results.success(hosts.hosts)
         except IcingaError as error:
             ask_confirmation(f'Failed to downtime hosts: {error}')
@@ -380,14 +372,16 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                 self.pre_action(batch)
                 self.action(batch)
                 self.post_action(batch)
-                self.results.success(batch)
                 sleep(self._args.grace_sleep)
+                self.results.success(batch.hosts)
             except Exception as error:  # pylint: disable=broad-except
                 # If an exception was raised within the context manager, we have some hosts
                 # left depooled, so we stop the loop for human inspection.
                 self.results.fail(batch.hosts)
                 self.logger.error(
-                    'Unrecoverable error. Stopping the rolling reboot: %s', error
+                    'Unrecoverable error. Stopping the rolling %s: %s',
+                    self._args.action,
+                    error,
                 )
                 break
 
