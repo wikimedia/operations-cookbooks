@@ -30,3 +30,13 @@ class BatchRunner(SREBatchRunnerBase):
         """Required by RebootRunnerBase"""
         # sretest dosn't  have real daemons to restart, nrpe is provided as an example
         return ['nagios-nrpe-server.service']
+
+    @property
+    def pre_scripts(self):
+        """Add depool to the list of prescripts"""
+        return ['/usr/local/bin/puppet-enabled']
+
+    @property
+    def post_scripts(self):
+        """Add pool to the list of prescripts"""
+        return ['/usr/local/bin/puppet-enabled']

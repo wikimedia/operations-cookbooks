@@ -26,14 +26,6 @@ PHABRICATOR_BOT_CONFIG_FILE = '/etc/phabricator_ops-monitoring-bot.conf'
 logger = getLogger(__name__)
 
 
-class ScriptFatalError(AbortError):
-    """Custom exception class for errors in reboot pre scripts."""
-
-
-class ScriptNoneFatalError(AbortError):
-    """Custom exception class for errors in reboot pre scripts."""
-
-
 class RebootPreScriptError(Exception):
     """Custom exception class for errors in reboot pre scripts."""
 
@@ -304,33 +296,28 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         """Run a list of scripts
 
         This function is provided so users can simply populate the pre/post_scripts properties
-        to return a list of functions to run.  Each function in the list should accept a
-        RemoteHosts argument representing the nodes to execute on. The function should raise
-        ScriptFatalError on fatal errors and ScriptNoneFatalError for other errors.
-
-         * if the script raises ScriptFatalError the result is marked as failed and executions halts
-         * if the script raises ScriptNoneFatalError the error is logged but execution continues
+        to return a list of scripts to run.  Each script in the list should return with:
+          * 0 on success
+          * any other return value is considered an error
 
         Arguments:
-            scripts (List): a list of functions to run
-            hosts (`RemoteHosts`): a hosts to run the functions on
+            scripts (List): a list of scripts to run (the script must exist on the host)
+            hosts (`RemoteHosts`): hosts to run the scripts on
 
         Raises:
-            ScriptFatalError: if a script has a fatal error
+            AbortError: if a script has an error and the user choose to abort
 
         """
         for script in scripts:
             try:
-                confirm_on_failure(script, hosts)
-            except ScriptFatalError as e:
+                confirm_on_failure(hosts.run_async, script)
+            except AbortError:
+                self.logger.error('%s: execution aborted', script)
                 self.results.fail(hosts.hosts)
-                self.logger.error('Pre boot script failed, aborting: %s', e)
                 raise
-            except ScriptNoneFatalError as e:
-                self.logger.error('Pre boot script failed, resuming: %s', e)
 
     def pre_action(self, hosts: RemoteHosts) -> None:
-        """Run this function before rebooting the batch of hosts
+        """Run this function before preforming the action on the batch of hosts
 
         By default this function will run:
             self._run_scripts(hosts, self.pre_scripts)
@@ -354,7 +341,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             self._restart_daemons(hosts)
 
     def post_action(self, hosts: RemoteHosts) -> None:
-        """Run this function after preforming the action on the hosts of hosts
+        """Run this function after preforming the action on the batch of hosts
 
         By default this function will run:
             self._run_scripts(hosts, self.post_scripts)
@@ -363,7 +350,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             hosts (`RemoteHosts`): a list of functions to run
 
         """
-        self._run_scripts(self.pre_scripts, hosts)
+        self._run_scripts(self.post_scripts, hosts)
 
     def batch_action(self) -> None:
         """Cookbook to preform an action on hosts in batches"""
