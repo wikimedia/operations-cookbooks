@@ -47,7 +47,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         ganeti = spicerack.ganeti()
         self.remote = spicerack.remote()
         self.master = self.remote.query(ganeti.rapi(self.cluster).master)
-        self.remote_host = spicerack.remote.query(args.fqdn)
+        self.remote_host = self.remote.query(args.fqdn)
         self.fqdn = args.fqdn
 
         ensure_shell_is_durable()
