@@ -27,7 +27,7 @@ class GanetiAddNode(CookbookBase):
         parser = argparse.ArgumentParser(description=self.__doc__,
                                          formatter_class=ArgparseFormatter)
 
-        parser.add_argument('cluster', choices=sorted(get_locations().keys()),
+        parser.add_argument('location', choices=sorted(get_locations().keys()),
                             help='The Ganeti cluster to which the new node should be added.')
         parser.add_argument('fqdn', help='The FQDN of the new Ganeti node.')
 
