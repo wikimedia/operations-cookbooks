@@ -255,7 +255,8 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             # log an error, exit *without* repooling
             self.logger.error(error)
             self.logger.error(
-                'Error restarting daemons on: Hosts %s, they may still be depooled', hosts
+                'Error restarting daemons on: Hosts %s, they may still be depooled',
+                hosts,
             )
             self.results.fail(hosts.hosts)
             raise
@@ -378,3 +379,49 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
     def run(self) -> None:
         """Perform rolling reboot servers in batches"""
         return self.batch_action()
+
+
+class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
+    """SRE batch runniner which is aare of conftool pool state"""
+
+    depool_threshold = 1
+    depool_sleep = 5
+
+    def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
+        """Initialize the runner."""
+        if args.batchsize > self.depool_threshold:
+            raise ValueError(
+                f"batchsize (args.batchsize) can't be greater then the depool_threshold {self.depool_threshold}"
+            )
+        # TODO: check currently depooled hosts + batchsize is less then depool_threshold
+        self._confctl = spicerack.confctl('node')
+        super().__init__(args, spicerack)
+
+    def wait_for_depool(self):
+        """Preform action to check a host has been de-pooled.
+
+        By default this function just sleeps for `depool_sleep` seconds
+
+        """
+        sleep(self.depool_sleep)
+
+    def action(self, hosts: RemoteHosts) -> None:
+        """The main action to preform e.g. reboot, restart a service etc
+
+        Arguments:
+            hosts (`RemoteHosts`): a list of functions to run
+
+        """
+        try:
+            with self._confctl.change_and_revert(
+                'pooled', 'yes', 'no', name="|".join(hosts.hosts.striter())
+            ):
+                self.wait_for_depool()
+                super().action(hosts)
+        except Exception:
+            self.logger.error('#' * 50)
+            self.logger.error(
+                'Unrecoverable error the following hosts are still depooled: %s', hosts
+            )
+            self.logger.error('#' * 50)
+            raise
