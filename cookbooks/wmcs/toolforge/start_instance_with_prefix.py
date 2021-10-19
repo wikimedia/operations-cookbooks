@@ -225,7 +225,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         self.security_group = security_group or f"{self.project}-k8s-full-connectivity"
         self.ssh_retries = ssh_retries
 
-    def run(self) -> Optional[int]:
+    def run(self) -> Optional[int]:  # pylint: disable=too-many-locals
         """Main entry point"""
         self.openstack_api.security_group_ensure(
             security_group=self.security_group,
@@ -309,8 +309,14 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
             exceptions=(RemoteExecutionError,),
         )
         def try_to_reach_the_new_instance():
-            new_prefix_node.run_sync("hostname")
+            return next(new_prefix_node.run_sync("hostname"))[1].message().decode().strip()
 
-        try_to_reach_the_new_instance()
+        result = try_to_reach_the_new_instance()
+
+        if "mesg: ttyname failed" in result:
+            # Ugly workaround for https://gerrit.wikimedia.org/r/c/operations/software/spicerack/+/730270
+            new_prefix_node.run_sync(
+                "sed -i -e 's/mesg n || true/mesg n 2>/dev/null || true/' /root/.profile"
+            )
 
         return new_instance_fqdn
