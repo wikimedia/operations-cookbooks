@@ -6,7 +6,7 @@
 - Wait for admin to merge hiera puppet change (unless invoked with --hiera-merged)
 - Remove packages
 - Re-enable puppet and run it to upgrade/downgrade
-- Run a test request through frontend and backend
+- Run a test request
 - Repool
 - Remove Icinga downtime
 
@@ -51,28 +51,19 @@ def argument_parser():
     return parser
 
 
-def check_http_responses(host):
-    """Check varnish-fe/varnish-be response.
+def check_http_response(host):
+    """Check varnish-fe response.
 
     Returns:
-        bool: False if either Varnish Frontend or Varnish Backend respond with an HTTP status code other than 200/404.
+        bool: False if Varnish Frontend responds with an HTTP status code other than 200/404.
 
     """
     req = requests.head("http://{}".format(host), timeout=3)
-    if req.status_code not in (requests.codes['ok'], requests.codes['not_found']):
+    if req.status_code not in (requests.codes["ok"], requests.codes["not_found"]):
         logger.error(
             "Unexpected response from varnish-fe. "
             "Got %d instead of 200/404. Exiting.",
-            req.status_code
-        )
-        return False
-
-    req = requests.head("http://{}:3128".format(host), timeout=3)
-    if req.status_code not in (requests.codes['ok'], requests.codes['not_found']):
-        logger.error(
-            "Unexpected response from varnish-be. "
-            "Got %d instead of 200/404. Exiting.",
-            req.status_code
+            req.status_code,
         )
         return False
 
@@ -118,12 +109,11 @@ def run(args, spicerack):
     logger.info("Waiting for %s to be drained.", args.host)
     time.sleep(30)
 
-    # Stop services, remove varnish
+    # Stop service, remove varnish
     cmds = [
         "apt update",
         "service varnish-frontend stop",
-        "service varnish stop",
-        "apt-get -y remove libvarnishapi1",
+        "apt-get -y remove libvarnishapi2",
     ]
     remote_host.run_sync(*cmds)
 
@@ -136,14 +126,13 @@ def run(args, spicerack):
 
     # Post-puppet
     cmds = [
-        "systemctl restart varnish.service",
         "run-puppet-agent",
         "systemctl restart prometheus-varnish-exporter@frontend.service",
     ]
     remote_host.run_sync(*cmds)
 
-    # check HTTP response from backend/frontend
-    if not check_http_responses(args.host):
+    # check HTTP response from frontend
+    if not check_http_response(args.host):
         return 1
 
     # Repool and cancel Icinga downtime
