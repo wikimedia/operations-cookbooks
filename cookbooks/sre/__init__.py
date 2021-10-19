@@ -179,7 +179,6 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
         reason = f'{args.action} {self.hosts.hosts}: {args.reason}'
         self.reason = spicerack.admin_reason(reason, args.task_id)
-        self.icinga_hosts = spicerack.icinga_hosts(self.hosts.hosts)
         self._spicerack = spicerack
         self.logger = getLogger('.'.join((self.__module__, self.__class__.__name__)))
 
@@ -237,14 +236,15 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             restart_cmds = [f"{systemd_cmd} restart {' '.join(self.restart_daemons)}"]
 
         puppet = self._spicerack.puppet(hosts)
+        icinga_hosts = self._spicerack.icinga_hosts(hosts.hosts)
         try:
             duration = timedelta(minutes=20)
-            with self.icinga_hosts.downtimed(self.reason, duration=duration):
+            with icinga_hosts.downtimed(self.reason, duration=duration):
                 now = datetime.utcnow()
                 confirm_on_failure(hosts.run_sync, *restart_cmds)
                 puppet.run(quiet=True)
                 puppet.wait_since(now)
-                self.icinga_hosts.wait_for_optimal()
+                icinga_hosts.wait_for_optimal()
             self.results.success(hosts.hosts)
         except IcingaError as error:
             ask_confirmation(f'Failed to dowtime hosts: {error}')
@@ -255,7 +255,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             # log an error, exit *without* repooling
             self.logger.error(error)
             self.logger.error(
-                'Hosts %s have NOT been repooled.', ','.join(self.results.hosts)
+                'Error restarting daemons on: Hosts %s, they may still be depooled', hosts
             )
             self.results.fail(hosts.hosts)
             raise
@@ -268,15 +268,16 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
         """
         puppet = self._spicerack.puppet(hosts)
+        icinga_hosts = self._spicerack.icinga_hosts(hosts.hosts)
         try:
             duration = timedelta(minutes=20)
-            with self.icinga_hosts.downtimed(self.reason, duration=duration):
+            with icinga_hosts.downtimed(self.reason, duration=duration):
                 reboot_time = datetime.utcnow()
                 confirm_on_failure(hosts.reboot, batch_size=len(hosts))
                 hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
                 puppet.run(quiet=True)
                 puppet.wait_since(reboot_time)
-                self.icinga_hosts.wait_for_optimal()
+                icinga_hosts.wait_for_optimal()
             self.results.success(hosts.hosts)
         except IcingaError as error:
             ask_confirmation(f'Failed to downtime hosts: {error}')
@@ -287,7 +288,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             # log an error, continue *without* repooling
             self.logger.error(error)
             self.logger.error(
-                'Hosts %s have NOT been repooled.', ','.join(self.results.hosts)
+                'Error rebooting: Hosts %s, they may still be depooled', hosts
             )
             self.results.fail(hosts.hosts)
             raise
