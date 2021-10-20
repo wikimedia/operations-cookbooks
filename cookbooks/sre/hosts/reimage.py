@@ -144,7 +144,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.downtime = Downtime(spicerack)
 
         # DHCP automation
-        self.dhcp_hosts = self.remote.query(f'A:installserver-light and A:{self.netbox_data["site"]["slug"]}')
+        try:
+            self.dhcp_hosts = self.remote.query(f'A:installserver-light and A:{self.netbox_data["site"]["slug"]}')
+        except RemoteError:  # Fallback to eqiad's install server if the above fails, i.e. for a new DC
+            self.dhcp_hosts = self.remote.query('A:installserver-light and A:eqiad')
         self.dhcp = spicerack.dhcp(self.dhcp_hosts)
         self.dhcp_config = self._get_dhcp_config()
 
