@@ -247,11 +247,16 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         """Instantiate a DHCP configuration to be used for the reimage."""
         netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
         switch_iface = netbox_host.primary_ip.assigned_object.connected_endpoint
+        switch_hostname = (
+            switch_iface.device.virtual_chassis.name.split('.')[0]
+            if switch_iface.device.virtual_chassis is not None
+            else switch_iface.device.name
+        )
 
         return DHCPConfOpt82(
             hostname=self.host,
             ipv4=ipaddress.ip_interface(netbox_host.primary_ip4).ip,
-            switch_hostname=switch_iface.device.virtual_chassis.name.split('.')[0],
+            switch_hostname=switch_hostname,
             switch_iface=f'{switch_iface}.0',  # In Netbox we have just the main interface
             vlan=switch_iface.untagged_vlan.name,
             ttys=1,
