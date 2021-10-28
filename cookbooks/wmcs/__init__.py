@@ -102,7 +102,7 @@ class OpenstackAPI:
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
         # some commands don't have formatted output
-        if "delete" in command:
+        if "delete" in command or ("volume" in command and "add" in command):
             format_args = []
         else:
             format_args = ["-f", "json"]
@@ -146,6 +146,32 @@ class OpenstackAPI:
         but maybo not).
         """
         self._run("server", "delete", name_to_remove, is_safe=False)
+
+    def volume_create(self, name: OpenstackName, size: int) -> str:
+        """Create a volume and return the ID of the created volume.
+
+        --size is in GB
+        """
+        out = self._run(
+            "volume",
+            "create",
+            "--size",
+            str(size),
+            "--type",
+            "standard",
+            name,
+        )
+        return out['id']
+
+    def volume_attach(self, server_id: str, volume_id: str) -> None:
+        """Attach a volume to a server"""
+        self._run(
+            "server",
+            "add",
+            "volume",
+            server_id,
+            volume_id,
+        )
 
     def server_create(
         self,
