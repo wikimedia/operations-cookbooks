@@ -34,7 +34,7 @@ class Reimage(CookbookBase):
     All data will be lost unless a specific partman recipe to retain partition data is used.
 
     Usage:
-        cookbook sre.experimental.reimage -t T12345 example1001.eqiad.wmnet
+        cookbook sre.hosts.reimage -t T12345 example1001
     """
 
     def argument_parser(self):
