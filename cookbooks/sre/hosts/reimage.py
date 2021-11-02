@@ -239,9 +239,12 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.host_actions.warning(
                 f'//Some services have a zero weight, you have to set a weight with//:\n{weights_lines}')
 
-        commands_lines = '\n'.join(commands)
-        self.host_actions.warning('//Services in confctl are not automatically pooled, to restore the previous '
-                                  f'state you have to run the following commands://\n{commands_lines}')
+        if commands:
+            commands_lines = '\n'.join(commands)
+            self.host_actions.warning('//Services in confctl are not automatically pooled, to restore the previous '
+                                      f'state you have to run the following commands://\n{commands_lines}')
+        else:
+            self.host_actions.success('No changes in confctl are needed to restore the previous state.')
 
     def _get_dhcp_config(self):
         """Instantiate a DHCP configuration to be used for the reimage."""
