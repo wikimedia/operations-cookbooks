@@ -125,7 +125,7 @@ class ToolforgeAddEtcdNodeRunner(CookbookRunnerBase):
             start_args.extend(["--flavor", self.flavor])
 
         start_instance_cookbook = StartInstanceWithPrefix(spicerack=self.spicerack)
-        new_member_fqdn = start_instance_cookbook.get_runner(
+        new_member = start_instance_cookbook.get_runner(
             args=start_instance_cookbook.argument_parser().parse_args(start_args)
         ).run()
 
@@ -135,7 +135,7 @@ class ToolforgeAddEtcdNodeRunner(CookbookRunnerBase):
             "--etcd-prefix",
             etcd_prefix,
             "--new-member-fqdn",
-            new_member_fqdn,
+            new_member.server_fqdn,
         ]
         if self.skip_puppet_bootstrap:
             add_node_to_cluster_args.append("--skip-puppet-bootstrap")
@@ -144,4 +144,4 @@ class ToolforgeAddEtcdNodeRunner(CookbookRunnerBase):
             args=add_node_to_cluster_cookbook.argument_parser().parse_args(add_node_to_cluster_args),
         ).run()
 
-        LOGGER.info("Added a new node %s to etcd cluster", new_member_fqdn)
+        LOGGER.info("Added a new node %s to etcd cluster", new_member.server_fqdn)

@@ -147,8 +147,8 @@ class OpenstackAPI:
         network: OpenstackIdentifier,
         server_group_id: OpenstackID,
         security_group_ids: List[OpenstackID],
-    ) -> None:
-        """Create a server.
+    ) -> OpenstackIdentifier:
+        """Create a server and return the ID of the created server.
 
         Note: You will probably want to add the server to the 'default' security group at least.
         """
@@ -156,7 +156,7 @@ class OpenstackAPI:
         for security_group_id in security_group_ids:
             security_group_options.extend(["--security-group", security_group_id])
 
-        self._run(
+        out = self._run(
             "server",
             "create",
             "--flavor",
@@ -171,6 +171,7 @@ class OpenstackAPI:
             *security_group_options,
             name,
         )
+        return out['id']
 
     def server_get_aggregates(self, name: OpenstackName) -> List[Dict[str, Any]]:
         """Get all the aggregates for the given server."""

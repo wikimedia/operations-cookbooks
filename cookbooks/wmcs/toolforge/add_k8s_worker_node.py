@@ -146,10 +146,10 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
             start_args.extend(["--flavor", self.flavor])
 
         start_instance_cookbook = StartInstanceWithPrefix(spicerack=self.spicerack)
-        new_member_fqdn = start_instance_cookbook.get_runner(
+        new_member = start_instance_cookbook.get_runner(
             args=start_instance_cookbook.argument_parser().parse_args(start_args)
         ).run()
-        node = self.spicerack.remote().query(f"D{{{new_member_fqdn}}}", use_sudo=True)
+        node = self.spicerack.remote().query(f"D{{{new_member.server_fqdn}}}", use_sudo=True)
 
         device = "/dev/sdb"
         LOGGER.info("Making sure %s is ext4, docker ovelay storage needs it", device)
@@ -165,12 +165,12 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
             )
         )
 
-        LOGGER.info("Making sure that the proper puppetmaster is setup for the new node %s", new_member_fqdn)
+        LOGGER.info("Making sure that the proper puppetmaster is setup for the new node %s", new_member.server_fqdn)
         LOGGER.info("It might fail before rebooting, will make sure it runs after too.")
         refresh_puppet_certs_cookbook = RefreshPuppetCerts(spicerack=self.spicerack)
         refresh_puppet_certs_cookbook.get_runner(
             args=refresh_puppet_certs_cookbook.argument_parser().parse_args(
-                ["--fqdn", new_member_fqdn, "--pre-run-puppet", "--ignore-failures"]
+                ["--fqdn", new_member.server_fqdn, "--pre-run-puppet", "--ignore-failures"]
             ),
         ).run()
 
@@ -179,7 +179,7 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
                 "Rebooting worker node %s to make sure iptables alternatives "
                 "are taken into account by docker, kube-proxy and calico."
             ),
-            new_member_fqdn,
+            new_member.server_fqdn,
         )
         reboot_time = datetime.datetime.utcnow()
         node.reboot()
@@ -187,7 +187,7 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
 
         LOGGER.info(
             "Rebooted node %s, running puppet again, this time it should work.",
-            new_member_fqdn,
+            new_member.server_fqdn,
         )
         PuppetHosts(remote_hosts=node).run()
 
@@ -198,7 +198,7 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
             node["Name"] for node in all_nodes if node["Name"].startswith(k8s_control_prefix)
         )
 
-        kubeadm = KubeadmController(remote=self.spicerack.remote(), controlling_node_fqdn=new_member_fqdn)
+        kubeadm = KubeadmController(remote=self.spicerack.remote(), controlling_node_fqdn=new_member.server_fqdn)
         # guessing that the domain of the k8s and kubeadmin are the same
         k8s_control_node_fqdn = f"{k8s_control_node_hostname}.{kubeadm.get_nodes_domain()}"
         kubectl = KubernetesController(remote=self.spicerack.remote(), controlling_node_fqdn=k8s_control_node_fqdn)
@@ -207,6 +207,6 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
 
         dologmsg(
             project=self.project,
-            message=f"Added a new k8s worker {new_member_fqdn} to the worker pool",
+            message=f"Added a new k8s worker {new_member.server_fqdn} to the worker pool",
             task_id=self.task_id,
         )

@@ -32,6 +32,14 @@ LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class CreateServerResponse:
+    """Instance creation results."""
+
+    server_id: OpenstackIdentifier
+    server_fqdn: str
+
+
+@dataclass(frozen=True)
 class InstanceCreationOpts:
     """Instance creation options."""
 
@@ -225,7 +233,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         self.security_group = security_group or f"{self.project}-k8s-full-connectivity"
         self.ssh_retries = ssh_retries
 
-    def run(self) -> Optional[int]:  # pylint: disable=too-many-locals
+    def run(self) -> CreateServerResponse:  # pylint: disable=too-many-locals
         """Main entry point"""
         self.openstack_api.security_group_ensure(
             security_group=self.security_group,
@@ -290,7 +298,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
 
         server_group_id: str = maybe_server_group["ID"]
 
-        self.openstack_api.server_create(
+        new_instance_id = self.openstack_api.server_create(
             flavor=self.flavor or other_prefix_members[-1]["Flavor"],
             security_group_ids=[default_security_group_id, security_group_id],
             server_group_id=server_group_id,
@@ -319,4 +327,4 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
                 "sed -i -e 's/mesg n || true/mesg n 2>/dev/null || true/' /root/.profile"
             )
 
-        return new_instance_fqdn
+        return CreateServerResponse(server_id=new_instance_id, server_fqdn=new_instance_fqdn)
