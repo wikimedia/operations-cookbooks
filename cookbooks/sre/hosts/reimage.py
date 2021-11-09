@@ -21,11 +21,11 @@ from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shel
 
 from cookbooks import ArgparseFormatter
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+from cookbooks.sre.hosts import OS_VERSIONS
 from cookbooks.sre.hosts.downtime import Downtime
 
 
 logger = logging.getLogger(__name__)
-OS_VERSIONS = ('stretch', 'buster', 'bullseye')
 
 
 class Reimage(CookbookBase):
