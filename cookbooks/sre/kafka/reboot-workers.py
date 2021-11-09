@@ -54,7 +54,7 @@ class RebootKafkaWorkersRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
 
         self.icinga_hosts = spicerack.icinga_hosts
-        self.reason = spicerack.admin_reason('Reboot kafka nodes')
+        self.admin_reason = spicerack.admin_reason('Reboot kafka nodes')
         self.puppet = spicerack.puppet
         self.remote = spicerack.remote()
 
@@ -69,15 +69,15 @@ class RebootKafkaWorkersRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for Kafka {} cluster: {}'.format(self.cluster, self.reason)
+        return 'for Kafka {} cluster: {}'.format(self.cluster, self.admin_reason.reason)
 
     def reboot_kafka_node(self, host):
         """Reboot a single Kafka node."""
         node = self.remote.query('D{' + host + '}')
         puppet = self.puppet(node)
 
-        with self.icinga_hosts([host]).downtimed(self.reason, duration=timedelta(minutes=30)):
-            with puppet.disabled(self.reason):
+        with self.icinga_hosts([host]).downtimed(self.admin_reason, duration=timedelta(minutes=30)):
+            with puppet.disabled(self.admin_reason):
                 logger.info('Stopping kafka processes on host %s', host)
 
                 node.run_sync('systemctl stop kafka-mirror')

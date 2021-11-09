@@ -68,13 +68,13 @@ class StopHadoopRunner(CookbookRunnerBase):
         self.hadoop_standby = spicerack.remote().query(standby_alias)
 
         self.icinga_hosts = spicerack.icinga_hosts(self.hadoop_hosts.hosts)
-        self.reason = spicerack.admin_reason('Stop the Hadoop cluster before maintenance.')
+        self.admin_reason = spicerack.admin_reason('Stop the Hadoop cluster before maintenance.')
         self.puppet = spicerack.puppet(self.hadoop_hosts)
 
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for Hadoop {} cluster: {}'.format(self.cluster, self.reason)
+        return 'for Hadoop {} cluster: {}'.format(self.cluster, self.admin_reason.reason)
 
     def safety_checks(self):
         """Run safety checks before starting any invasive action in the cluster."""
@@ -133,9 +133,9 @@ class StopHadoopRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
         self.safety_checks()
 
-        self.puppet.disable(self.reason)
+        self.puppet.disable(self.admin_reason)
 
-        self.icinga_hosts.downtime(self.reason, duration=timedelta(minutes=120))
+        self.icinga_hosts.downtime(self.admin_reason, duration=timedelta(minutes=120))
 
         logger.info("Stopping all Yarn daemons.")
         self.hadoop_workers.run_sync(

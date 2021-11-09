@@ -52,7 +52,7 @@ class RestartOresWorkersRunner(CookbookRunnerBase):
         self.cluster = args.cluster
         self.ores_workers = spicerack.remote().query(cluster_cumin_alias)
         self.icinga_hosts = spicerack.icinga_hosts(self.ores_workers.hosts)
-        self.reason = spicerack.admin_reason('Roll restart of ORES\'s daemons.')
+        self.admin_reason = spicerack.admin_reason('Roll restart of ORES\'s daemons.')
         self.daemons = args.daemons
         self.spicerack = spicerack
         self.confctl = spicerack.confctl('node')
@@ -61,11 +61,11 @@ class RestartOresWorkersRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for ORES {} cluster: {}'.format(self.cluster, self.reason)
+        return 'for ORES {} cluster: {}'.format(self.cluster, self.admin_reason.reason)
 
     def run(self):
         """Restart all ORES daemons on a given cluster"""
-        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=60)):
+        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=60)):
             logger.info(
                 'Restarting daemons (%s), one host at the time.', ','.join(self.daemons))
 

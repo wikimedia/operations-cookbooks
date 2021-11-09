@@ -69,7 +69,7 @@ class RollRestartMastersRunner(CookbookRunnerBase):
         self.hadoop_master = self.remote.query('A:hadoop-master' + self.suffix)
         self.hadoop_standby = self.remote.query('A:hadoop-standby' + self.suffix)
         self.icinga_hosts = spicerack.icinga_hosts(self.hadoop_master.hosts | self.hadoop_standby.hosts)
-        self.reason = spicerack.admin_reason('Restart of jvm daemons.')
+        self.admin_reason = spicerack.admin_reason('Restart of jvm daemons.')
 
         self.yarn_rm_sleep = args.yarn_rm_sleep_seconds
         self.hdfs_nn_sleep = args.hdfs_nn_sleep_seconds
@@ -100,11 +100,11 @@ class RollRestartMastersRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'restart masters for Hadoop {} cluster: {}'.format(self.cluster, self.reason)
+        return 'restart masters for Hadoop {} cluster: {}'.format(self.cluster, self.admin_reason.reason)
 
     def run(self):
         """Restart all Hadoop jvm daemons on a given cluster"""
-        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=120)):
+        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
             logger.info("Restarting Yarn Resourcemanager on Master.")
             self.hadoop_master.run_sync('systemctl restart hadoop-yarn-resourcemanager')
             logger.info("Sleeping %s seconds.", self.yarn_rm_sleep)

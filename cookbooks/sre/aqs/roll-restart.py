@@ -46,12 +46,12 @@ class RollRestartRunner(CookbookRunnerBase):
         self.aqs_canary = self.remote.query('A:' + args.cluster + '-canary')
         self.aqs_workers = self.remote.query('A:' + args.cluster)
         self.icinga_hosts = spicerack.icinga_hosts(self.aqs_workers.hosts)
-        self.reason = spicerack.admin_reason('Roll restart of all AQS\'s nodejs daemons.')
+        self.admin_reason = spicerack.admin_reason('Roll restart of all AQS\'s nodejs daemons.')
 
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for AQS {} cluster: {}'.format(self.cluster, self.reason)
+        return 'for AQS {} cluster: {}'.format(self.cluster, self.admin_reason.reason)
 
     def run(self):
         """Required by Spicerack API."""
@@ -59,7 +59,7 @@ class RollRestartRunner(CookbookRunnerBase):
             'If a config change is being rolled-out, please run puppet on all hosts '
             'before proceeding.')
 
-        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=60)):
+        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=60)):
             logger.info("Depool and test on canary: %s", self.aqs_canary.hosts)
             self.aqs_canary.run_sync(
                 'depool',

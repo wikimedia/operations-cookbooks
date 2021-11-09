@@ -101,7 +101,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
         self.hadoop_standby = spicerack_remote.query(STANDBY_CUMIN_ALIAS + suffix)
 
         self.icinga_hosts = spicerack.icinga_hosts(self.hadoop_hosts.hosts)
-        self.reason = spicerack.admin_reason('Change Hadoop distribution')
+        self.admin_reason = spicerack.admin_reason('Change Hadoop distribution')
 
         self.rollback = args.rollback
         self.cluster = args.cluster
@@ -116,7 +116,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for Hadoop {} cluster: {}'.format(self.cluster, self.reason)
+        return 'for Hadoop {} cluster: {}'.format(self.cluster, self.admin_reason.reason)
 
     def run(self):
         """Upgrade or Rollback the Hadoop distribution"""
@@ -130,7 +130,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
             'MANUAL STEP: time to run the Yarn metadata cleanup commands in Zookeeper:\n {}' +
             str([self.yarn_metadata_cleanup_commands]))
 
-        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=120)):
+        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
 
             self.hadoop_workers.run_sync('rm -rf /tmp/hadoop-yarn/*')
 

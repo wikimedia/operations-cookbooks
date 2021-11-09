@@ -55,7 +55,7 @@ class RollRestartZookeeperRunner(CookbookRunnerBase):
         self.cluster_cumin_alias = "A:zookeeper-" + args.cluster
         self.zookeeper = spicerack.remote().query(self.cluster_cumin_alias)
         self.icinga_hosts = spicerack.icinga_hosts(self.zookeeper.hosts)
-        self.reason = spicerack.admin_reason('Roll restart of jvm daemons.')
+        self.admin_reason = spicerack.admin_reason('Roll restart of jvm daemons.')
         self.batch_sleep_seconds = args.batch_sleep_seconds
 
         # Safety checks
@@ -69,11 +69,12 @@ class RollRestartZookeeperRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for Zookeeper {} cluster: {}'.format(self.cluster_cumin_alias, self.reason)
+        return 'for Zookeeper {} cluster: {}'.format(
+            self.cluster_cumin_alias, self.admin_reason.reason)
 
     def run(self):
         """Restart all Zookeeper daemons on a given cluster"""
-        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=120)):
+        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
             self.zookeeper.run_sync('systemctl restart zookeeper', batch_size=1, batch_sleep=self.batch_sleep_seconds)
 
         logger.info('All Zookeeper restarts completed!')

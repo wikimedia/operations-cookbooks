@@ -77,7 +77,7 @@ class RollRestartWorkersRunner(CookbookRunnerBase):
         self.hadoop_workers = spicerack.remote().query(self.cluster_cumin_alias)
         self.hadoop_hdfs_journal_workers = spicerack.remote().query(self.hdfs_jn_cumin_alias)
         self.icinga_hosts = spicerack.icinga_hosts(self.hadoop_workers.hosts)
-        self.reason = spicerack.admin_reason('Roll restart of jvm daemons for openjdk upgrade.')
+        self.admin_reason = spicerack.admin_reason('Roll restart of jvm daemons for openjdk upgrade.')
 
         self.yarn_nm_batch_size = args.yarn_nm_batch_size
         self.yarn_nm_sleep = args.yarn_nm_sleep_seconds
@@ -104,11 +104,11 @@ class RollRestartWorkersRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'restart workers for Hadoop {} cluster: {}'.format(self.cluster, self.reason)
+        return 'restart workers for Hadoop {} cluster: {}'.format(self.cluster, self.admin_reason.reason)
 
     def run(self):
         """Restart all Hadoop jvm daemons on a given cluster"""
-        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=120)):
+        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
             logger.info("Restarting Yarn Nodemanagers with batch size %s and sleep %s..",
                         self.yarn_nm_batch_size, self.yarn_nm_sleep)
             self.hadoop_workers.run_sync(

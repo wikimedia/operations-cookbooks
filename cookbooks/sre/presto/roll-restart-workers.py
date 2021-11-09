@@ -40,16 +40,16 @@ class RestartPrestoWorkersRunner(CookbookRunnerBase):
         self.cluster = args.cluster
         self.presto_workers = spicerack.remote().query("A:presto-" + self.cluster)
         self.icinga_hosts = spicerack.icinga_hosts(self.presto_workers.hosts)
-        self.reason = spicerack.admin_reason('Roll restart of all Presto\'s jvm daemons.')
+        self.admin_reason = spicerack.admin_reason('Roll restart of all Presto\'s jvm daemons.')
 
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for Presto {} cluster: {}'.format(self.cluster, self.reason)
+        return 'for Presto {} cluster: {}'.format(self.cluster, self.admin_reason.reason)
 
     def run(self):
         """Restart all Presto jvm daemons on a given cluster"""
-        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=60)):
+        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=60)):
             logger.info('Restarting daemons (one host at the time)...')
             commands = ['systemctl restart presto-server']
             self.presto_workers.run_async(*commands, batch_size=1, batch_sleep=120.0)
