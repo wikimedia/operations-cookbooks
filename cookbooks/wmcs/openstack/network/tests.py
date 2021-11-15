@@ -4,6 +4,9 @@ Usage example:
   cookbook wmcs.openstack.network.tests --deployment codfw1dev
   cookbook wmcs.openstack.network.tests --deployment eqiad1
 
+Documentation:
+  https://wikitech.wikimedia.org/wiki/Portal:Cloud_VPS/Admin/Network/Tests
+
 """
 import argparse
 import logging
