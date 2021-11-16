@@ -93,4 +93,9 @@ class RestartDruidWorkersRunner(CookbookRunnerBase):
             self.druid_workers.run_async(
                 *commands, batch_size=1, batch_sleep=120.0)
 
+            # https://github.com/wikimedia/operations-software-druid_exporter#known-limitations
+            logger.info('Restarting the Prometheus Druid exporters')
+            self.druid_workers.run_sync(
+                'systemctl restart prometheus-druid-exporter')
+
         logger.info("All Druid jvm restarts completed!")
