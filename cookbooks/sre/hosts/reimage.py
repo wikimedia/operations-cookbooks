@@ -91,13 +91,15 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         """Initiliaze the reimage runner."""
         ensure_shell_is_durable()
         self.args = args
+        self.host = self.args.host
 
         self.netbox = spicerack.netbox()
-        self.netbox_server = spicerack.netbox_server(self.args.host, read_write=True)
+        self.netbox_server = spicerack.netbox_server(self.host, read_write=True)
         self.netbox_data = self.netbox_server.as_dict()
 
+        ask_confirmation(f'ATTENTION: destructive action for host: {self.host}\nAre you sure to proceed?')
+
         # Shortcut variables
-        self.host = self.args.host
         self.fqdn = self.netbox_server.fqdn
         self.mgmt_fqdn = self.netbox_server.mgmt_fqdn
         self.output_filename = self._get_output_filename(spicerack.username)
