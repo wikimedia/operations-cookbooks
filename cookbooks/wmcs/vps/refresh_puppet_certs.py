@@ -14,15 +14,15 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts, PuppetMaster
 from spicerack.remote import RemoteExecutionError
 
+from cookbooks.wmcs import run_one
+
 LOGGER = logging.getLogger(__name__)
 
 
 def _get_puppetmaster(spicerack: Spicerack, remote_host: RemoteHosts, puppetmaster: str) -> PuppetMaster:
     puppetmaster_fqdn = puppetmaster
     if puppetmaster_fqdn == "puppet":
-        puppetmaster_fqdn = (
-            next(remote_host.run_sync("dig +short -x $(dig +short puppet)"))[1].message().decode().strip()
-        )
+        puppetmaster_fqdn = run_one(node=remote_host, command=["dig", "+short", "-x", "$(dig +short puppet)"]).strip()
         # remove the extra dot that dig appends
         puppetmaster_fqdn = puppetmaster_fqdn[:-1]
 

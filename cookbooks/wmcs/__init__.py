@@ -40,6 +40,13 @@ OpenstackName = str
 OpenstackIdentifier = Union[OpenstackID, OpenstackName]
 
 
+class OutputFormat(Enum):
+    """Types of format supported to try to decode when running commands."""
+
+    JSON = auto()
+    YAML = auto()
+
+
 def _quote(mystr: str) -> str:
     """Wraps the given string in single quotes."""
     return f"'{mystr}'"
@@ -105,26 +112,7 @@ class OpenstackAPI:
             *format_args,
         ]
 
-        command = Command(
-            command=" ".join(full_command),
-            ok_codes=[0, 1, 2] if capture_errors else [0],
-        )
-        try:
-            result = next(self._control_node.run_sync(command, is_safe=is_safe))
-
-        except StopIteration:
-            result = None
-
-        if result is None:
-            raw_result = "{}"
-        else:
-            raw_result = result[1].message().decode()
-
-        try:
-            return json.loads(raw_result)
-
-        except json.JSONDecodeError:
-            return raw_result
+        return run_one(command=full_command, node=self._control_node, is_safe=is_safe, capture_errors=capture_errors)
 
     def server_list(self) -> List[Dict[str, Any]]:
         """Retrieve the list of servers for the project."""
@@ -171,7 +159,7 @@ class OpenstackAPI:
             *security_group_options,
             name,
         )
-        return out['id']
+        return out["id"]
 
     def server_get_aggregates(self, name: OpenstackName) -> List[Dict[str, Any]]:
         """Get all the aggregates for the given server."""
@@ -335,14 +323,16 @@ class OpenstackAPI:
 
     @staticmethod
     def aggregate_load_from_host(host: RemoteHosts) -> None:
-        """Loads the persisted list of aggregates from the host."""
+        """Load the persisted list of aggregates from the host."""
         try:
-            result = next(host.run_sync(f"cat {AGGREGATES_FILE_PATH}", is_safe=True))[1].message().decode()
+            result = run_one(
+                command=["cat", AGGREGATES_FILE_PATH], node=host, is_safe=True, try_format=OutputFormat.YAML
+            )
 
         except Exception as error:
             raise OpenstackNotFound(f"Unable to cat the file {AGGREGATES_FILE_PATH} on host {host}") from error
 
-        return yaml.safe_load(result)
+        return result
 
     def drain_hypervisor(self, hypervisor_name: OpenstackName) -> None:
         """Drain a hypervisor."""
@@ -350,14 +340,13 @@ class OpenstackAPI:
             command=f"bash -c 'source /root/novaenv.sh && wmcs-drain-hypervisor {hypervisor_name}'",
             timeout=SECONDS_IN_MINUTE * MINUTES_IN_HOUR * 2,
         )
-        try:
-            next(self._control_node.run_sync(command, is_safe=False))
+        result = run_one(command=command, node=self._control_node, is_safe=False)
 
-        except StopIteration as error:
+        if not result:
             raise OpenstackMigrationError(
                 f"Got no result when running {command} on {self.control_node_fqdn}, was expecting some output at "
                 "least."
-            ) from error
+            )
 
 
 class CephException(Exception):
@@ -517,10 +506,11 @@ class CephOSDController:
 
     def get_available_devices(self) -> List[str]:
         """Get the current available devices in the node."""
-        raw_output = next(self._node.run_sync("lsblk --json"))[1].message().decode()
-        structured_output = json.loads(raw_output)
+        structured_output = run_one(command=["lsblk", "--json"], node=self._node)
         if "blockdevices" not in structured_output:
-            raise CephMalformedInfo(f"Missing 'blockdevices' on lsblk output: {raw_output}")
+            raise CephMalformedInfo(
+                f"Missing 'blockdevices' on lsblk output: {json.dumps(structured_output, indent=4)}"
+            )
 
         return [
             f"/dev/{device_info['name']}"
@@ -560,9 +550,8 @@ class CephClusterController:
 
     def get_nodes(self) -> Dict[str, Any]:
         """Get the nodes currently in the cluster."""
-        raw_output = next(self._controlling_node.run_sync("ceph node ls -f json"))[1].message().decode()
         # There's usually a couple empty lines before the json data
-        return json.loads(raw_output.splitlines()[-1])
+        return run_one(command=["ceph", "node", "ls", "-f", "json"], node=self._controlling_node, last_line_only=True)
 
     def get_nodes_domain(self) -> str:
         """Get the network domain for the nodes in the cluster."""
@@ -585,22 +574,18 @@ class CephClusterController:
 
     def get_cluster_status(self) -> CephClusterStatus:
         """Get the current cluster status."""
-        raw_cluster_status = next(self._controlling_node.run_sync("ceph status -f json"))[1].message().decode()
-        return CephClusterStatus(status_dict=json.loads(raw_cluster_status))
+        cluster_status_output = run_one(command=["ceph", "status", "-f", "json"], node=self._controlling_node)
+        return CephClusterStatus(status_dict=cluster_status_output)
 
     def set_osdmap_flag(self, flag: CephOSDFlag) -> None:
         """Set one of the osdmap flags."""
-        set_osdmap_flag_result = (
-            next(self._controlling_node.run_sync(f"ceph osd set {flag.value}"))[1].message().decode()
-        )
+        set_osdmap_flag_result = run_one(command=["ceph", "osd", "set", flag.value], node=self._controlling_node)
         if set_osdmap_flag_result != f"{flag.value} is set":
             raise CephFlagSetError(f"Unable to set `{flag.value}` on the cluster, got output: {set_osdmap_flag_result}")
 
     def unset_osdmap_flag(self, flag: CephOSDFlag) -> None:
         """Unset one of the osdmap flags."""
-        unset_osdmap_flag_result = (
-            next(self._controlling_node.run_sync(f"ceph osd unset {flag.value}"))[1].message().decode()
-        )
+        unset_osdmap_flag_result = run_one(command=["ceph", "osd", "unset", flag.value], node=self._controlling_node)
         if unset_osdmap_flag_result != f"{flag.value} is unset":
             raise CephFlagSetError(
                 f"Unable to unset `{flag.value}` on the cluster, got output: {unset_osdmap_flag_result}"
@@ -798,12 +783,11 @@ class KubernetesController:
 
     def get_cluster_info(self) -> KubernetesClusterInfo:
         """Get cluster info."""
-        raw_output = (
+        raw_output = run_one(
             # cluster-info does not support json output format (there's a dump
             # command, but it's too verbose)
-            next(self._controlling_node.run_sync("kubectl cluster-info"))[1]
-            .message()
-            .decode()
+            command=["kubectl", "custer-info"],
+            node=self._controlling_node,
         )
         return KubernetesClusterInfo.form_cluster_info_output(raw_output=raw_output)
 
@@ -814,12 +798,10 @@ class KubernetesController:
         else:
             selector_cli = ""
 
-        raw_output = (
-            next(self._controlling_node.run_sync(f"kubectl get nodes --output=json {selector_cli}"))[1]
-            .message()
-            .decode()
+        output = run_one(
+            command=["kubectl", "get", "nodes", "--output=json", selector_cli], node=self._controlling_node
         )
-        return json.loads(raw_output)["items"]
+        return output["items"]
 
     def get_node(self, node_hostname: str) -> Dict[str, Any]:
         """Get only info for the the given node."""
@@ -832,12 +814,11 @@ class KubernetesController:
         else:
             field_selector_cli = ""
 
-        raw_output = (
-            next(self._controlling_node.run_sync(f"kubectl get pods --output=json {field_selector_cli}"))[1]
-            .message()
-            .decode()
+        output = run_one(
+            command=["kubectl", "get", "pods", "--output=json", field_selector_cli],
+            node=self._controlling_node,
         )
-        return json.loads(raw_output)["items"]
+        return output["items"]
 
     def get_pods_for_node(self, node_hostname: str) -> Dict[str, Any]:
         """Get pods for node."""
@@ -905,7 +886,7 @@ class KubeadmController:
 
     def get_new_token(self) -> str:
         """Creates a new bootstrap token."""
-        raw_output = next(self._controlling_node.run_sync("kubeadm token create"))[1].message().decode()
+        raw_output = run_one(command=["kubeadm", "token", "create"], node=self._controlling_node)
         output = raw_output.splitlines()[-1].strip()
         if not output:
             raise KubeadmCreateTokenError(f"Error creating a new token:\nOutput:{raw_output}")
@@ -914,7 +895,7 @@ class KubeadmController:
 
     def delete_token(self, token: str) -> str:
         """Removes the given bootstrap token."""
-        raw_output = next(self._controlling_node.run_sync(f"kubeadm token delete {token}"))[1].message().decode()
+        raw_output = run_one(command=["kubeadm", "token", "delete", token], node=self._controlling_node)
         if "deleted" not in raw_output:
             raise KubeadmDeleteTokenError(f"Error deleting token {token}:\nOutput:{raw_output}")
 
@@ -922,17 +903,14 @@ class KubeadmController:
 
     def get_ca_cert_hash(self) -> str:
         """Retrieves the CA cert hash to use when bootstrapping."""
-        raw_output = (
-            next(
-                self._controlling_node.run_sync(
-                    "openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt "
-                    "| openssl rsa -pubin -outform der 2>/dev/null "
-                    "| openssl dgst -sha256 -hex "
-                    "| sed 's/^.* //'"
-                )
-            )[1]
-            .message()
-            .decode()
+        raw_output = run_one(
+            command=[
+                "openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt",
+                "| openssl rsa -pubin -outform der 2>/dev/null",
+                "| openssl dgst -sha256 -hex",
+                "| sed 's/^.* //'",
+            ],
+            node=self._controlling_node,
         )
         return raw_output.strip()
 
@@ -984,6 +962,52 @@ class KubeadmController:
             control_kubeadm.delete_token(token=new_token)
 
 
+def run_one(
+    command: Union[List[str], Command],
+    node: RemoteHosts,
+    capture_errors: bool = False,
+    last_line_only: bool = False,
+    try_format: OutputFormat = OutputFormat.JSON,
+    **kwargs,
+) -> Union[Dict[str, Any], str]:
+    """Run a command on a node.
+
+    Returns the loaded json if able, otherwise the raw output.
+
+    Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+    """
+    if not isinstance(command, Command):
+        command = Command(
+            command=" ".join(command),
+            ok_codes=[0, 1, 2] if capture_errors else [0],
+        )
+
+    try:
+        result = next(node.run_sync(command, **kwargs))
+
+    except StopIteration:
+        result = None
+
+    if result is None:
+        raw_result = "{}"
+    else:
+        raw_result = result[1].message().decode()
+        if last_line_only:
+            raw_result = raw_result.splitlines()[-1]
+
+    try:
+        if try_format == OutputFormat.JSON:
+            return json.loads(raw_result)
+
+        if try_format == OutputFormat.YAML:
+            return yaml.safe_load(raw_result)
+
+    except (json.JSONDecodeError, yaml.YAMLError):
+        pass
+
+    return raw_result
+
+
 def simple_create_file(
     dst_node: RemoteHosts,
     contents: str,
@@ -1006,7 +1030,7 @@ def simple_create_file(
 
     full_command.extend(["tee", remote_path])
 
-    return next(dst_node.run_sync(" ".join(full_command)))[1].message().decode()
+    return run_one(node=dst_node, command=full_command)
 
 
 def natural_sort_key(element: str) -> List[Union[str, int]]:
@@ -1215,7 +1239,7 @@ class CephTestUtils(TestUtils):
     @staticmethod
     def get_available_device(
         name: str = f"{CephOSDController.SYSTEM_DEVICES[0]}_non_matching_part",
-        device_type: str = 'disk',
+        device_type: str = "disk",
         children: Optional[List[Any]] = None,
         mountpoint: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -1224,7 +1248,7 @@ class CephTestUtils(TestUtils):
         If you pass any value, it will not ensure that it's still considered available.
         """
         available_device = {
-            "name":  name,
+            "name": name,
             "type": device_type,
         }
         if children is not None:

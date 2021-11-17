@@ -22,6 +22,8 @@ import yaml
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
+from cookbooks.wmcs import OutputFormat, run_one
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -79,16 +81,13 @@ class RemoveNodeFromHieraRunner(CookbookRunnerBase):
         control_node = self.spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True)
 
         etcd_prefix = self.prefix if self.prefix is not None else f"{self.project}-k8s-etcd"
-        response = yaml.safe_load(
-            next(
-                control_node.run_sync(
-                    f"wmcs-enc-cli --openstack-project {self.project} get_prefix_hiera {etcd_prefix}",
-                    is_safe=True,
-                )
-            )[1]
-            .message()
-            .decode()
+        response = run_one(
+            node=control_node,
+            command=["wmcs-enc-cli", "--openstack-project", self.project, "get_prefix_hiera", etcd_prefix],
+            try_format=OutputFormat.YAML,
+            is_safe=True,
         )
+        # double yaml yep xd
         current_hiera_config = yaml.safe_load(response["hiera"])
         changed = False
 

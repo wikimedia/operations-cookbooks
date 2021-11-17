@@ -1,6 +1,7 @@
 import json
 from typing import Any, Dict, List, Optional, Type
 from unittest import mock
+from cumin.transports import Command
 
 import pytest
 
@@ -53,7 +54,7 @@ def parametrize(params: Dict[str, Any]):
                         ' "mgr":{"mgrhost1":["mgr1"],"mgrhost2":["mgr2"]}}'
                     ),
                 ]
-            )
+            ),
         },
     }
 )
@@ -138,7 +139,9 @@ def test_set_osdmap_flag_happy_path(set_flag_command_output: str):
 
     my_controller.set_osdmap_flag(flag=CephOSDFlag.NOREBALANCE)
 
-    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd set {CephOSDFlag.NOREBALANCE.value}")
+    my_controller._controlling_node.run_sync.assert_called_with(
+        Command(f"ceph osd set {CephOSDFlag.NOREBALANCE.value}", ok_codes=[0])
+    )
 
 
 @parametrize(
@@ -157,7 +160,9 @@ def test_set_osdmap_flag_raising(set_flag_command_output: str):
     with pytest.raises(CephFlagSetError):
         my_controller.set_osdmap_flag(flag=CephOSDFlag.NOREBALANCE)
 
-    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd set {CephOSDFlag.NOREBALANCE.value}")
+    my_controller._controlling_node.run_sync.assert_called_with(
+        Command(f"ceph osd set {CephOSDFlag.NOREBALANCE.value}", ok_codes=[0])
+    )
 
 
 @parametrize(
@@ -175,7 +180,9 @@ def test_unset_osdmap_flag_happy_path(unset_flag_command_output: str):
 
     my_controller.unset_osdmap_flag(flag=CephOSDFlag.NOREBALANCE)
 
-    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd unset {CephOSDFlag.NOREBALANCE.value}")
+    my_controller._controlling_node.run_sync.assert_called_with(
+        Command(f"ceph osd unset {CephOSDFlag.NOREBALANCE.value}", ok_codes=[0])
+    )
 
 
 @parametrize(
@@ -194,7 +201,9 @@ def test_unset_osdmap_flag_raising(unset_flag_command_output: str):
     with pytest.raises(CephFlagSetError):
         my_controller.unset_osdmap_flag(flag=CephOSDFlag.NOREBALANCE)
 
-    my_controller._controlling_node.run_sync.assert_called_with(f"ceph osd unset {CephOSDFlag.NOREBALANCE.value}")
+    my_controller._controlling_node.run_sync.assert_called_with(
+        Command(f"ceph osd unset {CephOSDFlag.NOREBALANCE.value}", ok_codes=[0])
+    )
 
 
 @parametrize(

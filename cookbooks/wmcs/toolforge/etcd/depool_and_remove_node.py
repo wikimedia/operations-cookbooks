@@ -18,7 +18,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import Remote, RemoteHosts
 
-from cookbooks.wmcs import OpenstackAPI, natural_sort_key, simple_create_file
+from cookbooks.wmcs import OpenstackAPI, OutputFormat, natural_sort_key, run_one, simple_create_file
 from cookbooks.wmcs.toolforge.etcd.remove_node_from_hiera import RemoveNodeFromHiera
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
@@ -77,7 +77,7 @@ def _fix_apiserver_yaml(node: RemoteHosts, etcd_members: List[str]):
     members_urls = [f"https://{fqdn}:2379" for fqdn in etcd_members]
     new_etcd_members_arg = "--etcd-servers=" + ",".join(sorted(members_urls, key=natural_sort_key))
     apiserver_config_file = "/etc/kubernetes/manifests/kube-apiserver.yaml"
-    apiserver_config = yaml.safe_load(next(node.run_sync(f"cat '{apiserver_config_file}'"))[1].message().decode())
+    apiserver_config = run_one(node=node, command=["cat", f"'{apiserver_config_file}'"], try_format=OutputFormat.YAML)
     # we expect the container to be the first and only in the spec
     command_args = apiserver_config["spec"]["containers"][0]["command"]
     for index, arg in enumerate(command_args):
@@ -101,10 +101,10 @@ def _fix_apiserver_yaml(node: RemoteHosts, etcd_members: List[str]):
 def _remove_node_from_kubeadm_configmap(k8s_control_node: RemoteHosts, etcd_fqdn_to_remove: str) -> str:
     namespace = "kube-system"
     configmap = "kubeadm-config"
-    kubeadm_config = yaml.safe_load(
-        next(k8s_control_node.run_sync(f"kubectl --namespace='{namespace}' get configmap {configmap} -o yaml"))[1]
-        .message()
-        .decode()
+    kubeadm_config = run_one(
+        node=k8s_control_node,
+        command=["kubectl", f"--namespace='{namespace}'", "get", "configmap", configmap, "-o", "yaml"],
+        try_format=OutputFormat.YAML,
     )
     # double yaml yep xd
     cluster_config = yaml.safe_load(kubeadm_config["data"]["ClusterConfiguration"])
@@ -126,17 +126,13 @@ def _remove_node_from_kubeadm_configmap(k8s_control_node: RemoteHosts, etcd_fqdn
     kubeadm_config_str = yaml.dump(kubeadm_config)
     # avoid quoting/bash escaping issues
     kubeadm_config_base64 = base64.b64encode(kubeadm_config_str.encode("utf8"))
-    return (
-        next(
-            k8s_control_node.run_sync(
-                f"""echo '{kubeadm_config_base64.decode()}' |
-                base64 --decode |
-                sudo -i kubectl apply --filename=-
-                """
-            )
-        )[1]
-        .message()
-        .decode()
+    return run_one(
+        node=k8s_control_node,
+        command=[
+            f"echo '{kubeadm_config_base64.decode()}'",
+            "| base64 --decode",
+            "| sudo -i kubectl apply --filename=-",
+        ],
     )
 
 

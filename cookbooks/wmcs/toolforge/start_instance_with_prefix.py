@@ -26,7 +26,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
 from wmflib.decorators import retry
 
-from cookbooks.wmcs import OpenstackAPI, OpenstackServerGroupPolicy, natural_sort_key, OpenstackIdentifier
+from cookbooks.wmcs import OpenstackAPI, OpenstackServerGroupPolicy, natural_sort_key, OpenstackIdentifier, run_one
 
 LOGGER = logging.getLogger(__name__)
 
@@ -190,10 +190,7 @@ class StartInstanceWithPrefix(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_instance_creation_options(
-            args,
-            StartInstanceWithPrefixRunner,
-        )(
+        return with_instance_creation_options(args, StartInstanceWithPrefixRunner,)(
             security_group=args.security_group,
             server_group=args.server_group,
             server_group_policy=args.server_group_policy,
@@ -214,7 +211,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
         server_group_policy: str,
         server_group: Optional[str] = None,
         security_group: Optional[str] = None,
-        ssh_retries: int = 15
+        ssh_retries: int = 15,
     ):
         """Init"""
         self.openstack_api = OpenstackAPI(
@@ -269,8 +266,7 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
             # the trimming by length of the prefix allows prefixes with trailing integers (ex. tools-sgeexec-09)
             # so 1 will be extracted as id, instead of 901 for tools-sgexec-0901
             last_prefix_member_id = max(
-                int(member['Name'][len(self.prefix):].rsplit("-", 1)[-1])
-                for member in other_prefix_members
+                int(member["Name"][len(self.prefix) :].rsplit("-", 1)[-1]) for member in other_prefix_members
             )
 
         new_prefix_member_name = f"{self.prefix}-{last_prefix_member_id + 1}"
@@ -317,14 +313,15 @@ class StartInstanceWithPrefixRunner(CookbookRunnerBase):
             exceptions=(RemoteExecutionError,),
         )
         def try_to_reach_the_new_instance():
-            return next(new_prefix_node.run_sync("hostname"))[1].message().decode().strip()
+            return run_one(node=new_prefix_node, command=["hostname"]).strip()
 
         result = try_to_reach_the_new_instance()
 
         if "mesg: ttyname failed" in result:
             # Ugly workaround for https://gerrit.wikimedia.org/r/c/operations/software/spicerack/+/730270
-            new_prefix_node.run_sync(
-                "sed -i -e 's/mesg n || true/mesg n 2>/dev/null || true/' /root/.profile"
+            run_one(
+                node=new_prefix_node,
+                command=["sed", "-i", "-e", "'s/mesg n || true/mesg n 2>/dev/null || true/'", "/root/.profile"],
             )
 
         return CreateServerResponse(server_id=new_instance_id, server_fqdn=new_instance_fqdn)

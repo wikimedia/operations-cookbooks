@@ -12,6 +12,7 @@ from enum import Enum
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from cookbooks.wmcs import run_one
 
 LOGGER = logging.getLogger(__name__)
 
@@ -103,9 +104,7 @@ class NetworkTestRunner(CookbookRunnerBase):
                 continue
 
         if passed < 0 or failed < 0 or total < 0:
-            raise NetworkTestParsingError(
-                "Unable to parse the output of the checklist runner"
-            )
+            raise NetworkTestParsingError("Unable to parse the output of the checklist runner")
 
         return passed, failed, total
 
@@ -123,16 +122,13 @@ class NetworkTestRunner(CookbookRunnerBase):
             control_node = i
             break
 
-        results = control_node.run_sync(
-            "cmd-checklist-runner --config /etc/networktests/networktests.yaml",
+        output_lines = run_one(
+            node=control_node,
+            command=["cmd-checklist-runner", "--config", "/etc/networktests/networktests.yaml"],
             print_progress_bars=False,
             is_safe=True,
-        )
-
-        for _, output in results:
-            output_lines = output.message().decode().splitlines()
-            passed, failed, total = self._parse_output(output_lines)
-            break  # should have been executed in just 1 node anyway
+        ).splitlines()
+        passed, failed, total = self._parse_output(output_lines)
 
         if total < 1:
             LOGGER.warning(f"{self.__class__.__name__}: no tests were run!")

@@ -13,6 +13,8 @@ pep8:
   full: true
   options:
     max-line-length: 120
+  disable:
+    - E203  # https://github.com/PyCQA/pycodestyle/issues/373
 
 pep257:
   explain: true
