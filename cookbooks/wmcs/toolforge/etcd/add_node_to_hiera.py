@@ -20,7 +20,7 @@ from typing import Optional
 
 import yaml
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from cookbooks.wmcs import OutputFormat, run_one
 
 LOGGER = logging.getLogger(__name__)
@@ -35,8 +35,8 @@ class AddNodeToHiera(CookbookBase):
         """Parse the command line arguments for this cookbook."""
         parser = argparse.ArgumentParser(
             prog=__name__,
-            description=self.__doc__,
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            description=__doc__,
+            formatter_class=ArgparseFormatter,
         )
         parser.add_argument("--project", required=True, help="Openstack project to manage.")
         parser.add_argument(
@@ -86,7 +86,7 @@ class AddNodeToHieraRunner(CookbookRunnerBase):
             is_safe=True,
             try_format=OutputFormat.YAML,
         )
-        # Double yaml load yes
+        # double yaml yep xd
         current_hiera_config = yaml.safe_load(response["hiera"])
         changed = False
 

@@ -14,7 +14,7 @@ from typing import Optional
 
 from cumin.transports import Command
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
 from cookbooks.wmcs import KubeadmController, KubernetesController, OpenstackAPI, OpenstackServerGroupPolicy, dologmsg
@@ -33,8 +33,8 @@ class ToolforgeAddK8sWorkerNode(CookbookBase):
         """Parse the command line arguments for this cookbook."""
         parser = argparse.ArgumentParser(
             prog=__name__,
-            description=self.__doc__,
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            description=__doc__,
+            formatter_class=ArgparseFormatter,
         )
         parser.add_argument(
             "--project",

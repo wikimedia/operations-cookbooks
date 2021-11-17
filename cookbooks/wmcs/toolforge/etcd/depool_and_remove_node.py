@@ -15,7 +15,7 @@ from typing import List, Optional
 
 import yaml
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.remote import Remote, RemoteHosts
 
 from cookbooks.wmcs import OpenstackAPI, OutputFormat, natural_sort_key, run_one, simple_create_file
@@ -35,8 +35,8 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
         """Parse the command line arguments for this cookbook."""
         parser = argparse.ArgumentParser(
             prog=__name__,
-            description=self.__doc__,
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            description=__doc__,
+            formatter_class=ArgparseFormatter,
         )
         parser.add_argument("--project", required=True, help="Openstack project to manage.")
         parser.add_argument(

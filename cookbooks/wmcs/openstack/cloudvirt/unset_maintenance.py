@@ -11,7 +11,7 @@ import logging
 from typing import Optional
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.icinga import ICINGA_DOMAIN, IcingaHosts
 
 from cookbooks.wmcs import AGGREGATES_FILE_PATH, OpenstackAPI, OpenstackNotFound, dologmsg
@@ -28,8 +28,8 @@ class UnsetMaintenance(CookbookBase):
         """Parse the command line arguments for this cookbook."""
         parser = argparse.ArgumentParser(
             prog=__name__,
-            description=self.__doc__,
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            description=__doc__,
+            formatter_class=ArgparseFormatter,
         )
         parser.add_argument(
             "--control-node-fqdn",

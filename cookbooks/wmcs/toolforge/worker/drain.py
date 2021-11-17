@@ -12,7 +12,7 @@ import time
 from typing import Optional
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import K8S_SYSTEM_NAMESPACES, KubernetesController, dologmsg
 
@@ -28,8 +28,8 @@ class Drain(CookbookBase):
         """Parse the command line arguments for this cookbook."""
         parser = argparse.ArgumentParser(
             prog=__name__,
-            description=self.__doc__,
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            description=__doc__,
+            formatter_class=ArgparseFormatter,
         )
         parser.add_argument(
             "--project",
