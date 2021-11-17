@@ -122,15 +122,20 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         try:
             self.remote_host = self.remote.query(self.fqdn)
             if self.args.new:
-                ask_confirmation(
-                    f'Host {self.fqdn} was found in PuppetDB but --new was set. Are you sure you want to proceed?')
+                ask_confirmation(f'Host {self.fqdn} was found in PuppetDB but --new was set. Are you sure you want to '
+                                 'proceed? The --new option will be unset')
                 self.args.new = False  # Unset --new
+                logger.info('The option --new has been unset')
         except RemoteError as e:
             self.remote_host = self.remote.query(f'D{{{self.fqdn}}}')  # Use the Direct backend instead
             if not self.args.new:
                 raise RuntimeError(f'Host {self.fqdn} was not found in PuppetDB but --new was not set. Check that the '
                                    'FQDN is correct. If the host is new or has disappeared from PuppetDB because down '
                                    'for too long use --new.') from e
+
+        if len(self.remote_host) != 1:
+            raise RuntimeError(
+                f'Expected 1 host for query {self.fqdn} but got {len(self.remote_host)}: {self.remote_host}')
 
         # The same as self.remote_host but using the SSH key valid only during installation before the first Puppet run
         self.remote_installer = spicerack.remote(installer=True).query(self.fqdn)
