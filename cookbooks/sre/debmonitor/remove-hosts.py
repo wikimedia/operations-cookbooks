@@ -3,7 +3,8 @@ import argparse
 import logging
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.remote import NodeSet
+from spicerack.remote import NodeSet, RemoteError
+
 from wmflib.interactive import confirm_on_failure, ask_confirmation
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
@@ -37,10 +38,11 @@ class RemoveHostsRunner(CookbookRunnerBase):
     def __init__(self, args, spicerack):
         """Initialize the runner."""
         self.debmonitor = spicerack.debmonitor()
-        self.hosts = spicerack.remote().query(args.query).hosts
         self.removed_hosts = 0
         self.username = spicerack.username
-        if not self.hosts:
+        try:
+            self.hosts = spicerack.remote().query(args.query).hosts
+        except RemoteError:
             query_hosts = NodeSet(args.query)
             ask_confirmation(
                 'Your query did not match any hosts. This can happen if the host\n'
