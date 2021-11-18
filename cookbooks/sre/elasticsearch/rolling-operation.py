@@ -180,7 +180,9 @@ class RollingOperationRunner(CookbookRunnerBase):
             self.elasticsearch_clusters.wait_for_green()
 
             logger.info('Allow time to consume write queue')
-            self.elasticsearch_clusters.wait_for_all_write_queues_empty()
+            # Temporarily disable waiting for write queues; sleep 10 mins instead
+            sleep(600)
+            # self.elasticsearch_clusters.wait_for_all_write_queues_empty()
 
     def rolling_operation(self, nodes):
         """
