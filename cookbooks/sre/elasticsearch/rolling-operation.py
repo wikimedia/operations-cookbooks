@@ -9,6 +9,7 @@ from time import sleep
 
 from spicerack.constants import CORE_DATACENTERS
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.elasticsearch_cluster import ElasticsearchClusterCheckError
 from cookbooks.sre.elasticsearch import CLUSTERGROUPS, valid_datetime_type
 
 logger = logging.getLogger(__name__)
