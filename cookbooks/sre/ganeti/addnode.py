@@ -100,12 +100,12 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         )
 
         self.validate_state(
-            'brctl show private | grep "en[o|p]"',
+            'brctl show private | grep "en[o|p|s]"',
             'No private bridge configured',
         )
 
         self.validate_state(
-            'brctl show public | grep "en[o|p]"',
+            'brctl show public | grep "en[o|p|s]"',
             'No public bridge configured',
         )
 
