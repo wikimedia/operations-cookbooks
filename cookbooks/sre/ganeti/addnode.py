@@ -78,7 +78,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
 
     def run(self):
         """Add a new node to a Ganeti cluster."""
-        print('Ready to add Ganeti node {} in the {} cluster'.format(self.fqdn, self.master))
+        print('Ready to add Ganeti node {} in the {} cluster'.format(self.fqdn, self.cluster))
         ask_confirmation('Is this correct?')
 
         if str(self.remote_host) not in self.remote.query('A:ganeti-all').hosts:
