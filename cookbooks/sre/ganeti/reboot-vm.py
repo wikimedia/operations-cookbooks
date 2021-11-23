@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.icinga import IcingaError
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-from cookbooks.sre.ganeti import get_locations
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +40,6 @@ class RebootSingleVM(CookbookBase):
         parser = argparse.ArgumentParser(description=self.__doc__,
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
         parser.add_argument('vm', help='A single VM to reboot (specified in Cumin query syntax)')
-        parser.add_argument('location', choices=sorted(get_locations().keys()),
-                            help='The datacenter and row (only for multi-row clusters) where to VM runs.')
         parser.add_argument('-r', '--reason', required=False,
                             help=('The reason for the reboot. The current username and originating'
                                   'Cumin host are automatically added.'))
@@ -60,7 +57,8 @@ class RebootSingleVMRunner(CookbookRunnerBase):
         """Downtime a single VM and reboot it"""
         self.remote_host = spicerack.remote().query(args.vm)
         self.remote = spicerack.remote()
-        self.cluster, self.row, self.datacenter = get_locations()[args.location]
+        self.cluster = spicerack.netbox_server(self.remote_host).as_dict()['cluster']['name']
+
         ganeti = spicerack.ganeti()
         self.master = self.remote.query(ganeti.rapi(self.cluster).master)
 
