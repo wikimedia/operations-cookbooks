@@ -4,7 +4,7 @@ import argparse
 import logging
 import time
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.icinga import IcingaError
@@ -99,8 +99,10 @@ class RebootSingleVMRunner(CookbookRunnerBase):
                 self.remote_host.run_async('depool')
                 logger.info('Waiting a 30 second grace period after depooling')
                 time.sleep(30)
+            reboot_time = datetime.utcnow()
             self.master.run_sync('/usr/sbin/gnt-instance reboot "{vm}"'.format(vm=self.remote_host))
-
+            self.remote_host.wait_reboot_since(reboot_time)
+            self.puppet.wait_since(reboot_time)
             try:
                 self.icinga_hosts.wait_for_optimal()
                 icinga_ok = True
