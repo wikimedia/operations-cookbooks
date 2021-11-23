@@ -57,7 +57,7 @@ class RebootSingleVMRunner(CookbookRunnerBase):
         """Downtime a single VM and reboot it"""
         self.remote_host = spicerack.remote().query(args.vm)
         self.remote = spicerack.remote()
-        self.cluster = spicerack.netbox_server(self.remote_host).as_dict()['cluster']['name']
+        self.cluster = spicerack.netbox_server(str(self.remote_host)).as_dict()['cluster']['name']
 
         ganeti = spicerack.ganeti()
         self.master = self.remote.query(ganeti.rapi(self.cluster).master)
