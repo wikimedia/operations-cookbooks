@@ -41,6 +41,8 @@ class RebootSingleVM(CookbookBase):
         parser = argparse.ArgumentParser(description=self.__doc__,
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
         parser.add_argument('vm', help='A single VM to reboot (specified in Cumin query syntax)')
+        parser.add_argument('location', choices=sorted(get_locations().keys()),
+                            help='The datacenter and row (only for multi-row clusters) where to VM runs.')
         parser.add_argument('-r', '--reason', required=False,
                             help=('The reason for the reboot. The current username and originating'
                                   'Cumin host are automatically added.'))
