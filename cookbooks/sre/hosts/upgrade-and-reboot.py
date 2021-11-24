@@ -50,7 +50,7 @@ def run(args, spicerack):
     puppet = spicerack.puppet(remote_host)
     reason = spicerack.admin_reason('Software upgrade and reboot')
 
-    icinga_hosts.downtime_hosts(reason, duration=timedelta(minutes=20))
+    icinga_hosts.downtime(reason, duration=timedelta(minutes=20))
     puppet.disable(reason)
 
     # Depool and wait a bit for the host to be drained
