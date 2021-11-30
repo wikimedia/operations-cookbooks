@@ -345,8 +345,9 @@ class DecommissionHostRunner(CookbookRunnerBase):
                 'Set Netbox status to Decommissioning and deleted all non-mgmt interfaces '
                 'and related IPs')
 
-        logger.info('Sleeping for 20s to avoid race conditions...')
-        time.sleep(20)
+        if not self.spicerack.dry_run:
+            logger.info('Sleeping for 20s to avoid race conditions...')
+            time.sleep(20)
 
         debmonitor.host_delete(fqdn)
         self.spicerack.actions[fqdn].success('Removed from DebMonitor')
@@ -413,8 +414,9 @@ class DecommissionHostRunner(CookbookRunnerBase):
             if self.spicerack.actions[fqdn].has_failures:
                 has_failures = True
 
-        logger.info('Sleeping for 3 minutes to get Netbox caches in sync')
-        time.sleep(180)
+        if not self.spicerack.dry_run:
+            logger.info('Sleeping for 3 minutes to get netbox caches in sync')
+            time.sleep(180)
         dns_netbox_args = dns_netbox_argparse().parse_args(
             ['{hosts} decommissioned, removing all IPs except the asset tag one'
              .format(hosts=self.decom_hosts)])
