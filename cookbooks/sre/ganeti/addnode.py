@@ -109,7 +109,8 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
             'No public bridge configured',
         )
 
-        self.master.run_sync('gnt-node add --no-ssh-key-check "{node}"'.format(node=self.fqdn))
+        self.master.run_sync('gnt-node add --no-ssh-key-check -g "{cluster}" "{node}"'.format(
+            cluster=self.cluster, node=self.fqdn))
         ask_confirmation('Has the node been added correctly?')
 
         self.master.run_sync('gnt-cluster verify')
