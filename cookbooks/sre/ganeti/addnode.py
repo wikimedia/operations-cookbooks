@@ -30,6 +30,7 @@ class GanetiAddNode(CookbookBase):
         parser.add_argument('location', choices=sorted(get_locations().keys()),
                             help='The Ganeti cluster to which the new node should be added.')
         parser.add_argument('fqdn', help='The FQDN of the new Ganeti node.')
+        parser.add_argument('group', help='The Ganeti group to add the node to.')
 
         return parser
 
@@ -49,6 +50,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         self.master = self.remote.query(ganeti.rapi(self.cluster).master)
         self.remote_host = self.remote.query(args.fqdn)
         self.fqdn = args.fqdn
+        self.group = args.group
 
         ensure_shell_is_durable()
 
@@ -115,8 +117,8 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
                 'No analytics bridge configured',
             )
 
-        self.master.run_sync('gnt-node add --no-ssh-key-check -g "{cluster}" "{node}"'.format(
-            cluster=self.cluster, node=self.fqdn))
+        self.master.run_sync('gnt-node add --no-ssh-key-check -g "{group}" "{node}"'.format(
+            group=self.group, node=self.fqdn))
         ask_confirmation('Has the node been added correctly?')
 
         self.master.run_sync('gnt-cluster verify')
