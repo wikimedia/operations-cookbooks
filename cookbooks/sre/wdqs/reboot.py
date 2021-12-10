@@ -13,11 +13,16 @@ from datetime import datetime, timedelta
 from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError
 
-from . import check_host_is_wdqs
+from . import check_hosts_are_valid
 
 
 __title__ = "WDQS reboot cookbook"
 logger = logging.getLogger(__name__)
+
+SERVICES = {
+    'wdqs': ['wdqs-updater', 'wdqs-blazegraph', 'wdqs-categories'],
+    'wcqs': ['wcqs-updater', 'wcqs-blazegraph'],
+}
 
 
 def argument_parser():
@@ -43,7 +48,8 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     remote = spicerack.remote()
     remote_hosts = remote.query(args.query)
-    check_host_is_wdqs(remote_hosts, remote)
+    host_kind = check_hosts_are_valid(remote_hosts, remote)
+    services = SERVICES[host_kind]
 
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
@@ -55,10 +61,7 @@ def run(args, spicerack):
                 remote_host.run_sync('depool', 'sleep 180')
 
             # explicit shutdown of Blazegraph instance, to ensure they are not killed by systemd if taking too long
-            remote_host.run_sync(
-                'systemctl stop wdqs-blazegraph',
-                'systemctl stop wdqs-categories',
-                'systemctl stop wdqs-updater')
+            remote_host.run_sync(*('systemctl stop ' + service for service in services))
 
             reboot_time = datetime.utcnow()
             remote_host.reboot()

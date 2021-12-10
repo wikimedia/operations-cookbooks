@@ -10,11 +10,27 @@ import logging
 
 from datetime import timedelta
 
-from . import check_host_is_wdqs
+from . import check_hosts_are_valid
 
 
 __title__ = "WDQS services restart cookbook"
 logger = logging.getLogger(__name__)
+
+
+RESTART = {
+    'wdqs': [
+        'systemctl stop wdqs-updater',
+        'systemctl restart wdqs-blazegraph wdqs-categories',
+        'sleep 20',
+        'systemctl start wdqs-updater'
+    ],
+    'wcqs': [
+        'systemctl stop wcqs-updater',
+        'systemctl restart wcqs-blazegraph',
+        'sleep 20',
+        'systemctl start wcqs-updater'
+    ],
+}
 
 
 def argument_parser():
@@ -34,7 +50,7 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     remote = spicerack.remote()
     remote_hosts = remote.query(args.query)
-    check_host_is_wdqs(remote_hosts, remote)
+    host_kind = check_hosts_are_valid(remote_hosts, remote)
 
     icinga_hosts = spicerack.icinga_hosts(remote_hosts.hosts)
     puppet = spicerack.puppet(remote_hosts)
@@ -42,12 +58,7 @@ def run(args, spicerack):
 
     with icinga_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
         with puppet.disabled(reason):
-            base_commands = [
-                'systemctl stop wdqs-updater',
-                'systemctl restart wdqs-blazegraph wdqs-categories',
-                'sleep 20',
-                'systemctl start wdqs-updater'
-            ]
+            base_commands = RESTART[host_kind]
             if args.depool:
                 commands = ['depool', 'sleep 180', *base_commands, 'pool']
             else:
