@@ -492,6 +492,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         reboot_time = datetime.utcnow()
         self.remote_host.reboot()
+        time.sleep(60)  # Temporary workaround to prevent a race condition
         self.remote_host.wait_reboot_since(reboot_time, print_progress_bars=False)
         self.host_actions.success('Rebooted')
         self.puppet.wait_since(reboot_time)
