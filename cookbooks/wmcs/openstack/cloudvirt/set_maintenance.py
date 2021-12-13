@@ -12,7 +12,7 @@ from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
-from spicerack.icinga import ICINGA_DOMAIN, Icinga
+from spicerack.icinga import ICINGA_DOMAIN, IcingaHosts
 
 from cookbooks.wmcs import OpenstackAPI, OpenstackNotFound, dologmsg
 
@@ -88,10 +88,11 @@ class SetMaintenanceRunner(CookbookRunnerBase):
             message=f"Setting cloudvirt '{self.fqdn}' maintenance.",
             task_id=self.task_id,
         )
-        icinga = Icinga(
-            icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True)
+        icinga_hosts = IcingaHosts(
+            icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True),
+            target_hosts=[self.fqdn],
         )
-        icinga.downtime_hosts(hosts=[self.fqdn], reason=self.spicerack.admin_reason("Setting maintenance mode."))
+        icinga_hosts.downtime(reason=self.spicerack.admin_reason("Setting maintenance mode."))
         hostname = self.fqdn.split(".", 1)[0]
         self.openstack_api.aggregate_persist_on_host(host=self.spicerack.remote().query(self.fqdn))
 
