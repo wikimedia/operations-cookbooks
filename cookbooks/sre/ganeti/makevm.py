@@ -128,9 +128,12 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
     def _ganeti_netbox_sync(self):
         """Perform a sync from Ganeti to Netbox in the affected DC."""
         logger.info('Syncing VMs in DC %s to Netbox', self.datacenter)
+        cluster_id = ''
+        if self.datacenter in PER_RACK_VLAN_DATACENTERS:
+            cluster_id = self.cluster.split('.')[0][-2:]
         self.spicerack.netbox_master_host.run_sync(
-            'systemctl start netbox_ganeti_{dc}_sync.service'
-            .format(dc=self.datacenter))
+            'systemctl start netbox_ganeti_{dc}{cluster_id}_sync.service'
+            .format(dc=self.datacenter, cluster_id=cluster_id))
         self.need_netbox_sync = False
 
     def run(self):  # pylint: disable=too-many-locals
