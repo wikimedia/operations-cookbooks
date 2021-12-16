@@ -18,6 +18,7 @@ from cookbooks.sre.ganeti import get_locations
 
 logger = logging.getLogger(__name__)
 PRIMARY_INTERFACE_NAME = '##PRIMARY##'
+PER_RACK_VLAN_DATACENTERS = ('drmrs',)
 
 
 class GanetiMakeVM(CookbookBase):
@@ -135,7 +136,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
     def run(self):  # pylint: disable=too-many-locals
         """Create a new Ganeti VM as specified."""
         # Pre-allocate IPs
-        if self.datacenter in CORE_DATACENTERS:
+        if self.datacenter in CORE_DATACENTERS or self.datacenter in PER_RACK_VLAN_DATACENTERS:
             vlan_name = '{a.network}1-{row}-{a.datacenter}'.format(a=self, row=self.row.lower())
         else:
             vlan_name = '{a.network}1-{a.datacenter}'.format(a=self)
