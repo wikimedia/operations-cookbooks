@@ -18,8 +18,6 @@ def get_locations():
         dc = cluster.split('.')[2]
         if len(rows) == 1 and 'test01' in cluster:
             locations['{dc}_test'.format(dc=dc)] = (cluster, rows[0], dc)
-        elif len(rows) == 1:
-            locations[dc] = (cluster, rows[0], dc)
         else:
             for row in rows:
                 locations['{dc}_{row}'.format(dc=dc, row=row)] = (cluster, row, dc)
