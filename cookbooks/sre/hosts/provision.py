@@ -20,19 +20,22 @@ class Provision(CookbookBase):
 
     Actions performed:
         * Validate that the host is a physical host and the vendor is supported (only Dell at this time)
-        * Fail if the host is active on Netbox but --existing was not set
-        * [unless --existing is set] Setup the temporary DHCP so that the management console can get a connection and
+        * Fail if the host is active on Netbox but --no-dhcp and --no-users are not set as a precautionary measure
+        * [unless --no-dhcp is set] Setup the temporary DHCP so that the management console can get a connection and
           become reachable
         * Get the current configuration for BIOS, management console and NICs
         * Modify the common settings
+          * [if --enable-virtualization is set] Leave virtualization enabled, by default it gets disabled
         * Push back the whole modified configuration
         * Check that it can still connect to Redfish API
-        * [unless --existing is set] Update the root's user password with the production management password
+        * [unless --no-users is set] Update the root's user password with the production management password
         * Check that it can still connect to Redfish API
         * Check that it can connect via remote IPMI
 
     Usage:
         cookbook sre.hosts.provision example1001
+        cookbook sre.hosts.provision --enable-virtualization example1001
+        cookbook sre.hosts.provision --no-dhcp --no-users example1001
 
     """
 
@@ -40,13 +43,14 @@ class Provision(CookbookBase):
         """As specified by Spicerack API."""
         parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
         parser.add_argument(
-            '--existing',
+            '--no-dhcp',
             action='store_true',
-            help=('Consider the host already configured, this will assume:\n'
-                  '  * To ask for the management password to connect to its Redfish API\n'
-                  '  * Skip the DHCP config assuming the management console has already the correct fixed IP and '
-                  'network settings\n'
-                  '  * Do not change the root user management password'))
+            help='Skips the DHCP setting, assuming that the management console is already reachable')
+        parser.add_argument(
+            '--no-users',
+            action='store_true',
+            help=("Skips changing the root's user password from Dell's default value to the management one. Uses the "
+                  "management passwords also for the first connection"))
         parser.add_argument('--enable-virtualization', action='store_true',
                             help='Keep virtualization capabilities on. They are turned off if not speficied.')
         parser.add_argument('host', help='Short hostname of the host to provision, not FQDN')
@@ -79,8 +83,9 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             vendor = self.netbox_data['device_type']['manufacturer']['name']
             raise RuntimeError(f'Host {self.args.host} manufacturer is {vendor}. Only Dell is supported.')
 
-        if self.netbox_server.status == 'active' and not self.args.existing:
-            raise RuntimeError(f'Host {self.args.host} has active status in Netbox but --existing was not set.')
+        if self.netbox_server.status == 'active' and (not self.args.no_dhcp or not self.args.no_users):
+            raise RuntimeError(
+                f'Host {self.args.host} has active status in Netbox but --no-dhcp and --no-users were not set.')
 
         # DHCP automation
         try:
@@ -97,11 +102,14 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             fqdn=self.fqdn,
             ipv4=self.interface.ip,
         )
-        if self.args.existing:
+        if self.args.no_users:
             password = ''  # nosec
-            self.reboot_policy = DellSCPRebootPolicy.GRACEFUL
         else:
             password = DELL_DEFAULT
+
+        if self.netbox_server.status in ('active', 'staged'):
+            self.reboot_policy = DellSCPRebootPolicy.GRACEFUL
+        else:
             self.reboot_policy = DellSCPRebootPolicy.FORCED
 
         self.redfish = spicerack.redfish(self.fqdn, 'root', password)
@@ -153,28 +161,37 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         return f'for host {self.netbox_server.mgmt_fqdn} with reboot policy {self.reboot_policy.name}'
 
     def run(self):
-        """Provision BIOS and iDRAC settings."""
-        with self.dhcp.config(self.dhcp_config):
-            self.redfish.check_connection()
-            config = self.redfish.scp_dump()
-            if self.multi_gigabit:
-                self._config_pxe(config)
-
-            config.update(self.config_changes)
-
-            if self.redfish.get_power_state() == DellSCPPowerStatePolicy.OFF:
-                power_state = DellSCPPowerStatePolicy.OFF
-            else:
-                power_state = DellSCPPowerStatePolicy.ON
-
-            self.redfish.scp_push(config, reboot=self.reboot_policy, preview=False, power_state=power_state)
+        """Run the cookbook."""
+        if self.args.no_dhcp:
+            self._config()
+        else:
+            with self.dhcp.config(self.dhcp_config):
+                self._config()
 
         self.redfish.check_connection()
-        if not self.args.existing:
+        if self.args.no_users:
+            logger.info('Skipping root user password change')
+        else:
             self.redfish.change_user_password('root', self.mgmt_password)
 
         self.redfish.check_connection()
         self.ipmi.check_connection()
+
+    def _config(self):
+        """Provision the BIOS and iDRAC settings."""
+        self.redfish.check_connection()
+        config = self.redfish.scp_dump()
+        if self.multi_gigabit:
+            self._config_pxe(config)
+
+        config.update(self.config_changes)
+
+        if self.redfish.get_power_state() == DellSCPPowerStatePolicy.OFF.value:
+            power_state = DellSCPPowerStatePolicy.OFF
+        else:
+            power_state = DellSCPPowerStatePolicy.ON
+
+        self.redfish.scp_push(config, reboot=self.reboot_policy, preview=False, power_state=power_state)
 
     def _config_pxe(self, config):
         """Configure PXE boot on the correct NIC automatically or ask the user if unable to detect it.
