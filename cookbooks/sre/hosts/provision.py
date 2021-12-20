@@ -112,6 +112,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 'BootMode': 'Bios',
                 'CpuInterconnectBusLinkPower': 'Enabled',
                 'EnergyPerformanceBias': 'BalancedPerformance',
+                'InternalUsb': 'Off',
                 'PcieAspmL1': 'Enabled',
                 'ProcC1E': 'Enabled',
                 'ProcCStates':  'Enabled',
@@ -122,6 +123,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 'SerialPortAddress': 'Serial1Com1Serial2Com2',
                 'SysProfile': 'PerfPerWattOptimizedOs',
                 'UncoreFrequency': 'DynamicUFS',
+                'UsbPorts': 'OnlyBackPortsOn',
             },
             'iDRAC.Embedded.1': {
                 'IPMILan.1#Enable': 'Enabled',
