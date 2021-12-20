@@ -93,11 +93,13 @@ class OpenstackAPI:
         self._control_node = remote.query(f"D{{{control_node_fqdn}}}", use_sudo=True)
 
     def _run(
-        self, *command: List[str], is_safe: bool = False, capture_errors: bool = False
+        self, *command: List[str], is_safe: bool = False, capture_errors: bool = False, **kwargs
     ) -> Union[Dict[str, Any], str]:
         """Run an openstack command on a control node.
 
         Returns the loaded json if able, otherwise the raw output.
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
         # some commands don't have formatted output
         if "delete" in command:
@@ -113,11 +115,16 @@ class OpenstackAPI:
             *format_args,
         ]
 
-        return run_one(command=full_command, node=self._control_node, is_safe=is_safe, capture_errors=capture_errors)
+        return run_one(
+            command=full_command, node=self._control_node, is_safe=is_safe, capture_errors=capture_errors, **kwargs
+        )
 
-    def server_list(self) -> List[Dict[str, Any]]:
-        """Retrieve the list of servers for the project."""
-        return self._run("server", "list", is_safe=True)
+    def server_list(self, **kwargs) -> List[Dict[str, Any]]:
+        """Retrieve the list of servers for the project.
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+        """
+        return self._run("server", "list", is_safe=True, **kwargs)
 
     def server_delete(self, name_to_remove: OpenstackName) -> None:
         """Delete a server.
@@ -167,7 +174,7 @@ class OpenstackAPI:
         # NOTE: this currently does a bunch of requests making it slow, can be simplified
         # once the following gets released:
         #  https://review.opendev.org/c/openstack/python-openstackclient/+/794237
-        current_aggregates = self.aggregate_list()
+        current_aggregates = self.aggregate_list(print_output=False)
         server_aggregates: List[Dict[str, any]] = []
         for aggregate in current_aggregates:
             aggregate_details = self.aggregate_show(aggregate=aggregate["Name"])
@@ -176,19 +183,19 @@ class OpenstackAPI:
 
         return server_aggregates
 
-    def security_group_list(self) -> List[Dict[str, Any]]:
-        """Retrieve the list of security groups."""
-        return self._run("security", "group", "list", is_safe=True)
+    def security_group_list(self, **kwargs) -> List[Dict[str, Any]]:
+        """Retrieve the list of security groups.
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+        """
+        return self._run("security", "group", "list", is_safe=True, **kwargs)
 
     def security_group_create(self, name: OpenstackName, description: str) -> None:
         """Create a security group."""
         self._run("security", "group", "create", name, "--description", description)
 
     def security_group_rule_create(
-        self,
-        direction: OpenstackRuleDirection,
-        remote_group: OpenstackName,
-        security_group: OpenstackName,
+        self, direction: OpenstackRuleDirection, remote_group: OpenstackName, security_group: OpenstackName
     ) -> None:
         """Create a rule inside the given security group."""
         self._run(
@@ -209,7 +216,7 @@ class OpenstackAPI:
     ) -> None:
         """Make sure that the given security group exists, create it if not there."""
         try:
-            self.security_group_by_name(name=security_group)
+            self.security_group_by_name(name=security_group, print_output=False)
             LOGGER.info("Security group %s already exists, not creating.", security_group)
 
         except OpenstackNotFound:
@@ -229,12 +236,14 @@ class OpenstackAPI:
                 security_group=security_group,
             )
 
-    def security_group_by_name(self, name: OpenstackName) -> Optional[Dict[str, Any]]:
+    def security_group_by_name(self, name: OpenstackName, **kwargs) -> Optional[Dict[str, Any]]:
         """Retrieve the security group info given a name.
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
 
         Raises OpenstackNotFound if there's no security group found for the given name in the current project.
         """
-        existing_security_groups = self.security_group_list()
+        existing_security_groups = self.security_group_list(**kwargs)
         for security_group in existing_security_groups:
             if security_group["Project"] == self.project:
                 if security_group["Name"] == name:
@@ -242,12 +251,14 @@ class OpenstackAPI:
 
         raise OpenstackNotFound(f"Unable to find a security group with name {name}")
 
-    def server_group_list(self) -> List[Dict[str, Any]]:
+    def server_group_list(self, **kwargs) -> List[Dict[str, Any]]:
         """Get the list of server groups.
 
         Note:  it seems that on cli the project flag shows nothing :/ so we get the list all of them.
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self._run("server", "group", "list", is_safe=True)
+        return self._run("server", "group", "list", is_safe=True, **kwargs)
 
     def server_group_create(self, name: OpenstackName, policy: OpenstackServerGroupPolicy) -> None:
         """Create a server group."""
@@ -266,30 +277,38 @@ class OpenstackAPI:
     ) -> None:
         """Make sure that the given server group exists, create it if not there."""
         try:
-            self.server_group_by_name(name=server_group)
+            self.server_group_by_name(name=server_group, print_output=False)
             LOGGER.info("Server group %s already exists, not creating.", server_group)
         except OpenstackNotFound:
             self.server_group_create(policy=policy, name=server_group)
 
-    def server_group_by_name(self, name: OpenstackName) -> Optional[Dict[str, Any]]:
+    def server_group_by_name(self, name: OpenstackName, **kwargs) -> Optional[Dict[str, Any]]:
         """Retrieve the server group info given a name.
 
         Raises OpenstackNotFound if thereś no server group found with the given name.
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        all_server_groups = self.server_group_list()
+        all_server_groups = self.server_group_list(**kwargs)
         for server_group in all_server_groups:
             if server_group.get("Name", "") == name:
                 return server_group
 
         raise OpenstackNotFound(f"Unable to find a server group with name {name}")
 
-    def aggregate_list(self) -> List[Dict[str, Any]]:
-        """Get the simplified list of aggregates."""
-        return self._run("aggregate", "list", "--long", is_safe=True)
+    def aggregate_list(self, **kwargs) -> List[Dict[str, Any]]:
+        """Get the simplified list of aggregates.
 
-    def aggregate_show(self, aggregate: OpenstackIdentifier) -> List[Dict[str, Any]]:
-        """Get the details of a given aggregate."""
-        return self._run("aggregate", "show", aggregate, is_safe=True)
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+        """
+        return self._run("aggregate", "list", "--long", is_safe=True, **kwargs)
+
+    def aggregate_show(self, aggregate: OpenstackIdentifier, **kwargs) -> List[Dict[str, Any]]:
+        """Get the details of a given aggregate.
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+        """
+        return self._run("aggregate", "show", aggregate, is_safe=True, **kwargs)
 
     def aggregate_remove_host(self, aggregate_name: OpenstackName, host_name: OpenstackName) -> None:
         """Remove the given host from the aggregate."""
@@ -309,13 +328,15 @@ class OpenstackAPI:
                 "instead of the fqdn?"
             )
 
-    def aggregate_persist_on_host(self, host: RemoteHosts) -> None:
+    def aggregate_persist_on_host(self, host: RemoteHosts, **kwargs) -> None:
         """Creates a file in the host with it's current list of aggregates.
 
         For later usage, for example, when moving the host temporarily to another aggregate.
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
         hostname = str(host).split(".", 1)[0]
-        current_aggregates = self.server_get_aggregates(name=hostname)
+        current_aggregates = self.server_get_aggregates(name=hostname, **kwargs)
         simple_create_file(
             dst_node=host,
             contents=yaml.dump(current_aggregates, indent=4),
