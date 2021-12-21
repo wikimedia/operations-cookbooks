@@ -3,6 +3,8 @@ import argparse
 import ipaddress
 import logging
 
+from pprint import pformat
+
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.dhcp import DHCPConfMgmt
 from spicerack.redfish import DellSCPPowerStatePolicy, DellSCPRebootPolicy
@@ -191,7 +193,8 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         else:
             power_state = DellSCPPowerStatePolicy.ON
 
-        self.redfish.scp_push(config, reboot=self.reboot_policy, preview=False, power_state=power_state)
+        response = self.redfish.scp_push(config, reboot=self.reboot_policy, preview=False, power_state=power_state)
+        logger.info('SCP import results:\n%s', pformat(response))
 
     def _config_pxe(self, config):
         """Configure PXE boot on the correct NIC automatically or ask the user if unable to detect it.
