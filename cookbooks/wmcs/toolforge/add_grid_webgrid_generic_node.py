@@ -147,21 +147,12 @@ class ToolforgeAddGridWebgridGenericNodeRunner(CookbookRunnerBase):
             ),
         ).run()
 
-        LOGGER.info(
-            (
-                "Rebooting worker node %s to make sure iptables alternatives "
-                "are taken into account by docker, kube-proxy and calico."
-            ),
-            new_member_fqdn,
-        )
+        LOGGER.info("Rebooting new node %s to make sure everything is well installed.", new_member_fqdn)
         reboot_time = datetime.datetime.utcnow()
         node.reboot()
         node.wait_reboot_since(since=reboot_time)
 
-        LOGGER.info(
-            "Rebooted node %s, running puppet again, this time it should work.",
-            new_member_fqdn,
-        )
+        LOGGER.info("Rebooted node %s, running puppet again, this time it should work.", new_member_fqdn)
         PuppetHosts(remote_hosts=node).run(timeout=30 * 60)
 
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
