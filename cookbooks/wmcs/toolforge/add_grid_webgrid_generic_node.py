@@ -129,7 +129,7 @@ class ToolforgeAddGridWebgridGenericNodeRunner(CookbookRunnerBase):
             "--server-group-policy",
             OpenstackServerGroupPolicy.SOFT_ANTI_AFFINITY.value,
             "--ssh-retries",
-            "30",  # this kind of nodes take a long time to spin up
+            "60",  # 1H. Installing the exec environment (via puppet) takes a really long time.
         ] + self.instance_creation_opts.to_cli_args()
 
         start_instance_cookbook = StartInstanceWithPrefix(spicerack=self.spicerack)
