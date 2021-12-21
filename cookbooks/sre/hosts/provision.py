@@ -183,8 +183,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         """Provision the BIOS and iDRAC settings."""
         self.redfish.check_connection()
         config = self.redfish.scp_dump()
-        if self.multi_gigabit:
-            self._config_pxe(config)
+        self._config_pxe(config)
 
         config.update(self.config_changes)
 
@@ -210,40 +209,38 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             config (spicerack.redfish.RedfishDellSCP): the configuration to modify.
 
         """
-        embedded_nics = [key for key in config.components.keys() if key.startswith('NIC.Embedded.')]
+        embedded_nics = sorted(key for key in config.components.keys() if key.startswith('NIC.Embedded.'))
         other_nics = sorted(
             key for key in config.components.keys() if key.startswith('NIC.') and key not in embedded_nics)
 
-        if not other_nics:
-            logger.warning('Multi-gigabit primary interface found on Netbox but no external NIC found. Assuming the '
-                           'embedded NICs are the correct one to set PXE on.')
-            return
-
         prefixes = {key.split('-')[0] for key in other_nics}
-        if len(prefixes) > 1:
+        if len(prefixes) == 1 and self.multi_gigabit:
+            if self.multi_gigabit:  # One external card and multi-gigabit set on Netbox, select the external NIC
+                pxe_nic = other_nics[0]
+            else:  # One external card but multi-gigabit not set on Netbox, select theembedded NIC
+                pxe_nic = embedded_nics[0]
+        elif not prefixes and not self.multi_gigabit:  # Just embedded NICs and multi-gigabit not set on Netbox
+            pxe_nic = embedded_nics[0]
+        else:  # Unable to auto-detect
             all_nics = embedded_nics + other_nics
             all_nics_list = '\n'.join(all_nics)
+            speed = 'multi-gigabit' if self.multi_gigabit else '1G'
             pxe_nic = ask_input(
-                f'Too many NICs found. Pick the one to set PXE on:\n{all_nics_list}', all_nics)
-        else:
-            pxe_nic = other_nics[0]
+                f'Unable to auto-detect NIC, Netbox reports {speed} NIC. Pick the one to set PXE on:\n{all_nics_list}',
+                all_nics)
 
         logger.info('Enabling PXE boot on NIC %s', pxe_nic)
         self.config_changes['NIC.Embedded.1-1-1'] = {'LegacyBootProto': 'NONE'}
         self.config_changes[pxe_nic] = {'LegacyBootProto': 'PXE'}
 
+        # Keep any non-NIC part in the boot order and append the first external (when present) and embedded NICs
         current_order_parts = config.components['BIOS.Setup.1-1']['SetBootOrderEn'].split(',')
-        new_order_parts = []
-        for part in current_order_parts:
-            if part == 'NIC.Embedded.1-1-1':
-                new_order_parts.append(pxe_nic)
-            elif part == 'NIC.Embedded.2-1-1':
-                continue
-            else:
-                new_order_parts.append(part)
-
+        new_order_parts = [part for part in current_order_parts if not part.startswith('NIC.')]
+        new_order_parts.append(pxe_nic)
+        if pxe_nic != embedded_nics[0]:
+            new_order_parts.append(embedded_nics[0])
         new_order = ','.join(new_order_parts)
+
         self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = new_order
-        if self.config_changes['BIOS.Setup.1-1'].get('BiosBootSeq', ''):
-            # Some models don't have this key
+        if self.config_changes['BIOS.Setup.1-1'].get('BiosBootSeq', ''):  # Some models don't have this key
             self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = new_order
