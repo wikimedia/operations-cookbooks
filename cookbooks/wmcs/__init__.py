@@ -1203,6 +1203,11 @@ class GridController:
         self._master_node_fqdn = master_node_fqdn
         self._master_node = self._remote.query(f"D{{{self._master_node_fqdn}}}", use_sudo=True)
 
+    def reconfigure(self, is_tools_project: bool) -> None:
+        """Runs `grid-configurator --all-domains` on the grid master node."""
+        extra_param = "--beta" if not is_tools_project else ""
+        self._master_node.run_sync(f"grid-configurator --all-domains {extra_param}")
+
     def add_node(self, host_fqdn: str, is_tools_project: bool, force: bool = False) -> None:
         """Adds a node to the cluster this controller's master node is part of."""
         if not force:
@@ -1234,9 +1239,8 @@ class GridController:
             "Refreshing configuration on grid master %s a couple times, and giving it 5 seconds.",
             self._master_node_fqdn,
         )
-        extra_param = "--beta" if not is_tools_project else ""
-        self._master_node.run_sync(f"grid-configurator --all-domains {extra_param}")
-        self._master_node.run_sync(f"grid-configurator --all-domains {extra_param}")
+        self.reconfigure(is_tools_project)
+        self.reconfigure(is_tools_project)
         time.sleep(5)
 
         LOGGER.info("Fake-starting gridengine-exec on the node %s, this is expected to fail", host_fqdn)
