@@ -1070,6 +1070,8 @@ class GridQueueTypesSet:
 class GridQueueState(Enum):
     """Enum representing all grid queue states."""
 
+    OK = "_"  # virtual state, if there is no state information, the queue is OK
+
     UNKNOWN = "u"
     ALARM1 = "a"
     ALARM2 = "A"
@@ -1094,7 +1096,8 @@ class GridQueueStatesSet:
     def from_state_string(cls, state_string: Optional[str]) -> "GridQueueStatesSet":
         """Create a GridQueueStatesSet from qhost queue state string."""
         if not state_string:
-            return []
+            # if the XML contains no state info, use this virtual state to indicate is OK
+            state_string = GridQueueState.OK.value
 
         return cls(states=[GridQueueState(state_char) for state_char in state_string])
 
@@ -1137,10 +1140,7 @@ class GridQueueInfo:
 
     def is_ok(self):
         """Return if this queue is in a 'running' state."""
-        if self.statuses is not None:
-            return self.statuses.is_ok()
-
-        return False
+        return self.statuses.is_ok()
 
 
 @dataclass(frozen=True)
