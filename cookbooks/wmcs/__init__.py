@@ -126,6 +126,18 @@ class OpenstackAPI:
         """
         return self._run("server", "list", is_safe=True, **kwargs)
 
+    def server_exists(self, hostname: str, **kwargs) -> bool:
+        """Returns True if a server exists, False otherwise.
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+        """
+        listing = self.server_list(**kwargs)
+
+        if not any(info for info in listing if info["Name"] == hostname):
+            return False
+
+        return True
+
     def server_delete(self, name_to_remove: OpenstackName) -> None:
         """Delete a server.
 

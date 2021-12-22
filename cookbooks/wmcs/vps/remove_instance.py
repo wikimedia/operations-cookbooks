@@ -77,8 +77,7 @@ class RemoveInstanceRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        all_project_server_infos = self.openstack_api.server_list(print_output=False)
-        if not any(info for info in all_project_server_infos if info["Name"] == self.name_to_remove):
+        if not self.openstack_api.server_exists(self.name_to_remove, print_output=False):
             LOGGER.warning(
                 "Unable to find server %s in project %s. Please review the project and server name.",
                 self.name_to_remove,
