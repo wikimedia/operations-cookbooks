@@ -42,6 +42,12 @@ class RemoveInstance(CookbookBase):
             default=None,
             help="Id of the task related to this operation (ex. T123456)",
         )
+        parser.add_argument(
+            "--dologmsg",
+            required=False,
+            default=True,
+            help="To enable/disable dologmsg calls. Default is enabled.",
+        )
 
         return parser
 
@@ -52,6 +58,7 @@ class RemoveInstance(CookbookBase):
             name_to_remove=args.server_name,
             task_id=args.task_id,
             spicerack=self.spicerack,
+            _dologmsg=args.dologmsg,
         )
 
 
@@ -64,6 +71,7 @@ class RemoveInstanceRunner(CookbookRunnerBase):
         name_to_remove: str,
         spicerack: Spicerack,
         task_id: Optional[str] = None,
+        _dologmsg: bool = True,
     ):
         """Init"""
         self.openstack_api = OpenstackAPI(
@@ -74,6 +82,7 @@ class RemoveInstanceRunner(CookbookRunnerBase):
         self.name_to_remove = name_to_remove
         self.spicerack = spicerack
         self.task_id = task_id
+        self._dologmsg = _dologmsg
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -85,9 +94,11 @@ class RemoveInstanceRunner(CookbookRunnerBase):
             )
             return
 
-        dologmsg(
-            project=self.project,
-            message=f"removing instance {self.name_to_remove}",
-            task_id=self.task_id,
-        )
+        if self._dologmsg:
+            dologmsg(
+                project=self.project,
+                message=f"removing instance {self.name_to_remove}",
+                task_id=self.task_id,
+            )
+
         self.openstack_api.server_delete(name_to_remove=self.name_to_remove)
