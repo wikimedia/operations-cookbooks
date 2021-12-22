@@ -233,14 +233,13 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         self.config_changes['NIC.Embedded.1-1-1'] = {'LegacyBootProto': 'NONE'}
         self.config_changes[pxe_nic] = {'LegacyBootProto': 'PXE'}
 
-        # Keep any non-NIC part in the boot order and append the first external (when present) and embedded NICs
-        current_order_parts = config.components['BIOS.Setup.1-1']['SetBootOrderEn'].split(',')
-        new_order_parts = [part for part in current_order_parts if not part.startswith('NIC.')]
-        new_order_parts.append(pxe_nic)
+        # Set SetBootOrderEn to disk, primary NIC, first embedded NIC (when different from primary)
+        new_order_parts = ['HardDisk.List.1-1', pxe_nic]
         if pxe_nic != embedded_nics[0]:
             new_order_parts.append(embedded_nics[0])
         new_order = ','.join(new_order_parts)
 
         self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = new_order
         if self.config_changes['BIOS.Setup.1-1'].get('BiosBootSeq', ''):  # Some models don't have this key
-            self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = new_order
+            # BiosBootSeq doesn't seem to accept 3 values, just put the first two
+            self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = ','.join(['HardDisk.List.1-1', pxe_nic])
