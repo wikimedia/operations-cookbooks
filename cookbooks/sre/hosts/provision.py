@@ -9,7 +9,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from spicerack.dhcp import DHCPConfMgmt
 from spicerack.redfish import DellSCPPowerStatePolicy, DellSCPRebootPolicy
 from spicerack.remote import RemoteError
-from wmflib.interactive import ask_confirmation, ask_input, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
 
 
 DNS_ADDRESS = '10.3.0.1'
@@ -165,10 +165,10 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
     def run(self):
         """Run the cookbook."""
         if self.args.no_dhcp:
-            self._config()
+            confirm_on_failure(self._config)
         else:
             with self.dhcp.config(self.dhcp_config):
-                self._config()
+                confirm_on_failure(self._config)
 
         self.redfish.check_connection()
         if self.args.no_users:
@@ -176,16 +176,21 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         else:
             self.redfish.change_user_password('root', self.mgmt_password)
 
-        self.redfish.check_connection()
         self.ipmi.check_connection()
+
+    def _get_config(self):
+        """Get the current BIOS/iDRAC configuration."""
+        self.redfish.check_connection()
+        return self.redfish.scp_dump()
 
     def _config(self):
         """Provision the BIOS and iDRAC settings."""
-        self.redfish.check_connection()
-        config = self.redfish.scp_dump()
+        config = self._get_config()
         self._config_pxe(config)
-
-        config.update(self.config_changes)
+        was_changed = config.update(self.config_changes)
+        if not was_changed:
+            logger.warning('Skipping update of BIOS/iDRAC, all settings have already the correct values')
+            return
 
         if self.redfish.get_power_state() == DellSCPPowerStatePolicy.OFF.value:
             power_state = DellSCPPowerStatePolicy.OFF
@@ -193,7 +198,16 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             power_state = DellSCPPowerStatePolicy.ON
 
         response = self.redfish.scp_push(config, reboot=self.reboot_policy, preview=False, power_state=power_state)
-        logger.info('SCP import results:\n%s', pformat(response))
+        logger.debug('SCP import results:\n%s', pformat(response))
+
+        logger.info('Checking if all the changes were applied successfully')
+        config = self._get_config()
+        was_changed = config.update(self.config_changes)
+        if was_changed:
+            raise RuntimeError('Not all changes were applied successfully, see the ones reported above that starts '
+                               'with "Updated value..."')
+
+        logger.info('All changes were applied successfully')
 
     def _config_pxe(self, config):
         """Configure PXE boot on the correct NIC automatically or ask the user if unable to detect it.
