@@ -133,9 +133,10 @@ class ToolforgeAddGridWebgridGenericNodeRunner(CookbookRunnerBase):
         ] + self.instance_creation_opts.to_cli_args()
 
         start_instance_cookbook = StartInstanceWithPrefix(spicerack=self.spicerack)
-        new_member_fqdn = start_instance_cookbook.get_runner(
+        response = start_instance_cookbook.get_runner(
             args=start_instance_cookbook.argument_parser().parse_args(start_args)
         ).run()
+        new_member_fqdn = response.server_fqdn
         node = self.spicerack.remote().query(f"D{{{new_member_fqdn}}}", use_sudo=True)
 
         LOGGER.info("Making sure that the proper puppetmaster is setup for the new node %s", new_member_fqdn)
