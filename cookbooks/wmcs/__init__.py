@@ -22,6 +22,7 @@ from ClusterShell.MsgTree import MsgTreeElem
 from cumin.transports import Command
 from spicerack import ICINGA_DOMAIN, Spicerack
 from spicerack.remote import Remote, RemoteHosts
+from spicerack.puppet import PuppetHosts
 from wmflib.interactive import ask_confirmation
 
 LOGGER = logging.getLogger(__name__)
@@ -1230,7 +1231,11 @@ class GridController:
         self._master_node = self._remote.query(f"D{{{self._master_node_fqdn}}}", use_sudo=True)
 
     def reconfigure(self, is_tools_project: bool) -> None:
-        """Runs `grid-configurator --all-domains` on the grid master node."""
+        """Runs puppet and `grid-configurator --all-domains` on the grid master node."""
+        # in most cases, the grid master needs to run puppet so collectors are up-to-date
+        # otherwise the grid-configurator call may run over an incomplete environment
+        PuppetHosts(remote_hosts=self._master_node).run(timeout=60)
+
         extra_param = "--beta" if not is_tools_project else ""
         self._master_node.run_sync(f"grid-configurator --all-domains {extra_param}")
 
