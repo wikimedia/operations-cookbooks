@@ -12,6 +12,7 @@ from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.puppet import PuppetHosts
 
 from cookbooks.wmcs import GridController, dologmsg
 
@@ -57,6 +58,12 @@ class ToolforgeGridAddNodeToCluster(CookbookBase):
             action="store_true",
             help="If passed, it will try to add the node even if it's half set up.",
         )
+        parser.add_argument(
+            "--no-dologmsg",
+            required=False,
+            action='store_true',
+            help="To disable dologmsg calls",
+        )
 
         return parser
 
@@ -70,6 +77,7 @@ class ToolforgeGridAddNodeToCluster(CookbookBase):
             task_id=args.task_id,
             force=args.force,
             spicerack=self.spicerack,
+            no_dologmsg=args.no_dologmsg,
         )
 
 
@@ -84,6 +92,7 @@ class ToolforgeGridAddNodeToClusterRunner(CookbookRunnerBase):
         task_id: str,
         force: bool,
         spicerack: Spicerack,
+        no_dologmsg: bool = False,
     ):
         """Init"""
         self.project = project
@@ -92,6 +101,7 @@ class ToolforgeGridAddNodeToClusterRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.new_node_fqdn = new_node_fqdn
         self.force = force
+        self.no_dologmsg = no_dologmsg
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -99,19 +109,20 @@ class ToolforgeGridAddNodeToClusterRunner(CookbookRunnerBase):
             LOGGER.error("ERROR: the --new-node-fqdn argument requires a FQDN")
             return
 
-        dologmsg(
-            project=self.project,
-            message=f"Joining grid node {self.new_node_fqdn} to the {self.project} cluster",
-            task_id=self.task_id,
-        )
+        if not self.no_dologmsg:
+            dologmsg(
+                project=self.project,
+                message=f"trying to join node {self.new_node_fqdn} to the grid cluster in {self.project}.",
+                task_id=self.task_id,
+            )
 
+        # a puppet run is required to make sure grid config files are generated
+        LOGGER.info("INFO: running puppet before adding node %s to the grid in %s", self.new_node_fqdn, self.project)
+        node = self.spicerack.remote().query(f"D{{{self.new_node_fqdn}}}", use_sudo=True)
+        PuppetHosts(remote_hosts=node).run(timeout=30 * 60)
+
+        LOGGER.info("INFO: adding the node %s to the grid in %s", self.new_node_fqdn, self.project)
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
         grid_controller.add_node(
             host_fqdn=self.new_node_fqdn, is_tools_project=(self.project == "tools"), force=self.force
-        )
-
-        dologmsg(
-            project=self.project,
-            message=f"Node {self.new_node_fqdn} joined the grid cluster {self.project}.",
-            task_id=self.task_id,
         )
