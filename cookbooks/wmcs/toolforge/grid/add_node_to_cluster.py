@@ -95,6 +95,10 @@ class ToolforgeGridAddNodeToClusterRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point"""
+        if self.new_node_fqdn.find(".") < 0:
+            LOGGER.error("ERROR: the --new-node-fqdn argument requires a FQDN")
+            return
+
         dologmsg(
             project=self.project,
             message=f"Joining grid node {self.new_node_fqdn} to the {self.project} cluster",
