@@ -29,10 +29,12 @@ class Provision(CookbookBase):
         * Modify the common settings
           * [if --enable-virtualization is set] Leave virtualization enabled, by default it gets disabled
         * Push back the whole modified configuration
-        * Check that it can still connect to Redfish API
+        * Checks that it can still connect to Redfish API
+        * Checks that the configuration has been applied correctly dumping the new configuration and trying to apply
+          the same changes. In case it detects any non-applied configuration will prompt the user what to do. It can
+          retry to apply them, or the user can apply them manually (via web console or ssh) and then skip the step.
         * [unless --no-users is set] Update the root's user password with the production management password
-        * Check that it can still connect to Redfish API
-        * Check that it can connect via remote IPMI
+        * Checks that it can connect via remote IPMI
 
     Usage:
         cookbook sre.hosts.provision example1001
@@ -247,13 +249,8 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         self.config_changes['NIC.Embedded.1-1-1'] = {'LegacyBootProto': 'NONE'}
         self.config_changes[pxe_nic] = {'LegacyBootProto': 'PXE'}
 
-        # Set SetBootOrderEn to disk, primary NIC, first embedded NIC (when different from primary)
-        new_order_parts = ['HardDisk.List.1-1', pxe_nic]
-        if pxe_nic != embedded_nics[0]:
-            new_order_parts.append(embedded_nics[0])
-        new_order = ','.join(new_order_parts)
-
+        # Set SetBootOrderEn to disk, primary NIC
+        new_order = ','.join(['HardDisk.List.1-1', pxe_nic])
         self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = new_order
         if self.config_changes['BIOS.Setup.1-1'].get('BiosBootSeq', ''):  # Some models don't have this key
-            # BiosBootSeq doesn't seem to accept 3 values, just put the first two
-            self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = ','.join(['HardDisk.List.1-1', pxe_nic])
+            self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = new_order
