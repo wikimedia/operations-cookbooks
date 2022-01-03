@@ -16,7 +16,7 @@ class UpgradeMySQL(CookbookBase):
     Note: It doesn't depool the host (yet).
     """
 
-    def argument_parser():
+    def argument_parser(self):
         """CLI parsing, as required by the Spicerack API."""
         parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
         return parser
