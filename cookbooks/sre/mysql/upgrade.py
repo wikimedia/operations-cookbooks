@@ -18,7 +18,10 @@ class UpgradeMySQL(CookbookBase):
 
     def argument_parser(self):
         """CLI parsing, as required by the Spicerack API."""
-        parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
+        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser.add_argument(
+            'query', help='Cumin query to match the host(s) to act upon.'
+        )
         return parser
 
     def get_runner(self, args):
