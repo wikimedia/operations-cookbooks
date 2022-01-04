@@ -42,6 +42,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         query = 'P{' + args.query + '} and A:db-all and not A:db-multiinstance'
         self.hosts = spicerack.remote().query(query)
         self.puppet = spicerack.puppet
+        self.logger = logging.getLogger(__name__)
         if not self.hosts:
             print('No hosts have been found, exiting')
         if len(self.hosts) <= 5:
