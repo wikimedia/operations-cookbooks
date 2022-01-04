@@ -57,7 +57,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
     def upgrade_host(self, host):
         """Upgrade mysql version of a single host."""
         host_puppet = self.puppet(host)
-        with self.icinga_hosts(host).downtimed(self.admin_reason, duration=timedelta(hours=24)):
+        with self.icinga_hosts(host.hosts).downtimed(self.admin_reason, duration=timedelta(hours=24)):
             with host_puppet.disabled(self.admin_reason):
                 self._run_upgrade(host)
 
