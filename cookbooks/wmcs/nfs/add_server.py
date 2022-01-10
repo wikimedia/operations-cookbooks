@@ -167,5 +167,7 @@ class NFSAddServerRunner(CookbookRunnerBase):
 
         if self.create_storage_volume_size > 0:
             new_node.run_sync(
-                (f"wmcs-prepare-cinder-volume --device sdb --mountpoint '/srv/{self.volumes[0]}' --force")
+                ("wmcs-prepare-cinder-volume --device sdb --options "
+                 "'rw,nofail,x-systemd.device-timeout=2s,noatime,data=ordered' "
+                 f"--mountpoint '/srv/{self.volumes[0]}' --force")
             )
