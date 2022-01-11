@@ -171,3 +171,6 @@ class NFSAddServerRunner(CookbookRunnerBase):
                  "'rw,nofail,x-systemd.device-timeout=2s,noatime,data=ordered' "
                  f"--mountpoint '/srv/{self.volumes[0]}' --force")
             )
+
+        # Apply all pending changes
+        new_node.run_sync("/usr/local/sbin/run-puppet-agent")
