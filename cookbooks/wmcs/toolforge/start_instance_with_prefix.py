@@ -47,6 +47,9 @@ class InstanceCreationOpts:
     flavor: Optional[OpenstackIdentifier] = None
     image: Optional[OpenstackIdentifier] = None
     network: Optional[OpenstackIdentifier] = None
+    security_group: Optional[OpenstackIdentifier] = None
+    server_group: Optional[OpenstackIdentifier] = None
+    server_group_policy: Optional[OpenstackServerGroupPolicy] = None
 
     def to_cli_args(self) -> List[str]:
         """Helper to unwrap the options for use with argument parsers."""
@@ -59,6 +62,12 @@ class InstanceCreationOpts:
             args.extend(["--image", self.image])
         if self.network:
             args.extend(["--network", self.network])
+        if self.security_group:
+            args.extend(["--security-group", self.security_group])
+        if self.server_group:
+            args.extend(["--server-group", self.server_group])
+        if self.server_group_policy:
+            args.extend(["--server-group-policy", self.server_group_policy])
 
         return args
 
@@ -98,6 +107,34 @@ def add_instance_creation_options(parser: argparse.ArgumentParser) -> argparse.A
             "lan-flat-cloudinstances2b, ex. a69bdfad-d7d2-4cfa-8231-3d6d3e0074c9)"
         ),
     )
+    parser.add_argument(
+        "--security-group",
+        required=False,
+        default=None,
+        help=(
+            "Extra security group to put the instance in (will alway add the 'default' security group, and then "
+            "this one, '<project>-k8s-full-connectivity' by default). If it does not exist it will be created "
+            "allowing all traffic between instances of the group (ex. )."
+        ),
+    )
+    parser.add_argument(
+        "--server-group",
+        required=False,
+        help=(
+            "Server group to start the instance in. If it does not exist, it will create it with the given "
+            "server-group-policy, will use the same as '--prefix' by default (ex. toolsbeta-test-k8s-etcd)."
+        ),
+    )
+    parser.add_argument(
+        "--server-group-policy",
+        required=False,
+        help=(
+            "Server group policy to start the instance in. If it does not exist, it will create it with "
+            "anti-affinity policy, will use the same as '--prefix' by default (ex. toolsbeta-test-k8s-etcd)."
+        ),
+        choices=[policy.value for policy in OpenstackServerGroupPolicy],
+        default=OpenstackServerGroupPolicy.ANTI_AFFINITY.value,
+    )
     return parser
 
 
@@ -129,6 +166,9 @@ def with_instance_creation_options(args: argparse.Namespace, runner: CookbookRun
         flavor=args.flavor,
         image=args.image,
         network=args.network,
+        security_group=args.security_group,
+        server_group=args.server_group,
+        server_group_policy=args.server_group_policy
     )
     return partial(runner, instance_creation_opts=instance_creation_opts)
 
@@ -147,34 +187,6 @@ class StartInstanceWithPrefix(CookbookBase):
         )
         parser.add_argument("--project", required=True, help="Openstack project to manage.")
         add_instance_creation_options(parser)
-        parser.add_argument(
-            "--security-group",
-            required=False,
-            default=None,
-            help=(
-                "Extra security group to put the instance in (will alway add the 'default' security group, and then "
-                "this one, '<project>-k8s-full-connectivity' by default). If it does not exist it will be created "
-                "allowing all traffic between instances of the group (ex. )."
-            ),
-        )
-        parser.add_argument(
-            "--server-group",
-            required=False,
-            help=(
-                "Server group to start the instance in. If it does not exist, it will create it with the given "
-                "server-group-policy, will use the same as '--prefix' by default (ex. toolsbeta-test-k8s-etcd)."
-            ),
-        )
-        parser.add_argument(
-            "--server-group-policy",
-            required=False,
-            help=(
-                "Server group policy to start the instance in. If it does not exist, it will create it with "
-                "anti-affinity policy, will use the same as '--prefix' by default (ex. toolsbeta-test-k8s-etcd)."
-            ),
-            choices=[policy.value for policy in OpenstackServerGroupPolicy],
-            default=OpenstackServerGroupPolicy.ANTI_AFFINITY.value,
-        )
         parser.add_argument(
             "--ssh-retries",
             required=False,

@@ -39,6 +39,13 @@ OpenstackName = str
 OpenstackIdentifier = Union[OpenstackID, OpenstackName]
 
 
+class DebianVersion(Enum):
+    """Represents Debian release names/numbers."""
+
+    STRETCH = "09"
+    BUSTER = "10"
+
+
 class OutputFormat(Enum):
     """Types of format supported to try to decode when running commands."""
 

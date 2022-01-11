@@ -1,8 +1,9 @@
-r"""WMCS Toolforge - Add a new k8s worker node to a toolforge installation.
+r"""WMCS Toolforge - create a new grid node, make it join the grid and pool it
 
 Usage example:
-    cookbook wmcs.toolforge.add_grid_webgrid_generic_node \\
+    cookbook wmcs.toolforge.grid.node.lib.create_join_pool \\
         --project toolsbeta
+        --nodetype webgen
 """
 # pylint: disable=too-many-arguments
 import argparse
@@ -16,7 +17,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import GridController, OpenstackServerGroupPolicy, dologmsg
+from cookbooks.wmcs import GridController, dologmsg, DebianVersion
 from cookbooks.wmcs.toolforge.start_instance_with_prefix import (
     InstanceCreationOpts,
     StartInstanceWithPrefix,
@@ -28,15 +29,14 @@ from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 LOGGER = logging.getLogger(__name__)
 
 
-class DebianVersion(Enum):
-    """Represents Debian release names/numbers."""
+class GridNodeType(Enum):
+    """Represents a grid node type."""
 
-    STRETCH = "09"
-    BUSTER = "10"
+    WEBGEN = "webgen"
 
 
-class ToolforgeAddGridWebgridGenericNode(CookbookBase):
-    """WMCS Toolforge cookbook to add a new webgrid generic node"""
+class ToolforgeGridNodeCreateJoinPool(CookbookBase):
+    """WMCS Toolforge cookbook to create a new node"""
 
     title = __doc__
 
@@ -76,23 +76,30 @@ class ToolforgeAddGridWebgridGenericNode(CookbookBase):
             # TODO: Figure out the debian version from the image, or just not use it for the prefix
             help="Version of debian to use, as currently we are unable to get it from the image reliably.",
         )
+        parser.add_argument(
+            "--nodetype",
+            required=True,
+            choices=[ntype.value for ntype in GridNodeType],
+            help="Type of the new grid node",
+        )
 
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_instance_creation_options(args, ToolforgeAddGridWebgridGenericNodeRunner,)(
+        return with_instance_creation_options(args, ToolforgeGridNodeCreateJoinPoolRunner)(
             project=args.project,
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
             debian_version=DebianVersion[args.debian_version.upper()],
             task_id=args.task_id,
             spicerack=self.spicerack,
+            nodetype=args.nodetype,
         )
 
 
-class ToolforgeAddGridWebgridGenericNodeRunner(CookbookRunnerBase):
-    """Runner for ToolforgeAddGridWebgridGenericNode"""
+class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
+    """Runner for ToolforgeGridNodeCreateJoinPool"""
 
     def __init__(
         self,
@@ -101,6 +108,7 @@ class ToolforgeAddGridWebgridGenericNodeRunner(CookbookRunnerBase):
         task_id: str,
         spicerack: Spicerack,
         instance_creation_opts: InstanceCreationOpts,
+        nodetype: GridNodeType,
         debian_version: DebianVersion = DebianVersion.BUSTER,
     ):
         """Init"""
@@ -110,24 +118,18 @@ class ToolforgeAddGridWebgridGenericNodeRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.debian_version = debian_version
         self.instance_creation_opts = instance_creation_opts
+        self.nodetype = nodetype
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        dologmsg(project=self.project, message="Adding a new grid webgrid generic node", task_id=self.task_id)
         if not self.instance_creation_opts.prefix:
             self.instance_creation_opts = replace(
-                self.instance_creation_opts, prefix=f"{self.project}-sgewebgen-{self.debian_version.value}"
+                self.instance_creation_opts, prefix=f"{self.project}-sge{self.nodetype}-{self.debian_version.value}"
             )
 
         start_args = [
             "--project",
             self.project,
-            "--security-group",
-            "execnode",
-            "--server-group",
-            "webserver",
-            "--server-group-policy",
-            OpenstackServerGroupPolicy.SOFT_ANTI_AFFINITY.value,
             "--ssh-retries",
             "60",  # 1H. Installing the exec environment (via puppet) takes a really long time.
         ] + self.instance_creation_opts.to_cli_args()
@@ -161,6 +163,6 @@ class ToolforgeAddGridWebgridGenericNodeRunner(CookbookRunnerBase):
 
         dologmsg(
             project=self.project,
-            message=f"Added a new grid webgrid generic node {new_member_fqdn} to the pool",
+            message=f"created node {new_member_fqdn} and added it to the grid",
             task_id=self.task_id,
         )
