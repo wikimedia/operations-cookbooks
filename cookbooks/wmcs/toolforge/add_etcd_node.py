@@ -15,7 +15,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.toolforge.etcd.add_node_to_cluster import AddNodeToCluster
-from cookbooks.wmcs.toolforge.start_instance_with_prefix import StartInstanceWithPrefix
+from cookbooks.wmcs.vps.create_instance_with_prefix import CreateInstanceWithPrefix
 
 LOGGER = logging.getLogger(__name__)
 
@@ -124,9 +124,9 @@ class ToolforgeAddEtcdNodeRunner(CookbookRunnerBase):
         if self.flavor:
             start_args.extend(["--flavor", self.flavor])
 
-        start_instance_cookbook = StartInstanceWithPrefix(spicerack=self.spicerack)
-        new_member = start_instance_cookbook.get_runner(
-            args=start_instance_cookbook.argument_parser().parse_args(start_args)
+        create_instance_cookbook = CreateInstanceWithPrefix(spicerack=self.spicerack)
+        new_member = create_instance_cookbook.get_runner(
+            args=create_instance_cookbook.argument_parser().parse_args(start_args)
         ).run()
 
         add_node_to_cluster_args = [

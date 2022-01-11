@@ -18,7 +18,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from spicerack.puppet import PuppetHosts
 
 from cookbooks.wmcs import KubeadmController, KubernetesController, OpenstackAPI, OpenstackServerGroupPolicy, dologmsg
-from cookbooks.wmcs.toolforge.start_instance_with_prefix import StartInstanceWithPrefix
+from cookbooks.wmcs.vps.create_instance_with_prefix import CreateInstanceWithPrefix
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 
 LOGGER = logging.getLogger(__name__)
@@ -145,9 +145,9 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         if self.flavor:
             start_args.extend(["--flavor", self.flavor])
 
-        start_instance_cookbook = StartInstanceWithPrefix(spicerack=self.spicerack)
-        new_member = start_instance_cookbook.get_runner(
-            args=start_instance_cookbook.argument_parser().parse_args(start_args)
+        create_instance_cookbook = CreateInstanceWithPrefix(spicerack=self.spicerack)
+        new_member = create_instance_cookbook.get_runner(
+            args=create_instance_cookbook.argument_parser().parse_args(start_args)
         ).run()
         node = self.spicerack.remote().query(f"D{{{new_member.server_fqdn}}}", use_sudo=True)
 

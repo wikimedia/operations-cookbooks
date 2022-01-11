@@ -10,19 +10,21 @@ Usage example:
 """
 # pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
+import json
 import logging
 from typing import Optional
-import json
-import yaml
 
+import yaml
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.toolforge.start_instance_with_prefix import StartInstanceWithPrefix
-from cookbooks.wmcs.toolforge.start_instance_with_prefix import add_instance_creation_options
-from cookbooks.wmcs.toolforge.start_instance_with_prefix import with_instance_creation_options
-from cookbooks.wmcs.toolforge.start_instance_with_prefix import InstanceCreationOpts
 from cookbooks.wmcs import OpenstackAPI, run_one
+from cookbooks.wmcs.vps.create_instance_with_prefix import (
+    CreateInstanceWithPrefix,
+    InstanceCreationOpts,
+    add_instance_creation_options,
+    with_instance_creation_options,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -107,9 +109,9 @@ class NFSAddServerRunner(CookbookRunnerBase):
             "nfs",
         ] + self.instance_creation_opts.to_cli_args()
 
-        start_instance_cookbook = StartInstanceWithPrefix(spicerack=self.spicerack)
-        new_server = start_instance_cookbook.get_runner(
-            args=start_instance_cookbook.argument_parser().parse_args(start_args)
+        create_instance_cookbook = CreateInstanceWithPrefix(spicerack=self.spicerack)
+        new_server = create_instance_cookbook.get_runner(
+            args=create_instance_cookbook.argument_parser().parse_args(start_args)
         ).run()
 
         new_node = self.spicerack.remote().query(f"D{{{new_server.server_fqdn}}}", use_sudo=True)

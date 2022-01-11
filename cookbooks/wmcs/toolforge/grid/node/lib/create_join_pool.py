@@ -18,9 +18,9 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
 from cookbooks.wmcs import GridController, dologmsg, DebianVersion
-from cookbooks.wmcs.toolforge.start_instance_with_prefix import (
+from cookbooks.wmcs.vps.create_instance_with_prefix import (
     InstanceCreationOpts,
-    StartInstanceWithPrefix,
+    CreateInstanceWithPrefix,
     add_instance_creation_options,
     with_instance_creation_options,
 )
@@ -136,9 +136,9 @@ class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
             "60",  # 1H. Installing the exec environment (via puppet) takes a really long time.
         ] + self.instance_creation_opts.to_cli_args()
 
-        start_instance_cookbook = StartInstanceWithPrefix(spicerack=self.spicerack)
-        response = start_instance_cookbook.get_runner(
-            args=start_instance_cookbook.argument_parser().parse_args(start_args)
+        create_instance_cookbook = CreateInstanceWithPrefix(spicerack=self.spicerack)
+        response = create_instance_cookbook.get_runner(
+            args=create_instance_cookbook.argument_parser().parse_args(start_args)
         ).run()
         new_member_fqdn = response.server_fqdn
         node = self.spicerack.remote().query(f"D{{{new_member_fqdn}}}", use_sudo=True)

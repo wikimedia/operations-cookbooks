@@ -7,7 +7,7 @@ NOTE: it requires for an instance to be already there (TODO: allow creating
 a without previous instances).
 
 Usage example:
-    cookbook wmcs.toolforge.start_instance_with_prefix \
+    cookbook wmcs.vps.create_instance_with_prefix \
         --project toolsbeta \
         --prefix toolsbeta-k8s-test-etcd \
         --security-group toolsbeta-k8s-full-connectivity
@@ -158,7 +158,7 @@ def with_instance_creation_options(args: argparse.Namespace, runner: CookbookRun
     >>         )(my_option1=args.my_option1, spicerack=self.spicerack)
     >>
 
-    For a full Cookbook example, see cookbooks.wmcs.toolforge.start_instance_with_prefix.StartInstanceWithPrefix.
+    For a full Cookbook example, see cookbooks.wmcs.vps.create_instance_with_prefix.CreateInstanceWithPrefix.
 
     """
     instance_creation_opts = InstanceCreationOpts(
@@ -173,8 +173,8 @@ def with_instance_creation_options(args: argparse.Namespace, runner: CookbookRun
     return partial(runner, instance_creation_opts=instance_creation_opts)
 
 
-class StartInstanceWithPrefix(CookbookBase):
-    """WMCS Toolforge cookbook to start a new instance following a prefix."""
+class CreateInstanceWithPrefix(CookbookBase):
+    """WMCS cookbook to create and start a new instance following a prefix."""
 
     title = __doc__
 
@@ -202,7 +202,7 @@ class StartInstanceWithPrefix(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_instance_creation_options(args, StartInstanceWithPrefixRunner,)(
+        return with_instance_creation_options(args, CreateInstanceWithPrefixRunner,)(
             security_group=args.security_group,
             server_group=args.server_group,
             server_group_policy=args.server_group_policy,
@@ -212,8 +212,8 @@ class StartInstanceWithPrefix(CookbookBase):
         )
 
 
-class StartInstanceWithPrefixRunner(CookbookRunnerBase):
-    """Runner for StartInstanceWithPrefix"""
+class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
+    """Runner for CreateInstanceWithPrefix"""
 
     def __init__(
         self,

@@ -14,7 +14,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import OpenstackServerGroupPolicy, DebianVersion
 from cookbooks.wmcs.toolforge.grid.node.lib.create_join_pool import ToolforgeGridNodeCreateJoinPool
-from cookbooks.wmcs.toolforge.start_instance_with_prefix import (
+from cookbooks.wmcs.vps.create_instance_with_prefix import (
     InstanceCreationOpts,
     add_instance_creation_options,
     with_instance_creation_options,
