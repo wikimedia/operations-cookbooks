@@ -3,7 +3,7 @@ r"""WMCS Toolforge - create a new grid node, make it join the grid and pool it
 Usage example:
     cookbook wmcs.toolforge.grid.node.lib.create_join_pool \\
         --project toolsbeta
-        --nodetype webgen
+        --nodetype exec
 """
 # pylint: disable=too-many-arguments
 import argparse
@@ -32,7 +32,9 @@ LOGGER = logging.getLogger(__name__)
 class GridNodeType(Enum):
     """Represents a grid node type."""
 
+    EXEC = "exec"
     WEBGEN = "webgen"
+    WEBLIGHT = "weblight"
 
 
 class ToolforgeGridNodeCreateJoinPool(CookbookBase):
