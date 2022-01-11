@@ -1,7 +1,7 @@
-r"""WMCS Toolforge - grid - Add an existing grid exec/web node to the cluster
+r"""WMCS Toolforge - grid - join existing grid exec/web node to the cluster
 
 Usage example:
-    cookbook wmcs.toolforge.grid.add_node_to_cluster \\
+    cookbook wmcs.toolforge.grid.node.lib.join \\
         --project toolsbeta \\
         --new-node-fqdn toolsbeta-sgewebgen-09-2.toolsbeta.eqiad1.wikimedia.cloud
 """
@@ -19,7 +19,7 @@ from cookbooks.wmcs import GridController, dologmsg
 LOGGER = logging.getLogger(__name__)
 
 
-class ToolforgeGridAddNodeToCluster(CookbookBase):
+class ToolforgeGridNodeJoin(CookbookBase):
     """WMCS Toolforge cookbook to add a new webgrid generic node"""
 
     title = __doc__
@@ -69,7 +69,7 @@ class ToolforgeGridAddNodeToCluster(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return ToolforgeGridAddNodeToClusterRunner(
+        return ToolforgeGridNodeJoinRunner(
             project=args.project,
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
@@ -81,8 +81,8 @@ class ToolforgeGridAddNodeToCluster(CookbookBase):
         )
 
 
-class ToolforgeGridAddNodeToClusterRunner(CookbookRunnerBase):
-    """Runner for ToolforgeGridAddNodeToCluster."""
+class ToolforgeGridNodeJoinRunner(CookbookRunnerBase):
+    """Runner for ToolforgeGridNodeJoin."""
 
     def __init__(
         self,

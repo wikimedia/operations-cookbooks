@@ -1,9 +1,9 @@
-r"""WMCS Toolforge - grid - Remove an existing grid exec/web node from the cluster
+r"""WMCS Toolforge - grid - depool and remove an existing grid exec/web node from the cluster
 
-Note: also deletes the virtual machine!
+NOTE: also deletes the virtual machine!
 
 Usage example:
-    cookbook wmcs.toolforge.grid.remove_node_from_cluster \\
+    cookbook wmcs.toolforge.grid.node.lib.depool_remove \\
         --project toolsbeta \\
         --node-fqdn toolsbeta-sgewebgen-09-2.toolsbeta.eqiad1.wikimedia.cloud
 """
@@ -21,7 +21,7 @@ from cookbooks.wmcs.vps.remove_instance import RemoveInstance
 LOGGER = logging.getLogger(__name__)
 
 
-class ToolforgeGridRemoveNodeFromCluster(CookbookBase):
+class ToolforgeGridNodeDepoolRemove(CookbookBase):
     """WMCS Toolforge cookbook to remove any grid node from the cluster"""
 
     title = __doc__
@@ -58,7 +58,7 @@ class ToolforgeGridRemoveNodeFromCluster(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return ToolforgeGridRemoveNodeFromClusterRunner(
+        return ToolforgeGridNodeDepoolRemoveRunner(
             project=args.project,
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
@@ -68,8 +68,8 @@ class ToolforgeGridRemoveNodeFromCluster(CookbookBase):
         )
 
 
-class ToolforgeGridRemoveNodeFromClusterRunner(CookbookRunnerBase):
-    """Runner for ToolforgeGridRemoveNodeFromCluster."""
+class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
+    """Runner for ToolforgeGridNodeDepoolRemove."""
 
     def __init__(
         self,

@@ -1,7 +1,7 @@
 r"""WMCS Toolforge - grid - depool an existing grid exec/web node from the cluster
 
 Usage example:
-    cookbook wmcs.toolforge.grid.depool_node \\
+    cookbook wmcs.toolforge.grid.node.lib.depool \\
         --project toolsbeta \\
         --node-fqdn toolsbeta-sgewebgen-09-2.toolsbeta.eqiad1.wikimedia.cloud
 """
@@ -17,7 +17,7 @@ from cookbooks.wmcs import OpenstackAPI, GridController, GridNodeNotFound, dolog
 LOGGER = logging.getLogger(__name__)
 
 
-class ToolforgeGridDepoolNode(CookbookBase):
+class ToolforgeGridNodeDepool(CookbookBase):
     """WMCS Toolforge cookbook to depool a grid node"""
 
     title = __doc__
@@ -54,7 +54,7 @@ class ToolforgeGridDepoolNode(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return ToolforgeGridDepoolNodeRunner(
+        return ToolforgeGridNodeDepoolRunner(
             project=args.project,
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
@@ -64,8 +64,8 @@ class ToolforgeGridDepoolNode(CookbookBase):
         )
 
 
-class ToolforgeGridDepoolNodeRunner(CookbookRunnerBase):
-    """Runner for ToolforgeGridDepoolNode."""
+class ToolforgeGridNodeDepoolRunner(CookbookRunnerBase):
+    """Runner for ToolforgeGridNodeDepool."""
 
     def __init__(
         self,
