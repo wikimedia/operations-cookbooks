@@ -42,14 +42,6 @@ DUMPS = {
 }
 
 
-RELOAD_TYPES = {
-    'wdqs': ['wikidata', 'categories'],
-    'wikidata': ['wikidata'],
-    'categories': ['categories'],
-    'commons': ['commons'],
-}
-
-
 class StopWatch:
     """Stop watch to measure time."""
 
@@ -78,9 +70,8 @@ def argument_parser():
     parser.add_argument('--reuse-downloaded-dump', action='store_true', help='Reuse downloaded dump')
     parser.add_argument('--downtime', type=int, default=336, help='Hour(s) of downtime')
     parser.add_argument('--depool', action='store_true', help='Should be depooled.')
-    parser.add_argument('--reload-data', default='all', choices=RELOAD_TYPES.keys(),
+    parser.add_argument('--reload-data', required=True, choices=['wikidata', 'categories', 'commons'],
                         help='Type of data to reload')
-    parser.add_argument('--skolemize', action='store_true', help='Skolemize blank nodes when munging')
     parser.add_argument('--kafka-timestamp', type=int, help='Timestamp to use for kafka consumer topic reset (in ms)')
 
     return parser
@@ -124,20 +115,19 @@ def fail_for_disk_space(remote_host, dumps, journal_path):
             dump_paths=dump_paths, journal_path=journal_path), is_safe=True)
 
 
-def munge(dumps, remote_host, skolemize):
+def munge(dumps, remote_host):
     """Run munger for main database and lexeme"""
     logger.info('Running munger for main database and then lexeme')
     stop_watch = StopWatch()
     for dump in dumps:
-        logger.info('munging %s (skolemizaton: %s)', dump['munge_path'], str(skolemize))
+        logger.info('munging %s', dump['munge_path'])
         stop_watch.reset()
         remote_host.run_sync(
             "rm -rf {munge_path} && mkdir -p {munge_path} && bzcat {path} | "
-            "/srv/deployment/wdqs/wdqs/munge.sh -f - -d {munge_path} -- {skolemize} {munge_jar_args}"
+            "/srv/deployment/wdqs/wdqs/munge.sh -f - -d {munge_path} -- --skolemize {munge_jar_args}"
             .format(path=dump['path'],
                     munge_path=dump['munge_path'],
-                    munge_jar_args=dump.get('munge_jar_args', ''),
-                    skolemize="--skolemize" if skolemize else ""),
+                    munge_jar_args=dump.get('munge_jar_args', ''))
         )
         logger.info('munging %s completed in %s', dump['munge_path'], stop_watch.elapsed())
 
@@ -165,6 +155,10 @@ def reload_commons(remote_host, puppet, kafka, timestamps, consumer_definition, 
     )
     logger.info('Commons dump loaded in %s', watch.elapsed())
     kafka.set_consumer_position_by_timestamp(consumer_definition, timestamps)
+    remote_host.run_sync(
+        'touch /srv/query_service/data_loaded',
+        'systemctl start wcqs-updater'
+    )
 
 
 def reload_wikidata(remote_host, puppet, kafka, timestamps, consumer_definition, reason):
@@ -189,7 +183,6 @@ def reload_wikidata(remote_host, puppet, kafka, timestamps, consumer_definition,
         )
     )
     logger.info('Wikidata dump loaded in %s', watch.elapsed())
-    kafka.set_consumer_position_by_timestamp(consumer_definition, timestamps)
     logger.info('Loading lexeme dump')
     watch.reset()
     remote_host.run_sync(
@@ -199,6 +192,7 @@ def reload_wikidata(remote_host, puppet, kafka, timestamps, consumer_definition,
     )
     logger.info('Lexeme dump loaded in %s', watch.elapsed())
     logger.info('Performing final steps')
+    kafka.set_consumer_position_by_timestamp(consumer_definition, timestamps)
     remote_host.run_sync(
         'touch /srv/wdqs/data_loaded',
         'systemctl start wdqs-updater'
@@ -240,20 +234,21 @@ def run(args, spicerack):
     confctl = spicerack.confctl('node')
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
-    data_to_reload = RELOAD_TYPES[args.reload_data]
-
     def fetch_dumps(dumps, journal):
         get_dumps(dumps, remote_host, args.proxy_server, args.reuse_downloaded_dump)
         fail_for_disk_space(remote_host, dumps, journal)
-        munge(dumps, remote_host, args.skolemize)
+        munge(dumps, remote_host)
 
     dumps = []
-    if 'wikidata' in data_to_reload:
+    if 'wikidata' == args.reload_data:
         dumps = [DUMPS['wikidata'], DUMPS['lexeme']]
         fetch_dumps(dumps, '/srv/wdqs/wikidata.jnl')
-    if 'commons' in data_to_reload:
+    if 'commons' == args.reload_data:
         dumps = [DUMPS['commons']]
         fetch_dumps(dumps, '/srv/query_service/wcqs.jnl')
+
+    if args.reload_data in ['wikidata', 'commons'] and args.kafka_timestamp is None:
+        raise ValueError("--kafka-timestamp should be set when reloading commons or wikidata")
 
     @contextmanager
     def noop_change_and_revert():
@@ -281,13 +276,11 @@ def run(args, spicerack):
     with icinga_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
         with depool_host():
             remote_host.run_sync('sleep 180')
-            if 'categories' in data_to_reload:
+            if 'categories' == args.reload_data:
                 reload_categories(remote_host, puppet, reason)
-
-            if 'wikidata' in data_to_reload:
+            elif 'wikidata' == args.reload_data:
                 reload_wikibase(reload_wikidata, MUTATION_TOPICS['wikidata'])
-
-            if 'commons' in data_to_reload:
+            elif 'commons' == args.reload_data:
                 reload_wikibase(reload_commons, MUTATION_TOPICS['commons'])
 
     if dumps:
