@@ -11,7 +11,7 @@ Usage example:
 # pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import logging
-from typing import Optional, List
+from typing import Optional
 import json
 import yaml
 
@@ -22,7 +22,7 @@ from cookbooks.wmcs.toolforge.start_instance_with_prefix import StartInstanceWit
 from cookbooks.wmcs.toolforge.start_instance_with_prefix import add_instance_creation_options
 from cookbooks.wmcs.toolforge.start_instance_with_prefix import with_instance_creation_options
 from cookbooks.wmcs.toolforge.start_instance_with_prefix import InstanceCreationOpts
-from cookbooks.wmcs import OpenstackAPI
+from cookbooks.wmcs import OpenstackAPI, run_one
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,15 +41,20 @@ class NFSAddServer(CookbookBase):
             "--project", required=False, default="cloudinfra-nfs", help="Openstack project to contain the new server"
         )
         parser.add_argument(
+            "--service-ip",
+            action="store_true",
+            help="If set, a service IP and fqdn will be created and attached to the new host.",
+        )
+        parser.add_argument(
             "--create-storage-volume-size",
             type=int,
             required=False,
-            default=None,
+            default=0,
             help="Size for created storage volume. If unset, no volume will be created; "
             "an existing volume can be attached later.",
         )
         add_instance_creation_options(parser)
-        parser.add_argument("volumes", nargs="+", help=("nfs volumes to be provided and managed by this server"))
+        parser.add_argument("volume", help=("nfs volume to be provided and managed by this server"))
 
         return parser
 
@@ -58,7 +63,8 @@ class NFSAddServer(CookbookBase):
         return with_instance_creation_options(args, NFSAddServerRunner)(
             prefix=args.prefix,
             project=args.project,
-            volumes=args.volumes,
+            volume=args.volume,
+            service_ip=args.service_ip,
             create_storage_volume_size=args.create_storage_volume_size,
             spicerack=self.spicerack,
         )
@@ -71,22 +77,24 @@ class NFSAddServerRunner(CookbookRunnerBase):
         self,
         prefix: str,
         project: str,
-        volumes: List[str],
+        service_ip: bool,
+        volume: str,
         create_storage_volume_size: int,
         spicerack: Spicerack,
         instance_creation_opts: InstanceCreationOpts,
     ):
         """Init"""
         self.create_storage_volume_size = create_storage_volume_size
-        self.volumes = volumes
+        self.volume = volume
         self.project = project
         self.spicerack = spicerack
         self.prefix = prefix
+        self.service_ip = service_ip
         self.instance_creation_opts = instance_creation_opts
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        prefix = self.prefix if self.prefix is not None else f"{self.volumes[0]}"
+        prefix = self.prefix if self.prefix is not None else f"{self.volume}"
 
         start_args = [
             "--project",
@@ -103,12 +111,13 @@ class NFSAddServerRunner(CookbookRunnerBase):
         new_server = start_instance_cookbook.get_runner(
             args=start_instance_cookbook.argument_parser().parse_args(start_args)
         ).run()
+
         new_node = self.spicerack.remote().query(f"D{{{new_server.server_fqdn}}}", use_sudo=True)
+        openstack_api = OpenstackAPI(
+            remote=self.spicerack.remote(), control_node_fqdn="cloudcontrol1003.wikimedia.org", project=self.project
+        )
 
         if self.create_storage_volume_size > 0:
-            openstack_api = OpenstackAPI(
-                remote=self.spicerack.remote(), control_node_fqdn="cloudcontrol1003.wikimedia.org", project=self.project
-            )
             new_volume = openstack_api.volume_create(self.prefix, self.create_storage_volume_size)
 
             openstack_api.volume_attach(new_server.server_id, new_volume)
@@ -131,10 +140,12 @@ class NFSAddServerRunner(CookbookRunnerBase):
         current_hiera = response["hiera"]
         current_roles = response["roles"]
 
-        # Add nfs volumes
-        current_hiera["profile::wcms::nfs::standalone::volumes"] = self.volumes
+        # Add nfs volume
+        current_hiera["profile::wcms::nfs::standalone::volumes"] = [self.volume]
         if self.create_storage_volume_size > 0:
             current_hiera["profile::wcms::nfs::standalone::cinder_attached"] = True
+        else:
+            current_hiera["profile::wcms::nfs::standalone::cinder_attached"] = False
         current_hiera_str = json.dumps(current_hiera)
         response = yaml.safe_load(
             next(
@@ -167,9 +178,27 @@ class NFSAddServerRunner(CookbookRunnerBase):
 
         if self.create_storage_volume_size > 0:
             new_node.run_sync(
-                ("wmcs-prepare-cinder-volume --device sdb --options "
-                 "'rw,nofail,x-systemd.device-timeout=2s,noatime,data=ordered' "
-                 f"--mountpoint '/srv/{self.volumes[0]}' --force")
+                (
+                    "wmcs-prepare-cinder-volume --device sdb --options "
+                    "'rw,nofail,x-systemd.device-timeout=2s,noatime,data=ordered' "
+                    f"--mountpoint '/srv/{self.volume}' --force"
+                )
+            )
+
+        if self.service_ip:
+            new_server_ip = run_one(node=new_node, command=["dig", "+short", new_server.server_fqdn]).strip()
+
+            host_port = openstack_api.port_get(new_server_ip)
+
+            service_ip_response = openstack_api.create_service_ip(self.volume, self.instance_creation_opts.network)
+            service_ip = service_ip_response["fixed_ips"][0]["ip_address"]
+
+            logging.warning("The new service_ip is %s" % service_ip)
+            openstack_api.attach_service_ip(service_ip, host_port[0]["ID"])
+
+            zone_record = openstack_api.zone_get(f"svc.{self.project}.eqiad1.wikimedia.cloud.")
+            openstack_api.recordset_create(
+                zone_record[0]["id"], "A", f"{self.volume}.svc.{self.project}.eqiad1.wikimedia.cloud.", service_ip
             )
 
         # Apply all pending changes

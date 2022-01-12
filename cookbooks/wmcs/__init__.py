@@ -28,10 +28,7 @@ from wmflib.interactive import ask_confirmation
 LOGGER = logging.getLogger(__name__)
 PHABRICATOR_BOT_CONFIG_FILE = "/etc/phabricator_ops-monitoring-bot.conf"
 AGGREGATES_FILE_PATH = "/etc/wmcs_host_aggregates.yaml"
-K8S_SYSTEM_NAMESPACES = [
-    "kube-system",
-    "metrics",
-]
+K8S_SYSTEM_NAMESPACES = ["kube-system", "metrics"]
 DIGIT_RE = re.compile("([0-9]+)")
 MINUTES_IN_HOUR = 60
 SECONDS_IN_MINUTE = 60
@@ -103,22 +100,51 @@ class OpenstackAPI:
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
         # some commands don't have formatted output
-        if "delete" in command or ("volume" in command and "add" in command):
+        if (
+            "delete" in command
+            or ("volume" in command and "add" in command)
+            or ("set" in command and "port" in command)
+        ):
             format_args = []
         else:
             format_args = ["-f", "json"]
 
-        full_command = [
-            "env",
-            f"OS_PROJECT_ID={self.project}",
-            "wmcs-openstack",
-            *command,
-            *format_args,
-        ]
+        full_command = ["env", f"OS_PROJECT_ID={self.project}", "wmcs-openstack", *command, *format_args]
 
         return run_one(
             command=full_command, node=self._control_node, is_safe=is_safe, capture_errors=capture_errors, **kwargs
         )
+
+    def create_service_ip(self, ip_name: OpenstackName, network: OpenstackIdentifier, **kwargs) -> Dict[str, Any]:
+        """Create a service IP with a specified name
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+        """
+        return self._run("port", "create", "--network", _quote(network), _quote(ip_name), **kwargs)
+
+    def attach_service_ip(
+        self, ip_address: OpenstackIdentifier, server_port_id: OpenstackIdentifier, **kwargs
+    ) -> Dict[str, Any]:
+        """Attach a specified service ip address to the specifed port
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+        """
+        return self._run(
+            "port", "set", "--allowed-address", f"ip-address={ip_address}", _quote(server_port_id), **kwargs
+        )
+
+    def port_get(self, ip_address, **kwargs) -> List[Dict[str, Any]]:
+        """Get port for specified IP address"""
+        ip_filter = '--fixed-ip="ip-address=%s"' % ip_address
+        return self._run("port", "list", ip_filter, **kwargs)
+
+    def zone_get(self, name, **kwargs) -> List[Dict[str, Any]]:
+        """Get zone record for specified dns zone"""
+        return self._run("zone", "list", "--name", name, **kwargs)
+
+    def recordset_create(self, zone_id, record_type, name, record, **kwargs) -> List[Dict[str, Any]]:
+        """Get zone record for specified dns zone"""
+        return self._run("recordset", "create", "--type", record_type, "--record", record, zone_id, name, **kwargs)
 
     def server_list(self, **kwargs) -> List[Dict[str, Any]]:
         """Retrieve the list of servers for the project.
@@ -153,26 +179,12 @@ class OpenstackAPI:
 
         --size is in GB
         """
-        out = self._run(
-            "volume",
-            "create",
-            "--size",
-            str(size),
-            "--type",
-            "standard",
-            name,
-        )
-        return out['id']
+        out = self._run("volume", "create", "--size", str(size), "--type", "standard", name)
+        return out["id"]
 
     def volume_attach(self, server_id: str, volume_id: str) -> None:
         """Attach a volume to a server"""
-        self._run(
-            "server",
-            "add",
-            "volume",
-            server_id,
-            volume_id,
-        )
+        self._run("server", "add", "volume", server_id, volume_id)
 
     def server_create(
         self,
@@ -260,19 +272,12 @@ class OpenstackAPI:
 
         except OpenstackNotFound:
             LOGGER.info("Creating security group %s...", security_group)
-            self.security_group_create(
-                name=security_group,
-                description=description,
+            self.security_group_create(name=security_group, description=description)
+            self.security_group_rule_create(
+                direction=OpenstackRuleDirection.EGRESS, remote_group=security_group, security_group=security_group
             )
             self.security_group_rule_create(
-                direction=OpenstackRuleDirection.EGRESS,
-                remote_group=security_group,
-                security_group=security_group,
-            )
-            self.security_group_rule_create(
-                direction=OpenstackRuleDirection.INGRESS,
-                remote_group=security_group,
-                security_group=security_group,
+                direction=OpenstackRuleDirection.INGRESS, remote_group=security_group, security_group=security_group
             )
 
     def security_group_by_name(self, name: OpenstackName, **kwargs) -> Optional[Dict[str, Any]]:
@@ -377,9 +382,7 @@ class OpenstackAPI:
         hostname = str(host).split(".", 1)[0]
         current_aggregates = self.server_get_aggregates(name=hostname, **kwargs)
         simple_create_file(
-            dst_node=host,
-            contents=yaml.dump(current_aggregates, indent=4),
-            remote_path=AGGREGATES_FILE_PATH,
+            dst_node=host, contents=yaml.dump(current_aggregates, indent=4), remote_path=AGGREGATES_FILE_PATH
         )
 
     @staticmethod
@@ -822,11 +825,7 @@ class KubernetesClusterInfo:
         if master_url is None or dns_url is None or metrics_url is None:
             raise KubernetesMalformedCluterInfo(f"Unable to parse cluster info:\n{raw_output}")
 
-        return cls(
-            master_url=master_url,
-            dns_url=dns_url,
-            metrics_url=metrics_url,
-        )
+        return cls(master_url=master_url, dns_url=dns_url, metrics_url=metrics_url)
 
 
 class KubernetesController:
@@ -876,8 +875,7 @@ class KubernetesController:
             field_selector_cli = ""
 
         output = run_one(
-            command=["kubectl", "get", "pods", "--output=json", field_selector_cli],
-            node=self._controlling_node,
+            command=["kubectl", "get", "pods", "--output=json", field_selector_cli], node=self._controlling_node
         )
         return output["items"]
 
@@ -976,15 +974,11 @@ class KubeadmController:
         return raw_output.strip()
 
     def join(
-        self,
-        kubernetes_controller: KubernetesController,
-        wait_for_ready: bool = True,
-        timeout_seconds: int = 600,
+        self, kubernetes_controller: KubernetesController, wait_for_ready: bool = True, timeout_seconds: int = 600
     ) -> None:
         """Join this node to the kubernetes cluster controlled by the given controller."""
         control_kubeadm = KubeadmController(
-            remote=self._remote,
-            controlling_node_fqdn=kubernetes_controller.controlling_node_fqdn,
+            remote=self._remote, controlling_node_fqdn=kubernetes_controller.controlling_node_fqdn
         )
         cluster_info = kubernetes_controller.get_cluster_info()
         # kubeadm does not want the protocol part https?://
@@ -1038,10 +1032,7 @@ def run_one(
     Any extra kwargs will be passed to the RemoteHosts.run_sync function.
     """
     if not isinstance(command, Command):
-        command = Command(
-            command=" ".join(command),
-            ok_codes=[0, 1, 2] if capture_errors else [0],
-        )
+        command = Command(command=" ".join(command), ok_codes=[0, 1, 2] if capture_errors else [0])
 
     try:
         result = next(node.run_sync(command, **kwargs))
@@ -1163,9 +1154,7 @@ class GridQueueInfo:
     @classmethod
     def from_xml(cls, xml_obj: ElementTree) -> "GridQueueInfo":
         """Create a GridQueueInfo from qhost xml output queue node."""
-        info_params = {
-            "name": xml_obj.attrib.get("name"),
-        }
+        info_params = {"name": xml_obj.attrib.get("name")}
         for queuevalue_xml in xml_obj.iter("queuevalue"):
             value_type = queuevalue_xml.attrib.get("name")
             if value_type == "state_string":
@@ -1202,10 +1191,7 @@ class GridNodeInfo:
     @classmethod
     def from_xml(cls, xml_obj: ElementTree) -> "GridNodeInfo":
         """Create a GridNodeInfo from qhost xml output."""
-        info_params = {
-            "name": xml_obj.attrib.get("name"),
-            "queues_info": {},
-        }
+        info_params = {"name": xml_obj.attrib.get("name"), "queues_info": {}}
         for hostvalue_xml in xml_obj.iter("hostvalue"):
             value_type = hostvalue_xml.attrib.get("name")
             info_params[value_type] = hostvalue_xml.text if hostvalue_xml.text != "-" else None
@@ -1357,23 +1343,11 @@ class GridController:
         self._master_node.run_sync(f"exec-manage depool {hostname}", print_output=False)
 
 
-def simple_create_file(
-    dst_node: RemoteHosts,
-    contents: str,
-    remote_path: str,
-    use_root: bool = True,
-) -> None:
+def simple_create_file(dst_node: RemoteHosts, contents: str, remote_path: str, use_root: bool = True) -> None:
     """Creates a file on the remote host/hosts with the given content."""
     # this makes it esier to get away with quotes or similar
     base64_content = base64.b64encode(contents.encode("utf8"))
-    full_command = [
-        "echo",
-        f"'{base64_content.decode()}'",
-        "|",
-        "base64",
-        "--decode",
-        "|",
-    ]
+    full_command = ["echo", f"'{base64_content.decode()}'", "|", "base64", "--decode", "|"]
     if use_root:
         full_command.extend(["sudo", "-i"])
 
@@ -1404,10 +1378,7 @@ def wrap_with_sudo_icinga(my_spicerack: Spicerack) -> Spicerack:
         @property
         def icinga_master_host(self) -> RemoteHosts:
             """Icinga master host."""
-            new_host = self.remote().query(
-                query_string=self.dns().resolve_cname(ICINGA_DOMAIN),
-                use_sudo=True,
-            )
+            new_host = self.remote().query(query_string=self.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True)
             return new_host
 
         def __getattr__(self, what):
@@ -1488,11 +1459,7 @@ class TestUtils:
         else:
             argvalues = [_fill_up_params(test_case_params) for test_case_params in test_cases.values()]
 
-        return {
-            "argnames": ",".join(_param_names),
-            "argvalues": argvalues,
-            "ids": list(test_cases.keys()),
-        }
+        return {"argnames": ",".join(_param_names), "argvalues": argvalues, "ids": list(test_cases.keys())}
 
     @staticmethod
     def get_fake_remote(responses: List[str] = None, side_effect: Optional[List[Any]] = None) -> mock.MagicMock:
@@ -1528,9 +1495,7 @@ class CephTestUtils(TestUtils):
     @staticmethod
     def get_status_dict(overrides: Dict[str, Any] = None) -> Dict[str, Any]:
         """Generate a stub status dict to use when creating CephStatus"""
-        status_dict = {
-            "health": {"status": {}, "checks": {}},
-        }
+        status_dict = {"health": {"status": {}, "checks": {}}}
 
         def _merge_dict(to_update, source_dict):
             if not source_dict:
@@ -1551,14 +1516,8 @@ class CephTestUtils(TestUtils):
         maintenance_status_dict = {
             "health": {
                 "status": "HEALTH_WARN",
-                "checks": {
-                    "OSDMAP_FLAGS": {
-                        "summary": {
-                            "message": "noout,norebalance flag(s) set",
-                        },
-                    }
-                },
-            },
+                "checks": {"OSDMAP_FLAGS": {"summary": {"message": "noout,norebalance flag(s) set"}}},
+            }
         }
 
         return cls.get_status_dict(maintenance_status_dict)
@@ -1566,22 +1525,14 @@ class CephTestUtils(TestUtils):
     @classmethod
     def get_ok_status_dict(cls):
         """Generate a stub maintenance status dict to use when creating CephStatus"""
-        ok_status_dict = {
-            "health": {
-                "status": "HEALTH_OK",
-            },
-        }
+        ok_status_dict = {"health": {"status": "HEALTH_OK"}}
 
         return cls.get_status_dict(ok_status_dict)
 
     @classmethod
     def get_warn_status_dict(cls):
         """Generate a stub maintenance status dict to use when creating CephStatus"""
-        warn_status_dict = {
-            "health": {
-                "status": "HEALTH_WARN",
-            },
-        }
+        warn_status_dict = {"health": {"status": "HEALTH_WARN"}}
 
         return cls.get_status_dict(warn_status_dict)
 
@@ -1596,10 +1547,7 @@ class CephTestUtils(TestUtils):
 
         If you pass any value, it will not ensure that it's still considered available.
         """
-        available_device = {
-            "name": name,
-            "type": device_type,
-        }
+        available_device = {"name": name, "type": device_type}
         if children is not None:
             available_device["children"] = children
 
