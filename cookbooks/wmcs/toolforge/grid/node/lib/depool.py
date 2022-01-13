@@ -12,7 +12,8 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import OpenstackAPI, GridController, GridNodeNotFound, dologmsg
+from cookbooks.wmcs import OpenstackAPI, dologmsg
+from cookbooks.wmcs.toolforge.grid import GridController, GridNodeNotFound
 
 LOGGER = logging.getLogger(__name__)
 

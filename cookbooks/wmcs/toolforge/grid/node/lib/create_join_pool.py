@@ -17,7 +17,8 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import GridController, dologmsg, DebianVersion
+from cookbooks.wmcs import dologmsg, DebianVersion
+from cookbooks.wmcs.toolforge.grid import GridController
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
     InstanceCreationOpts,
     CreateInstanceWithPrefix,
