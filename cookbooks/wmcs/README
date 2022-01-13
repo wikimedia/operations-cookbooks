@@ -31,9 +31,9 @@ Some well known keywords:
 * drain: remove any workload running in the resource, and prevent new one from getting scheduled.
 
 A good example:
-wmcs.toolforge.scale_grid_exec_pool
-wmcs.toolforge.scale_grid_webgen_pool
-wmcs.toolforge.scale_grid_weblight_pool
+wmcs.toolforge.scale_grid_exec
+wmcs.toolforge.scale_grid_webgen
+wmcs.toolforge.scale_grid_weblight
 
 wmcs.toolforge.grid.lib.get_cluster_status
 wmcs.toolforge.grid.lib.reconfigure
