@@ -96,7 +96,7 @@ class OpenstackAPI:
         self._control_node = remote.query(f"D{{{control_node_fqdn}}}", use_sudo=True)
 
     def _run(
-        self, *command: List[str], is_safe: bool = False, capture_errors: bool = False, **kwargs
+        self, *command: List[str], is_safe: bool = False, capture_errors: bool = False, json_output=True, **kwargs
     ) -> Union[Dict[str, Any], str]:
         """Run an openstack command on a control node.
 
@@ -105,14 +105,12 @@ class OpenstackAPI:
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
         # some commands don't have formatted output
-        if (
-            "delete" in command
-            or ("volume" in command and "add" in command)
-            or ("set" in command and "port" in command)
-        ):
-            format_args = []
-        else:
+        if json_output:
             format_args = ["-f", "json"]
+        else:
+            format_args = []
+        if "delete" in command:
+            format_args = []
 
         full_command = ["env", f"OS_PROJECT_ID={self.project}", "wmcs-openstack", *command, *format_args]
 
@@ -127,15 +125,37 @@ class OpenstackAPI:
         """
         return self._run("port", "create", "--network", _quote(network), _quote(ip_name), **kwargs)
 
-    def attach_service_ip(
-        self, ip_address: OpenstackIdentifier, server_port_id: OpenstackIdentifier, **kwargs
-    ) -> Dict[str, Any]:
+    def attach_service_ip(self, ip_address: str,
+                          server_port_id: OpenstackIdentifier, **kwargs) -> Dict[OpenstackName, Any]:
         """Attach a specified service ip address to the specifed port
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
         return self._run(
-            "port", "set", "--allowed-address", f"ip-address={ip_address}", _quote(server_port_id), **kwargs
+            "port",
+            "set",
+            "--allowed-address",
+            f"ip-address={ip_address}",
+            _quote(server_port_id),
+            json_output=False,
+            **kwargs,
+        )
+
+    def detach_service_ip(
+        self, ip_address: str, mac_addr: str, server_port_id: OpenstackIdentifier, **kwargs
+    ) -> Dict[str, Any]:
+        """Detach a specified service ip address from the specifed port
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+        """
+        return self._run(
+            "port",
+            "unset",
+            "--allowed-address",
+            f"ip-address={ip_address},mac-address={mac_addr}",
+            _quote(server_port_id),
+            json_output=False,
+            **kwargs,
         )
 
     def port_get(self, ip_address, **kwargs) -> List[Dict[str, Any]]:
@@ -187,9 +207,23 @@ class OpenstackAPI:
         out = self._run("volume", "create", "--size", str(size), "--type", "standard", name)
         return out["id"]
 
-    def volume_attach(self, server_id: str, volume_id: str) -> None:
+    def volume_attach(self, server_id: OpenstackID, volume_id: OpenstackID) -> None:
         """Attach a volume to a server"""
-        self._run("server", "add", "volume", server_id, volume_id)
+        self._run("server", "add", "volume", server_id, volume_id, json_output=False)
+
+    def volume_detach(self, server_id: OpenstackID, volume_id: OpenstackID) -> None:
+        """Attach a volume to a server"""
+        self._run("server", "remove", "volume", server_id, volume_id, json_output=False)
+
+    def server_from_id(self, server_id: OpenstackIdentifier) -> str:
+        """Given the ID of a server, return the server details"""
+        out = self._run("server", "show", server_id)
+        return out
+
+    def volume_from_id(self, volume_id: OpenstackIdentifier) -> str:
+        """Given the ID of a volume, return the volume details"""
+        out = self._run("volume", "show", volume_id)
+        return out
 
     def server_create(
         self,
