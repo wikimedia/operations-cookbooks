@@ -5,7 +5,7 @@ NOTE: also deletes the virtual machine!
 Usage example:
     cookbook wmcs.toolforge.grid.node.lib.depool_remove \\
         --project toolsbeta \\
-        --node-fqdn toolsbeta-sgewebgen-09-2.toolsbeta.eqiad1.wikimedia.cloud
+        --node-hostname toolsbeta-sgewebgen-09-2
 """
 import argparse
 import time
@@ -20,6 +20,14 @@ from cookbooks.wmcs.toolforge.grid import GridController, GridNodeNotFound
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
 
 LOGGER = logging.getLogger(__name__)
+
+
+def str_not_fqdn(value: str):
+    """Validates if a string is a valid hostname."""
+    if "." in value:
+        raise argparse.ArgumentTypeError(f"'{value}' contains a dot, likely not a short hostname")
+
+    return value
 
 
 class ToolforgeGridNodeDepoolRemove(CookbookBase):
@@ -54,7 +62,7 @@ class ToolforgeGridNodeDepoolRemove(CookbookBase):
                 "default."
             ),
         )
-        parser.add_argument("--node-fqdn", required=True, help="FQDN of the node to delete.")
+        parser.add_argument("--node-hostname", required=True, help="hostname of the node to delete.", type=str_not_fqdn)
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
@@ -63,7 +71,7 @@ class ToolforgeGridNodeDepoolRemove(CookbookBase):
             project=args.project,
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
-            node_fqdn=args.node_fqdn,
+            node_hostname=args.node_hostname,
             task_id=args.task_id,
             spicerack=self.spicerack,
         )
@@ -75,7 +83,7 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
     def __init__(
         self,
         project: str,
-        node_fqdn: str,
+        node_hostname: str,
         grid_master_fqdn: str,
         task_id: str,
         spicerack: Spicerack,
@@ -85,7 +93,7 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
         self.grid_master_fqdn = grid_master_fqdn
         self.task_id = task_id
         self.spicerack = spicerack
-        self.node_fqdn = node_fqdn
+        self.node_hostname = node_hostname
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -94,42 +102,42 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
             control_node_fqdn="cloudcontrol1005.wikimedia.org",
             project=self.project,
         )
-        if not openstack_api.server_exists(self.node_fqdn, print_output=False):
-            LOGGER.warning("%s is not an openstack VM in project %s", self.node_fqdn, self.project)
+        if not openstack_api.server_exists(self.node_hostname, print_output=False):
+            LOGGER.warning("%s is not an openstack VM in project %s", self.node_hostname, self.project)
             return
 
         # before we start, notify folks
         dologmsg(
             project=self.project,
-            message=f"removing grid node {self.node_fqdn} (depool/drain, remove VM and reconfigure grid)",
+            message=f"removing grid node {self.node_hostname} (depool/drain, remove VM and reconfigure grid)",
             task_id=self.task_id,
         )
 
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
 
         # step 1
-        LOGGER.info("STEP 1: depool/drain grid node %s", self.node_fqdn)
+        LOGGER.info("STEP 1: depool/drain grid node %s", self.node_hostname)
         try:
-            grid_controller.depool_node(host_fqdn=self.node_fqdn)
+            grid_controller.depool_node(host_fqdn=self.node_hostname)
             LOGGER.info(
-                "depooled/drained node %s, now waiting a couple minutes so jobs are rescheduled", self.node_fqdn
+                "depooled/drained node %s, now waiting a couple minutes so jobs are rescheduled", self.node_hostname
             )
             time.sleep(60 * 2)
         except GridNodeNotFound:
             LOGGER.info(
                 "can't depool node %s, not found in the %s grid, continuing with other steps anyway",
-                self.node_fqdn,
+                self.node_hostname,
                 self.project,
             )
 
         # step 2
-        LOGGER.info("STEP 2: delete the virtual machine %s", self.node_fqdn)
+        LOGGER.info("STEP 2: delete the virtual machine %s", self.node_hostname)
         remove_instance_cookbook = RemoveInstance(self.spicerack)
         remove_args = [
             "--project",
             self.project,
             "--server-name",
-            self.node_fqdn.split(".")[0],
+            self.node_hostname,
             "--dologmsg",
             False,
         ]
@@ -137,11 +145,11 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
             args=remove_instance_cookbook.argument_parser().parse_args(remove_args)
         )
         remove_instance_cookbook_runner.run()
-        LOGGER.info("removed VM %s, now waiting a minute so openstack can actually remove it", self.node_fqdn)
+        LOGGER.info("removed VM %s, now waiting a minute so openstack can actually remove it", self.node_hostname)
         time.sleep(60 * 1)
 
         # step 3
-        LOGGER.info("STEP 3: reconfigure the grid so it knows %s no longer exists", self.node_fqdn)
+        LOGGER.info("STEP 3: reconfigure the grid so it knows %s no longer exists", self.node_hostname)
         grid_controller.reconfigure(is_tools_project=(self.project == "tools"))
 
         # all done
