@@ -11,6 +11,7 @@ from defusedxml import ElementTree
 from spicerack.puppet import PuppetHosts
 from spicerack.remote import Remote
 
+from cookbooks.wmcs import run_one
 
 LOGGER = logging.getLogger(__name__)
 
@@ -273,17 +274,25 @@ class GridController:
             GridNodeNotFound: when the node is not found in the cluster
 
         """
-        xml_output = (
-            next(self._master_node.run_sync(f"qhost -q -xml -h {host_fqdn}", print_output=False))[1].message().decode()
+        raw_output = run_one(
+            node=self._master_node,
+            command=f"qhost -q -xml -h {host_fqdn}".split(),
+            capture_errors=True,
+            print_output=False,
+            print_progress_bars=False,
         )
-        parsed_xml = ElementTree.fromstring(xml_output)
+        for line in raw_output.split("\n"):
+            if line.startswith("error: can't resolve hostname"):
+                raise GridNodeNotFound(f"can't resolve hostname {host_fqdn}")
+
+        parsed_xml = ElementTree.fromstring(raw_output)
         for node_xml in parsed_xml:
             if node_xml.attrib["name"] == "global":
                 continue
 
             return GridNodeInfo.from_xml(xml_obj=node_xml)
 
-        raise GridNodeNotFound(f"Unable to find node {host_fqdn}, output:\n{xml_output}")
+        raise GridNodeNotFound(f"Unable to find node {host_fqdn}, output:\n{raw_output}")
 
     def depool_node(self, host_fqdn: str) -> None:
         """Depools a node from the grid.
