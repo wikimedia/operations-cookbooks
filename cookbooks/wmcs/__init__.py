@@ -40,6 +40,14 @@ OpenstackName = str
 OpenstackIdentifier = Union[OpenstackID, OpenstackName]
 
 
+def parser_type_str_hostname(value: str):
+    """Validates datatype in arparser if a string is a hostname."""
+    if "." in value:
+        raise argparse.ArgumentTypeError(f"'{value}' contains a dot, likely not a short hostname")
+
+    return value
+
+
 class DebianVersion(Enum):
     """Represents Debian release names/numbers."""
 

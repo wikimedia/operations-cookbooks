@@ -305,3 +305,14 @@ class GridController:
         self.get_node_info(host_fqdn)
         hostname = host_fqdn.split(".")[0]
         self._master_node.run_sync(f"exec-manage depool {hostname}", print_output=False)
+
+    def pool_node(self, hostname: str) -> None:
+        """Repools a node from the grid.
+
+        Raises:
+            GridNodeNotFound: when the node is not found in the cluster
+
+        """
+        # call this just to report upstream an exception
+        self.get_node_info(hostname)
+        self._master_node.run_sync(f"exec-manage repool {hostname}", print_output=False, print_progress_bars=False)

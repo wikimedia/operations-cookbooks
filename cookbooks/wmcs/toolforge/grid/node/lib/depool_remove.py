@@ -15,19 +15,18 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CommonOpts, OpenstackAPI, add_common_opts, dologmsg, with_common_opts
+from cookbooks.wmcs import (
+    CommonOpts,
+    OpenstackAPI,
+    add_common_opts,
+    dologmsg,
+    with_common_opts,
+    parser_type_str_hostname,
+)
 from cookbooks.wmcs.toolforge.grid import GridController, GridNodeNotFound
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
 
 LOGGER = logging.getLogger(__name__)
-
-
-def str_not_fqdn(value: str):
-    """Validates if a string is a valid hostname."""
-    if "." in value:
-        raise argparse.ArgumentTypeError(f"'{value}' contains a dot, likely not a short hostname")
-
-    return value
 
 
 class ToolforgeGridNodeDepoolRemove(CookbookBase):
@@ -52,7 +51,9 @@ class ToolforgeGridNodeDepoolRemove(CookbookBase):
                 "default."
             ),
         )
-        parser.add_argument("--node-hostname", required=True, help="hostname of the node to delete.", type=str_not_fqdn)
+        parser.add_argument(
+            "--node-hostname", required=True, help="hostname of the node to delete.", type=parser_type_str_hostname
+        )
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
