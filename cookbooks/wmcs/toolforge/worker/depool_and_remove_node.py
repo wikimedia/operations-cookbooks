@@ -7,7 +7,6 @@ Usage example:
         --hostname-to-drain toolsbeta-test-worker-4
 
 """
-# pylint: disable=too-many-arguments
 import argparse
 import logging
 from typing import Optional
@@ -15,7 +14,15 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import KubernetesController, OpenstackAPI, dologmsg, natural_sort_key
+from cookbooks.wmcs import (
+    CommonOpts,
+    KubernetesController,
+    OpenstackAPI,
+    add_common_opts,
+    dologmsg,
+    natural_sort_key,
+    with_common_opts,
+)
 from cookbooks.wmcs.toolforge.worker.drain import Drain
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
 
@@ -34,7 +41,7 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
-        parser.add_argument("--project", required=True, help="Openstack project to manage.")
+        add_common_opts(parser, project_default="toolsbeta")
         parser.add_argument(
             "--fqdn-to-remove",
             required=False,
@@ -53,23 +60,15 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
             default=None,
             help=("Prefix for the k8s worker nodes, default is <project>-k8s-worker"),
         )
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this operation (ex. T123456)",
-        )
 
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return ToolforgeDepoolAndRemoveNodeRunner(
+        return with_common_opts(args, ToolforgeDepoolAndRemoveNodeRunner,)(
             k8s_worker_prefix=args.k8s_worker_prefix,
             fqdn_to_remove=args.fqdn_to_remove,
             control_node_fqdn=args.control_node_fqdn,
-            project=args.project,
-            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
@@ -79,24 +78,22 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
 
     def __init__(
         self,
+        common_opts: CommonOpts,
         k8s_worker_prefix: str,
         control_node_fqdn: str,
         fqdn_to_remove: str,
-        project: str,
-        task_id: str,
         spicerack: Spicerack,
     ):
         """Init"""
+        self.common_opts = common_opts
         self.k8s_worker_prefix = k8s_worker_prefix
         self.fqdn_to_remove = fqdn_to_remove
         self.control_node_fqdn = control_node_fqdn
-        self.project = project
-        self.task_id = task_id
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
             control_node_fqdn="cloudcontrol1003.wikimedia.org",
-            project=self.project,
+            project=self.common_opts.project,
         )
         self._all_project_servers = None
 
@@ -115,10 +112,12 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
             )
         )
         if not prefix_members:
-            raise Exception(f"No servers in project {self.project} with prefix {k8s_worker_prefix}, nothing to remove.")
+            raise Exception(
+                f"No servers in project {self.common_opts.project} with prefix {k8s_worker_prefix}, nothing to remove."
+            )
 
         # TODO: find a way to not hardcode the domain
-        return f"{prefix_members[0]['Name']}.{self.project}.eqiad1.wikimedia.cloud"
+        return f"{prefix_members[0]['Name']}.{self.common_opts.project}.eqiad1.wikimedia.cloud"
 
     def _pick_a_control_node(self, k8s_worker_prefix: str) -> str:
         if not self._all_project_servers:
@@ -143,17 +142,18 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
                 "given worker prefix is correct or pass explicitly a control node."
             )
 
-        return f"{prefix_members[0]['Name']}.{self.project}.eqiad1.wikimedia.cloud"
+        return f"{prefix_members[0]['Name']}.{self.common_opts.project}.eqiad1.wikimedia.cloud"
 
     def run(self) -> Optional[int]:
         """Main entry point"""
         dologmsg(
+            common_opts=self.common_opts,
             message=f"Depooling and removing worker {self.fqdn_to_remove or ', will pick the oldest'}.",
-            project=self.project,
-            task_id=self.task_id,
         )
         remote = self.spicerack.remote()
-        k8s_worker_prefix = self.k8s_worker_prefix if self.k8s_worker_prefix is not None else f"{self.project}-k8s-etcd"
+        k8s_worker_prefix = (
+            self.k8s_worker_prefix if self.k8s_worker_prefix is not None else f"{self.common_opts.project}-k8s-etcd"
+        )
         if not self.fqdn_to_remove:
             fqdn_to_remove = self._get_oldest_worker(k8s_worker_prefix=k8s_worker_prefix)
             LOGGER.info("Picked node %s to remove.", fqdn_to_remove)
@@ -168,15 +168,12 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
 
         drain_cookbook = Drain(spicerack=self.spicerack)
         drain_args = [
-            "--project",
-            self.project,
             "--hostname-to-drain",
             fqdn_to_remove.split(".", 1)[0],
             "--control-node-fqdn",
             control_node_fqdn,
-        ]
-        if self.task_id:
-            drain_args.extend(["--task-id", self.task_id])
+        ] + self.common_opts.to_cli_args()
+
         drain_cookbook.get_runner(args=drain_cookbook.argument_parser().parse_args(args=drain_args)).run()
 
         kubectl = KubernetesController(remote=remote, controlling_node_fqdn=control_node_fqdn)
@@ -187,16 +184,12 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         remove_instance_cookbook.get_runner(
             args=remove_instance_cookbook.argument_parser().parse_args(
                 [
-                    "--project",
-                    self.project,
                     "--server-name",
                     fqdn_to_remove.split(".", 1)[0],
-                ],
+                    "--no-dologmsg",  # not interested in the inner SAL entry
+                ]
+                + self.common_opts.to_cli_args(),
             ),
         ).run()
 
-        dologmsg(
-            message=f"Depooled and removed worker {fqdn_to_remove}.",
-            project=self.project,
-            task_id=self.task_id,
-        )
+        dologmsg(common_opts=self.common_opts, message=f"Depooled and removed worker {fqdn_to_remove}.")

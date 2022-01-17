@@ -14,7 +14,15 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.icinga import ICINGA_DOMAIN, IcingaHosts
 
-from cookbooks.wmcs import AGGREGATES_FILE_PATH, OpenstackAPI, OpenstackNotFound, dologmsg
+from cookbooks.wmcs import (
+    AGGREGATES_FILE_PATH,
+    CommonOpts,
+    OpenstackAPI,
+    OpenstackNotFound,
+    add_common_opts,
+    dologmsg,
+    with_common_opts,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,6 +39,7 @@ class UnsetMaintenance(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
+        add_common_opts(parser)
         parser.add_argument(
             "--control-node-fqdn",
             required=False,
@@ -51,22 +60,15 @@ class UnsetMaintenance(CookbookBase):
                 f"use {AGGREGATES_FILE_PATH} if it exists, and fail otherwise). A safe choice would be just `ceph`"
             ),
         )
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this reboot (ex. T123456)",
-        )
 
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return UnsetMaintenanceRunner(
+        return with_common_opts(args, UnsetMaintenanceRunner,)(
             fqdn=args.fqdn,
             control_node_fqdn=args.control_node_fqdn,
             aggregates=args.aggregates,
-            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
@@ -76,16 +78,16 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
 
     def __init__(
         self,
+        common_opts: CommonOpts,
         fqdn: str,
         control_node_fqdn: str,
         spicerack: Spicerack,
         aggregates: Optional[str] = None,
-        task_id: Optional[str] = None,
     ):
         """Init."""
+        self.common_opts = common_opts
         self.fqdn = fqdn
         self.control_node_fqdn = control_node_fqdn
-        self.task_id = task_id
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
             control_node_fqdn=control_node_fqdn,
@@ -95,11 +97,7 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point."""
-        dologmsg(
-            project="admin",
-            message=f"Unsetting cloudvirt '{self.fqdn}' maintenance.",
-            task_id=self.task_id,
-        )
+        dologmsg(common_opts=self.common_opts, message=f"Unsetting cloudvirt '{self.fqdn}' maintenance.")
         hostname = self.fqdn.split(".", 1)[0]
         try:
             self.openstack_api.aggregate_remove_host(aggregate_name="maintenance", host_name=hostname)
@@ -127,11 +125,7 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
             target_hosts=[self.fqdn],
         )
         icinga_hosts.remove_downtime()
-        dologmsg(
-            project="admin",
-            message=f"Unset cloudvirt '{self.fqdn}' maintenance.",
-            task_id=self.task_id,
-        )
+        dologmsg(common_opts=self.common_opts, message=f"Unset cloudvirt '{self.fqdn}' maintenance.")
         LOGGER.info(
             "Host %s now in out of maintenance mode. New VMs will be scheduled in it (aggregates: %s).",
             self.fqdn,

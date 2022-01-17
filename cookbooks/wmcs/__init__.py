@@ -2,6 +2,7 @@
 # pylint: disable=too-many-arguments,too-many-lines
 """Cloud Services Cookbooks"""
 __title__ = __doc__
+import argparse
 import base64
 import getpass
 import json
@@ -12,14 +13,16 @@ import time
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, auto
+from functools import partial
 from itertools import chain
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Union
 from unittest import mock
 
 import yaml
 from ClusterShell.MsgTree import MsgTreeElem
 from cumin.transports import Command
 from spicerack import ICINGA_DOMAIN, Spicerack
+from spicerack.cookbook import CookbookRunnerBase
 from spicerack.remote import Remote, RemoteHosts
 from wmflib.interactive import ask_confirmation
 
@@ -49,6 +52,59 @@ class OutputFormat(Enum):
 
     JSON = auto()
     YAML = auto()
+
+
+@dataclass(frozen=True)
+class CommonOpts:
+    """Common WMCS cookbook options."""
+
+    project: str = "admin"
+    task_id: Optional[str] = None
+    no_dologmsg: Optional[bool] = False
+
+    def to_cli_args(self) -> List[str]:
+        """Helper to unwrap the options for use with argument parsers."""
+        args = []
+        args.extend(["--project", self.project])
+
+        if self.task_id:
+            args.extend(["--task-id", self.task_id])
+        if self.no_dologmsg:
+            args.extend(["--no-dologmsg"])
+
+        return args
+
+
+def add_common_opts(parser: argparse.ArgumentParser, project_default: str = "admin") -> argparse.ArgumentParser:
+    """Adds the common WMCS options to a cookbook parser."""
+    parser.add_argument(
+        "--project",
+        default=project_default,
+        help="Relevant Cloud VPS openstack project (for operations, dologmsg, etc). "
+        "If this cookbook is for hardware, this only affects dologmsg calls. "
+        "Default is '%(default)s'.",
+    )
+    parser.add_argument(
+        "--task-id",
+        required=False,
+        default=None,
+        help="Id of the task related to this operation (ex. T123456).",
+    )
+    parser.add_argument(
+        "--no-dologmsg",
+        required=False,
+        action="store_true",
+        help="To disable dologmsg calls (no SAL messages on IRC).",
+    )
+
+    return parser
+
+
+def with_common_opts(args: argparse.Namespace, runner: CookbookRunnerBase) -> Callable:
+    """Helper to add CommonOpts to a cookbook instantation."""
+    common_opts = CommonOpts(project=args.project, task_id=args.task_id, no_dologmsg=args.no_dologmsg)
+
+    return partial(runner, common_opts=common_opts)
 
 
 def _quote(mystr: str) -> str:
@@ -1147,26 +1203,29 @@ def wrap_with_sudo_icinga(my_spicerack: Spicerack) -> Spicerack:
 
 
 def dologmsg(
+    common_opts: CommonOpts,
     message: str,
-    project: str,
-    task_id: Optional[str] = None,
     channel: str = "#wikimedia-cloud",
     host: str = "wm-bot.wm-bot.wmcloud.org",
     port: int = 64835,
 ):
     """Log a message to the given irc channel for stashbot to pick up and register in SAL."""
-    postfix = f"- cookbook ran by {getpass.getuser()}@{socket.gethostname()}"
-    if task_id is not None:
-        postfix = f"({task_id}) {postfix}"
+    if common_opts.no_dologmsg:
+        LOGGER.info("[DOLOGMSG - silent]: %s", message)
+        return
 
-    payload = f"{channel} !log {project} {message} {postfix}\n"
+    postfix = f"- cookbook ran by {getpass.getuser()}@{socket.gethostname()}"
+    if common_opts.task_id is not None:
+        postfix = f"({common_opts.task_id}) {postfix}"
+
+    payload = f"{channel} !log {common_opts.project} {message} {postfix}\n"
     # try all the possible addresses for that host (ip4/ip6/etc.)
     for family, s_type, proto, _, sockaddr in socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP):
         my_socket = socket.socket(family, s_type, proto)
         my_socket.connect(sockaddr)
         try:
             my_socket.send(payload.encode("utf-8"))
-            LOGGER.info(message)
+            LOGGER.info("[DOLOGMSG]: %s", message)
             return
         # pylint: disable=broad-except
         except Exception as error:

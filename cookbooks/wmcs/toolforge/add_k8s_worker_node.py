@@ -17,7 +17,16 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import KubeadmController, KubernetesController, OpenstackAPI, OpenstackServerGroupPolicy, dologmsg
+from cookbooks.wmcs import (
+    CommonOpts,
+    KubeadmController,
+    KubernetesController,
+    OpenstackAPI,
+    OpenstackServerGroupPolicy,
+    add_common_opts,
+    dologmsg,
+    with_common_opts,
+)
 from cookbooks.wmcs.vps.create_instance_with_prefix import CreateInstanceWithPrefix
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 
@@ -36,17 +45,7 @@ class ToolforgeAddK8sWorkerNode(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
-        parser.add_argument(
-            "--project",
-            required=True,
-            help="Openstack project where the toolforge installation resides.",
-        )
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this operation (ex. T123456)",
-        )
+        add_common_opts(parser, project_default="toolsbeta")
         parser.add_argument(
             "--k8s-worker-prefix",
             required=False,
@@ -82,13 +81,11 @@ class ToolforgeAddK8sWorkerNode(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return ToolforgeAddK8sWorkerNodeRunner(
+        return with_common_opts(args, ToolforgeAddK8sWorkerNodeRunner,)(
             k8s_worker_prefix=args.k8s_worker_prefix,
             k8s_control_prefix=args.k8s_control_prefix,
-            project=args.project,
             image=args.image,
             flavor=args.flavor,
-            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
@@ -98,28 +95,26 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
 
     def __init__(
         self,
+        common_opts: CommonOpts,
         k8s_worker_prefix: Optional[str],
         k8s_control_prefix: Optional[str],
-        project: str,
-        task_id: str,
         spicerack: Spicerack,
         image: Optional[str] = None,
         flavor: Optional[str] = None,
     ):
         """Init"""
+        self.common_opts = common_opts
         self.k8s_worker_prefix = k8s_worker_prefix
         self.k8s_control_prefix = k8s_control_prefix
-        self.project = project
-        self.task_id = task_id
         self.spicerack = spicerack
         self.image = image
         self.flavor = flavor
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        dologmsg(project=self.project, message="Adding a new k8s worker node", task_id=self.task_id)
+        dologmsg(common_opts=self.common_opts, message="Adding a new k8s worker node")
         k8s_worker_prefix = (
-            self.k8s_worker_prefix if self.k8s_worker_prefix is not None else f"{self.project}-k8s-worker"
+            self.k8s_worker_prefix if self.k8s_worker_prefix is not None else f"{self.common_opts.project}-k8s-worker"
         )
         k8s_control_prefix = (
             self.k8s_control_prefix
@@ -128,17 +123,16 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         )
 
         start_args = [
-            "--project",
-            self.project,
             "--prefix",
             k8s_worker_prefix,
             "--security-group",
-            f"{self.project}-k8s-full-connectivity",
+            f"{self.common_opts.project}-k8s-full-connectivity",
             "--server-group",
             self.k8s_worker_prefix,
             "--server-group-policy",
             OpenstackServerGroupPolicy.SOFT_ANTI_AFFINITY.value,
-        ]
+        ] + self.common_opts.to_cli_args()
+
         if self.image:
             start_args.extend(["--image", self.image])
 
@@ -192,7 +186,7 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         PuppetHosts(remote_hosts=node).run()
 
         LOGGER.info("Getting the list of k8s control nodes for the project...")
-        openstack_api = OpenstackAPI(remote=self.spicerack.remote(), project=self.project)
+        openstack_api = OpenstackAPI(remote=self.spicerack.remote(), project=self.common_opts.project)
         all_nodes = openstack_api.server_list()
         k8s_control_node_hostname = next(
             node["Name"] for node in all_nodes if node["Name"].startswith(k8s_control_prefix)
@@ -206,7 +200,5 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         kubeadm.join(kubernetes_controller=kubectl, wait_for_ready=True)
 
         dologmsg(
-            project=self.project,
-            message=f"Added a new k8s worker {new_member.server_fqdn} to the worker pool",
-            task_id=self.task_id,
+            common_opts=self.common_opts, message=f"Added a new k8s worker {new_member.server_fqdn} to the worker pool"
         )

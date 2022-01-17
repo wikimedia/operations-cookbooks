@@ -15,7 +15,14 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephClusterController, dologmsg, wrap_with_sudo_icinga
+from cookbooks.wmcs import (
+    CephClusterController,
+    CommonOpts,
+    add_common_opts,
+    dologmsg,
+    with_common_opts,
+    wrap_with_sudo_icinga,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,6 +39,7 @@ class RebootNode(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
+        add_common_opts(parser)
         parser.add_argument(
             "--fqdn-to-reboot",
             required=True,
@@ -50,12 +58,6 @@ class RebootNode(CookbookBase):
             help="If passed, will not set the cluster in maintenance mode (careful! might start rebalancing data).",
         )
         parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this reboot (ex. T123456)",
-        )
-        parser.add_argument(
             "--force",
             required=False,
             action="store_true",
@@ -66,10 +68,9 @@ class RebootNode(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return RebootNodeRunner(
+        return with_common_opts(args, RebootNodeRunner,)(
             fqdn_to_reboot=args.fqdn_to_reboot,
             controlling_node_fqdn=args.controlling_node_fqdn,
-            task_id=args.task_id,
             skip_maintenance=args.skip_maintenance,
             force=args.force,
             spicerack=self.spicerack,
@@ -81,24 +82,24 @@ class RebootNodeRunner(CookbookRunnerBase):
 
     def __init__(
         self,
+        common_opts: CommonOpts,
         fqdn_to_reboot: str,
         controlling_node_fqdn: str,
-        task_id: str,
         force: bool,
         skip_maintenance: bool,
         spicerack: Spicerack,
     ):
         """Init"""
+        self.common_opts = common_opts
         self.fqdn_to_reboot = fqdn_to_reboot
         self.controlling_node_fqdn = controlling_node_fqdn
         self.skip_maintenance = skip_maintenance
         self.force = force
-        self.task_id = task_id
         self.spicerack = spicerack
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        dologmsg(project="admin", message=f"Rebooting node {self.fqdn_to_reboot}", task_id=self.task_id)
+        dologmsg(common_opts=self.common_opts, message=f"Rebooting node {self.fqdn_to_reboot}")
 
         controller = CephClusterController(
             remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn
@@ -113,7 +114,7 @@ class RebootNodeRunner(CookbookRunnerBase):
         icinga_hosts = wrap_with_sudo_icinga(my_spicerack=self.spicerack).icinga_hosts(target_hosts=node.hosts)
         icinga_hosts.downtime(
             reason=self.spicerack.admin_reason(
-                reason="Rebooting at user request through cookbook", task_id=self.task_id
+                reason="Rebooting at user request through cookbook", task_id=self.common_opts.task_id
             ),
             duration=datetime.timedelta(minutes=20),
         )
@@ -133,4 +134,4 @@ class RebootNodeRunner(CookbookRunnerBase):
             controller.unset_maintenance()
 
         icinga_hosts.remove_downtime()
-        dologmsg(project="admin", message=f"Finished rebooting node {self.fqdn_to_reboot}", task_id=self.task_id)
+        dologmsg(common_opts=self.common_opts, message=f"Finished rebooting node {self.fqdn_to_reboot}")

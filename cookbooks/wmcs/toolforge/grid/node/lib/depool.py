@@ -12,7 +12,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import OpenstackAPI, dologmsg
+from cookbooks.wmcs import CommonOpts, OpenstackAPI, add_common_opts, dologmsg, with_common_opts
 from cookbooks.wmcs.toolforge.grid import GridController, GridNodeNotFound
 
 LOGGER = logging.getLogger(__name__)
@@ -30,17 +30,7 @@ class ToolforgeGridNodeDepool(CookbookBase):
             description=__doc__,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
-        parser.add_argument(
-            "--project",
-            required=True,
-            help="Openstack project where the toolforge installation resides.",
-        )
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this operation (ex. T123456)",
-        )
+        add_common_opts(parser, project_default="toolsbeta")
         parser.add_argument(
             "--grid-master-fqdn",
             required=False,
@@ -55,12 +45,10 @@ class ToolforgeGridNodeDepool(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return ToolforgeGridNodeDepoolRunner(
-            project=args.project,
+        return with_common_opts(args, ToolforgeGridNodeDepoolRunner,)(
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
             node_fqdn=args.node_fqdn,
-            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
@@ -70,16 +58,14 @@ class ToolforgeGridNodeDepoolRunner(CookbookRunnerBase):
 
     def __init__(
         self,
-        project: str,
+        common_opts: CommonOpts,
         node_fqdn: str,
         grid_master_fqdn: str,
-        task_id: str,
         spicerack: Spicerack,
     ):
         """Init"""
-        self.project = project
+        self.common_opts = common_opts
         self.grid_master_fqdn = grid_master_fqdn
-        self.task_id = task_id
         self.spicerack = spicerack
         self.node_fqdn = node_fqdn
 
@@ -88,22 +74,22 @@ class ToolforgeGridNodeDepoolRunner(CookbookRunnerBase):
         openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(),
             control_node_fqdn="cloudcontrol1005.wikimedia.org",
-            project=self.project
+            project=self.common_opts.project,
         )
         if not openstack_api.server_exists(self.node_fqdn, print_output=False):
-            LOGGER.warning("node %s is not a VM in project %s", self.node_fqdn, self.project)
+            LOGGER.warning("node %s is not a VM in project %s", self.node_fqdn, self.common_opts.project)
             return 1
 
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
         try:
             grid_controller.depool_node(host_fqdn=self.node_fqdn)
         except GridNodeNotFound:
-            LOGGER.warning("node %s not found in the %s grid", self.node_fqdn, self.project)
+            LOGGER.warning("node %s not found in the %s grid", self.node_fqdn, self.common_opts.project)
             return 1
 
         dologmsg(
-            project=self.project,
+            common_opts=self.common_opts,
             message=f"depooled grid node {self.node_fqdn}",
-            task_id=self.task_id,
         )
+
         return 0

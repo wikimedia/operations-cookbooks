@@ -12,7 +12,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephClusterController, dologmsg
+from cookbooks.wmcs import CephClusterController, CommonOpts, add_common_opts, dologmsg, with_common_opts
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
 
 LOGGER = logging.getLogger(__name__)
@@ -30,16 +30,11 @@ class RollRebootMons(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
+        add_common_opts(parser)
         parser.add_argument(
             "--controlling-node-fqdn",
             required=True,
             help="FQDN of one of the nodes to manage the cluster.",
-        )
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this reboot (ex. T123456)",
         )
         parser.add_argument(
             "--force",
@@ -52,9 +47,8 @@ class RollRebootMons(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return RollRebootMonsRunner(
+        return with_common_opts(args, RollRebootMonsRunner,)(
             controlling_node_fqdn=args.controlling_node_fqdn,
-            task_id=args.task_id,
             force=args.force,
             spicerack=self.spicerack,
         )
@@ -65,16 +59,16 @@ class RollRebootMonsRunner(CookbookRunnerBase):
 
     def __init__(
         self,
+        common_opts: CommonOpts,
         controlling_node_fqdn: str,
-        task_id: str,
         force: bool,
         spicerack: Spicerack,
     ):
         """Init"""
+        self.common_opts: common_opts
         self.controlling_node_fqdn = controlling_node_fqdn
         self.force = force
         self.spicerack = spicerack
-        self.task_id = task_id
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -83,7 +77,7 @@ class RollRebootMonsRunner(CookbookRunnerBase):
         )
         mon_nodes = list(controller.get_nodes()["mon"].keys())
 
-        dologmsg(project="admin", message=f"Rebooting the nodes {','.join(mon_nodes)}", task_id=self.task_id)
+        dologmsg(common_opts=self.common_opts, message=f"Rebooting the nodes {','.join(mon_nodes)}")
 
         controller.set_maintenance()
 
@@ -99,11 +93,10 @@ class RollRebootMonsRunner(CookbookRunnerBase):
                 self.controlling_node_fqdn,
                 "--fqdn-to-reboot",
                 f"{mon_node}.{controller.get_nodes_domain()}",
-            ]
+            ] + self.common_opts.to_cli_args()
+
             if self.force:
                 args.append("--force")
-            if self.task_id:
-                args.extend(["--task-id", self.task_id])
 
             reboot_node_cookbook.get_runner(args=reboot_node_cookbook.argument_parser().parse_args(args)).run()
             LOGGER.info(
@@ -116,4 +109,4 @@ class RollRebootMonsRunner(CookbookRunnerBase):
             LOGGER.info("Cluster stable, continuing")
 
         controller.unset_maintenance()
-        dologmsg(project="admin", message=f"Finished rebooting the nodes {mon_nodes}", task_id=self.task_id)
+        dologmsg(common_opts=self.common_opts, message=f"Finished rebooting the nodes {mon_nodes}")

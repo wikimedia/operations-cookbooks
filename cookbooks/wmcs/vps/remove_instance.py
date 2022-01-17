@@ -13,7 +13,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import OpenstackAPI, dologmsg
+from cookbooks.wmcs import CommonOpts, OpenstackAPI, add_common_opts, dologmsg, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,35 +30,20 @@ class RemoveInstance(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
-        parser.add_argument("--project", required=True, help="Openstack project to manage (ex. toolsbeta).")
+        add_common_opts(parser)
         parser.add_argument(
             "--server-name",
             required=True,
             help="Name of the server to remove (without domain, ex. toolsbeta-test-k8s-etcd-9).",
-        )
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this operation (ex. T123456)",
-        )
-        parser.add_argument(
-            "--dologmsg",
-            required=False,
-            default=True,
-            help="To enable/disable dologmsg calls. Default is enabled.",
         )
 
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return RemoveInstanceRunner(
-            project=args.project,
+        return with_common_opts(args, RemoveInstanceRunner,)(
             name_to_remove=args.server_name,
-            task_id=args.task_id,
             spicerack=self.spicerack,
-            _dologmsg=args.dologmsg,
         )
 
 
@@ -67,22 +52,20 @@ class RemoveInstanceRunner(CookbookRunnerBase):
 
     def __init__(
         self,
-        project: str,
+        common_opts: CommonOpts,
         name_to_remove: str,
         spicerack: Spicerack,
-        task_id: Optional[str] = None,
-        _dologmsg: bool = True,
     ):
         """Init"""
+        self.common_opts = common_opts
         self.openstack_api = OpenstackAPI(
-            remote=spicerack.remote(), control_node_fqdn="cloudcontrol1003.wikimedia.org", project=project
+            remote=spicerack.remote(),
+            control_node_fqdn="cloudcontrol1003.wikimedia.org",
+            project=self.common_opts.project,
         )
 
-        self.project = project
         self.name_to_remove = name_to_remove
         self.spicerack = spicerack
-        self.task_id = task_id
-        self._dologmsg = _dologmsg
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -90,15 +73,9 @@ class RemoveInstanceRunner(CookbookRunnerBase):
             LOGGER.warning(
                 "Unable to find server %s in project %s. Please review the project and server name.",
                 self.name_to_remove,
-                self.project,
+                self.common_opts.project,
             )
             return
 
-        if self._dologmsg:
-            dologmsg(
-                project=self.project,
-                message=f"removing instance {self.name_to_remove}",
-                task_id=self.task_id,
-            )
-
+        dologmsg(common_opts=self.common_opts, message=f"removing instance {self.name_to_remove}")
         self.openstack_api.server_delete(name_to_remove=self.name_to_remove)

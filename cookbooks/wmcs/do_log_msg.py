@@ -12,7 +12,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import dologmsg
+from cookbooks.wmcs import CommonOpts, add_common_opts, dologmsg, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -29,32 +29,19 @@ class Dologmsg(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
-        parser.add_argument(
-            "--project",
-            required=False,
-            default="admin",
-            help="Project on SAL to log the message for.",
-        )
+        add_common_opts(parser)
         parser.add_argument(
             "--msg",
             required=True,
             help="Message to log.",
-        )
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to the message (ex. T123456)",
         )
 
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return DologmsgRunner(
+        return with_common_opts(args, DologmsgRunner,)(
             msg=args.msg,
-            project=args.project,
-            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
@@ -64,17 +51,15 @@ class DologmsgRunner(CookbookRunnerBase):
 
     def __init__(
         self,
+        common_opts: CommonOpts,
         msg: str,
-        project: str,
         spicerack: Spicerack,
-        task_id: Optional[str] = None,
     ):
         """Init."""
+        self.common_opts = common_opts
         self.msg = msg
-        self.project = project
-        self.task_id = task_id
         self.spicerack = spicerack
 
     def run(self) -> Optional[int]:
         """Main entry point."""
-        dologmsg(project=self.project, message=self.msg, task_id=self.task_id)
+        dologmsg(common_opts=self.common_opts, message=self.msg)

@@ -13,7 +13,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import dologmsg
+from cookbooks.wmcs import CommonOpts, add_common_opts, dologmsg, with_common_opts
 from cookbooks.wmcs.toolforge.grid import GridController
 
 LOGGER = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ class ToolforgeGridReconfigure(CookbookBase):
             description=__doc__,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
-        parser.add_argument("--project", required=True, help="Openstack project to manage.")
+        add_common_opts(parser, project_default="toolsbeta")
         parser.add_argument(
             "--master-node-fqdn",
             required=False,
@@ -41,30 +41,14 @@ class ToolforgeGridReconfigure(CookbookBase):
                 "default."
             ),
         )
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this operation (ex. T123456)",
-        )
-        parser.add_argument(
-            "--no-dologmsg",
-            required=False,
-            action='store_true',
-            help="To disable dologmsg calls",
-        )
-
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return ToolforgeGridReconfigureRunner(
+        return with_common_opts(args, ToolforgeGridReconfigureRunner,)(
             master_node_fqdn=args.master_node_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
-            project=args.project,
             spicerack=self.spicerack,
-            no_dologmsg=args.no_dologmsg,
-            task_id=args.task_id,
         )
 
 
@@ -73,27 +57,18 @@ class ToolforgeGridReconfigureRunner(CookbookRunnerBase):
 
     def __init__(
         self,
+        common_opts: CommonOpts,
         master_node_fqdn: str,
-        project: str,
         spicerack: Spicerack,
-        no_dologmsg: bool = False,
-        task_id: Optional[str] = None,
     ):
         """Init"""
+        self.common_opts = common_opts
         self.master_node_fqdn = master_node_fqdn
-        self.project = project
         self.spicerack = spicerack
-        self.no_dologmsg = no_dologmsg
-        self.task_id = task_id
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        if not self.no_dologmsg:
-            dologmsg(
-                project=self.project,
-                message="reconfiguring the grid by using grid-configurator",
-                task_id=self.task_id,
-            )
+        dologmsg(common_opts=self.common_opts, message="reconfiguring the grid by using grid-configurator")
 
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn)
-        grid_controller.reconfigure(is_tools_project=(self.project == "tools"))
+        grid_controller.reconfigure(is_tools_project=(self.common_opts.project == "tools"))

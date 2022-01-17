@@ -14,7 +14,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.icinga import ICINGA_DOMAIN, IcingaHosts
 
-from cookbooks.wmcs import OpenstackAPI, OpenstackNotFound, dologmsg
+from cookbooks.wmcs import CommonOpts, OpenstackAPI, OpenstackNotFound, add_common_opts, dologmsg, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ class SetMaintenance(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
+        add_common_opts(parser)
         parser.add_argument(
             "--control-node-fqdn",
             required=False,
@@ -42,21 +43,14 @@ class SetMaintenance(CookbookBase):
             required=True,
             help="FQDN of the cloudvirt to set in maintenance.",
         )
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this reboot (ex. T123456)",
-        )
 
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return SetMaintenanceRunner(
+        return with_common_opts(args, SetMaintenanceRunner,)(
             fqdn=args.fqdn,
             control_node_fqdn=args.control_node_fqdn,
-            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
@@ -66,15 +60,15 @@ class SetMaintenanceRunner(CookbookRunnerBase):
 
     def __init__(
         self,
+        common_opts: CommonOpts,
         fqdn: str,
         control_node_fqdn: str,
         spicerack: Spicerack,
-        task_id: Optional[str] = None,
     ):
         """Init."""
+        self.common_opts = common_opts
         self.fqdn = fqdn
         self.control_node_fqdn = control_node_fqdn
-        self.task_id = task_id
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
             control_node_fqdn=control_node_fqdn,
@@ -83,11 +77,7 @@ class SetMaintenanceRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point."""
-        dologmsg(
-            project="admin",
-            message=f"Setting cloudvirt '{self.fqdn}' maintenance.",
-            task_id=self.task_id,
-        )
+        dologmsg(common_opts=self.common_opts, message=f"Setting cloudvirt '{self.fqdn}' maintenance.")
         icinga_hosts = IcingaHosts(
             icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True),
             target_hosts=[self.fqdn],
@@ -106,9 +96,5 @@ class SetMaintenanceRunner(CookbookRunnerBase):
         except OpenstackNotFound as error:
             logging.info("%s", error)
 
-        dologmsg(
-            project="admin",
-            message=f"Set cloudvirt '{self.fqdn}' maintenance.",
-            task_id=self.task_id,
-        )
+        dologmsg(common_opts=self.common_opts, message=f"Set cloudvirt '{self.fqdn}' maintenance.")
         LOGGER.info("Host %s now in maintenance mode. No new VMs will be scheduled in it.", self.fqdn)

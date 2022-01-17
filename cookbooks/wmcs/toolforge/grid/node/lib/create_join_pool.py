@@ -9,19 +9,19 @@ Usage example:
 import argparse
 import datetime
 import logging
-from typing import Optional
-from enum import Enum
 from dataclasses import replace
+from enum import Enum
+from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import dologmsg, DebianVersion
+from cookbooks.wmcs import CommonOpts, DebianVersion, add_common_opts, dologmsg, with_common_opts
 from cookbooks.wmcs.toolforge.grid import GridController
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
-    InstanceCreationOpts,
     CreateInstanceWithPrefix,
+    InstanceCreationOpts,
     add_instance_creation_options,
     with_instance_creation_options,
 )
@@ -50,18 +50,8 @@ class ToolforgeGridNodeCreateJoinPool(CookbookBase):
             description=__doc__,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
-        parser.add_argument(
-            "--project",
-            required=True,
-            help="Openstack project where the toolforge installation resides.",
-        )
+        add_common_opts(parser, project_default="toolsbeta")
         add_instance_creation_options(parser)
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this operation (ex. T123456)",
-        )
         parser.add_argument(
             "--grid-master-fqdn",
             required=False,
@@ -90,12 +80,10 @@ class ToolforgeGridNodeCreateJoinPool(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_instance_creation_options(args, ToolforgeGridNodeCreateJoinPoolRunner)(
-            project=args.project,
+        return with_common_opts(args, with_instance_creation_options(args, ToolforgeGridNodeCreateJoinPoolRunner))(
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
             debian_version=DebianVersion[args.debian_version.upper()],
-            task_id=args.task_id,
             spicerack=self.spicerack,
             nodetype=args.nodetype,
         )
@@ -106,18 +94,16 @@ class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
 
     def __init__(
         self,
-        project: str,
+        common_opts: CommonOpts,
         grid_master_fqdn: str,
-        task_id: str,
         spicerack: Spicerack,
         instance_creation_opts: InstanceCreationOpts,
         nodetype: GridNodeType,
         debian_version: DebianVersion = DebianVersion.BUSTER,
     ):
         """Init"""
-        self.project = project
+        self.common_opts = common_opts
         self.grid_master_fqdn = grid_master_fqdn
-        self.task_id = task_id
         self.spicerack = spicerack
         self.debian_version = debian_version
         self.instance_creation_opts = instance_creation_opts
@@ -127,15 +113,14 @@ class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
         """Main entry point"""
         if not self.instance_creation_opts.prefix:
             self.instance_creation_opts = replace(
-                self.instance_creation_opts, prefix=f"{self.project}-sge{self.nodetype}-{self.debian_version.value}"
+                self.instance_creation_opts,
+                prefix=f"{self.common_opts.project}-sge{self.nodetype}-{self.debian_version.value}",
             )
 
         start_args = [
-            "--project",
-            self.project,
             "--ssh-retries",
             "60",  # 1H. Installing the exec environment (via puppet) takes a really long time.
-        ] + self.instance_creation_opts.to_cli_args()
+        ] + self.instance_creation_opts.to_cli_args() + self.common_opts.to_cli_args()
 
         create_instance_cookbook = CreateInstanceWithPrefix(spicerack=self.spicerack)
         response = create_instance_cookbook.get_runner(
@@ -162,10 +147,6 @@ class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
         PuppetHosts(remote_hosts=node).run(timeout=30 * 60)
 
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
-        grid_controller.add_node(host_fqdn=new_member_fqdn, is_tools_project=(self.project == "tools"))
+        grid_controller.add_node(host_fqdn=new_member_fqdn, is_tools_project=(self.common_opts.project == "tools"))
 
-        dologmsg(
-            project=self.project,
-            message=f"created node {new_member_fqdn} and added it to the grid",
-            task_id=self.task_id,
-        )
+        dologmsg(common_opts=self.common_opts, message=f"created node {new_member_fqdn} and added it to the grid")

@@ -8,14 +8,14 @@ Usage example:
         --node-hostname toolsbeta-sgewebgen-09-2
 """
 import argparse
-import time
 import logging
+import time
 from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import OpenstackAPI, dologmsg
+from cookbooks.wmcs import CommonOpts, OpenstackAPI, add_common_opts, dologmsg, with_common_opts
 from cookbooks.wmcs.toolforge.grid import GridController, GridNodeNotFound
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
 
@@ -42,17 +42,7 @@ class ToolforgeGridNodeDepoolRemove(CookbookBase):
             description=__doc__,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
-        parser.add_argument(
-            "--project",
-            required=True,
-            help="Openstack project where the toolforge installation resides.",
-        )
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this operation (ex. T123456)",
-        )
+        add_common_opts(parser, project_default="toolsbeta")
         parser.add_argument(
             "--grid-master-fqdn",
             required=False,
@@ -67,12 +57,10 @@ class ToolforgeGridNodeDepoolRemove(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return ToolforgeGridNodeDepoolRemoveRunner(
-            project=args.project,
+        return with_common_opts(args, ToolforgeGridNodeDepoolRemoveRunner,)(
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
             node_hostname=args.node_hostname,
-            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
@@ -82,16 +70,14 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
 
     def __init__(
         self,
-        project: str,
+        common_opts: CommonOpts,
         node_hostname: str,
         grid_master_fqdn: str,
-        task_id: str,
         spicerack: Spicerack,
     ):
         """Init"""
-        self.project = project
+        self.common_opts = common_opts
         self.grid_master_fqdn = grid_master_fqdn
-        self.task_id = task_id
         self.spicerack = spicerack
         self.node_hostname = node_hostname
 
@@ -100,17 +86,16 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
         openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(),
             control_node_fqdn="cloudcontrol1005.wikimedia.org",
-            project=self.project,
+            project=self.common_opts.project,
         )
         if not openstack_api.server_exists(self.node_hostname, print_output=False):
-            LOGGER.warning("%s is not an openstack VM in project %s", self.node_hostname, self.project)
+            LOGGER.warning("%s is not an openstack VM in project %s", self.node_hostname, self.common_opts.project)
             return
 
         # before we start, notify folks
         dologmsg(
-            project=self.project,
+            common_opts=self.common_opts,
             message=f"removing grid node {self.node_hostname} (depool/drain, remove VM and reconfigure grid)",
-            task_id=self.task_id,
         )
 
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
@@ -127,20 +112,18 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
             LOGGER.info(
                 "can't depool node %s, not found in the %s grid, continuing with other steps anyway",
                 self.node_hostname,
-                self.project,
+                self.common_opts.project,
             )
 
         # step 2
         LOGGER.info("STEP 2: delete the virtual machine %s", self.node_hostname)
         remove_instance_cookbook = RemoveInstance(self.spicerack)
         remove_args = [
-            "--project",
-            self.project,
             "--server-name",
             self.node_hostname,
-            "--dologmsg",
-            False,
-        ]
+            "--no-dologmsg",  # not interested in SAL logs for the internal call
+        ] + self.common_opts.to_cli_args()
+
         remove_instance_cookbook_runner = remove_instance_cookbook.get_runner(
             args=remove_instance_cookbook.argument_parser().parse_args(remove_args)
         )
@@ -150,7 +133,7 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
 
         # step 3
         LOGGER.info("STEP 3: reconfigure the grid so it knows %s no longer exists", self.node_hostname)
-        grid_controller.reconfigure(is_tools_project=(self.project == "tools"))
+        grid_controller.reconfigure(is_tools_project=(self.common_opts.project == "tools"))
 
         # all done
         LOGGER.info("all operations done. Congratulations, you have one less grid node.")

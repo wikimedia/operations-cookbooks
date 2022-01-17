@@ -15,7 +15,15 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import CephClusterController, CephOSDController, CephOSDFlag, dologmsg
+from cookbooks.wmcs import (
+    CephClusterController,
+    CephOSDController,
+    CephOSDFlag,
+    CommonOpts,
+    add_common_opts,
+    dologmsg,
+    with_common_opts,
+)
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
 
 LOGGER = logging.getLogger(__name__)
@@ -35,6 +43,7 @@ class BootstrapAndAdd(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
+        add_common_opts(parser)
         parser.add_argument(
             "--new-osd-fqdn",
             required=True,
@@ -43,12 +52,6 @@ class BootstrapAndAdd(CookbookBase):
                 "FQDNs of the new OSDs to add. Repeat for each new OSD. If specifying more than one, consider passing "
                 "--yes-i-know-what-im-doing"
             ),
-        )
-        parser.add_argument(
-            "--task-id",
-            required=False,
-            default=None,
-            help="Id of the task related to this reboot (ex. T123456)",
         )
         parser.add_argument(
             "--controlling-node-fqdn",
@@ -86,7 +89,7 @@ class BootstrapAndAdd(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return BootstrapAndAddRunner(
+        return with_common_opts(args, BootstrapAndAddRunner,)(
             new_osd_fqdns=args.new_osd_fqdn,
             yes_i_know=args.yes_i_know_what_im_doing,
             skip_reboot=args.skip_reboot,
@@ -102,29 +105,28 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
 
     def __init__(
         self,
+        common_opts: CommonOpts,
         new_osd_fqdns: List[str],
         yes_i_know: bool,
         skip_reboot: bool,
         wait_for_rebalance: bool,
-        task_id: str,
         controlling_node_fqdn: str,
         spicerack: Spicerack,
     ):
         """Init"""
+        self.common_opts = common_opts
         self.new_osd_fqdns = new_osd_fqdns
         self.controlling_node_fqdn = controlling_node_fqdn
         self.yes_i_know = yes_i_know
         self.skip_reboot = skip_reboot
         self.spicerack = spicerack
         self.wait_for_rebalance = wait_for_rebalance
-        self.task_id = task_id
 
     def run(self) -> Optional[int]:
         """Main entry point"""
         dologmsg(
-            project="admin",
+            common_opts=self.common_opts,
             message=f"Adding new OSDs {self.new_osd_fqdns} to the cluster",
-            task_id=self.task_id,
         )
         cluster_controller = CephClusterController(
             remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn
@@ -134,9 +136,8 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
 
         for index, new_osd_fqdn in enumerate(self.new_osd_fqdns):
             dologmsg(
-                project="admin",
-                message=f"  Adding OSD {new_osd_fqdn}... ({index + 1}/{len(self.new_osd_fqdns)})",
-                task_id=self.task_id,
+                common_opts=self.common_opts,
+                message=f"Adding OSD {new_osd_fqdn}... ({index + 1}/{len(self.new_osd_fqdns)})",
             )
             node = self.spicerack.remote().query(f"D{{{new_osd_fqdn}}}", use_sudo=True)
             # make sure puppet has run fully
@@ -150,7 +151,8 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
                     self.controlling_node_fqdn,
                     "--fqdn-to-reboot",
                     new_osd_fqdn,
-                ]
+                ] + self.common_opts.to_cli_args()
+
                 reboot_node_cookbook.get_runner(
                     args=reboot_node_cookbook.argument_parser().parse_args(reboot_args)
                 ).run()
@@ -159,17 +161,15 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
                 interactive=(not self.yes_i_know)
             )
             dologmsg(
-                project="admin",
-                message=f"  Added OSD {new_osd_fqdn}... ({index + 1}/{len(self.new_osd_fqdns)})",
-                task_id=self.task_id,
+                common_opts=self.common_opts,
+                message=f"Added OSD {new_osd_fqdn}... ({index + 1}/{len(self.new_osd_fqdns)})",
             )
 
         # Now we start rebalancing once all are in
         cluster_controller.unset_osdmap_flag(CephOSDFlag("norebalance"))
         dologmsg(
-            project="admin",
+            common_opts=self.common_opts,
             message=f"Added {len(self.new_osd_fqdns)} new OSDs {self.new_osd_fqdns}",
-            task_id=self.task_id,
         )
         LOGGER.info(
             "The new OSDs are up and running, the cluster will now start rebalancing the data to them, that might "
@@ -183,7 +183,6 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
             cluster_controller.wait_for_in_progress_events(timeout_seconds=wait_hours * 60 * 60)
             LOGGER.info("Rebalancing done.")
             dologmsg(
-                project="admin",
+                common_opts=self.common_opts,
                 message=f"The cluster is now rebalanced after adding the new OSDs {self.new_osd_fqdns}",
-                task_id=self.task_id,
             )
