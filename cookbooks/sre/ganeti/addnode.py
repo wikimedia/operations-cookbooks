@@ -81,7 +81,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         print('Ready to add Ganeti node {} in the {} cluster'.format(self.fqdn, self.cluster))
         ask_confirmation('Is this correct?')
 
-        if str(self.remote_host) not in self.remote.query('A:ganeti-all').hosts:
+        if self.fqdn not in self.remote.query('A:ganeti-all').hosts:
             raise RuntimeError(
                 '{} does have not have the Ganeti role applied. Please fix and re-run the cookbook'
                 .format(self.fqdn)
@@ -108,6 +108,12 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
             'brctl show public | grep "en[o|p|s]"',
             'No public bridge configured',
         )
+
+        if self.fqdn in self.remote.query('A:eqiad').hosts:
+            self.validate_state(
+                'brctl show analytics | grep "en[o|p|s]"',
+                'No analytics bridge configured',
+            )
 
         self.master.run_sync('gnt-node add --no-ssh-key-check -g "{cluster}" "{node}"'.format(
             cluster=self.cluster, node=self.fqdn))
