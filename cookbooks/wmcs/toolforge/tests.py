@@ -64,7 +64,7 @@ class ToolforgeTestsRunner(CookbookRunnerBase):
     def run(self) -> Optional[int]:
         """Main entry point"""
         fqdn = f"{self.bastion_hostname}.{self.common_opts.project}.eqiad1.wikimedia.cloud"
-        bastion = self.spicerack.remote().query(f"D{{{fqdn}}}")
+        bastion = self.spicerack.remote().query(f"D{{{fqdn}}}", use_sudo=True)
 
         checklist = CmdChecklist(
             name="Toolforge automated tests",
