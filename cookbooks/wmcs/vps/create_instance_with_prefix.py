@@ -24,7 +24,16 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from spicerack.remote import RemoteExecutionError
 from wmflib.decorators import retry
 
-from cookbooks.wmcs import OpenstackAPI, OpenstackServerGroupPolicy, natural_sort_key, OpenstackIdentifier, run_one
+from cookbooks.wmcs import (
+    OpenstackAPI,
+    OpenstackServerGroupPolicy,
+    natural_sort_key,
+    OpenstackIdentifier,
+    run_one,
+    CommonOpts,
+    with_common_opts,
+    add_common_opts,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -166,7 +175,7 @@ def with_instance_creation_options(args: argparse.Namespace, runner: CookbookRun
         network=args.network,
         security_group=args.security_group,
         server_group=args.server_group,
-        server_group_policy=args.server_group_policy
+        server_group_policy=args.server_group_policy,
     )
     return partial(runner, instance_creation_opts=instance_creation_opts)
 
@@ -183,7 +192,7 @@ class CreateInstanceWithPrefix(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
-        parser.add_argument("--project", required=True, help="Openstack project to manage.")
+        add_common_opts(parser)
         add_instance_creation_options(parser)
         parser.add_argument(
             "--ssh-retries",
@@ -200,7 +209,7 @@ class CreateInstanceWithPrefix(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_instance_creation_options(args, CreateInstanceWithPrefixRunner,)(
+        return with_common_opts(args, with_instance_creation_options(args, CreateInstanceWithPrefixRunner,))(
             security_group=args.security_group,
             server_group=args.server_group,
             server_group_policy=args.server_group_policy,
@@ -215,7 +224,7 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
 
     def __init__(
         self,
-        project: str,
+        common_opts: CommonOpts,
         spicerack: Spicerack,
         instance_creation_opts: InstanceCreationOpts,
         server_group_policy: str,
@@ -224,12 +233,12 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
         ssh_retries: int = 15,
     ):
         """Init"""
+        self.common_opts = common_opts
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
             control_node_fqdn="cloudcontrol1003.wikimedia.org",
-            project=project,
+            project=self.common_opts.project,
         )
-        self.project = project
         self.prefix = instance_creation_opts.prefix
         self.flavor = instance_creation_opts.flavor
         self.network = instance_creation_opts.network
@@ -282,23 +291,23 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
         maybe_security_group = self.openstack_api.security_group_by_name(name=self.security_group, print_output=False)
         if maybe_security_group is None:
             raise Exception(
-                f"Unable to find a '{self.security_group}' security group for project {self.project}, though it "
-                "should have been created before if not there."
+                f"Unable to find a '{self.security_group}' security group for project {self.common_opts.project}, "
+                "though it should have been created before if not there."
             )
 
         security_group_id: str = maybe_security_group["ID"]
 
         maybe_default_security_group = self.openstack_api.security_group_by_name(name="default", print_output=False)
         if maybe_default_security_group is None:
-            raise Exception(f"Unable to find a default security group for project {self.project}")
+            raise Exception(f"Unable to find a default security group for project {self.common_opts.project}")
 
         default_security_group_id: str = maybe_default_security_group["ID"]
 
         maybe_server_group = self.openstack_api.server_group_by_name(name=self.server_group, print_output=False)
         if maybe_server_group is None:
             raise Exception(
-                f"Unable to find a server group with name {self.server_group} for project {self.project}, though it "
-                "should have been created before if not there."
+                f"Unable to find a server group with name {self.server_group} for project {self.common_opts.project}, "
+                "though it should have been created before if not there."
             )
 
         server_group_id: str = maybe_server_group["ID"]
@@ -312,7 +321,7 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
             name=new_prefix_member_name,
         )
 
-        new_instance_fqdn = f"{new_prefix_member_name}.{self.project}.eqiad1.wikimedia.cloud"
+        new_instance_fqdn = f"{new_prefix_member_name}.{self.common_opts.project}.eqiad1.wikimedia.cloud"
         new_prefix_node = self.spicerack.remote().query(f"D{{{new_instance_fqdn}}}", use_sudo=True)
 
         @retry(
