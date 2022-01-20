@@ -3,8 +3,6 @@
 It will make sure to use the same flavor, network, groups and increment the
 index of the existing instance with the same prefix unless you pass a specific
 one.
-NOTE: it requires for an instance to be already there (TODO: allow creating
-a without previous instances).
 
 Usage example:
     cookbook wmcs.vps.create_instance_with_prefix \
@@ -246,7 +244,6 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
         """Main entry point"""
         self.openstack_api.security_group_ensure(
             security_group=self.security_group,
-            description="This group provides full access from its members to its members.",
         )
         self.openstack_api.server_group_ensure(
             server_group=self.server_group,
