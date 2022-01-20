@@ -189,8 +189,9 @@ class OpenstackAPI:
         """
         return self._run("port", "create", "--network", _quote(network), _quote(ip_name), **kwargs)
 
-    def attach_service_ip(self, ip_address: str,
-                          server_port_id: OpenstackIdentifier, **kwargs) -> Dict[OpenstackName, Any]:
+    def attach_service_ip(
+        self, ip_address: str, server_port_id: OpenstackIdentifier, **kwargs
+    ) -> Dict[OpenstackName, Any]:
         """Attach a specified service ip address to the specifed port
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
