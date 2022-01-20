@@ -239,7 +239,7 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
         self.server_group = server_group or self.prefix
         self.server_group_policy = server_group_policy
         self.spicerack = spicerack
-        self.security_group = security_group or f"{self.project}-k8s-full-connectivity"
+        self.security_group = security_group
         self.ssh_retries = ssh_retries
 
     def run(self) -> CreateServerResponse:  # pylint: disable=too-many-locals
