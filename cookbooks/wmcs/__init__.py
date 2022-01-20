@@ -1379,3 +1379,72 @@ class CephTestUtils(TestUtils):
             available_device["mountpoint"] = mountpoint
 
         return available_device
+
+
+class CmdChecklistParsingError(Exception):
+    """CmdChecklistParsingError used to signal that we failed to parse cmd-checklist-runner output."""
+
+
+@dataclass(frozen=True)
+class CmdCheckListResults:
+    """CmdChecklistResults to host the results of running cmd-checklist-runner."""
+
+    passed: int
+    failed: int
+    total: int
+
+
+class CmdChecklist:
+    """CmdChecklist to abstract running cmd-checklist-runner on a remote host."""
+
+    def __init__(self, name: str, remote_hosts: RemoteHosts, config_file: str):
+        """Init."""
+        self.name = name
+        self.remote_hosts = remote_hosts
+        self.config_file = config_file
+
+    def _parse_output(self, output_lines: List[str]) -> CmdCheckListResults:
+        """Parse output from cmd-checklist-runner."""
+        passed = failed = total = -1
+
+        for line in output_lines:
+            if line.startswith("[cmd-checklist-runner] INFO: --- passed tests: "):
+                passed = int(line.split(" ")[-1])
+                continue
+
+            if line.startswith("[cmd-checklist-runner] INFO: --- failed tests: "):
+                failed = int(line.split(" ")[-1])
+                continue
+
+            if line.startswith("[cmd-checklist-runner] INFO: --- total tests: "):
+                total = int(line.split(" ")[-1])
+                continue
+
+        if passed < 0 or failed < 0 or total < 0:
+            raise CmdChecklistParsingError(f"{self.name}: unable to parse the output from cmd-checklist-runner")
+
+        return CmdCheckListResults(passed=passed, failed=failed, total=total)
+
+    def run(self, **kwargs) -> CmdCheckListResults:
+        """Run the cmd-checklist-runner testsuite."""
+        output_lines = run_one(
+            node=self.remote_hosts,
+            command=["cmd-checklist-runner", "--config", self.config_file],
+            is_safe=True,
+            **kwargs,
+        ).splitlines()
+
+        return self._parse_output(output_lines)
+
+    def evaluate(self, results: CmdCheckListResults) -> int:
+        """Evaluate the cmd-checklist-runner results."""
+        if results.total < 1:
+            LOGGER.warning("%s: no tests were run!", self.name)
+            return 0
+
+        if results.failed > 0:
+            LOGGER.error("%s: %s failed tests detected!", self.name, results.failed)
+            return 1
+
+        LOGGER.info("%s: %s/%s passed tests.", self.name, results.passed, results.total)
+        return 0

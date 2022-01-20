@@ -7,12 +7,12 @@ Usage example:
 """
 import argparse
 import logging
-from typing import Optional, Tuple, List
+from typing import Optional
 from enum import Enum
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
-from cookbooks.wmcs import run_one
+from cookbooks.wmcs import CmdChecklist
 
 LOGGER = logging.getLogger(__name__)
 
@@ -74,39 +74,13 @@ class NetworkTests(CookbookBase):
         )
 
 
-class NetworkTestParsingError(Exception):
-    """Custom exception class for NetworkTest parsing errors."""
-
-
 class NetworkTestRunner(CookbookRunnerBase):
-    """Runner for NetworkTestsTODO"""
+    """Runner for NetworkTests"""
 
     def __init__(self, deployment: str, spicerack: Spicerack):
         """Init"""
         self.deployment = deployment
         self.spicerack = spicerack
-
-    def _parse_output(self, output_lines: List[str]) -> Tuple[int, int, int]:
-        """Parse run_sync() results"""
-        passed = failed = total = -1
-
-        for line in output_lines:
-            if line.startswith("[cmd-checklist-runner] INFO: --- passed tests: "):
-                passed = int(line.split(" ")[-1])
-                continue
-
-            if line.startswith("[cmd-checklist-runner] INFO: --- failed tests: "):
-                failed = int(line.split(" ")[-1])
-                continue
-
-            if line.startswith("[cmd-checklist-runner] INFO: --- total tests: "):
-                total = int(line.split(" ")[-1])
-                continue
-
-        if passed < 0 or failed < 0 or total < 0:
-            raise NetworkTestParsingError("Unable to parse the output of the checklist runner")
-
-        return passed, failed, total
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -122,20 +96,8 @@ class NetworkTestRunner(CookbookRunnerBase):
             control_node = i
             break
 
-        output_lines = run_one(
-            node=control_node,
-            command=["cmd-checklist-runner", "--config", "/etc/networktests/networktests.yaml"],
-            print_progress_bars=False,
-            is_safe=True,
-        ).splitlines()
-        passed, failed, total = self._parse_output(output_lines)
-
-        if total < 1:
-            LOGGER.warning(f"{self.__class__.__name__}: no tests were run!")
-
-        if failed > 0:
-            LOGGER.error(f"{self.__class__.__name__}: {failed} failed tests detected!")
-            return 1
-
-        LOGGER.info(f"{self.__class__.__name__}: {passed}/{total} passed tests.")
-        return 0
+        checklist = CmdChecklist(
+            name="Cloud VPS network tests", remote_hosts=control_node, config_file="/etc/networktests/networktests.yaml"
+        )
+        results = checklist.run(print_progress_bars=False)
+        return checklist.evaluate(results)
