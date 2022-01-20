@@ -90,7 +90,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
             )
 
         self.validate_state(
-            'lscpu |grep vmx',
+            'ls /dev/kvm',
             'does have not have virtualisation enabled in BIOS'
         )
 
