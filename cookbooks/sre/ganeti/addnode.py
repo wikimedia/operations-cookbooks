@@ -65,10 +65,13 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return 'for new host {} to {}'.format(self.fqdn, self.cluster)
 
-    def validate_state(self, cmd, msg):
+    def validate_state(self, cmd, msg, *, run_on_masternode=False):
         """Ensure a given precondition for adding a Ganeti node and bail out if missed"""
         try:
-            status = next(self.master.run_sync(cmd))
+            if run_on_masternode:
+                status = next(self.master.run_sync(cmd))
+            else:
+                status = next(self.remote_host.run_sync(cmd))
 
         except StopIteration:
             status = None
