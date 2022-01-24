@@ -307,6 +307,10 @@ class OpenstackAPI:
         for security_group_id in security_group_ids:
             security_group_options.extend(["--security-group", security_group_id])
 
+        server_group_options = []
+        if server_group_id:
+            server_group_options.extend(["--hint", f"group={server_group_id}"])
+
         out = self._run(
             "server",
             "create",
@@ -316,9 +320,8 @@ class OpenstackAPI:
             _quote(image),
             "--network",
             _quote(network),
-            "--hint",
-            f"group={server_group_id}",
             "--wait",
+            *server_group_options,
             *security_group_options,
             name,
         )
@@ -347,7 +350,7 @@ class OpenstackAPI:
 
     def security_group_create(self, name: OpenstackName, description: str) -> None:
         """Create a security group."""
-        self._run("security", "group", "create", name, "--description", description)
+        self._run("security", "group", "create", name, "--description", _quote(description))
 
     def security_group_rule_create(
         self, direction: OpenstackRuleDirection, remote_group: OpenstackName, security_group: OpenstackName
@@ -358,7 +361,7 @@ class OpenstackAPI:
             "group",
             "rule",
             "create",
-            f"--{direction.name}",
+            f"--{direction.name.lower}",
             "--remote-group",
             remote_group,
             "--protocol",
