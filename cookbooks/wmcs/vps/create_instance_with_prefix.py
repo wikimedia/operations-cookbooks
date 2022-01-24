@@ -213,7 +213,6 @@ class CreateInstanceWithPrefix(CookbookBase):
             security_group=args.security_group,
             server_group=args.server_group,
             server_group_policy=args.server_group_policy,
-            project=args.project,
             ssh_retries=args.ssh_retries,
             spicerack=self.spicerack,
         )
