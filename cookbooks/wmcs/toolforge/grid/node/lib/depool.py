@@ -3,16 +3,23 @@ r"""WMCS Toolforge - grid - depool an existing grid exec/web node from the clust
 Usage example:
     cookbook wmcs.toolforge.grid.node.lib.depool \\
         --project toolsbeta \\
-        --node-fqdn toolsbeta-sgewebgen-09-2.toolsbeta.eqiad1.wikimedia.cloud
+        --node-hostnames toolsbeta-sgewebgen-09-2 toolsbeta-sgeexec-10-1
 """
 import argparse
 import logging
-from typing import Optional
+from typing import Optional, List
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CommonOpts, OpenstackAPI, add_common_opts, dologmsg, with_common_opts
+from cookbooks.wmcs import (
+    CommonOpts,
+    OpenstackAPI,
+    add_common_opts,
+    dologmsg,
+    with_common_opts,
+    parser_type_list_hostnames,
+)
 from cookbooks.wmcs.toolforge.grid import GridController, GridNodeNotFound
 
 LOGGER = logging.getLogger(__name__)
@@ -40,7 +47,9 @@ class ToolforgeGridNodeDepool(CookbookBase):
                 "default."
             ),
         )
-        parser.add_argument("--node-fqdn", required=True, help="FQDN of the new node.")
+        parser.add_argument(
+            "--node-hostnames", required=True, help="FQDN of the new node.", nargs="+", type=parser_type_list_hostnames
+        )
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
@@ -48,7 +57,7 @@ class ToolforgeGridNodeDepool(CookbookBase):
         return with_common_opts(args, ToolforgeGridNodeDepoolRunner,)(
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
-            node_fqdn=args.node_fqdn,
+            node_hostnames=args.node_hostnames,
             spicerack=self.spicerack,
         )
 
@@ -59,7 +68,7 @@ class ToolforgeGridNodeDepoolRunner(CookbookRunnerBase):
     def __init__(
         self,
         common_opts: CommonOpts,
-        node_fqdn: str,
+        node_hostnames: List[str],
         grid_master_fqdn: str,
         spicerack: Spicerack,
     ):
@@ -67,7 +76,7 @@ class ToolforgeGridNodeDepoolRunner(CookbookRunnerBase):
         self.common_opts = common_opts
         self.grid_master_fqdn = grid_master_fqdn
         self.spicerack = spicerack
-        self.node_fqdn = node_fqdn
+        self.node_hostnames = node_hostnames
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -76,20 +85,20 @@ class ToolforgeGridNodeDepoolRunner(CookbookRunnerBase):
             control_node_fqdn="cloudcontrol1005.wikimedia.org",
             project=self.common_opts.project,
         )
-        if not openstack_api.server_exists(self.node_fqdn, print_output=False):
-            LOGGER.warning("node %s is not a VM in project %s", self.node_fqdn, self.common_opts.project)
-            return 1
 
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
-        try:
-            grid_controller.depool_node(host_fqdn=self.node_fqdn)
-        except GridNodeNotFound:
-            LOGGER.warning("node %s not found in the %s grid", self.node_fqdn, self.common_opts.project)
-            return 1
 
-        dologmsg(
-            common_opts=self.common_opts,
-            message=f"depooled grid node {self.node_fqdn}",
-        )
+        for node in self.node_hostnames:
+            if not openstack_api.server_exists(node, print_output=False, print_progress_bars=False):
+                LOGGER.warning("node %s is not a VM in project %s", node, self.common_opts.project)
+                return 1
+
+            try:
+                grid_controller.depool_node(host_fqdn=node)
+            except GridNodeNotFound:
+                LOGGER.warning("node %s not found in the %s grid", node, self.common_opts.project)
+                return 1
+
+            dologmsg(common_opts=self.common_opts, message=f"depooled grid node {node}")
 
         return 0

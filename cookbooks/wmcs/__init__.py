@@ -40,6 +40,14 @@ OpenstackName = str
 OpenstackIdentifier = Union[OpenstackID, OpenstackName]
 
 
+def parser_type_list_hostnames(valuelist: List[str]):
+    """Validates a datatype in argparser to be a list of hostnames."""
+    for value in valuelist:
+        parser_type_str_hostname(value)
+
+    return valuelist
+
+
 def parser_type_str_hostname(value: str):
     """Validates datatype in arparser if a string is a hostname."""
     if "." in value:
