@@ -220,6 +220,8 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             ['NIC.Embedded.1-1-1', 'NIC.Embedded.2-1-1', 'NIC.Slot.2-1-1', 'NIC.Slot.2-2-1']
             ['NIC.Embedded.1-1-1', 'NIC.Embedded.2-1-1', 'NIC.Mezzanine.1-1-1', 'NIC.Mezzanine.1-2-1']
             ['NIC.Embedded.1-1-1', 'NIC.Embedded.2-1-1', 'NIC.Slot.3-1-1', 'NIC.Slot.3-2-1']
+            #     10Gb NIC1                 10Gb NIC2             1Gb NIC1                 1Gb NIC 2
+            ['NIC.Integrated.1-1-1', 'NIC.Integrated.1-2-1', 'NIC.Integrated.1-3-1', 'NIC.Integrated.1-4-1']
 
         Arguments:
             config (spicerack.redfish.RedfishDellSCP): the configuration to modify.
@@ -229,16 +231,13 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         other_nics = sorted(
             key for key in config.components.keys() if key.startswith('NIC.') and key not in embedded_nics)
 
+        all_nics = embedded_nics + other_nics
         prefixes = {key.split('-')[0] for key in other_nics}
-        if len(prefixes) == 1 and self.multi_gigabit:
-            if self.multi_gigabit:  # One external card and multi-gigabit set on Netbox, select the external NIC
-                pxe_nic = other_nics[0]
-            else:  # One external card but multi-gigabit not set on Netbox, select theembedded NIC
-                pxe_nic = embedded_nics[0]
-        elif not prefixes and not self.multi_gigabit:  # Just embedded NICs and multi-gigabit not set on Netbox
-            pxe_nic = embedded_nics[0]
+        if len(prefixes) == 1 and self.multi_gigabit:  # One external card and multi-gigabit set on Netbox
+            pxe_nic = other_nics[0]  # Select the first external NIC
+        elif embedded_nics and not self.multi_gigabit:  # Embedded NICs present and multi-gigabit not set on Netbox
+            pxe_nic = embedded_nics[0]  # Select the first embedded NIC
         else:  # Unable to auto-detect
-            all_nics = embedded_nics + other_nics
             all_nics_list = '\n'.join(all_nics)
             speed = 'multi-gigabit' if self.multi_gigabit else '1G'
             pxe_nic = ask_input(
@@ -246,8 +245,11 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 all_nics)
 
         logger.info('Enabling PXE boot on NIC %s', pxe_nic)
-        self.config_changes['NIC.Embedded.1-1-1'] = {'LegacyBootProto': 'NONE'}
-        self.config_changes[pxe_nic] = {'LegacyBootProto': 'PXE'}
+        for nic in all_nics:
+            if nic == pxe_nic:
+                self.config_changes[pxe_nic] = {'LegacyBootProto': 'PXE'}
+            else:
+                self.config_changes[nic] = {'LegacyBootProto': 'NONE'}
 
         # Set SetBootOrderEn to disk, primary NIC
         new_order = ','.join(['HardDisk.List.1-1', pxe_nic])
