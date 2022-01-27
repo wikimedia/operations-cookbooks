@@ -8,7 +8,7 @@ Usage example:
 import argparse
 import logging
 from typing import Optional
-from pprint import pprint
+import yaml
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -16,6 +16,14 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from cookbooks.wmcs.toolforge.grid import GridController
 
 LOGGER = logging.getLogger(__name__)
+
+
+class NoAliasDumper(yaml.Dumper):  # pylint: disable=too-many-ancestors
+    """Class override for the yaml module."""
+
+    def ignore_aliases(self, data):
+        """Function override, resolve yaml references."""
+        return True
 
 
 class ToolforgeGridGetClusterStatus(CookbookBase):
@@ -70,4 +78,4 @@ class ToolforgeGridGetClusterStatusRunner(CookbookRunnerBase):
     def run(self) -> Optional[int]:
         """Main entry point"""
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn)
-        pprint(grid_controller.get_nodes_info())
+        print(yaml.dump(grid_controller.get_nodes_info(), Dumper=NoAliasDumper))
