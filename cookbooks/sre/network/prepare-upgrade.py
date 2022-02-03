@@ -57,7 +57,8 @@ def run(args, spicerack):  # pylint: disable=too-many-return-statements
     ensure_shell_is_durable()
 
     logger.info('Get source image checksum')
-    image_server = spicerack.dns().resolve_cname('apt.wikimedia.org')
+    dns = spicerack.dns()
+    image_server = dns.resolve_ptr(dns.resolve_ipv4('apt.wikimedia.org')[0])[0]
     remote = spicerack.remote()
     image_server = remote.query(image_server)
     cmd = "sha1sum /srv/junos/{} | cut -d' ' -f1".format(args.image)
