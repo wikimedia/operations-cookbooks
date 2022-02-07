@@ -1419,15 +1419,15 @@ class CmdChecklist:
         passed = failed = total = -1
 
         for line in output_lines:
-            if line.startswith("[cmd-checklist-runner] INFO: --- passed tests: "):
+            if " INFO: --- passed tests: " in line:
                 passed = int(line.split(" ")[-1])
                 continue
 
-            if line.startswith("[cmd-checklist-runner] INFO: --- failed tests: "):
+            if " INFO: --- failed tests: " in line:
                 failed = int(line.split(" ")[-1])
                 continue
 
-            if line.startswith("[cmd-checklist-runner] INFO: --- total tests: "):
+            if " INFO: --- total tests: " in line:
                 total = int(line.split(" ")[-1])
                 continue
 
