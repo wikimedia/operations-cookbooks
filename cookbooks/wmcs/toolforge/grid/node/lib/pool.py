@@ -3,19 +3,20 @@ r"""WMCS Toolforge - grid - pool an existing grid exec/web node into the cluster
 Usage example:
     cookbook wmcs.toolforge.grid.node.lib.pool \\
         --project toolsbeta \\
-        --node-hostname toolsbeta-sgewebgen-09-2
+        --nodes-query toolsbeta-sgewebgen-09-[2-4],toolsbeta-sgeexec-10-[10,20]
 """
 import argparse
 import logging
 from typing import Optional
 
+from ClusterShell.NodeSet import NodeSetParseError
+from cumin.backends import InvalidQueryError
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import (
     OpenstackAPI,
     dologmsg,
-    parser_type_str_hostname,
     CommonOpts,
     with_common_opts,
     add_common_opts,
@@ -48,7 +49,9 @@ class ToolforgeGridNodePool(CookbookBase):
             ),
         )
         parser.add_argument(
-            "--node-hostname", required=True, help="FQDN of the new node.", type=parser_type_str_hostname
+            "--nodes-query",
+            required=True,
+            help="FQDN of the new node.",
         )
         return parser
 
@@ -57,7 +60,7 @@ class ToolforgeGridNodePool(CookbookBase):
         return with_common_opts(args, ToolforgeGridNodePoolRunner,)(
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
-            node_hostname=args.node_hostname,
+            nodes_query=args.nodes_query,
             spicerack=self.spicerack,
         )
 
@@ -68,7 +71,7 @@ class ToolforgeGridNodePoolRunner(CookbookRunnerBase):
     def __init__(
         self,
         common_opts: CommonOpts,
-        node_hostname: str,
+        nodes_query: str,
         grid_master_fqdn: str,
         spicerack: Spicerack,
     ):
@@ -76,25 +79,52 @@ class ToolforgeGridNodePoolRunner(CookbookRunnerBase):
         self.common_opts = common_opts
         self.grid_master_fqdn = grid_master_fqdn
         self.spicerack = spicerack
-        self.node_hostname = node_hostname
+        self.nodes_query = nodes_query
 
     def run(self) -> Optional[int]:
         """Main entry point"""
+        try:
+            remote_hosts = self.spicerack.remote().query("D{%s}" % (self.nodes_query))
+            requested_nodes = remote_hosts.hosts
+        except InvalidQueryError as exc:
+            LOGGER.error(f"invalid query: {exc}")
+            return 1
+        except NodeSetParseError as exc:
+            LOGGER.error(f"invalid query: {exc}")
+            return 1
+
         openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(),
             control_node_fqdn="cloudcontrol1005.wikimedia.org",
             project=self.common_opts.project,
         )
-        if not openstack_api.server_exists(self.node_hostname, print_output=False, print_progress_bars=False):
-            LOGGER.warning("node %s is not a VM in project %s", self.node_hostname, self.common_opts.project)
-            return 1
 
-        grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
-        try:
-            grid_controller.pool_node(hostname=self.node_hostname)
-        except GridNodeNotFound:
-            LOGGER.warning("node %s not found in the %s grid", self.node_fqdn, self.common_opts.project)
-            return 1
+        actual_nodes = openstack_api.server_list_filter_exists(
+            requested_nodes[:], print_output=False, print_progress_bars=False
+        )
 
-        dologmsg(common_opts=self.common_opts, message=f"pooled grid node {self.node_hostname}")
-        return 0
+        for node in set(requested_nodes) - set(actual_nodes):
+            LOGGER.warning("node %s is not a VM in project %s, ignoring", node, self.common_opts.project)
+
+        self._grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
+
+        counter = 0
+        for hostname in actual_nodes:
+            if self.spicerack.dry_run:
+                LOGGER.info("would repool node %s", hostname)
+                counter += 1
+                continue
+
+            try:
+                self._grid_controller.pool_node(hostname=hostname)
+                LOGGER.info("repooled node %s", hostname)
+                counter += 1
+            except GridNodeNotFound:
+                LOGGER.warning("node %s not found in the %s grid, ignoring", hostname, self.common_opts.project)
+
+        if counter > 0:
+            dologmsg(common_opts=self.common_opts, message=f"pooled {counter} grid nodes {self.nodes_query}")
+            return 0
+
+        LOGGER.error("couldn't pool any node")
+        return 1
