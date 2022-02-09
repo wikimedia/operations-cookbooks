@@ -58,7 +58,9 @@ class ToolforgeScaleGridWebgen(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, with_instance_creation_options(args, ToolforgeScaleGridWebgenRunner))(
+        return with_common_opts(
+            self.spicerack, args, with_instance_creation_options(args, ToolforgeScaleGridWebgenRunner)
+        )(
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
             debian_version=DebianVersion[args.debian_version.upper()],

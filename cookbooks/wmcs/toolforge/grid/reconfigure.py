@@ -45,7 +45,7 @@ class ToolforgeGridReconfigure(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, ToolforgeGridReconfigureRunner,)(
+        return with_common_opts(self.spicerack, args, ToolforgeGridReconfigureRunner,)(
             master_node_fqdn=args.master_node_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
             spicerack=self.spicerack,

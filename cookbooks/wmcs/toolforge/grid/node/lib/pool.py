@@ -57,7 +57,7 @@ class ToolforgeGridNodePool(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, ToolforgeGridNodePoolRunner,)(
+        return with_common_opts(self.spicerack, args, ToolforgeGridNodePoolRunner,)(
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
             nodes_query=args.nodes_query,

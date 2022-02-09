@@ -54,7 +54,7 @@ class Drain(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, DrainRunner,)(
+        return with_common_opts(self.spicerack, args, DrainRunner,)(
             hostname_to_drain=args.hostname_to_drain,
             control_node_fqdn=args.control_node_fqdn,
             spicerack=self.spicerack,

@@ -81,7 +81,7 @@ class ToolforgeAddK8sWorkerNode(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, ToolforgeAddK8sWorkerNodeRunner,)(
+        return with_common_opts(self.spicerack, args, ToolforgeAddK8sWorkerNodeRunner,)(
             k8s_worker_prefix=args.k8s_worker_prefix,
             k8s_control_prefix=args.k8s_control_prefix,
             image=args.image,

@@ -54,7 +54,7 @@ class ToolforgeGridNodeJoin(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, ToolforgeGridNodeJoinRunner,)(
+        return with_common_opts(self.spicerack, args, ToolforgeGridNodeJoinRunner,)(
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
             new_node_fqdn=args.new_node_fqdn,

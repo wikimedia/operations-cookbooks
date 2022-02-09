@@ -209,7 +209,14 @@ class CreateInstanceWithPrefix(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, with_instance_creation_options(args, CreateInstanceWithPrefixRunner,))(
+        return with_common_opts(
+            self.spicerack,
+            args,
+            with_instance_creation_options(
+                args,
+                CreateInstanceWithPrefixRunner,
+            ),
+        )(
             security_group=args.security_group,
             server_group=args.server_group,
             server_group_policy=args.server_group_policy,

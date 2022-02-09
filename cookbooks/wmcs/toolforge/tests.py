@@ -41,7 +41,7 @@ class ToolforgeTests(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, ToolforgeTestsRunner,)(
+        return with_common_opts(self.spicerack, args, ToolforgeTestsRunner,)(
             bastion_hostname=args.bastion_hostname,
             spicerack=self.spicerack,
         )

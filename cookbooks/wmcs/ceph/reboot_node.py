@@ -68,7 +68,7 @@ class RebootNode(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, RebootNodeRunner,)(
+        return with_common_opts(self.spicerack, args, RebootNodeRunner,)(
             fqdn_to_reboot=args.fqdn_to_reboot,
             controlling_node_fqdn=args.controlling_node_fqdn,
             skip_maintenance=args.skip_maintenance,

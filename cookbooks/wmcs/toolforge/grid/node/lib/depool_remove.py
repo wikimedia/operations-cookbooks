@@ -58,7 +58,7 @@ class ToolforgeGridNodeDepoolRemove(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, ToolforgeGridNodeDepoolRemoveRunner,)(
+        return with_common_opts(self.spicerack, args, ToolforgeGridNodeDepoolRemoveRunner,)(
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
             node_hostname=args.node_hostname,

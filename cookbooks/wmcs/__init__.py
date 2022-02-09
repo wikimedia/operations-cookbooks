@@ -116,9 +116,11 @@ def add_common_opts(parser: argparse.ArgumentParser, project_default: str = "adm
     return parser
 
 
-def with_common_opts(args: argparse.Namespace, runner: CookbookRunnerBase) -> Callable:
+def with_common_opts(spicerack: Spicerack, args: argparse.Namespace, runner: CookbookRunnerBase) -> Callable:
     """Helper to add CommonOpts to a cookbook instantation."""
-    common_opts = CommonOpts(project=args.project, task_id=args.task_id, no_dologmsg=args.no_dologmsg)
+    no_dologmsg = bool(spicerack.dry_run or args.no_dologmsg)
+
+    common_opts = CommonOpts(project=args.project, task_id=args.task_id, no_dologmsg=no_dologmsg)
 
     return partial(runner, common_opts=common_opts)
 

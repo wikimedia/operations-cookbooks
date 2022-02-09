@@ -41,7 +41,7 @@ class RemoveInstance(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, RemoveInstanceRunner,)(
+        return with_common_opts(self.spicerack, args, RemoveInstanceRunner,)(
             name_to_remove=args.server_name,
             spicerack=self.spicerack,
         )

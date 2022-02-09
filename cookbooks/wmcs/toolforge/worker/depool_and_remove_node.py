@@ -65,7 +65,7 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, ToolforgeDepoolAndRemoveNodeRunner,)(
+        return with_common_opts(self.spicerack, args, ToolforgeDepoolAndRemoveNodeRunner,)(
             k8s_worker_prefix=args.k8s_worker_prefix,
             fqdn_to_remove=args.fqdn_to_remove,
             control_node_fqdn=args.control_node_fqdn,

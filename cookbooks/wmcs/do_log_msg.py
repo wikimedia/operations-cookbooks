@@ -40,7 +40,7 @@ class Dologmsg(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, DologmsgRunner,)(
+        return with_common_opts(self.spicerack, args, DologmsgRunner,)(
             msg=args.msg,
             spicerack=self.spicerack,
         )

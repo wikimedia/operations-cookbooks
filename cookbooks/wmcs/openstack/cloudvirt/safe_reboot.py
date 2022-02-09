@@ -52,7 +52,7 @@ class SafeReboot(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, SafeRebootRunner,)(
+        return with_common_opts(self.spicerack, args, SafeRebootRunner,)(
             fqdn=args.fqdn,
             control_node_fqdn=args.control_node_fqdn,
             spicerack=self.spicerack,

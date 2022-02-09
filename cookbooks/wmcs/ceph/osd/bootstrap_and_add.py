@@ -89,7 +89,7 @@ class BootstrapAndAdd(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(args, BootstrapAndAddRunner,)(
+        return with_common_opts(self.spicerack, args, BootstrapAndAddRunner,)(
             new_osd_fqdns=args.new_osd_fqdn,
             yes_i_know=args.yes_i_know_what_im_doing,
             skip_reboot=args.skip_reboot,
