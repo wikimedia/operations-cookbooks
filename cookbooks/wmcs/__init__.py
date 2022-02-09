@@ -251,6 +251,21 @@ class OpenstackAPI:
         """
         return self._run("server", "list", is_safe=True, **kwargs)
 
+    def server_list_filter_exists(self, hostnames: List[str], **kwargs) -> List[str]:
+        """Verify if all servers in the list exists.
+
+        Returns the input list filtered with those hostnames that do exists.
+
+        Any extra kwarg will be passed to the RemoteHosts.run_sync function.
+        """
+        listing = self.server_list(**kwargs)
+
+        for hostname in hostnames:
+            if not any(info for info in listing if info["Name"] == hostname):
+                hostnames.remove(hostname)
+
+        return hostnames
+
     def server_exists(self, hostname: str, **kwargs) -> bool:
         """Returns True if a server exists, False otherwise.
 
