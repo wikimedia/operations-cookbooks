@@ -200,7 +200,7 @@ class NFSAddServerRunner(CookbookRunnerBase):
 
             zone_record = openstack_api.zone_get(f"svc.{self.project}.eqiad1.wikimedia.cloud.")
             openstack_api.recordset_create(
-                zone_record[0]["id"], "A", f"{self.volume}.svc.{self.project}.eqiad1.wikimedia.cloud.", service_ip
+                zone_record[0]["id"], "A", f"{self.prefix}.svc.{self.project}.eqiad1.wikimedia.cloud.", service_ip
             )
 
         # Apply all pending changes
