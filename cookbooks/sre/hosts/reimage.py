@@ -21,7 +21,6 @@ from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shel
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
-from cookbooks.sre.hosts.downtime import Downtime
 
 
 logger = logging.getLogger(__name__)
@@ -117,6 +116,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.debmonitor = spicerack.debmonitor()
         self.confctl = spicerack.confctl('node')
         self.remote = spicerack.remote()
+        self.spicerack = spicerack
 
         try:
             self.remote_host = self.remote.query(self.fqdn)
@@ -147,7 +147,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.puppet = spicerack.puppet(self.remote_host)
         # The same as self.puppet but using the SSH key valid only during installation before the first Puppet run
         self.puppet_installer = spicerack.puppet(self.remote_installer)
-        self.downtime = Downtime(spicerack)
 
         # DHCP automation
         try:
@@ -461,8 +460,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.host_actions.success('Signed new Puppet certificate')
 
         self._populate_puppetdb()
-        downtime_args = ['--force-puppet', '--reason', 'host reimage', '--hours', '2', self.fqdn]
-        self.downtime.get_runner(self.downtime.argument_parser().parse_args(downtime_args)).run()
+        self.spicerack.run_cookbook(
+            'sre.hosts.downtime', ['--force-puppet', '--reason', 'host reimage', '--hours', '2', self.fqdn])
         self.host_actions.success('Downtimed the new host on Icinga')
 
         def _first_puppet_run():
