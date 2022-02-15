@@ -18,9 +18,8 @@ import json
 
 from spicerack import Spicerack
 from spicerack.puppet import PuppetHosts
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks import ArgparseFormatter
 from cookbooks.wmcs import OpenstackAPI, run_one
 from cookbooks.wmcs import OutputFormat
 
