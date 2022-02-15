@@ -5,8 +5,8 @@ import time
 
 from spicerack.confctl import ConfctlError
 from spicerack.constants import CORE_DATACENTERS
+from spicerack.cookbook import ArgparseFormatter
 
-from cookbooks import ArgparseFormatter
 from cookbooks.sre.discovery import check_record_for_dc, wipe_recursor_cache, update_ttl
 
 __title__ = __doc__

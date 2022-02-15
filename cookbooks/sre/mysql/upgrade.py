@@ -1,13 +1,11 @@
-"""Upgrade minor veresion of MySQL hosts."""
+"""Upgrade minor version of MySQL hosts."""
 
 import argparse
 import logging
 from datetime import datetime, timedelta
 
-from spicerack.cookbook import (ArgparseFormatter, CookbookBase,
-                                CookbookRunnerBase)
-from wmflib.interactive import (AbortError, confirm_on_failure,
-                                ensure_shell_is_durable)
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from wmflib.interactive import AbortError, confirm_on_failure, ensure_shell_is_durable
 
 
 class UpgradeMySQL(CookbookBase):

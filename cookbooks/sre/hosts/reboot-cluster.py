@@ -28,11 +28,10 @@ import attr
 
 from cumin import NodeSet
 from spicerack.constants import CORE_DATACENTERS
+from spicerack.cookbook import ArgparseFormatter
 from spicerack.icinga import IcingaError
 from spicerack.puppet import PuppetHostsCheckError
 from spicerack.remote import RemoteCheckError, RemoteExecutionError
-
-from cookbooks import ArgparseFormatter
 
 
 __title__ = "Perform a rolling reboot of a conftool cluster"

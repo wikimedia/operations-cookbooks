@@ -11,7 +11,7 @@ from pathlib import Path
 import requests
 
 from cumin.transports import Command
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.dhcp import DHCPConfOpt82
 from spicerack.exceptions import SpicerackError
@@ -19,7 +19,6 @@ from spicerack.icinga import IcingaError
 from spicerack.remote import RemoteError, RemoteExecutionError
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
-from cookbooks import ArgparseFormatter
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
 from cookbooks.sre.hosts.downtime import Downtime

@@ -9,9 +9,9 @@ import urllib3
 
 import requests.exceptions
 
+from spicerack.cookbook import ArgparseFormatter
 from spicerack.decorators import retry
 
-from cookbooks import ArgparseFormatter
 
 logger = getLogger(__name__)
 __title__ = __doc__

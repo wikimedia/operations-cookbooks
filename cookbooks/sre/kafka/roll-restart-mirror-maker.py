@@ -4,8 +4,8 @@ import logging
 
 from datetime import timedelta
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from cookbooks import ArgparseFormatter
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+
 
 logger = logging.getLogger(__name__)
 

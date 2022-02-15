@@ -9,9 +9,8 @@ from datetime import datetime, timedelta
 
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks import ArgparseFormatter
 from cookbooks.sre.hadoop import HADOOP_CLUSTER_NAMES
 
 

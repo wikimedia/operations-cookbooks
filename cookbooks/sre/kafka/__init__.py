@@ -40,7 +40,7 @@ There are some things to keep into consideration:
 
 import argparse
 
-from cookbooks import ArgparseFormatter
+from spicerack.cookbook import ArgparseFormatter
 
 
 __title__ = __doc__

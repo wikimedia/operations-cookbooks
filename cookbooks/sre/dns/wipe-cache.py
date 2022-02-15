@@ -1,10 +1,8 @@
 """Class based cookbook to wipe dns cache entries"""
 from argparse import ArgumentParser
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from wmflib.constants import ALL_DATACENTERS
-
-from cookbooks import ArgparseFormatter
 
 
 class WipeCache(CookbookBase):

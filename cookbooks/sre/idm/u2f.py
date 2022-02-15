@@ -2,10 +2,8 @@
 from argparse import ArgumentParser
 from logging import getLogger
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
-
-from cookbooks import ArgparseFormatter
 
 
 logger = getLogger(__name__)

@@ -2,13 +2,12 @@
 # flake8: noqa: E501
 import argparse
 import logging
-from cookbooks import ArgparseFormatter
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from time import sleep
 
 from spicerack.constants import CORE_DATACENTERS
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.elasticsearch_cluster import ElasticsearchClusterCheckError
 from cookbooks.sre.elasticsearch import CLUSTERGROUPS, valid_datetime_type
 

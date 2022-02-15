@@ -5,10 +5,9 @@ import logging
 from datetime import datetime, timedelta
 from time import sleep
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
-from cookbooks import ArgparseFormatter
 from cookbooks.sre.druid import DRUID_DAEMONS
 
 

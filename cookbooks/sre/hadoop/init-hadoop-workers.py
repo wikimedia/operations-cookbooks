@@ -6,10 +6,9 @@ import string
 
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
 
-from cookbooks import ArgparseFormatter
 
 logger = logging.getLogger(__name__)
 

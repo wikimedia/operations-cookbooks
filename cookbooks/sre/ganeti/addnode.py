@@ -4,8 +4,7 @@ import argparse
 import logging
 
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from cookbooks import ArgparseFormatter
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from cookbooks.sre.ganeti import get_locations
 
 

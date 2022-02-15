@@ -4,10 +4,9 @@ import logging
 
 from datetime import timedelta
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
-from cookbooks import ArgparseFormatter
 
 logger = logging.getLogger(__name__)
 

@@ -8,11 +8,10 @@ from wmflib.constants import DATACENTER_NUMBERING_PREFIX
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from spicerack.constants import CORE_DATACENTERS
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.ganeti import INSTANCE_LINKS
 
-from cookbooks import ArgparseFormatter
 from cookbooks.sre.dns.netbox import argument_parser as dns_netbox_argparse, run as dns_netbox_run
 from cookbooks.sre.ganeti import get_locations
 

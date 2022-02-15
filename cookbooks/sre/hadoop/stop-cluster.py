@@ -8,9 +8,8 @@ from datetime import timedelta
 
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks import ArgparseFormatter
 from . import (HADOOP_CLUSTER_NAMES, CLUSTER_CUMIN_ALIAS,
                MASTER_CUMIN_ALIAS, STANDBY_CUMIN_ALIAS,
                WORKERS_CUMIN_ALIAS, HDFS_JOURNAL_CUMIN_ALIAS)
