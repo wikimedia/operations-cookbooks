@@ -4,10 +4,11 @@ import ipaddress
 import logging
 
 from pprint import pformat
+from socket import gethostname
 
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.dhcp import DHCPConfMgmt
-from spicerack.redfish import DellSCPPowerStatePolicy, DellSCPRebootPolicy
+from spicerack.redfish import DellSCPPowerStatePolicy, DellSCPRebootPolicy, RedfishError
 from spicerack.remote import RemoteError
 from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
 
@@ -118,6 +119,15 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
         self.redfish = spicerack.redfish(self.fqdn, 'root', password)
         self.mgmt_password = spicerack.management_password
+
+        # Testing that the management password is correct connecting to the current cumin host
+        localhost = gethostname()
+        netbox_localhost = spicerack.netbox_server(localhost)
+        try:
+            spicerack.redfish(netbox_localhost.mgmt_fqdn, 'root').check_connection()
+        except RedfishError:
+            raise RuntimeError(
+                f'The management password provided seems incorrect, it does not work on {localhost}.') from None
 
         self.config_changes = {
             'BIOS.Setup.1-1': {
