@@ -104,8 +104,6 @@ class NFSAddServerRunner(CookbookRunnerBase):
             "--prefix",
             prefix,
             "--security-group",
-            f"{self.project}-k8s-full-connectivity",
-            "--security-group",
             "nfs",
         ] + self.instance_creation_opts.to_cli_args()
 

@@ -135,11 +135,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
                 f"Server {self.from_fqdn} must have exactly one value set for profile::wcms::nfs::standalone::volumes."
             )
 
-        if from_hiera["profile::wcms::nfs::standalone::volumes"][0] != volume_name:
-            wrong_volume_name = from_hiera["profile::wcms::nfs::standalone::volumes"][0]
-            raise Exception(
-                f"Server {self.from_fqdn} has volume {volume_name} attached but hiera refers to {wrong_volume_name}"
-            )
+        mount_name = from_hiera["profile::wcms::nfs::standalone::volumes"][0]
 
         response = run_one(
             node=control_node,
@@ -159,10 +155,10 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         if (
             "profile::wcms::nfs::standalone::volumes" not in to_hiera
             or len(to_hiera["profile::wcms::nfs::standalone::volumes"]) != 1
-            or to_hiera["profile::wcms::nfs::standalone::volumes"][0] != volume_name
+            or to_hiera["profile::wcms::nfs::standalone::volumes"][0] != mount_name
         ):
             raise Exception(
-                f"Server {self.to_fqdn} must have profile::wcms::nfs::standalone::volumes: ['{volume_name}']"
+                f"Server {self.to_fqdn} must have profile::wcms::nfs::standalone::volumes: ['{mount_name}']"
             )
 
         if (
@@ -182,8 +178,8 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
             raise Exception(f"Unable to resolve service ip for service name {service_fqdn}")
         service_ip_port = openstack_api.port_get(service_ip)[0]
 
-        if service_ip_port["Name"] != volume_name:
-            raise Exception(f"service ip name mismatch. Expected {volume_name}, found {service_ip_port['name']}")
+        if service_ip_port["Name"] != mount_name:
+            raise Exception(f"service ip name mismatch. Expected {mount_name}, found {service_ip_port['Name']}")
 
         to_ip = run_one(node=to_node, command=["dig", "+short", self.to_fqdn], last_line_only=True).strip()
         to_port = openstack_api.port_get(to_ip)
@@ -191,7 +187,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         from_port = openstack_api.port_get(from_ip)
 
         # See if wmcs-prepare-cinder-volume has already been run on the target host
-        volume_path = f"/srv/{volume_name}"
+        volume_path = f"/srv/{mount_name}"
         volume_prepared = False
 
         response = run_one(node=to_node, command=["cat", "/etc/fstab"])
