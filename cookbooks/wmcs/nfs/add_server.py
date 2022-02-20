@@ -146,6 +146,8 @@ class NFSAddServerRunner(CookbookRunnerBase):
             current_hiera["profile::wcms::nfs::standalone::cinder_attached"] = True
         else:
             current_hiera["profile::wcms::nfs::standalone::cinder_attached"] = False
+        current_hiera["mount_nfs"] = False
+
         current_hiera_str = json.dumps(current_hiera)
         response = yaml.safe_load(
             next(
