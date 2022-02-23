@@ -209,7 +209,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
     def _get_config(self):
         """Get the current BIOS/iDRAC configuration."""
         self.redfish.check_connection()
-        return self.redfish.scp_dump()
+        return self.redfish.scp_dump(allow_new_attributes=True)
 
     def _config(self):
         """Provision the BIOS and iDRAC settings."""
@@ -280,5 +280,4 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         # Set SetBootOrderEn to disk, primary NIC
         new_order = ','.join(['HardDisk.List.1-1', pxe_nic])
         self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = new_order
-        if self.config_changes['BIOS.Setup.1-1'].get('BiosBootSeq', ''):  # Some models don't have this key
-            self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = new_order
+        self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = new_order
