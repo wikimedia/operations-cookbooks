@@ -80,6 +80,39 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
                 '{} {}. Please fix and re-run the cookbook'.format(self.fqdn, msg)
             )
 
+    def is_valid_bridge(self, bridge):
+        """Ensure a that a bridge interface is correctly configured on the switches"""
+        cmd = "ip -br link show master {bridge} ".format(bridge=bridge)
+        cmd += "| awk -F'@' '!/tap/{print $1}'"
+        try:
+            interface = next(self.remote_host.run_sync(cmd))
+
+        except StopIteration:
+            interface = None
+
+        if not interface:
+            raise RuntimeError(
+                '{} Could not detect interface for bridge {}. Please fix and re-run the cookbook'
+                .format(self.fqdn, bridge)
+            )
+
+        valid = True
+        cmd = "bridge fdb show br {} dev {} | grep -vc permanent".format(bridge, interface)
+        try:
+            bridge_check = next(self.remote_host.run_sync(cmd))
+
+        except StopIteration:
+            valid = False
+
+        if bridge_check != "0":
+            valid = False
+
+        if not valid:
+            raise RuntimeError(
+                'The switch does not appear to be trunking the correct VLANs for the {} bridge.'.
+                format(bridge)
+            )
+
     def run(self):
         """Add a new node to a Ganeti cluster."""
         print('Ready to add Ganeti node {} in the {} cluster'.format(self.fqdn, self.cluster))
@@ -108,16 +141,21 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
             'No private bridge configured',
         )
 
+        self.is_valid_bridge('private')
+
         self.validate_state(
             'brctl show public | grep "en[o|p|s]"',
             'No public bridge configured',
         )
+
+        self.is_valid_bridge('public')
 
         if self.fqdn in self.remote.query('A:eqiad').hosts:
             self.validate_state(
                 'brctl show analytics | grep "en[o|p|s]"',
                 'No analytics bridge configured',
             )
+            self.is_valid_bridge('analytics')
 
         self.master.run_sync('gnt-node add --no-ssh-key-check -g "{group}" "{node}"'.format(
             group=self.group, node=self.fqdn))
