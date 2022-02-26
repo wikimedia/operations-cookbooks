@@ -21,7 +21,7 @@ extras_require = {
         'pytest>=6.1.0',
     ],
     'prospector': [
-        'prospector[with_everything]>=0.12.4',
+        'prospector[with_everything]>=0.12.4,<1.7.0',  # https://github.com/PyCQA/prospector/issues/491
         'pytest>=6.1.0',
     ],
 }
