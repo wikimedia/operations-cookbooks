@@ -5,14 +5,13 @@ import logging
 import re
 
 from wmflib.constants import DATACENTER_NUMBERING_PREFIX
-from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
 from spicerack.constants import CORE_DATACENTERS
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.ganeti import INSTANCE_LINKS
 
-from cookbooks.sre.dns.netbox import argument_parser as dns_netbox_argparse, run as dns_netbox_run
 from cookbooks.sre.ganeti import get_locations
 
 logger = logging.getLogger(__name__)
@@ -120,8 +119,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
     def _propagate_dns(self, prefix):
         """Run the sre.dns.netbox cookbook to propagate the DNS records."""
-        dns_netbox_args = dns_netbox_argparse().parse_args([f'{prefix} records for VM {self.fqdn}'])
-        dns_netbox_run(dns_netbox_args, self.spicerack)
+        confirm_on_failure(self.spicerack.run_cookbook, 'sre.dns.netbox', [f'{prefix} records for VM {self.fqdn}'])
         self.dns_propagated = True
 
     def _ganeti_netbox_sync(self):
