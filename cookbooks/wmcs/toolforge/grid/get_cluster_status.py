@@ -46,6 +46,12 @@ class ToolforgeGridGetClusterStatus(CookbookBase):
         )
         parser.add_argument("--project", required=True, help="Openstack project to manage.")
         parser.add_argument(
+            "--only-failed",
+            required=False,
+            action="store_true",
+            help="If passed, will only show nodes and queues that are in failed status (that is, not OK).",
+        )
+        parser.add_argument(
             "--master-node-fqdn",
             required=False,
             default=None,
@@ -63,6 +69,7 @@ class ToolforgeGridGetClusterStatus(CookbookBase):
             master_node_fqdn=args.master_node_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
             project=args.project,
+            only_failed=args.only_failed,
             spicerack=self.spicerack,
         )
 
@@ -74,12 +81,14 @@ class ToolforgeGridGetClusterStatusRunner(CookbookRunnerBase):
         self,
         master_node_fqdn: str,
         project: str,
+        only_failed: bool,
         spicerack: Spicerack,
     ):
         """Init"""
         self.master_node_fqdn = master_node_fqdn
         self.project = project
         self.spicerack = spicerack
+        self.only_failed = only_failed
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -88,4 +97,12 @@ class ToolforgeGridGetClusterStatusRunner(CookbookRunnerBase):
         NoAliasDumper.add_representer(GridQueueTypesSet, GridQueueTypesSet.yaml_representer)
         NoAliasDumper.add_representer(GridQueueState, GridQueueState.yaml_representer)
         NoAliasDumper.add_representer(GridQueueStatesSet, GridQueueStatesSet.yaml_representer)
-        print(yaml.dump(grid_controller.get_nodes_info(), Dumper=NoAliasDumper))
+        nodes_info = grid_controller.get_nodes_info()
+        if self.only_failed:
+            filtered_info = {
+                node_name: node_info for node_name, node_info in nodes_info.items() if not node_info.is_ok()
+            }
+        else:
+            filtered_info = nodes_info
+
+        print(yaml.dump(filtered_info, Dumper=NoAliasDumper))
