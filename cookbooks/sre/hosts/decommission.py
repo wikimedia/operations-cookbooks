@@ -18,7 +18,6 @@ from spicerack.puppet import get_puppet_ca_hostname
 from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-from cookbooks.sre.dns.netbox import argument_parser as dns_netbox_argparse, run as dns_netbox_run
 
 
 logger = logging.getLogger(__name__)
@@ -417,11 +416,10 @@ class DecommissionHostRunner(CookbookRunnerBase):
         if not self.spicerack.dry_run:
             logger.info('Sleeping for 3 minutes to get netbox caches in sync')
             time.sleep(180)
-        dns_netbox_args = dns_netbox_argparse().parse_args(
-            ['{hosts} decommissioned, removing all IPs except the asset tag one'
-             .format(hosts=self.decom_hosts)])
+
         try:
-            dns_netbox_run(dns_netbox_args, self.spicerack)
+            self.spicerack.run_cookbook(
+                'sre.dns.netbox', [f'{self.decom_hosts} decommissioned, removing all IPs except the asset tag one'])
         except RemoteExecutionError as e:
             message = 'Failed to run the sre.dns.netbox cookbook'
             logger.exception(message)
