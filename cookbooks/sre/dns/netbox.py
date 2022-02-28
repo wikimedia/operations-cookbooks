@@ -12,7 +12,7 @@ import json
 import logging
 
 from cumin.transports import Command
-from wmflib.interactive import ask_confirmation
+from wmflib.interactive import ask_confirmation, confirm_on_failure
 
 
 __title__ = 'Update and deploy the DNS records generated from Netbox'
@@ -116,7 +116,8 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
 
     authdns_hosts = remote.query(AUTHDNS_HOSTS_QUERY)
     logger.info('Updating the authdns copies of the repository on %s', authdns_hosts)
-    authdns_hosts.run_sync(
+    confirm_on_failure(
+        authdns_hosts.run_sync,
         'runuser -u {user} -- git -C "{path}" fetch && git -C "{path}" merge --ff-only {sha1}'.format(
             path=AUTHDNS_NETBOX_CHECKOUT_PATH, user=AUTHDNS_USER, sha1=sha1))
 
@@ -125,5 +126,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
                         'run of this cookbook will deploy the changes!'))
     else:
         logger.info('Deploying the updated zonefiles on %s', authdns_hosts)
-        authdns_hosts.run_sync('cd {git} && utils/deploy-check.py -g {netbox} --deploy'.format(
-            git=AUTHDNS_DNS_CHECKOUT_PATH, netbox=AUTHDNS_NETBOX_CHECKOUT_PATH))
+        confirm_on_failure(
+            authdns_hosts.run_sync,
+            'cd {git} && utils/deploy-check.py -g {netbox} --deploy'.format(
+                git=AUTHDNS_DNS_CHECKOUT_PATH, netbox=AUTHDNS_NETBOX_CHECKOUT_PATH))
