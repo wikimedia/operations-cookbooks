@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional
 
+import yaml
 from cumin.transports import Command
 from defusedxml import ElementTree
 from spicerack.puppet import PuppetHosts
@@ -37,6 +38,11 @@ class GridQueueType(Enum):
     PARALLEL = "P"
     NONE = "N"
 
+    @staticmethod
+    def yaml_representer(dumper: yaml.Dumper, data: "GridQueueType") -> yaml.Node:
+        """Serialize the structure as yaml."""
+        return dumper.represent_scalar("!GridQueueType", data.name)
+
 
 @dataclass(frozen=True)
 class GridQueueTypesSet:
@@ -51,6 +57,11 @@ class GridQueueTypesSet:
             return []
 
         return cls(types=[GridQueueType(type_char) for type_char in types_string])
+
+    @staticmethod
+    def yaml_representer(dumper: yaml.Dumper, data: "GridQueueTypesSet") -> yaml.Node:
+        """Serialize the structure as yaml."""
+        return dumper.represent_sequence("!GridQueueTypesSet", data.types)
 
 
 class GridQueueState(Enum):
@@ -70,6 +81,11 @@ class GridQueueState(Enum):
     CONFIGURATION_AMBIGUOUS = "c"
     ORPHANED = "o"
     PREEMPTED = "P"
+
+    @staticmethod
+    def yaml_representer(dumper: yaml.Dumper, data: "GridQueueState") -> yaml.Node:
+        """Serialize the structure as yaml."""
+        return dumper.represent_scalar("!GridQueueState", data.name)
 
 
 @dataclass(frozen=True)
@@ -94,6 +110,11 @@ class GridQueueStatesSet:
             and GridQueueState.ALARM2 not in self.states
             and GridQueueState.ERROR not in self.states
         )
+
+    @staticmethod
+    def yaml_representer(dumper: yaml.Dumper, data: "GridQueueStatesSet") -> yaml.Node:
+        """Serialize the structure as yaml."""
+        return dumper.represent_sequence("!GridQueueStatesSet", data.states)
 
 
 @dataclass(frozen=True)

@@ -8,12 +8,18 @@ Usage example:
 import argparse
 import logging
 from typing import Optional
-import yaml
 
+import yaml
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.toolforge.grid import GridController
+from cookbooks.wmcs.toolforge.grid import (
+    GridController,
+    GridQueueState,
+    GridQueueStatesSet,
+    GridQueueType,
+    GridQueueTypesSet,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -78,4 +84,8 @@ class ToolforgeGridGetClusterStatusRunner(CookbookRunnerBase):
     def run(self) -> Optional[int]:
         """Main entry point"""
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn)
+        NoAliasDumper.add_representer(GridQueueType, GridQueueType.yaml_representer)
+        NoAliasDumper.add_representer(GridQueueTypesSet, GridQueueTypesSet.yaml_representer)
+        NoAliasDumper.add_representer(GridQueueState, GridQueueState.yaml_representer)
+        NoAliasDumper.add_representer(GridQueueStatesSet, GridQueueStatesSet.yaml_representer)
         print(yaml.dump(grid_controller.get_nodes_info(), Dumper=NoAliasDumper))
