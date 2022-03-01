@@ -107,6 +107,8 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             fqdn=self.fqdn,
             ipv4=self.interface.ip,
         )
+        self._dhcp_active = False
+
         if self.args.no_users:
             password = ''  # nosec
         else:
@@ -176,11 +178,19 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
     def run(self):
         """Run the cookbook."""
-        if self.args.no_dhcp:
+        if not self.args.no_dhcp:
+            self.dhcp.push_configuration(self.dhcp_config)
+            self._dhcp_active = True
+
+        try:
+            self._config()
+        except Exception:  # pylint: disable=broad-except
+            logger.warning('First attempt to load the new configuration, auto-retrying once')
             confirm_on_failure(self._config)
-        else:
-            with self.dhcp.config(self.dhcp_config):
-                confirm_on_failure(self._config)
+
+        if not self.args.no_dhcp:
+            self.dhcp.remove_configuration(self.dhcp_config)
+            self._dhcp_active = False
 
         self.redfish.check_connection()
         if self.args.no_users:
@@ -189,6 +199,12 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             self.redfish.change_user_password('root', self.mgmt_password)
 
         self.ipmi.check_connection()
+
+    def rollback(self):
+        """Rollback the DHCP setup if present."""
+        if self._dhcp_active:
+            logger.info('Rolling back DHCP setup')
+            self.dhcp.remove_configuration(self.dhcp_config)
 
     def _get_config(self):
         """Get the current BIOS/iDRAC configuration."""
