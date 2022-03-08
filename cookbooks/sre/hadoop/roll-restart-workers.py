@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 class RollRestartWorkers(CookbookBase):
     """Roll restart all the jvm daemons on Hadoop worker nodes.
 
-    - Set Icinga downtime for all nodes (no puppet disable or depool is needed).
+    - Set Icinga/Alertmanager downtime for all nodes (no puppet disable or depool is needed).
     - Roll restart all the Yarn Node Managers in batches of 5 hosts.
     - Roll restart all the HDFS Journalnodes, one at a time,
     with 30s of delay in between.
     - Roll restart all the HDFS Datanodes, a couple of hosts at a time,
     with 30s of delay in between.
-    - Remove Icinga downtime.
+    - Remove Icinga/Alertmanager downtime.
     - Batch sizes and delay periods are configurable.
 
     Usage example:
@@ -75,7 +75,7 @@ class RollRestartWorkersRunner(CookbookRunnerBase):
         self.cluster = args.cluster
         self.hadoop_workers = spicerack.remote().query(self.cluster_cumin_alias)
         self.hadoop_hdfs_journal_workers = spicerack.remote().query(self.hdfs_jn_cumin_alias)
-        self.icinga_hosts = spicerack.icinga_hosts(self.hadoop_workers.hosts)
+        self.alerting_hosts = spicerack.alerting_hosts(self.hadoop_workers.hosts)
         self.admin_reason = spicerack.admin_reason('Roll restart of jvm daemons for openjdk upgrade.')
 
         self.yarn_nm_batch_size = args.yarn_nm_batch_size
@@ -107,7 +107,7 @@ class RollRestartWorkersRunner(CookbookRunnerBase):
 
     def run(self):
         """Restart all Hadoop jvm daemons on a given cluster"""
-        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
+        with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
             logger.info("Restarting Yarn Nodemanagers with batch size %s and sleep %s..",
                         self.yarn_nm_batch_size, self.yarn_nm_sleep)
             self.hadoop_workers.run_sync(

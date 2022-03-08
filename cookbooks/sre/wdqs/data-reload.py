@@ -229,7 +229,7 @@ def run(args, spicerack):
         raise ValueError("Only one host is needed. Not {total}({source})".
                          format(total=len(remote_host), source=remote_host))
 
-    icinga_hosts = spicerack.icinga_hosts(remote_host.hosts)
+    alerting_hosts = spicerack.alerting_hosts(remote_host.hosts)
     puppet = spicerack.puppet(remote_host)
     confctl = spicerack.confctl('node')
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
@@ -273,7 +273,7 @@ def run(args, spicerack):
         wait_for_updater(prometheus, args.site, remote_host)
         logger.info('Caught up on updates in %s', watch.elapsed())
 
-    with icinga_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
+    with alerting_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
         with depool_host():
             remote_host.run_sync('sleep 180')
             if 'categories' == args.reload_data:

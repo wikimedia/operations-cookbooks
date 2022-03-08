@@ -58,7 +58,7 @@ class RenewCertRunner(CookbookRunnerBase):
             raise RuntimeError(f'Only a single server should match the query, got {len(hosts)}')
 
         self.host = str(hosts.hosts[0])
-        self.icinga_hosts = spicerack.icinga_hosts(hosts.hosts)
+        self.alerting_hosts = spicerack.alerting_hosts(hosts.hosts)
         self.puppet = spicerack.puppet(hosts)
         self.puppet_master = spicerack.puppet_master()
         self.reason = spicerack.admin_reason('Renew puppet certificate')
@@ -73,7 +73,7 @@ class RenewCertRunner(CookbookRunnerBase):
         if self.installer:
             self._run()
         else:
-            with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
+            with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
                 self._run()
 
     def _run(self):

@@ -56,7 +56,7 @@ def run(args, spicerack):
     for host in remote_hosts.hosts:
         remote_host = remote.query(host)
 
-        with spicerack.icinga_hosts(remote_host.hosts).downtimed(reason, duration=timedelta(hours=args.downtime)):
+        with spicerack.alerting_hosts(remote_host.hosts).downtimed(reason, duration=timedelta(hours=args.downtime)):
             if args.depool:
                 remote_host.run_sync('depool', 'sleep 180')
 

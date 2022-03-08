@@ -99,7 +99,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
         self.hadoop_master = spicerack_remote.query(MASTER_CUMIN_ALIAS + suffix)
         self.hadoop_standby = spicerack_remote.query(STANDBY_CUMIN_ALIAS + suffix)
 
-        self.icinga_hosts = spicerack.icinga_hosts(self.hadoop_hosts.hosts)
+        self.alerting_hosts = spicerack.alerting_hosts(self.hadoop_hosts.hosts)
         self.admin_reason = spicerack.admin_reason('Change Hadoop distribution')
 
         self.rollback = args.rollback
@@ -129,7 +129,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
             'MANUAL STEP: time to run the Yarn metadata cleanup commands in Zookeeper:\n {}' +
             str([self.yarn_metadata_cleanup_commands]))
 
-        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
+        with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
 
             self.hadoop_workers.run_sync('rm -rf /tmp/hadoop-yarn/*')
 

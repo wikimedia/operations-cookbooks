@@ -66,7 +66,7 @@ class StopHadoopRunner(CookbookRunnerBase):
         self.hadoop_master = spicerack.remote().query(master_alias)
         self.hadoop_standby = spicerack.remote().query(standby_alias)
 
-        self.icinga_hosts = spicerack.icinga_hosts(self.hadoop_hosts.hosts)
+        self.alerting_hosts = spicerack.alerting_hosts(self.hadoop_hosts.hosts)
         self.admin_reason = spicerack.admin_reason('Stop the Hadoop cluster before maintenance.')
         self.puppet = spicerack.puppet(self.hadoop_hosts)
 
@@ -134,7 +134,7 @@ class StopHadoopRunner(CookbookRunnerBase):
 
         self.puppet.disable(self.admin_reason)
 
-        self.icinga_hosts.downtime(self.admin_reason, duration=timedelta(minutes=120))
+        self.alerting_hosts.downtime(self.admin_reason, duration=timedelta(minutes=120))
 
         logger.info("Stopping all Yarn daemons.")
         self.hadoop_workers.run_sync(

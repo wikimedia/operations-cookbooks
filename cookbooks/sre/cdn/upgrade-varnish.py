@@ -1,6 +1,6 @@
 """Upgrade/downgrade Varnish on the given cache host between major releases.
 
-- Set Icinga downtime
+- Set Icinga/Alertmanager downtime
 - Depool
 - Disable puppet (unless invoked with --hiera-merged)
 - Wait for admin to merge hiera puppet change (unless invoked with --hiera-merged)
@@ -8,7 +8,7 @@
 - Re-enable puppet and run it to upgrade/downgrade
 - Run a test request
 - Repool
-- Remove Icinga downtime
+- Remove Icinga/Alertmanager downtime
 
 Usage example:
     cookbook sre.hosts.upgrade-varnish --hiera-merged "Upgrading varnish -- TXXXXXX" cp3030.esams.wmnet
@@ -73,7 +73,7 @@ def check_http_response(host):
 def run(args, spicerack):
     """Required by Spicerack API."""
     remote_host = spicerack.remote().query(args.host)
-    icinga_hosts = spicerack.icinga_hosts(remote_host.hosts)
+    alerting_hosts = spicerack.alerting_hosts(remote_host.hosts)
     puppet = spicerack.puppet(remote_host)
 
     action = "Upgrading"
@@ -82,7 +82,7 @@ def run(args, spicerack):
 
     reason = spicerack.admin_reason("{} Varnish".format(action))
 
-    icinga_hosts.downtime(reason, duration=timedelta(minutes=20))
+    downtime_id = alerting_hosts.downtime(reason, duration=timedelta(minutes=20))
 
     if not args.hiera_merged:
         # Check that puppet is not already disabled. We skip this check if
@@ -135,7 +135,7 @@ def run(args, spicerack):
     if not check_http_response(args.host):
         return 1
 
-    # Repool and cancel Icinga downtime
+    # Repool and cancel Icinga/Alertmanager downtime
     remote_host.run_sync("pool")
-    icinga_hosts.remove_downtime()
+    alerting_hosts.remove_downtime(downtime_id)
     return 0

@@ -46,11 +46,11 @@ def argument_parser():
 def run(args, spicerack):
     """Required by Spicerack API."""
     remote_host = spicerack.remote().query(args.host, use_sudo=args.use_sudo)
-    icinga_hosts = spicerack.icinga_hosts(remote_host.hosts)
+    alerting_hosts = spicerack.alerting_hosts(remote_host.hosts)
     puppet = spicerack.puppet(remote_host)
     reason = spicerack.admin_reason('Software upgrade and reboot')
 
-    icinga_hosts.downtime(reason, duration=timedelta(minutes=20))
+    downtime_id = alerting_hosts.downtime(reason, duration=timedelta(minutes=20))
     puppet.disable(reason)
 
     # Depool and wait a bit for the host to be drained
@@ -78,4 +78,4 @@ def run(args, spicerack):
     else:
         logging.info('Not performing any repool action as requested (empty --repool-cmd)')
 
-    icinga_hosts.remove_downtime()
+    alerting_hosts.remove_downtime(downtime_id)

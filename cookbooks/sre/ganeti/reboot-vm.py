@@ -20,10 +20,10 @@ class RebootSingleVM(CookbookBase):
        it can be compared to powercycling a server. This kind of reboot
        is e.g. needed if KVM/QEMU machine settings have been modified.
 
-    - Set Icinga downtime
+    - Set Icinga/Alertmanager downtime
     - Reboot with optional depool
     - Wait for VM to come back online
-    - Remove the Icinga downtime after the VM has been rebooted, the
+    - Remove the Icinga/Alertmanager downtime after the VM has been rebooted, the
       first Puppet run is complete and all Icinga checks have recovered.
 
     Usage example:
@@ -69,6 +69,7 @@ class RebootSingleVMRunner(CookbookRunnerBase):
         if len(self.remote_host) != 1:
             raise RuntimeError('Only a single VM can be rebooted')
 
+        self.alerting_hosts = spicerack.alerting_hosts(self.remote_host.hosts)
         self.icinga_hosts = spicerack.icinga_hosts(self.remote_host.hosts)
         self.puppet = spicerack.puppet(self.remote_host)
         self.reason = spicerack.admin_reason('Rebooting VM' if not args.reason else args.reason)
@@ -90,7 +91,7 @@ class RebootSingleVMRunner(CookbookRunnerBase):
 
     def run(self):
         """Reboot the VM"""
-        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
+        with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
             if self.phabricator is not None:
                 self.phabricator.task_comment(self.task_id, self.message)
 

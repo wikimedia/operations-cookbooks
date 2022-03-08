@@ -34,7 +34,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         """Upgrade MySQL on a given set of hosts."""
         ensure_shell_is_durable()
 
-        self.icinga_hosts = spicerack.icinga_hosts
+        self.alerting_hosts = spicerack.alerting_hosts
         self.admin_reason = spicerack.admin_reason('MySQL upgrade')
         self.remote = spicerack.remote()
         query = 'P{' + args.query + '} and A:db-all and not A:db-multiinstance'
@@ -56,7 +56,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
     def upgrade_host(self, host):
         """Upgrade mysql version of a single host."""
         host_puppet = self.puppet(host)
-        with self.icinga_hosts(host.hosts).downtimed(self.admin_reason, duration=timedelta(hours=24)):
+        with self.alerting_hosts(host.hosts).downtimed(self.admin_reason, duration=timedelta(hours=24)):
             with host_puppet.disabled(self.admin_reason):
                 self._run_upgrade(host)
 

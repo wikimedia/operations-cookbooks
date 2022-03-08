@@ -67,7 +67,7 @@ class ChangeHadoopDistroOnClientsRunner(CookbookRunnerBase):
             cumin_labels = [args.cumin_client_label]
 
         self.hadoop_client_hosts = spicerack_remote.query(' or '.join(cumin_labels))
-        self.icinga_hosts = spicerack.icinga_hosts(self.hadoop_client_hosts.hosts)
+        self.alerting_hosts = spicerack.alerting_hosts(self.hadoop_client_hosts.hosts)
         self.admin_reason = spicerack.admin_reason('Change Hadoop distribution')
         self.rollback = args.rollback
         self.cluster = args.cluster
@@ -105,7 +105,7 @@ class ChangeHadoopDistroOnClientsRunner(CookbookRunnerBase):
 
     def run(self):
         """Change the Hadoop distribution."""
-        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=30)):
+        with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=30)):
             if not self.rollback:
                 logger.info(
                     'Saving a snapshot of cdh package names and versions in /root/cdh_package_list '

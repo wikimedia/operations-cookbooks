@@ -53,7 +53,7 @@ class RebootKafkaWorkersRunner(CookbookRunnerBase):
         """Reboot kafka on a given cluster."""
         ensure_shell_is_durable()
 
-        self.icinga_hosts = spicerack.icinga_hosts
+        self.alerting_hosts = spicerack.alerting_hosts
         self.admin_reason = spicerack.admin_reason('Reboot kafka nodes')
         self.puppet = spicerack.puppet
         self.remote = spicerack.remote()
@@ -76,7 +76,7 @@ class RebootKafkaWorkersRunner(CookbookRunnerBase):
         node = self.remote.query('D{' + host + '}')
         puppet = self.puppet(node)
 
-        with self.icinga_hosts([host]).downtimed(self.admin_reason, duration=timedelta(minutes=30)):
+        with self.alerting_hosts([host]).downtimed(self.admin_reason, duration=timedelta(minutes=30)):
             with puppet.disabled(self.admin_reason):
                 logger.info('Stopping kafka processes on host %s', host)
 

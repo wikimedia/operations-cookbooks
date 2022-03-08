@@ -103,7 +103,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
             f'setAcl /yarn-rmstore/analytics{suffix}-hadoop/ZKRMStateRoot world:anyone:cdrwa',
             f'rmr /yarn-rmstore/analytics{suffix}-hadoop/ZKRMStateRoot']
 
-        self.icinga_hosts = spicerack.icinga_hosts(self.hadoop_hosts.hosts)
+        self.alerting_hosts = spicerack.alerting_hosts(self.hadoop_hosts.hosts)
         self.admin_reason = spicerack.admin_reason('Change Hadoop distribution')
         self.rollback = args.rollback
         self.cluster = args.cluster
@@ -249,7 +249,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
             'MANUAL STEP: time to run the Yarn metadata cleanup commands in Zookeeper:\n' +
             str([self.yarn_metadata_cleanup_commands]))
 
-        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
+        with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
             logger.info("Removing the /tmp/hadoop-yarn leftovers on worker nodes.")
             confirm_on_failure(self.hadoop_workers.run_sync, 'rm -rf /tmp/hadoop-yarn/*')
 

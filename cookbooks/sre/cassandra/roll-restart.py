@@ -64,7 +64,7 @@ class RollRestartCassandraRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
 
         self.cassandra_nodes = spicerack.remote().query(self.query)
-        self.icinga_hosts = spicerack.icinga_hosts(self.cassandra_nodes.hosts)
+        self.alerting_hosts = spicerack.alerting_hosts(self.cassandra_nodes.hosts)
         self.reason = spicerack.admin_reason(args.reason)
         self.instance_sleep_seconds = args.instance_sleep_seconds
         self.batch_sleep_seconds = args.batch_sleep_seconds
@@ -86,7 +86,7 @@ class RollRestartCassandraRunner(CookbookRunnerBase):
 
     def run(self):
         """Restart some or all Cassandra nodes on a given cluster"""
-        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=240)):
+        with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=240)):
             self.cassandra_nodes.run_sync(
                 'c-foreach-restart -d ' + str(self.instance_sleep_seconds) + ' -a 20 -r 12',
                 batch_size=1,

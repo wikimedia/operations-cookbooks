@@ -59,7 +59,7 @@ def run(args, spicerack):
     fail_for_replicate_osm_process(remote_hosts)
 
     for remote_host in remote_hosts.split(len(remote_hosts)):
-        with spicerack.icinga_hosts(remote_host.hosts).downtimed(reason, duration=timedelta(hours=args.downtime)):
+        with spicerack.alerting_hosts(remote_host.hosts).downtimed(reason, duration=timedelta(hours=args.downtime)):
             if args.depool:
                 logger.info("Depool %s and wait for current requests to terminate", remote_host)
                 remote_host.run_sync('depool', 'sleep 180')

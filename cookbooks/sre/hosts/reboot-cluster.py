@@ -2,11 +2,11 @@
 
 For groups of machines in the cluster it will:
 - Depool all machines
-- Set Icinga downtime
+- Set Icinga/Alertmanager downtime
 - Reboot
 - Wait for host to come back online
-- Remove the Icinga downtime after the host has been rebooted, the
-  first Puppet run is complete and (optionally) icinga is all green.
+- Remove the Icinga/Alertmanager downtime after the host has been rebooted, the
+  first Puppet run is complete and (optionally) Icinga is all green.
 - Repool all machines
 
 
@@ -107,11 +107,12 @@ class Results:
 
 def reboot_with_downtime(spicerack, remote_hosts, results, no_fail_on_icinga):
     """Reboots a group of hosts, setting downtime."""
+    alerting_hosts = spicerack.alerting_hosts(remote_hosts.hosts)
     icinga_hosts = spicerack.icinga_hosts(remote_hosts.hosts)
     puppet = spicerack.puppet(remote_hosts)
     reason = spicerack.admin_reason('Rebooting hosts {}'.format(remote_hosts))
     try:
-        with icinga_hosts.downtimed(reason, duration=timedelta(minutes=20)):
+        with alerting_hosts.downtimed(reason, duration=timedelta(minutes=20)):
             reboot_time = datetime.utcnow()
             remote_hosts.reboot(batch_size=len(remote_hosts))
             remote_hosts.wait_reboot_since(reboot_time)

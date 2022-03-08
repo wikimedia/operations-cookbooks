@@ -16,10 +16,10 @@ logger = logging.getLogger(__name__)
 class RebootSingleHost(CookbookBase):
     """Downtime a single host and reboot it
 
-    - Set Icinga downtime
+    - Set Icinga/Alertmanager downtime
     - Reboot
     - Wait for host to come back online
-    - Remove the Icinga downtime after the host has been rebooted and the
+    - Remove the Icinga/Alertmanager downtime after the host has been rebooted and the
       first Puppet run is complete
 
     This is meant for one off servers and doesn't support pooling/depooling
@@ -62,6 +62,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
         if len(self.remote_host) != 1:
             raise RuntimeError('Only a single server can be rebooted')
 
+        self.alerting_hosts = spicerack.alerting_hosts(self.remote_host.hosts)
         self.icinga_hosts = spicerack.icinga_hosts(self.remote_host.hosts)
         self.puppet = spicerack.puppet(self.remote_host)
         self.reason = spicerack.admin_reason('Rebooting host' if not args.reason else args.reason)
@@ -83,7 +84,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
 
     def run(self):
         """Reboot the host"""
-        with self.icinga_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
+        with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
             if self.phabricator is not None:
                 self.phabricator.task_comment(self.task_id, self.message)
 

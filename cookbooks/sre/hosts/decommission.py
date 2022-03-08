@@ -154,7 +154,7 @@ class DecommissionHost(CookbookBase):
     - Check if any reference was left in the Puppet (both public and private) or
       mediawiki-config repositories and ask for confirmation before proceeding
       if there is any match.
-    - Downtime the host on Icinga (it will be removed at the next Puppet run on
+    - Downtime the host on Icinga/Alertmanager (it will be removed at the next Puppet run on
       the Icinga host).
     - Detect if Physical or Virtual host based on Netbox data.
     - If virtual host (Ganeti VM)
@@ -162,7 +162,7 @@ class DecommissionHost(CookbookBase):
       - Force Ganeti->Netbox sync of VMs to update its state and avoid
         Netbox Report errors
     - If physical host
-      - Downtime the management host on Icinga (it will be removed at the next
+      - Downtime the management host on Icinga/Alertmanager (it will be removed at the next
         Puppet run on the Icinga host)
       - Wipe bootloaders to prevent it from booting again
       - Pull the plug (IPMI power off without shutdown)
@@ -261,10 +261,10 @@ class DecommissionHostRunner(CookbookRunnerBase):
         # Using the Direct Cumin backend to support also hosts already removed from PuppetDB
         remote_host = self.remote.query('D{' + fqdn + '}')
 
-        # Downtime on Icinga both the host and the mgmt host (later below), they will be removed by Puppet
+        # Downtime on Icinga/Alertmanager both the host and the mgmt host (later below), they will be removed by Puppet
         try:
-            self.spicerack.icinga_hosts([fqdn]).downtime(self.reason)
-            self.spicerack.actions[fqdn].success('Downtimed host on Icinga')
+            self.spicerack.alerting_hosts([fqdn]).downtime(self.reason)
+            self.spicerack.actions[fqdn].success('Downtimed host on Icinga/Alertmanager')
         except IcingaError:
             self.spicerack.actions[fqdn].warning(
                 '//Host not found on Icinga, unable to downtime it//')
@@ -289,11 +289,10 @@ class DecommissionHostRunner(CookbookRunnerBase):
 
         else:  # Physical host
             self.spicerack.actions[fqdn].success('Found physical host')
-
             try:
-                self.spicerack.icinga_hosts([netbox_server.mgmt_fqdn]).downtime(self.reason)
+                self.spicerack.alerting_hosts([netbox_server.mgmt_fqdn]).downtime(self.reason)
                 self.spicerack.actions[fqdn].success(
-                    'Downtimed management interface on Icinga')
+                    'Downtimed management interface on Icinga/Alertmanager')
             except IcingaError:
                 self.spicerack.actions[fqdn].warning(
                     '//Management interface not found on Icinga, unable to downtime it//')

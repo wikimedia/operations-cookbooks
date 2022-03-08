@@ -48,7 +48,7 @@ class RollRestartBrokersRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
         self.cluster_cumin_alias = "A:kafka-" + args.cluster
         self.kafka_brokers = spicerack.remote().query(self.cluster_cumin_alias)
-        self.icinga_hosts = spicerack.icinga_hosts(self.kafka_brokers.hosts)
+        self.alerting_hosts = spicerack.alerting_hosts(self.kafka_brokers.hosts)
         self.admin_reason = spicerack.admin_reason('Roll restart of jvm daemons for openjdk upgrade.')
         self.batch_sleep_seconds = args.batch_sleep_seconds
         self.sleep_before_pref_replica_election = args.sleep_before_pref_replica_election
@@ -76,7 +76,7 @@ class RollRestartBrokersRunner(CookbookRunnerBase):
         logger.info('Checking if /etc/profile.d/kafka.sh can be sourced.')
         self.kafka_brokers.run_sync('source /etc/profile.d/kafka.sh')
 
-        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=240)):
+        with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=240)):
             commands = [
                 'systemctl restart kafka',
                 'sleep ' + str(self.sleep_before_pref_replica_election),

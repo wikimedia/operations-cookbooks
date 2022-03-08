@@ -136,7 +136,8 @@ class RollingOperationRunner(CookbookRunnerBase):
             remote_hosts = nodes.get_remote_hosts()
             puppet = self.spicerack.puppet(remote_hosts)
 
-            with self.spicerack.icinga_hosts(remote_hosts.hosts).downtimed(self.reason, duration=timedelta(minutes=30)):
+            with self.spicerack.alerting_hosts(remote_hosts.hosts).downtimed(
+                    self.reason, duration=timedelta(minutes=30)):
                 with puppet.disabled(self.reason):
 
                     with self.elasticsearch_clusters.frozen_writes(self.reason):

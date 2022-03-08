@@ -42,7 +42,7 @@ class RebootPrestoWorkersRunner(CookbookRunnerBase):
         """Reboot Presto on a given cluster."""
         ensure_shell_is_durable()
 
-        self.icinga_hosts = spicerack.icinga_hosts
+        self.alerting_hosts = spicerack.alerting_hosts
         self.puppet = spicerack.puppet
         self.admin_reason = spicerack.admin_reason('Reboot Presto nodes')
         self.remote = spicerack.remote()
@@ -64,7 +64,7 @@ class RebootPrestoWorkersRunner(CookbookRunnerBase):
         puppet = self.puppet(node)
         duration = timedelta(minutes=120)
 
-        with self.icinga_hosts([host]).downtimed(self.admin_reason, duration=duration):
+        with self.alerting_hosts([host]).downtimed(self.admin_reason, duration=duration):
             with puppet.disabled(self.admin_reason):
                 logger.info('Stopping the Presto worker daemon..')
                 node.run_async('systemctl stop presto-server')

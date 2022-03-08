@@ -40,8 +40,8 @@ class Reimage(CookbookBase):
         parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
         parser.add_argument(
             '--no-downtime', action='store_true',
-            help=('do not set the host in downtime on Icinga before the reimage. Included if --new is set. The host '
-                  'will be downtimed after the reimage in any case.'))
+            help=('do not set the host in downtime on Icinga/Alertmanager before the reimage. Included if --new is '
+                  'set. The host will be downtimed after the reimage in any case.'))
         parser.add_argument(
             '--no-pxe', action='store_true',
             help=('do not reboot into PXE and reimage. To be used when the reimage had issues and was manually fixed '
@@ -110,6 +110,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         self.dns = spicerack.dns()
         self.icinga_host = spicerack.icinga_hosts([self.host])
+        self.alerting_host = spicerack.alerting_hosts([self.host])
+        self.alertmanager_host = spicerack.alertmanager_hosts([self.host])
         self.ipmi = spicerack.ipmi(self.mgmt_fqdn)
         self.reason = spicerack.admin_reason('Host reimage', task_id=self.args.task_id)
         self.puppet_master = spicerack.puppet_master()
@@ -427,10 +429,11 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 self.args.task_id,
                 f'Cookbook {__name__} was started by {self.reason.owner} {self.runtime_description}')
 
+        downtime_id_pre_install = ''
         if not self.args.new:
             if not self.args.no_downtime:
-                confirm_on_failure(self.icinga_host.downtime, self.reason)
-                self.host_actions.success('Downtimed on Icinga')
+                downtime_id_pre_install = confirm_on_failure(self.alerting_host.downtime, self.reason)
+                self.host_actions.success('Downtimed on Icinga/Alertmanager')
 
             self._depool()
             try:
@@ -463,6 +466,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.spicerack.run_cookbook(
             'sre.hosts.downtime', ['--force-puppet', '--reason', 'host reimage', '--hours', '2', self.fqdn])
         self.host_actions.success('Downtimed the new host on Icinga')
+        if downtime_id_pre_install:
+            self.alertmanager_host.remove_downtime(downtime_id_pre_install)
+            self.host_actions.success('Removed previous downtime on Alertmanager (old OS)')
 
         def _first_puppet_run():
             """Print a nicer message on failure."""

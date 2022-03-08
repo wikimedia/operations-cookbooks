@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class RollRestartMasters(CookbookBase):
     """Restart all the jvm daemons on Hadoop master nodes.
 
-    - Set Icinga downtime for all nodes (no puppet disable or depool is needed).
+    - Set Icinga/Alertmanager downtime for all nodes (no puppet disable or depool is needed).
     - Check the status of Yarn Resourcemanager daemons (expecting an active and a standby node).
     - Check the status of HDFS Namenode daemons (expecting an active and a standby node).
     - Restart one Resource Manager at a time.
@@ -25,6 +25,7 @@ class RollRestartMasters(CookbookBase):
     - Restart one HDFS Namenode (the current standby).
     - Force a failover of HDFS Namenode to the standby node (basically restoring the prev. state).
     - Restart the Mapreduce history server (only on one host).
+    - Remove the Icinga/Alertmanager downtime.
 
     Usage example:
       cookbook sre.hadoop.roll-restart-masters analytics
@@ -67,7 +68,7 @@ class RollRestartMastersRunner(CookbookRunnerBase):
         self.remote = spicerack.remote()
         self.hadoop_master = self.remote.query('A:hadoop-master' + self.suffix)
         self.hadoop_standby = self.remote.query('A:hadoop-standby' + self.suffix)
-        self.icinga_hosts = spicerack.icinga_hosts(self.hadoop_master.hosts | self.hadoop_standby.hosts)
+        self.alerting_hosts = spicerack.alerting_hosts(self.hadoop_master.hosts | self.hadoop_standby.hosts)
         self.admin_reason = spicerack.admin_reason('Restart of jvm daemons.')
 
         self.yarn_rm_sleep = args.yarn_rm_sleep_seconds
@@ -103,7 +104,7 @@ class RollRestartMastersRunner(CookbookRunnerBase):
 
     def run(self):
         """Restart all Hadoop jvm daemons on a given cluster"""
-        with self.icinga_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
+        with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
             logger.info("Restarting Yarn Resourcemanager on Master.")
             self.hadoop_master.run_sync('systemctl restart hadoop-yarn-resourcemanager')
             logger.info("Sleeping %s seconds.", self.yarn_rm_sleep)

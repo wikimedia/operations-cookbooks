@@ -99,7 +99,7 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
 
     def _reboot_hadoop_workers(self, hadoop_workers_batch, stop_journal_daemons=False):
         """Reboot a batch of Hadoop workers"""
-        with self.spicerack.icinga_hosts(hadoop_workers_batch.hosts).downtimed(
+        with self.spicerack.alerting_hosts(hadoop_workers_batch.hosts).downtimed(
                 self.reason, duration=timedelta(minutes=60)):
             puppet = self.spicerack.puppet(hadoop_workers_batch)
             puppet.disable(self.reason)
