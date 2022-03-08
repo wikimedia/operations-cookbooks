@@ -37,8 +37,10 @@ class RollingOperation(CookbookBase):
         (Perform a plugin upgrade followed by rolling restart of relforge)
         cookbook sre.elasticsearch.rolling-operation relforge "relforge plugin upgrade + reboot" --reboot --upgrade --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
     """
+
+    ## FIXME: turn --upgrade and --reboot into a single --operation or positional argument
     def argument_parser(self):
-        """Parse the command line arguments for rolling operations (restart/reboot/upgrade).
+        """Parse the command line arguments for a rolling operation (restart/reboot/upgrade).
 
         TODO:
             Remove ``--without-lvs`` for a better implementation as this was introduced because
@@ -59,7 +61,7 @@ class RollingOperation(CookbookBase):
         parser.add_argument('--no-wait-for-green', action='store_false', dest='wait_for_green',
                             help='Don\'t wait for green before starting the operation (still wait at the end).')
         parser.add_argument('--upgrade', action='store_true',
-                            help='Perform a plugin upgrade as part of the rolling operation')
+                            help='Upgrade Elasticsearch and its plugins')
         parser.add_argument('--reboot', action='store_true',
                             help='Perform a full reboot [rather than only service restarts]')
         parser.add_argument('--write-queue-datacenters', choices=CORE_DATACENTERS, default=CORE_DATACENTERS, nargs='+',
@@ -82,22 +84,23 @@ class RollingOperation(CookbookBase):
         nodes_per_run = args.nodes_per_run
         with_lvs = args.with_lvs
         wait_for_green = args.wait_for_green
-        operations = list()
         if args.upgrade:
-            operations.append(Operation.UPGRADE)
-        if args.reboot:
-            operations.append(Operation.REBOOT)
+            operation = Operation.UPGRADE
+        elif args.reboot:
+            operation = Operation.REBOOT
+        elif args.restart:
+            operation = Operation.RESTART
         else:
-            operations.append(Operation.RESTART)
+            raise RuntimeError("Please specify a valid operation.")
 
         return RollingOperationRunner(
             self.spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
-            nodes_per_run, with_lvs, wait_for_green, operations)
+            nodes_per_run, with_lvs, wait_for_green, operation)
 
 
 class RollingOperationRunner(CookbookRunnerBase):
     def __init__(self, spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
-                 nodes_per_run, with_lvs, wait_for_green, operations):
+                 nodes_per_run, with_lvs, wait_for_green, operation):
         self.spicerack = spicerack
 
         self.elasticsearch_clusters = elasticsearch_clusters
@@ -109,19 +112,13 @@ class RollingOperationRunner(CookbookRunnerBase):
         self.wait_for_green = wait_for_green
         self.nodes_per_run = nodes_per_run
 
-        self.operations = operations
-
-        if not (Operation.REBOOT in self.operations or Operation.RESTART in self.operations):
-            raise ValueError('Operations should always include REBOOT or RESTART')
+        self.operation = operation
 
     @property
     def runtime_description(self):
         """Return a string that represents which operation will be performed as well as the target cluster + reason."""
-        reboot_or_restart = "reboot" if Operation.REBOOT in self.operations else "restart"
-        with_optional_upgrade = ("with" if Operation.UPGRADE in self.operations else "without") + " plugin upgrade"
-        operation = "{} {}".format(reboot_or_restart, with_optional_upgrade)
         batch_size = "{} nodes at a time".format(self.nodes_per_run)
-        return "{} ({}) for ElasticSearch cluster {}: {}".format(operation, batch_size, self.clustergroup, self.reason)
+        return "{} ({}) for ElasticSearch cluster {}: {}".format(self.operation, batch_size, self.clustergroup, self.reason)
 
     def run(self):
         """Required by Spicerack API."""
@@ -191,19 +188,27 @@ class RollingOperationRunner(CookbookRunnerBase):
         Optionally performs a full reboot as opposed to just restarting services.
         """
         start_time = datetime.utcnow()
-        logger.info("Starting rolling_operation {} on {} at time {}".format(self.operations, nodes, start_time))
+        logger.info("Starting rolling_operation {} on {} at time {}".format(self.operation, nodes, start_time))
 
-        for operation in self.operations:
-            if operation is Operation.UPGRADE:
-                # TODO: implement a generic and robust package upgrade mechanism in spicerack
-                upgrade_cmd = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
-                              options='-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
-                              packages=' '.join(['elasticsearch-oss', 'wmf-elasticsearch-search-plugins']))
-                nodes.get_remote_hosts().run_sync(upgrade_cmd)  # pylint: disable=protected-access
+        if operation is Operation.UPGRADE:
+            # TODO: implement a generic and robust package upgrade mechanism in spicerack
+            upgrade_cmd = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
+                          options='-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
+                          packages=' '.join(['elasticsearch-oss', 'wmf-elasticsearch-search-plugins']))
 
-            if operation is Operation.REBOOT:
-                nodes.get_remote_hosts().reboot(batch_size=self.nodes_per_run)
-                nodes.get_remote_hosts().wait_reboot_since(start_time)
+            nodes.get_remote_hosts().run_sync('chown -R elasticsearch /etc/elasticsearch/*')
+            nodes.get_remote_hosts().run_sync(upgrade_cmd)  # pylint: disable=protected-access
+            nodes.start_elasticsearch()
+            ##FIXME: implement polling per comment at
+            # https://gerrit.wikimedia.org/r/c/operations/cookbooks/+/769109/comment/91b26217_5f2fd4bb/
+            sleep(120) # Sleep during restart of elasticsearch services (b/c systemctl returns asynchronously)
+            # Restarting the service will write a keystore file that requires elasticsearch to be owner
+            # See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/elasticsearch-keystore.html#keystore-upgrade
+            nodes.get_remote_hosts().run_sync('chown -R root /etc/elasticsearch/*')
 
-            if operation is Operation.RESTART:
-                nodes.start_elasticsearch()
+        if operation is Operation.REBOOT:
+            nodes.get_remote_hosts().reboot(batch_size=self.nodes_per_run)
+            nodes.get_remote_hosts().wait_reboot_since(start_time)
+
+        if operation is Operation.RESTART:
+            nodes.start_elasticsearch()
