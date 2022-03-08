@@ -1,4 +1,4 @@
-"""Downtime hosts and all their services in Icinga."""
+"""Downtime hosts and all their services in Icinga and Alertmanager."""
 import argparse
 import logging
 
@@ -18,10 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 class Downtime(CookbookBase):
-    """Downtime hosts and all their services in Icinga.
+    """Downtime hosts and all their services in Icinga and Alertmanager.
 
     - Optionally force a Puppet run on the Icinga host to pick up new hosts or services
-    - Set Icinga downtime for the given time with a default of 4h if not specified
+    - Set an Icinga downtime for the given time with a default of 4h if not specified
+    - Set an Alertmanager silence for the given time with a default of 4h if not specified
 
     Usage example:
       cookbook sre.hosts.downtime --days 5 -r 'some reason' 'somehost1001*'
@@ -53,7 +54,7 @@ class Downtime(CookbookBase):
                             help='Force a Puppet run on the Icinga host to pick up new hosts or services.')
         parser.add_argument('--force', action='store_true',
                             help=('Override the check that use a Cumin query to validate the given hosts. Useful when '
-                                  'you want to downtime an Icinga "host" that is not a real host or '
+                                  'you want to downtime a "host" that is not a real host like a service or '
                                   'not anymore queryable via Cumin.'))
 
         return parser
@@ -80,11 +81,12 @@ class DowntimeRunner(CookbookRunnerBase):
         else:
             self.hosts = spicerack.remote().query(args.query).hosts
             if not self.hosts:
-                raise RuntimeError(f'No host found for query "{args.query}". Use --force targeting Icinga hosts that '
-                                   'are not real hosts.')
+                raise RuntimeError(f'No host found for query "{args.query}". Use --force targeting Icinga/Alertmanager '
+                                   'hosts that are not real hosts.')
 
         self.task_id = args.task_id
         self.icinga_hosts = spicerack.icinga_hosts(self.hosts, verbatim_hosts=args.force)
+        self.alerting_hosts = spicerack.alerting_hosts(self.hosts, verbatim_hosts=args.force)
         self.reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
         if args.force_puppet:
@@ -104,9 +106,6 @@ class DowntimeRunner(CookbookRunnerBase):
 
         self.short_message = f'for {self.duration} on {hosts_message} with reason: {args.reason}'
 
-        self.long_message = (f'Icinga downtime set by {self.reason.owner} for {self.duration} {len(self.hosts)} '
-                             f'host(s) and their services with reason: {args.reason}\n```\n{self.hosts}\n```')
-
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the downtime action."""
@@ -121,10 +120,14 @@ class DowntimeRunner(CookbookRunnerBase):
             self._poll_status()
 
         logging.info('Downtiming %s', self.runtime_description)
-        self.icinga_hosts.downtime(self.reason, duration=self.duration)
+        downtime_id = self.alerting_hosts.downtime(self.reason, duration=self.duration)
 
         if self.phabricator is not None:
-            self.phabricator.task_comment(self.task_id, self.long_message)
+            message = (f'Icinga downtime and Alertmanager silence (ID={downtime_id}) set by {self.reason.owner} '
+                       f'for {self.duration} on {len(self.hosts)} host(s) and their services with reason: '
+                       f'{self.reason.reason}\n```\n{self.hosts}\n```')
+
+            self.phabricator.task_comment(self.task_id, message)
 
     @retry(  # pylint: disable=no-value-for-parameter
         tries=10,
