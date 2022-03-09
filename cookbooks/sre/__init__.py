@@ -235,15 +235,11 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         else:
             restart_cmds = [f"{systemd_cmd} restart {' '.join(self.restart_daemons)}"]
 
-        puppet = self._spicerack.puppet(hosts)
         icinga_hosts = self._spicerack.icinga_hosts(hosts.hosts)
         try:
             duration = timedelta(minutes=20)
             with icinga_hosts.downtimed(self.reason, duration=duration):
-                now = datetime.utcnow()
                 confirm_on_failure(hosts.run_sync, *restart_cmds)
-                puppet.run(quiet=True)
-                puppet.wait_since(now)
                 icinga_hosts.wait_for_optimal()
             self.results.success(hosts.hosts)
         except IcingaError as error:
@@ -276,7 +272,6 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                 reboot_time = datetime.utcnow()
                 confirm_on_failure(hosts.reboot, batch_size=len(hosts))
                 hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
-                puppet.run(quiet=True)
                 puppet.wait_since(reboot_time)
                 icinga_hosts.wait_for_optimal()
             self.results.success(hosts.hosts)
