@@ -377,10 +377,11 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
 
 class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
-    """SRE batch runniner which is aare of conftool pool state"""
+    """SRE batch runnner which is aware of conftool pool state"""
 
     depool_threshold = 1
     depool_sleep = 5
+    repool_sleep = 5
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Initialize the runner."""
@@ -392,6 +393,11 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         self._confctl = spicerack.confctl('node')
         super().__init__(args, spicerack)
 
+    @property
+    def depool_services(self) -> List[str]:
+        """Property to return a list of specific services to depool/repool. If empty means all services."""
+        return []
+
     def wait_for_depool(self):
         """Preform action to check a host has been de-pooled.
 
@@ -400,6 +406,14 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         """
         sleep(self.depool_sleep)
 
+    def wait_for_repool(self):
+        """Preform action to check a host is ready to be repooled.
+
+        By default this function just sleeps for `repool_sleep` seconds
+
+        """
+        sleep(self.repool_sleep)
+
     def action(self, hosts: RemoteHosts) -> None:
         """The main action to preform e.g. reboot, restart a service etc
 
@@ -407,12 +421,18 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
             hosts (`RemoteHosts`): a list of functions to run
 
         """
+        kwargs = {}
+        depool_services = "|".join(self.depool_services)
+        if depool_services:
+            kwargs["service"] = depool_services
+
         try:
             with self._confctl.change_and_revert(
-                'pooled', 'yes', 'no', name="|".join(hosts.hosts.striter())
+                'pooled', 'yes', 'no', name="|".join(hosts.hosts.striter(), **kwargs)
             ):
                 self.wait_for_depool()
                 super().action(hosts)
+                self.wait_for_repool()
         except Exception:
             self.logger.error('#' * 50)
             self.logger.error(

@@ -20,7 +20,7 @@ class Reboot(SREBatchBase):
     # Optional
     def argument_parser(self):
         """Argument parser"""
-        parser = super().argument_parser(self)
+        parser = super().argument_parser()
         parser.add_argument('--foobar')
         return parser
 
