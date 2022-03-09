@@ -150,14 +150,15 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
     - Optionally: Run pre action(s) (e.g. depool via conftool or
       sanity check Cassandra cluster state)
-    - Set Icinga downtime for all servers in the batch to reboot
-    - Reboot
-    - Wait for hosts to come back online
+    - Set Icinga/Alertmanager downtime for all servers in the batch to reboot
+    - Reboot/Restart services
+    - If reboot: Wait for hosts to come back online
+    - If reboot: Wait for the first puppet run
+    - Wait for Icinga optimal status
     - Optionally: Run post action(s) (e.g. pool via conftool or
       verify that all Cassandra nodes have rejoined the cluster fully)
-    - Remove the Icinga downtime after the host has been rebooted, the
-      first Puppet run is complete and the (optional) post action has
-      return 0
+    - Remove the Icinga/Alertmanager downtime
+
     """
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
@@ -236,9 +237,10 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             restart_cmds = [f"{systemd_cmd} restart {' '.join(self.restart_daemons)}"]
 
         icinga_hosts = self._spicerack.icinga_hosts(hosts.hosts)
+        alerting_hosts = self._spicerack.alerting_hosts(hosts.hosts)
         try:
             duration = timedelta(minutes=20)
-            with icinga_hosts.downtimed(self.reason, duration=duration):
+            with alerting_hosts.downtimed(self.reason, duration=duration):
                 confirm_on_failure(hosts.run_sync, *restart_cmds)
                 icinga_hosts.wait_for_optimal()
             self.results.success(hosts.hosts)
@@ -266,9 +268,10 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         """
         puppet = self._spicerack.puppet(hosts)
         icinga_hosts = self._spicerack.icinga_hosts(hosts.hosts)
+        alerting_hosts = self._spicerack.alerting_hosts(hosts.hosts)
         try:
             duration = timedelta(minutes=20)
-            with icinga_hosts.downtimed(self.reason, duration=duration):
+            with alerting_hosts.downtimed(self.reason, duration=duration):
                 reboot_time = datetime.utcnow()
                 confirm_on_failure(hosts.reboot, batch_size=len(hosts))
                 hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
