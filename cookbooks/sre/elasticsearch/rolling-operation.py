@@ -29,13 +29,13 @@ class RollingOperation(CookbookBase):
 
     Usage examples:
         (Perform a rolling restart of eqiad)
-        cookbook sre.elasticsearch.rolling-operation search_eqiad "eqiad cluster restart" --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
+        cookbook sre.elasticsearch.rolling-operation search_eqiad "eqiad cluster restart" --restart --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
 
         (Perform a rolling reboot of codfw)
         cookbook sre.elasticsearch.rolling-operation search_codfw "codfw cluster reboot" --reboot --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
 
         (Perform a plugin upgrade followed by rolling restart of relforge)
-        cookbook sre.elasticsearch.rolling-operation relforge "relforge plugin upgrade + reboot" --reboot --upgrade --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
+        cookbook sre.elasticsearch.rolling-operation relforge "relforge elasticsearch and plugin upgrade" --upgrade --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
     """
 
     ## FIXME: turn --upgrade and --reboot into a single --operation or positional argument
@@ -64,6 +64,8 @@ class RollingOperation(CookbookBase):
                             help='Upgrade Elasticsearch and its plugins')
         parser.add_argument('--reboot', action='store_true',
                             help='Perform a full reboot [rather than only service restarts]')
+        parser.add_argument('--restart', action='store_true',
+                            help='Restart Elasticsearch services')
         parser.add_argument('--write-queue-datacenters', choices=CORE_DATACENTERS, default=CORE_DATACENTERS, nargs='+',
                             help='Manually specify a list of specific datacenters to check the '
                                  'cirrus write queue rather than checking all core datacenters (default)')
