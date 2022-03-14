@@ -1,8 +1,12 @@
 """WDQS data transfer cookbook for source node
 
-Usage example:
-    cookbook sre.wdqs.data-transfer --source wdqs1004.eqiad.wmnet --dest wdqs1010.eqiad.wmnet
-     --reason "allocator troubles" --blazegraph_instance blazegraph --task-id T12345
+Usage example for hosts behind lvs:
+    cookbook sre.wdqs.data-transfer --source wdqs1004.eqiad.wmnet --dest wdqs1003.eqiad.wmnet
+     --reason "allocator troubles" --blazegraph_instance wikidata --task-id T12345
+
+Usage example for test hosts:
+    cookbook sre.wdqs.data-transfer --source wdqs1009.eqiad.wmnet --dest wdqs1010.eqiad.wmnet
+     --reason "moving away from legacy updater" --without-lvs --blazegraph_instance wikidata --task-id T12345
 
 """
 import argparse
