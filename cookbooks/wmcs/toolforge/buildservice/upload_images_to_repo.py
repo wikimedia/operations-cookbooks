@@ -15,7 +15,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteHosts
 
-from cookbooks.wmcs import run_one
+from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, run_one, with_common_opts
 
 
 class UploadImagesToRepo(CookbookBase):
@@ -60,12 +60,13 @@ class UploadImagesToRepo(CookbookBase):
             default="tools-docker-imagebuilder-01.tools.eqiad1.wikimedia.cloud",
             help="Host to use to pull and push to the given repository.",
         )
+        add_common_opts(parser, project_default="toolsbeta")
 
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return UploadImagesToRepoRunner(
+        return with_common_opts(self.spicerack, args, UploadImagesToRepoRunner)(
             tekton_version=args.tekton_version,
             lifecycle_version=args.lifecycle_version,
             bash_version=args.bash_version,
@@ -99,6 +100,7 @@ class UploadImagesToRepoRunner(CookbookRunnerBase):
 
     def __init__(
         self,
+        common_opts: CommonOpts,
         image_repo_url: str,
         uploader_node: str,
         tekton_version: Optional[str],
@@ -113,6 +115,9 @@ class UploadImagesToRepoRunner(CookbookRunnerBase):
         self.image_repo_url = image_repo_url
         self.uploader_node = uploader_node
         self.spicerack = spicerack
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> None:
         """Main entry point"""
@@ -120,22 +125,26 @@ class UploadImagesToRepoRunner(CookbookRunnerBase):
         uploader_node = remote.query(f"D{{{self.uploader_node}}}", use_sudo=True)
 
         if self.tekton_version:
+            self.sallogger.log(message=f"Updating the tekton related images on {self.image_repo_url}")
             for image_name in self.TEKTON_IMAGES:
                 pull_url = f"{self.TEKTON_COMMON_PATH}/{image_name}:{self.tekton_version}"
                 push_url = f"{self.image_repo_url}/toolforge-tektoncd-pipeline-cmd-{image_name}:{self.tekton_version}"
                 _update_image(uploader_node=uploader_node, pull_url=pull_url, push_url=push_url)
 
         if self.bash_version:
+            self.sallogger.log(message=f"Updating the bash image on {self.image_repo_url}")
             pull_url = f"docker.io/library/bash:{self.bash_version}"
             push_url = f"{self.image_repo_url}/toolforge-library-bash:{self.bash_version}"
             _update_image(uploader_node=uploader_node, pull_url=pull_url, push_url=push_url)
 
         if self.lifecycle_version:
+            self.sallogger.log(message=f"Updating the lifecycle image on {self.image_repo_url}")
             pull_url = f"docker.io/buildpacksio/lifecycle:{self.lifecycle_version}"
             push_url = f"{self.image_repo_url}/toolforge-buildpacksio-lifecycle:{self.lifecycle_version}"
             _update_image(uploader_node=uploader_node, pull_url=pull_url, push_url=push_url)
 
         # this image should not be pulled with a tag, so CRI-O can run it, so we update it always.
+        self.sallogger.log(message=f"Updating the distroless/base image on {self.image_repo_url}")
         _update_image(
             uploader_node=uploader_node,
             pull_url="gcr.io/distroless/base",
