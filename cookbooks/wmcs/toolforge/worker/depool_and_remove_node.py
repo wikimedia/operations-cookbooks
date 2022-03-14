@@ -18,8 +18,8 @@ from cookbooks.wmcs import (
     CommonOpts,
     KubernetesController,
     OpenstackAPI,
+    SALLogger,
     add_common_opts,
-    dologmsg,
     natural_sort_key,
     with_common_opts,
 )
@@ -96,6 +96,9 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
             project=self.common_opts.project,
         )
         self._all_project_servers = None
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def _get_oldest_worker(self, k8s_worker_prefix: str) -> str:
         if not self._all_project_servers:
@@ -146,8 +149,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        dologmsg(
-            common_opts=self.common_opts,
+        self.sallogger.log(
             message=f"Depooling and removing worker {self.fqdn_to_remove or ', will pick the oldest'}.",
         )
         remote = self.spicerack.remote()
@@ -192,4 +194,4 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
             ),
         ).run()
 
-        dologmsg(common_opts=self.common_opts, message=f"Depooled and removed worker {fqdn_to_remove}.")
+        self.sallogger.log(message=f"Depooled and removed worker {fqdn_to_remove}.")

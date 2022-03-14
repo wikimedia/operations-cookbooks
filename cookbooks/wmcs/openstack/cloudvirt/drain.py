@@ -12,7 +12,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CommonOpts, OpenstackAPI, add_common_opts, dologmsg, with_common_opts
+from cookbooks.wmcs import CommonOpts, OpenstackAPI, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.openstack.cloudvirt.set_maintenance import SetMaintenance
 
 LOGGER = logging.getLogger(__name__)
@@ -73,10 +73,13 @@ class DrainRunner(CookbookRunnerBase):
             remote=spicerack.remote(),
             control_node_fqdn=control_node_fqdn,
         )
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        dologmsg(common_opts=self.common_opts, message=f"Draining '{self.fqdn}'.")
+        self.sallogger.log(message=f"Draining '{self.fqdn}'.")
         set_maintenance_cookbook = SetMaintenance(spicerack=self.spicerack)
         set_maintenance_cookbook.get_runner(
             args=set_maintenance_cookbook.argument_parser().parse_args(
@@ -85,9 +88,10 @@ class DrainRunner(CookbookRunnerBase):
                     self.control_node_fqdn,
                     "--fqdn",
                     self.fqdn,
-                ] + self.common_opts.to_cli_args(),
+                ]
+                + self.common_opts.to_cli_args(),
             )
         ).run()
         hypervisor_name = self.fqdn.split(".", 1)[0]
         self.openstack_api.drain_hypervisor(hypervisor_name=hypervisor_name)
-        dologmsg(common_opts=self.common_opts, message=f"Drained '{self.fqdn}'.")
+        self.sallogger.log(message=f"Drained '{self.fqdn}'.")

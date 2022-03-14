@@ -16,7 +16,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CommonOpts, OpenstackAPI, add_common_opts, dologmsg, with_common_opts
+from cookbooks.wmcs import CommonOpts, OpenstackAPI, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.openstack.cloudvirt.drain import Drain
 from cookbooks.wmcs.openstack.cloudvirt.unset_maintenance import UnsetMaintenance
 
@@ -78,10 +78,13 @@ class SafeRebootRunner(CookbookRunnerBase):
             remote=spicerack.remote(),
             control_node_fqdn=control_node_fqdn,
         )
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        dologmsg(common_opts=self.common_opts, message=f"Safe rebooting '{self.fqdn}'.")
+        self.sallogger.log(message=f"Safe rebooting '{self.fqdn}'.")
         drain_cookbook = Drain(spicerack=self.spicerack)
         drain_cookbook.get_runner(
             args=drain_cookbook.argument_parser().parse_args(
@@ -90,7 +93,8 @@ class SafeRebootRunner(CookbookRunnerBase):
                     self.control_node_fqdn,
                     "--fqdn",
                     self.fqdn,
-                ] + self.common_opts.to_cli_args(),
+                ]
+                + self.common_opts.to_cli_args(),
             )
         ).run()
 
@@ -108,7 +112,8 @@ class SafeRebootRunner(CookbookRunnerBase):
                     self.control_node_fqdn,
                     "--fqdn",
                     self.fqdn,
-                ] + self.common_opts.to_cli_args(),
+                ]
+                + self.common_opts.to_cli_args(),
             )
         ).run()
-        dologmsg(common_opts=self.common_opts, message=f"Safe reboot of '{self.fqdn}' finished successfully.")
+        self.sallogger.log(message=f"Safe reboot of '{self.fqdn}' finished successfully.")

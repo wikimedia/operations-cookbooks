@@ -12,7 +12,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CommonOpts, add_common_opts, dologmsg, with_common_opts
+from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -56,10 +56,12 @@ class DologmsgRunner(CookbookRunnerBase):
         spicerack: Spicerack,
     ):
         """Init."""
-        self.common_opts = common_opts
         self.msg = msg
         self.spicerack = spicerack
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point."""
-        dologmsg(common_opts=self.common_opts, message=self.msg)
+        self.sallogger.log(message=self.msg)

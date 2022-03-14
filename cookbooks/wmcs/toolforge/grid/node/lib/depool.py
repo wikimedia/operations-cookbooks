@@ -7,7 +7,7 @@ Usage example:
 """
 import argparse
 import logging
-from typing import Optional, List
+from typing import List, Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -15,10 +15,10 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from cookbooks.wmcs import (
     CommonOpts,
     OpenstackAPI,
+    SALLogger,
     add_common_opts,
-    dologmsg,
-    with_common_opts,
     parser_type_list_hostnames,
+    with_common_opts,
 )
 from cookbooks.wmcs.toolforge.grid import GridController, GridNodeNotFound
 
@@ -77,6 +77,9 @@ class ToolforgeGridNodeDepoolRunner(CookbookRunnerBase):
         self.grid_master_fqdn = grid_master_fqdn
         self.spicerack = spicerack
         self.node_hostnames = node_hostnames
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -99,6 +102,6 @@ class ToolforgeGridNodeDepoolRunner(CookbookRunnerBase):
                 LOGGER.warning("node %s not found in the %s grid", node, self.common_opts.project)
                 return 1
 
-            dologmsg(common_opts=self.common_opts, message=f"depooled grid node {node}")
+            self.sallogger.log(message=f"depooled grid node {node}")
 
         return 0

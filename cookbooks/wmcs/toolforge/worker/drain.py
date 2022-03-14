@@ -18,8 +18,8 @@ from cookbooks.wmcs import (
     K8S_SYSTEM_NAMESPACES,
     CommonOpts,
     KubernetesController,
+    SALLogger,
     add_common_opts,
-    dologmsg,
     with_common_opts,
 )
 
@@ -72,15 +72,17 @@ class DrainRunner(CookbookRunnerBase):
         spicerack: Spicerack,
     ):
         """Init"""
-        self.common_opts = common_opts
         self.control_node_fqdn = control_node_fqdn
         self.hostname_to_drain = hostname_to_drain
         self.spicerack = spicerack
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
         remote = self.spicerack.remote()
-        dologmsg(common_opts=self.common_opts, message=f"Draining node {self.hostname_to_drain}...")
+        self.sallogger.log(message=f"Draining node {self.hostname_to_drain}...")
         kubectl = KubernetesController(remote=remote, controlling_node_fqdn=self.control_node_fqdn)
         kubectl.drain_node(node_hostname=self.hostname_to_drain)
 
@@ -109,4 +111,4 @@ class DrainRunner(CookbookRunnerBase):
             )
             time.sleep(30)
 
-        dologmsg(common_opts=self.common_opts, message=f"Drained node {self.hostname_to_drain}.")
+        self.sallogger.log(message=f"Drained node {self.hostname_to_drain}.")

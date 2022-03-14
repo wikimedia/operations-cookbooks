@@ -21,6 +21,7 @@ from typing import Optional
 import yaml
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+
 from cookbooks.wmcs import OutputFormat, run_one
 
 LOGGER = logging.getLogger(__name__)

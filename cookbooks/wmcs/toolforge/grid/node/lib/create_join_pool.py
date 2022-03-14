@@ -17,7 +17,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import CommonOpts, DebianVersion, add_common_opts, dologmsg, with_common_opts
+from cookbooks.wmcs import CommonOpts, DebianVersion, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.toolforge.grid import GridController
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
     CreateInstanceWithPrefix,
@@ -110,6 +110,9 @@ class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
         self.debian_version = debian_version
         self.instance_creation_opts = instance_creation_opts
         self.nodetype = nodetype
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -119,10 +122,14 @@ class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
                 prefix=f"{self.common_opts.project}-sge{self.nodetype}-{self.debian_version.value}",
             )
 
-        start_args = [
-            "--ssh-retries",
-            "60",  # 1H. Installing the exec environment (via puppet) takes a really long time.
-        ] + self.instance_creation_opts.to_cli_args() + self.common_opts.to_cli_args()
+        start_args = (
+            [
+                "--ssh-retries",
+                "60",  # 1H. Installing the exec environment (via puppet) takes a really long time.
+            ]
+            + self.instance_creation_opts.to_cli_args()
+            + self.common_opts.to_cli_args()
+        )
 
         create_instance_cookbook = CreateInstanceWithPrefix(spicerack=self.spicerack)
         response = create_instance_cookbook.get_runner(
@@ -151,4 +158,4 @@ class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
         grid_controller.add_node(host_fqdn=new_member_fqdn, is_tools_project=(self.common_opts.project == "tools"))
 
-        dologmsg(common_opts=self.common_opts, message=f"created node {new_member_fqdn} and added it to the grid")
+        self.sallogger.log(message=f"created node {new_member_fqdn} and added it to the grid")

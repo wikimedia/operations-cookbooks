@@ -19,8 +19,8 @@ from cookbooks.wmcs import (
     CommonOpts,
     OpenstackAPI,
     OpenstackNotFound,
+    SALLogger,
     add_common_opts,
-    dologmsg,
     with_common_opts,
 )
 
@@ -85,7 +85,6 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
         aggregates: Optional[str] = None,
     ):
         """Init."""
-        self.common_opts = common_opts
         self.fqdn = fqdn
         self.control_node_fqdn = control_node_fqdn
         self.openstack_api = OpenstackAPI(
@@ -94,10 +93,13 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
         )
         self.aggregates = aggregates
         self.spicerack = spicerack
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point."""
-        dologmsg(common_opts=self.common_opts, message=f"Unsetting cloudvirt '{self.fqdn}' maintenance.")
+        self.sallogger.log(message=f"Unsetting cloudvirt '{self.fqdn}' maintenance.")
         hostname = self.fqdn.split(".", 1)[0]
         try:
             self.openstack_api.aggregate_remove_host(aggregate_name="maintenance", host_name=hostname)
@@ -125,7 +127,7 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
             target_hosts=[self.fqdn],
         )
         icinga_hosts.remove_downtime()
-        dologmsg(common_opts=self.common_opts, message=f"Unset cloudvirt '{self.fqdn}' maintenance.")
+        self.sallogger.log(message=f"Unset cloudvirt '{self.fqdn}' maintenance.")
         LOGGER.info(
             "Host %s now in out of maintenance mode. New VMs will be scheduled in it (aggregates: %s).",
             self.fqdn,

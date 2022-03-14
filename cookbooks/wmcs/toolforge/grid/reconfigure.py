@@ -13,7 +13,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CommonOpts, add_common_opts, dologmsg, with_common_opts
+from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.toolforge.grid import GridController
 
 LOGGER = logging.getLogger(__name__)
@@ -65,10 +65,13 @@ class ToolforgeGridReconfigureRunner(CookbookRunnerBase):
         self.common_opts = common_opts
         self.master_node_fqdn = master_node_fqdn
         self.spicerack = spicerack
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        dologmsg(common_opts=self.common_opts, message="reconfiguring the grid by using grid-configurator")
+        self.sallogger.log(message="reconfiguring the grid by using grid-configurator")
 
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn)
         grid_controller.reconfigure(is_tools_project=(self.common_opts.project == "tools"))

@@ -18,8 +18,8 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from cookbooks.wmcs import (
     CephClusterController,
     CommonOpts,
+    SALLogger,
     add_common_opts,
-    dologmsg,
     with_common_opts,
     wrap_with_sudo_icinga,
 )
@@ -96,10 +96,13 @@ class RebootNodeRunner(CookbookRunnerBase):
         self.skip_maintenance = skip_maintenance
         self.force = force
         self.spicerack = spicerack
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        dologmsg(common_opts=self.common_opts, message=f"Rebooting node {self.fqdn_to_reboot}")
+        self.sallogger.log(message=f"Rebooting node {self.fqdn_to_reboot}")
 
         controller = CephClusterController(
             remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn
@@ -134,4 +137,4 @@ class RebootNodeRunner(CookbookRunnerBase):
             controller.unset_maintenance()
 
         icinga_hosts.remove_downtime()
-        dologmsg(common_opts=self.common_opts, message=f"Finished rebooting node {self.fqdn_to_reboot}")
+        self.sallogger.log(message=f"Finished rebooting node {self.fqdn_to_reboot}")

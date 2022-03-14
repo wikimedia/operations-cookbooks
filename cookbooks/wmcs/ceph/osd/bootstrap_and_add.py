@@ -20,8 +20,8 @@ from cookbooks.wmcs import (
     CephOSDController,
     CephOSDFlag,
     CommonOpts,
+    SALLogger,
     add_common_opts,
-    dologmsg,
     with_common_opts,
 )
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
@@ -121,11 +121,13 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
         self.skip_reboot = skip_reboot
         self.spicerack = spicerack
         self.wait_for_rebalance = wait_for_rebalance
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        dologmsg(
-            common_opts=self.common_opts,
+        self.sallogger.log(
             message=f"Adding new OSDs {self.new_osd_fqdns} to the cluster",
         )
         cluster_controller = CephClusterController(
@@ -135,8 +137,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
         cluster_controller.set_osdmap_flag(CephOSDFlag("norebalance"))
 
         for index, new_osd_fqdn in enumerate(self.new_osd_fqdns):
-            dologmsg(
-                common_opts=self.common_opts,
+            self.sallogger.log(
                 message=f"Adding OSD {new_osd_fqdn}... ({index + 1}/{len(self.new_osd_fqdns)})",
             )
             node = self.spicerack.remote().query(f"D{{{new_osd_fqdn}}}", use_sudo=True)
@@ -160,15 +161,13 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
             CephOSDController(remote=self.spicerack.remote(), node_fqdn=new_osd_fqdn).add_all_available_devices(
                 interactive=(not self.yes_i_know)
             )
-            dologmsg(
-                common_opts=self.common_opts,
+            self.sallogger.log(
                 message=f"Added OSD {new_osd_fqdn}... ({index + 1}/{len(self.new_osd_fqdns)})",
             )
 
         # Now we start rebalancing once all are in
         cluster_controller.unset_osdmap_flag(CephOSDFlag("norebalance"))
-        dologmsg(
-            common_opts=self.common_opts,
+        self.sallogger.log(
             message=f"Added {len(self.new_osd_fqdns)} new OSDs {self.new_osd_fqdns}",
         )
         LOGGER.info(
@@ -182,7 +181,6 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
             LOGGER.info("Waiting for the cluster to rebalance all the data (timeout of {%d} hours)...", wait_hours)
             cluster_controller.wait_for_in_progress_events(timeout_seconds=wait_hours * 60 * 60)
             LOGGER.info("Rebalancing done.")
-            dologmsg(
-                common_opts=self.common_opts,
+            self.sallogger.log(
                 message=f"The cluster is now rebalanced after adding the new OSDs {self.new_osd_fqdns}",
             )

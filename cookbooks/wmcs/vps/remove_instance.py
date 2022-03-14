@@ -13,7 +13,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CommonOpts, OpenstackAPI, add_common_opts, dologmsg, with_common_opts
+from cookbooks.wmcs import CommonOpts, OpenstackAPI, SALLogger, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +66,9 @@ class RemoveInstanceRunner(CookbookRunnerBase):
 
         self.name_to_remove = name_to_remove
         self.spicerack = spicerack
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -77,5 +80,5 @@ class RemoveInstanceRunner(CookbookRunnerBase):
             )
             return
 
-        dologmsg(common_opts=self.common_opts, message=f"removing instance {self.name_to_remove}")
+        self.sallogger.log(message=f"removing instance {self.name_to_remove}")
         self.openstack_api.server_delete(name_to_remove=self.name_to_remove)

@@ -16,8 +16,8 @@ import argparse
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Optional, Callable, List
 from functools import partial
+from typing import Callable, List, Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
@@ -25,14 +25,14 @@ from spicerack.remote import RemoteExecutionError
 from wmflib.decorators import retry
 
 from cookbooks.wmcs import (
-    OpenstackAPI,
-    OpenstackServerGroupPolicy,
-    natural_sort_key,
-    OpenstackIdentifier,
-    run_one,
     CommonOpts,
-    with_common_opts,
+    OpenstackAPI,
+    OpenstackIdentifier,
+    OpenstackServerGroupPolicy,
     add_common_opts,
+    natural_sort_key,
+    run_one,
+    with_common_opts,
 )
 
 LOGGER = logging.getLogger(__name__)

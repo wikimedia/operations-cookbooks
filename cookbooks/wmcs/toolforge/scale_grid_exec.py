@@ -6,13 +6,13 @@ Usage example:
 """
 import argparse
 import logging
-from typing import Optional
 from enum import Enum
+from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import OpenstackServerGroupPolicy, CommonOpts, add_common_opts, with_common_opts
+from cookbooks.wmcs import CommonOpts, OpenstackServerGroupPolicy, add_common_opts, with_common_opts
 from cookbooks.wmcs.toolforge.grid.node.lib.create_join_pool import ToolforgeGridNodeCreateJoinPool
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
     InstanceCreationOpts,

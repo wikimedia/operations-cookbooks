@@ -12,16 +12,15 @@ calls such that they have the same puppet/hiera config.
 """
 # pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
+import json
 import logging
 from typing import Optional, Union
-import json
 
 from spicerack import Spicerack
-from spicerack.puppet import PuppetHosts
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import OpenstackAPI, run_one
-from cookbooks.wmcs import OutputFormat
+from cookbooks.wmcs import OpenstackAPI, OutputFormat, run_one
 
 LOGGER = logging.getLogger(__name__)
 

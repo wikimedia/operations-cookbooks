@@ -14,13 +14,7 @@ from cumin.backends import InvalidQueryError
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import (
-    OpenstackAPI,
-    dologmsg,
-    CommonOpts,
-    with_common_opts,
-    add_common_opts,
-)
+from cookbooks.wmcs import CommonOpts, OpenstackAPI, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.toolforge.grid import GridController, GridNodeNotFound
 
 LOGGER = logging.getLogger(__name__)
@@ -80,6 +74,9 @@ class ToolforgeGridNodePoolRunner(CookbookRunnerBase):
         self.grid_master_fqdn = grid_master_fqdn
         self.spicerack = spicerack
         self.nodes_query = nodes_query
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -123,7 +120,7 @@ class ToolforgeGridNodePoolRunner(CookbookRunnerBase):
                 LOGGER.warning("node %s not found in the %s grid, ignoring", hostname, self.common_opts.project)
 
         if counter > 0:
-            dologmsg(common_opts=self.common_opts, message=f"pooled {counter} grid nodes {self.nodes_query}")
+            self.sallogger.log(message=f"pooled {counter} grid nodes {self.nodes_query}")
             return 0
 
         LOGGER.error("couldn't pool any node")

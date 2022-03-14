@@ -7,11 +7,12 @@ Usage example:
 """
 import argparse
 import logging
-from typing import Optional
 from enum import Enum
+from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+
 from cookbooks.wmcs import CmdChecklist
 
 LOGGER = logging.getLogger(__name__)

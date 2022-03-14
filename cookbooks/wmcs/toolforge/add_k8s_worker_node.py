@@ -23,8 +23,8 @@ from cookbooks.wmcs import (
     KubernetesController,
     OpenstackAPI,
     OpenstackServerGroupPolicy,
+    SALLogger,
     add_common_opts,
-    dologmsg,
     with_common_opts,
 )
 from cookbooks.wmcs.vps.create_instance_with_prefix import CreateInstanceWithPrefix
@@ -109,10 +109,13 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.image = image
         self.flavor = flavor
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        dologmsg(common_opts=self.common_opts, message="Adding a new k8s worker node")
+        self.sallogger.log(message="Adding a new k8s worker node")
         k8s_worker_prefix = (
             self.k8s_worker_prefix if self.k8s_worker_prefix is not None else f"{self.common_opts.project}-k8s-worker"
         )
@@ -199,6 +202,4 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         LOGGER.info("Joining the cluster...")
         kubeadm.join(kubernetes_controller=kubectl, wait_for_ready=True)
 
-        dologmsg(
-            common_opts=self.common_opts, message=f"Added a new k8s worker {new_member.server_fqdn} to the worker pool"
-        )
+        self.sallogger.log(message=f"Added a new k8s worker {new_member.server_fqdn} to the worker pool")

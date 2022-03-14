@@ -17,7 +17,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 from spicerack.remote import RemoteError
 
-from cookbooks.wmcs import CommonOpts, add_common_opts, dologmsg, with_common_opts, OpenstackAPI
+from cookbooks.wmcs import CommonOpts, OpenstackAPI, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.toolforge.grid import GridController
 
 LOGGER = logging.getLogger(__name__)
@@ -87,6 +87,9 @@ class ToolforgeGridNodeJoinRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.nodes_query = nodes_query
         self.force = force
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def _run(self, new_node_fqdn: str) -> Optional[int]:
         # a puppet run is required to make sure grid config files are generated
@@ -136,8 +139,7 @@ class ToolforgeGridNodeJoinRunner(CookbookRunnerBase):
             return
 
         for hostname in actual_nodes:
-            dologmsg(
-                common_opts=self.common_opts,
+            self.sallogger.log(
                 message=f"trying to join node {hostname} to the grid cluster in {self.common_opts.project}.",
             )
             self._run(f"{hostname}.{self.common_opts.project}.eqiad1.wikimedia.cloud")

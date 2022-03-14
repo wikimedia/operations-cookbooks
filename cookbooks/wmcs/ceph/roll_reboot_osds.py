@@ -12,7 +12,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephClusterController, CommonOpts, add_common_opts, dologmsg, with_common_opts
+from cookbooks.wmcs import CephClusterController, CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
 
 LOGGER = logging.getLogger(__name__)
@@ -69,6 +69,9 @@ class RollRebootOsdsRunner(CookbookRunnerBase):
         self.controlling_node_fqdn = controlling_node_fqdn
         self.force = force
         self.spicerack = spicerack
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -77,7 +80,7 @@ class RollRebootOsdsRunner(CookbookRunnerBase):
         )
         osd_nodes = list(controller.get_nodes()["osd"].keys())
 
-        dologmsg(common_opts=self.common_opts, message=f"Rebooting the nodes {','.join(osd_nodes)}")
+        self.sallogger.log(message=f"Rebooting the nodes {','.join(osd_nodes)}")
 
         controller.set_maintenance()
 
@@ -106,4 +109,4 @@ class RollRebootOsdsRunner(CookbookRunnerBase):
             LOGGER.info("Cluster stable, continuing")
 
         controller.unset_maintenance()
-        dologmsg(common_opts=self.common_opts, message=f"Finished rebooting the nodes {osd_nodes}")
+        self.sallogger.log(message=f"Finished rebooting the nodes {osd_nodes}")

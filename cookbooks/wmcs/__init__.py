@@ -1239,38 +1239,47 @@ def wrap_with_sudo_icinga(my_spicerack: Spicerack) -> Spicerack:
     return SudoIcingaSpicerackWrapper()
 
 
-def dologmsg(
-    common_opts: CommonOpts,
-    message: str,
-    channel: str = "#wikimedia-cloud",
-    host: str = "wm-bot.wm-bot.wmcloud.org",
-    port: int = 64835,
-):
-    """Log a message to the given irc channel for stashbot to pick up and register in SAL."""
-    if common_opts.no_dologmsg:
-        LOGGER.info("[DOLOGMSG - silent]: %s", message)
-        return
+@dataclass(frozen=True)
+class SALLogger:
+    """Class to log messages to sal."""
 
-    postfix = f"- cookbook ran by {getpass.getuser()}@{socket.gethostname()}"
-    if common_opts.task_id is not None:
-        postfix = f"({common_opts.task_id}) {postfix}"
+    project: str
+    task_id: Optional[str] = None
+    channel: str = "#wikimedia-cloud"
+    host: str = "wm-bot.wm-bot.wmcloud.org"
+    port: int = 64835
+    dry_run: bool = False
 
-    payload = f"{channel} !log {common_opts.project} {message} {postfix}\n"
-    # try all the possible addresses for that host (ip4/ip6/etc.)
-    for family, s_type, proto, _, sockaddr in socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP):
-        my_socket = socket.socket(family, s_type, proto)
-        my_socket.connect(sockaddr)
-        try:
-            my_socket.send(payload.encode("utf-8"))
-            LOGGER.info("[DOLOGMSG]: %s", message)
+    def log(
+        self,
+        message: str,
+    ):
+        """Log a message to the given irc channel for stashbot to pick up and register in SAL."""
+        postfix = f"- cookbook ran by {getpass.getuser()}@{socket.gethostname()}"
+        if self.task_id is not None:
+            postfix = f"({self.task_id}) {postfix}"
+
+        payload = f"{self.channel} !log {self.project} {message} {postfix}\n"
+
+        if self.dry_run:
+            LOGGER.info("[DOLOGMSG - would have sent]: %s", payload)
             return
-        # pylint: disable=broad-except
-        except Exception as error:
-            LOGGER.warning("Error trying to send a message to %s: %s", str(sockaddr), str(error))
-        finally:
-            my_socket.close()
 
-    raise Exception(f"Unable to send log message to {host}:{port}, see previous logs for details")
+        # try all the possible addresses for that host (ip4/ip6/etc.)
+        for family, s_type, proto, _, sockaddr in socket.getaddrinfo(self.host, self.port, proto=socket.IPPROTO_TCP):
+            my_socket = socket.socket(family, s_type, proto)
+            my_socket.connect(sockaddr)
+            try:
+                my_socket.send(payload.encode("utf-8"))
+                LOGGER.info("[DOLOGMSG]: %s", message)
+                return
+            # pylint: disable=broad-except
+            except Exception as error:
+                LOGGER.warning("Error trying to send a message to %s: %s", str(sockaddr), str(error))
+            finally:
+                my_socket.close()
+
+        raise Exception(f"Unable to send log message to {self.host}:{self.port}, see previous logs for details")
 
 
 # Poor man's namespace to compensate for the restriction to not create modules

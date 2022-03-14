@@ -18,10 +18,10 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from cookbooks.wmcs import (
     CommonOpts,
     OpenstackAPI,
+    SALLogger,
     add_common_opts,
-    dologmsg,
-    with_common_opts,
     parser_type_str_hostname,
+    with_common_opts,
 )
 from cookbooks.wmcs.toolforge.grid import GridController, GridNodeNotFound
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
@@ -81,6 +81,9 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
         self.grid_master_fqdn = grid_master_fqdn
         self.spicerack = spicerack
         self.node_hostname = node_hostname
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> Optional[int]:
         """Main entry point"""
@@ -94,8 +97,7 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
             return
 
         # before we start, notify folks
-        dologmsg(
-            common_opts=self.common_opts,
+        self.sallogger.log(
             message=f"removing grid node {self.node_hostname} (depool/drain, remove VM and reconfigure grid)",
         )
 
