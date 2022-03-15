@@ -15,14 +15,16 @@ logger = logging.getLogger(__name__)
 
 
 class Operation(Enum):
+    """Perform one of the following operations against the cluster."""
+
     RESTART = auto()
     REBOOT = auto()
     UPGRADE = auto()
 
 
 class RollingOperation(CookbookBase):
-    """
-    Perform a rolling operation on a CirrusSearch Elasticsearch cluster.
+    """Perform a rolling operation on a CirrusSearch Elasticsearch cluster.
+
     Will perform Elasticsearch service restarts by default.
     Optionally perform a full reboot instead of just service restarts,
     and additionally can optionally perform a plugin upgrade in addition to the restart or reboot.
@@ -38,11 +40,11 @@ class RollingOperation(CookbookBase):
         cookbook sre.elasticsearch.rolling-operation relforge "relforge elasticsearch and plugin upgrade" --upgrade --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
     """
 
-    ## FIXME: turn --upgrade and --reboot into a single --operation or positional argument
+    # FIXME: turn --upgrade and --reboot into a single --operation or positional argument
     def argument_parser(self):
         """Parse the command line arguments for a rolling operation (restart/reboot/upgrade).
 
-        TODO:
+        Todo:
             Remove ``--without-lvs`` for a better implementation as this was introduced because
             relforge cluster does not have lvs enabled.
 
@@ -73,6 +75,7 @@ class RollingOperation(CookbookBase):
         return parser
 
     def get_runner(self, args):
+        """Orchestrates cluster operations"""
         if args.start_datetime is None:
             args.start_datetime = datetime.utcnow()
 
@@ -101,8 +104,11 @@ class RollingOperation(CookbookBase):
 
 
 class RollingOperationRunner(CookbookRunnerBase):
+    """Apply rolling operation to cluster."""
+
     def __init__(self, spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
                  nodes_per_run, with_lvs, wait_for_green, operation):
+        """Create rolling operation for cluster."""
         self.spicerack = spicerack
 
         self.elasticsearch_clusters = elasticsearch_clusters
@@ -139,79 +145,64 @@ class RollingOperationRunner(CookbookRunnerBase):
             with self.spicerack.alerting_hosts(remote_hosts.hosts).downtimed(
                     self.reason, duration=timedelta(minutes=30)):
                 with puppet.disabled(self.reason):
+                    self.elasticsearch_clusters.flush_markers()
+                    # TODO: remove this condition when a better implementation is found.
+                    if self.with_lvs:
+                        nodes.depool_nodes()
+                        sleep(20)
 
-                    with self.elasticsearch_clusters.frozen_writes(self.reason):
-                        logger.info('Wait for a minimum time of 60sec to make sure all CirrusSearch writes are terminated')
-                        sleep(60)
+                    nodes.stop_elasticsearch()
 
-                        logger.info('Stopping elasticsearch replication in a safe way on %s', self.clustergroup)
-                        with self.elasticsearch_clusters.stopped_replication():
-                            self.elasticsearch_clusters.flush_markers()
+                    self.rolling_operation(nodes)
 
-                            # TODO: remove this condition when a better implementation is found.
-                            if self.with_lvs:
-                                nodes.depool_nodes()
-                                sleep(20)
+                    nodes.wait_for_elasticsearch_up(timedelta(minutes=10))
 
-                            nodes.stop_elasticsearch()
+                    # let's wait a bit to make sure everything has time to settle down
+                    sleep(20)
 
-                            self.rolling_operation(nodes)
+                    # TODO: remove this condition when a better implementation is found.
+                    # NOTE: we repool nodes before thawing writes and re-enabling replication since they
+                    #       can already serve traffic at this point.
+                    if self.with_lvs:
+                        nodes.pool_nodes()
 
-                            nodes.wait_for_elasticsearch_up(timedelta(minutes=10))
-
-                            # let's wait a bit to make sure everything has time to settle down
-                            sleep(20)
-
-                            # TODO: remove this condition when a better implementation is found.
-                            # NOTE: we repool nodes before thawing writes and re-enabling replication since they
-                            #       can already serve traffic at this point.
-                            if self.with_lvs:
-                                nodes.pool_nodes()
-
-                        logger.info('wait for green on all clusters before thawing writes. If not green, still thaw writes')
-                        try:
-                            self.elasticsearch_clusters.wait_for_green(timedelta(minutes=5))
-                        except ElasticsearchClusterCheckError:
-                            logger.info('Cluster not yet green, thawing writes and resume waiting for green')
-                        # TODO: inspect the back pressure on the kafka queue so that nothing
-                        #       is attempted if it's too high.
+                    logger.info('wait for green on all clusters before thawing writes. If not green, still thaw writes')
+                    try:
+                        self.elasticsearch_clusters.wait_for_green(timedelta(minutes=5))
+                    except ElasticsearchClusterCheckError:
+                        logger.info('Cluster not yet green, thawing writes and resume waiting for green')
 
             logger.info('Wait for green in %s before fetching next set of nodes', self.clustergroup)
             self.elasticsearch_clusters.wait_for_green()
 
-            logger.info('Allow time to consume write queue')
-            # Temporarily disable waiting for write queues; sleep 10 mins instead
-            sleep(600)
-            # self.elasticsearch_clusters.wait_for_all_write_queues_empty()
-
     def rolling_operation(self, nodes):
-        """
-        Performs rolling Elasticsearch service restarts across the cluster.
+        """Performs rolling Elasticsearch service restarts across the cluster.
+
         Optionally upgrade Elasticsearch plugins before proceeding to restart/reboot.
         Optionally performs a full reboot as opposed to just restarting services.
         """
         start_time = datetime.utcnow()
-        logger.info("Starting rolling_operation {} on {} at time {}".format(self.operation, nodes, start_time))
+        logger.info("Starting rolling_operation %s on %s at time %s", self.operation, nodes, start_time)
 
-        if operation is Operation.UPGRADE:
+        if self.operation is Operation.UPGRADE:
             # TODO: implement a generic and robust package upgrade mechanism in spicerack
             upgrade_cmd = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
                           options='-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
                           packages=' '.join(['elasticsearch-oss', 'wmf-elasticsearch-search-plugins']))
 
             nodes.get_remote_hosts().run_sync('chown -R elasticsearch /etc/elasticsearch/*')
-            nodes.get_remote_hosts().run_sync(upgrade_cmd)  # pylint: disable=protected-access
+            nodes.get_remote_hosts().run_sync(upgrade_cmd)
             nodes.start_elasticsearch()
-            ##FIXME: implement polling per comment at
+            # FIXME: implement polling per comment at
             # https://gerrit.wikimedia.org/r/c/operations/cookbooks/+/769109/comment/91b26217_5f2fd4bb/
-            sleep(120) # Sleep during restart of elasticsearch services (b/c systemctl returns asynchronously)
-            # Restarting the service will write a keystore file that requires elasticsearch to be owner
-            # See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/elasticsearch-keystore.html#keystore-upgrade
+            sleep(120)  # Sleep during restart of elasticsearch services (b/c systemctl returns asynchronously)
+            # Restarting the service will write a keystore file that requires elasticsearch to be owner. See:
+            # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/elasticsearch-keystore.html#keystore-upgrade
             nodes.get_remote_hosts().run_sync('chown -R root /etc/elasticsearch/*')
 
-        if operation is Operation.REBOOT:
+        if self.operation is Operation.REBOOT:
             nodes.get_remote_hosts().reboot(batch_size=self.nodes_per_run)
             nodes.get_remote_hosts().wait_reboot_since(start_time)
 
-        if operation is Operation.RESTART:
+        if self.operation is Operation.RESTART:
             nodes.start_elasticsearch()
