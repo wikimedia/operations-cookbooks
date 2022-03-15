@@ -490,7 +490,16 @@ class OpenstackAPI:
 
     def aggregate_remove_host(self, aggregate_name: OpenstackName, host_name: OpenstackName) -> None:
         """Remove the given host from the aggregate."""
-        result = self._run("aggregate", "remove", "host", aggregate_name, host_name, capture_errors=True)
+        result = self._run(
+            "aggregate",
+            "remove",
+            "host",
+            aggregate_name,
+            host_name,
+            capture_errors=True,
+            print_output=False,
+            print_progress_bars=False,
+        )
         if "HTTP 404" in result:
             raise OpenstackNotFound(
                 f"Node {host_name} was not found in aggregate {aggregate_name}, did you try using the hostname "
@@ -524,7 +533,12 @@ class OpenstackAPI:
         """Load the persisted list of aggregates from the host."""
         try:
             result = run_one(
-                command=["cat", AGGREGATES_FILE_PATH], node=host, is_safe=True, try_format=OutputFormat.YAML
+                command=["cat", AGGREGATES_FILE_PATH],
+                node=host,
+                is_safe=True,
+                try_format=OutputFormat.YAML,
+                print_output=False,
+                print_progress_bars=False,
             )
 
         except Exception as error:

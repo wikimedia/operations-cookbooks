@@ -99,7 +99,6 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point."""
-        self.sallogger.log(message=f"Unsetting cloudvirt '{self.fqdn}' maintenance.")
         hostname = self.fqdn.split(".", 1)[0]
         try:
             self.openstack_api.aggregate_remove_host(aggregate_name="maintenance", host_name=hostname)
