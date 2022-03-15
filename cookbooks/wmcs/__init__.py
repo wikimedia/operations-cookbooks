@@ -360,7 +360,9 @@ class OpenstackAPI:
         current_aggregates = self.aggregate_list(print_output=False)
         server_aggregates: List[Dict[str, any]] = []
         for aggregate in current_aggregates:
-            aggregate_details = self.aggregate_show(aggregate=aggregate["Name"])
+            aggregate_details = self.aggregate_show(
+                aggregate=aggregate["Name"], print_output=False, print_progress_bars=False
+            )
             if name in aggregate_details.get("hosts", []):
                 server_aggregates.append(aggregate_details)
 

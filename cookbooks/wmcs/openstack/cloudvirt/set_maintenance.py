@@ -79,7 +79,6 @@ class SetMaintenanceRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point."""
-        self.sallogger.log(message=f"Setting cloudvirt '{self.fqdn}' maintenance.")
         icinga_hosts = IcingaHosts(
             icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True),
             target_hosts=[self.fqdn],
