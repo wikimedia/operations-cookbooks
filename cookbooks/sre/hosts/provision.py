@@ -139,7 +139,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 'InternalUsb': 'Off',
                 'PcieAspmL1': 'Enabled',
                 'ProcC1E': 'Enabled',
-                'ProcCStates':  'Enabled',
+                'ProcCStates': 'Enabled',
                 'ProcPwrPerf': 'OsDbpm',
                 'ProcVirtualization': 'Enabled' if self.args.enable_virtualization else 'Disabled',
                 'ProcX2Apic': 'Disabled',
