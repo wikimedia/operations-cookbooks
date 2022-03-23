@@ -1261,7 +1261,7 @@ class SALLogger:
 
     project: str
     task_id: Optional[str] = None
-    channel: str = "#wikimedia-cloud"
+    channel: str = "#wikimedia-cloud-feed"
     host: str = "wm-bot.wm-bot.wmcloud.org"
     port: int = 64835
     dry_run: bool = False
