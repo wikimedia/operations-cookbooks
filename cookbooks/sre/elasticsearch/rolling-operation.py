@@ -1,5 +1,4 @@
 """Perform rolling operations on elasticsearch servers"""
-# flake8: noqa: E501
 import argparse
 import logging
 from datetime import datetime, timedelta
@@ -31,13 +30,16 @@ class RollingOperation(CookbookBase):
 
     Usage examples:
         (Perform a rolling restart of eqiad)
-        cookbook sre.elasticsearch.rolling-operation search_eqiad "eqiad cluster restart" --restart --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
+        cookbook sre.elasticsearch.rolling-operation search_eqiad "eqiad cluster restart" \
+                --restart --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
 
         (Perform a rolling reboot of codfw)
-        cookbook sre.elasticsearch.rolling-operation search_codfw "codfw cluster reboot" --reboot --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
+        cookbook sre.elasticsearch.rolling-operation search_codfw "codfw cluster reboot" \
+                --reboot --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
 
         (Perform a plugin upgrade followed by rolling restart of relforge)
-        cookbook sre.elasticsearch.rolling-operation relforge "relforge elasticsearch and plugin upgrade" --upgrade --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
+        cookbook sre.elasticsearch.rolling-operation relforge "relforge elasticsearch and plugin upgrade" \
+                --upgrade --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
     """
 
     # FIXME: turn --upgrade and --reboot into a single --operation or positional argument
@@ -106,6 +108,7 @@ class RollingOperation(CookbookBase):
 class RollingOperationRunner(CookbookRunnerBase):
     """Apply rolling operation to cluster."""
 
+    # pylint: disable=too-many-arguments
     def __init__(self, spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
                  nodes_per_run, with_lvs, wait_for_green, operation):
         """Create rolling operation for cluster."""
@@ -126,7 +129,8 @@ class RollingOperationRunner(CookbookRunnerBase):
     def runtime_description(self):
         """Return a string that represents which operation will be performed as well as the target cluster + reason."""
         batch_size = "{} nodes at a time".format(self.nodes_per_run)
-        return "{} ({}) for ElasticSearch cluster {}: {}".format(self.operation, batch_size, self.clustergroup, self.reason)
+        return "{} ({}) for ElasticSearch cluster {}: {}".format(
+            self.operation, batch_size, self.clustergroup, self.reason)
 
     def run(self):
         """Required by Spicerack API."""
