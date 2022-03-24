@@ -149,26 +149,29 @@ class RollingOperationRunner(CookbookRunnerBase):
             with self.spicerack.alerting_hosts(remote_hosts.hosts).downtimed(
                     self.reason, duration=timedelta(minutes=30)):
                 with puppet.disabled(self.reason):
-                    self.elasticsearch_clusters.flush_markers()
-                    # TODO: remove this condition when a better implementation is found.
-                    if self.with_lvs:
-                        nodes.depool_nodes()
+                    logger.info('Stopping elasticsearch replication in a safe way on %s', self.clustergroup)
+                    with self.elasticsearch_clusters.stopped_replication():
+                        self.elasticsearch_clusters.flush_markers()
+
+                        # TODO: remove this condition when a better implementation is found.
+                        if self.with_lvs:
+                            nodes.depool_nodes()
+                            sleep(20)
+
+                        nodes.stop_elasticsearch()
+
+                        self.rolling_operation(nodes)
+
+                        nodes.wait_for_elasticsearch_up(timedelta(minutes=10))
+
+                        # let's wait a bit to make sure everything has time to settle down
                         sleep(20)
 
-                    nodes.stop_elasticsearch()
-
-                    self.rolling_operation(nodes)
-
-                    nodes.wait_for_elasticsearch_up(timedelta(minutes=10))
-
-                    # let's wait a bit to make sure everything has time to settle down
-                    sleep(20)
-
-                    # TODO: remove this condition when a better implementation is found.
-                    # NOTE: we repool nodes before thawing writes and re-enabling replication since they
-                    #       can already serve traffic at this point.
-                    if self.with_lvs:
-                        nodes.pool_nodes()
+                        # TODO: remove this condition when a better implementation is found.
+                        # NOTE: we repool nodes before thawing writes and re-enabling replication since they
+                        #       can already serve traffic at this point.
+                        if self.with_lvs:
+                            nodes.pool_nodes()
 
                     logger.info('wait for green on all clusters before thawing writes. If not green, still thaw writes')
                     try:
