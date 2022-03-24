@@ -56,7 +56,8 @@ class ToolforgeComponentDeploy(CookbookBase):
         parser.add_argument(
             "--deployment-command",
             required=False,
-            help="command to trigger the deployment. If not provided, it will be kubectl apply -k deployment/project",
+            default="./deploy.sh",
+            help="command to trigger the deployment.",
         )
         return parser
 
@@ -109,11 +110,7 @@ class ToolforgeComponentDeployRunner(CookbookRunnerBase):
 
         if not self.git_name:
             self.git_name = self.git_url.split("/")[-1]
-            LOGGER.info("INFO: guesses git tree name as %s", self.git_name)
-
-        if not self.deployment_command:
-            self.deployment_command = f"kubectl apply -k deployment/{common_opts.project}"
-            LOGGER.info("INFO: guesses deployment command as %s", self.deployment_command)
+            LOGGER.info("INFO: guessed git tree name as %s", self.git_name)
 
     def run(self) -> None:
         """Main entry point"""
