@@ -49,7 +49,7 @@ class RollRestartBrokersRunner(CookbookRunnerBase):
         self.cluster_cumin_alias = "A:kafka-" + args.cluster
         self.kafka_brokers = spicerack.remote().query(self.cluster_cumin_alias)
         self.alerting_hosts = spicerack.alerting_hosts(self.kafka_brokers.hosts)
-        self.admin_reason = spicerack.admin_reason('Roll restart of jvm daemons for openjdk upgrade.')
+        self.admin_reason = spicerack.admin_reason('Roll restart of jvm daemons.')
         self.batch_sleep_seconds = args.batch_sleep_seconds
         self.sleep_before_pref_replica_election = args.sleep_before_pref_replica_election
 
