@@ -143,7 +143,7 @@ class ToolforgeComponentDeployRunner(CookbookRunnerBase):
         # deploy!
         cmd = f"cd {repo_dir} ; {self.deployment_command}"
         LOGGER.info("INFO: deploying with %s", self.deployment_command)
-        run_one(node=deploy_node, command=_sh_wrap(cmd), print_output=False, print_progress_bars=False)
+        run_one(node=deploy_node, command=_sh_wrap(cmd), print_progress_bars=False)
 
         # cleanup
         cmd = f"rm -rf --preserve-root=all {self.random_dir}"
