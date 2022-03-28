@@ -337,3 +337,7 @@ class GridController:
         # call this just to report upstream an exception
         self.get_node_info(hostname)
         self._master_node.run_sync(f"exec-manage repool {hostname}", print_output=False, print_progress_bars=False)
+
+    def cleanup_queue_errors(self) -> None:
+        """Cleans up queue errors."""
+        self._master_node.run_sync("qmod -c '*'", print_progress_bars=False)
