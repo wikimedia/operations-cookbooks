@@ -463,9 +463,14 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.host_actions.success('Signed new Puppet certificate')
 
         self._populate_puppetdb()
-        self.spicerack.run_cookbook(
+        downtime_retcode = self.spicerack.run_cookbook(
             'sre.hosts.downtime', ['--force-puppet', '--reason', 'host reimage', '--hours', '2', self.fqdn])
-        self.host_actions.success('Downtimed the new host on Icinga')
+        if downtime_retcode == 0:
+            self.host_actions.success('Downtimed the new host on Icinga/Alertmanager')
+        else:
+            self.host_actions.warning('//Unable to downtime the new host on Icinga/Alertmanager, the '
+                                      f'sre.hosts.downtime cookbook returned {downtime_retcode}//')
+
         if downtime_id_pre_install:
             self.alertmanager_host.remove_downtime(downtime_id_pre_install)
             self.host_actions.success('Removed previous downtime on Alertmanager (old OS)')
