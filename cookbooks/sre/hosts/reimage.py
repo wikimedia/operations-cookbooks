@@ -493,6 +493,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             for _, output in puppet_first_run:
                 output_file.write(output.message().decode())
 
+        self.ipmi.remove_boot_override()
         self.ipmi.check_bootparams()
         self.host_actions.success('Checked BIOS boot parameters are back to normal')
 
