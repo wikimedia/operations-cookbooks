@@ -115,7 +115,7 @@ class DowntimeRunner(CookbookRunnerBase):
         """Required by Spicerack API."""
         if self.puppet is not None:
             logging.info('Forcing a Puppet run on the Icinga server')
-            self.puppet.run(quiet=True, attempts=30)
+            self.puppet.run(quiet=True, attempts=60, timeout=600)
             logging.info('Polling Icinga status to wait for all hosts to be known to Icinga')
             self._poll_status()
 
