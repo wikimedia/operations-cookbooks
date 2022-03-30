@@ -55,13 +55,13 @@ class RollRestartVarnishRunner(SRELBBatchRunnerBase):
 
         threshold_hosts = []
         for metric in metrics:
-            if float(metric['value'][1]) > self._args.thread_limited:
+            if float(metric['value'][1]) > self._args.threads_limited:
                 threshold_hosts.append(metric['metric']['instance'].split(':')[0])
 
         metric_query = ','.join(f'{host}*' for host in threshold_hosts)
         if not metric_query:
             raise RuntimeError('No matching varnish host has the irate at 10 minutes of varnish_main_threads_limited '
-                               f'over the threshold of {self._args.thread_limited}')
+                               f'over the threshold of {self._args.threads_limited}')
 
         return f'{query} and P{{{metric_query}}}'
 
@@ -79,8 +79,12 @@ class RollRestartVarnishRunner(SRELBBatchRunnerBase):
     @property
     def runtime_description(self):
         """Override the default runtime description"""
+        if self._args.query:
+            query = self._args.query
+        else:
+            query = self.query
         threads = 'with threads_limited > {self._args.threads_limited}' if self._args.threads_limited else ''
-        return f'rolling restart of Varnish{threads} on {self.query}'
+        return f'rolling restart of Varnish{threads} on {query}'
 
     @property
     def restart_daemons(self):
