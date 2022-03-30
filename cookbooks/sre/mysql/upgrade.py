@@ -74,7 +74,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
             "-o Dpkg::Options::='--force-confold' dist-upgrade"
         scripts = [
             # TODO: Migrate to the new MySQL class in spicecrack
-            'mysql -e "stop slave; SET GLOBAL innodb_buffer_pool_dump_at_shutdown = OFF;"',
+            'mysql -e "stop slave;"',
             'systemctl stop mariadb',
             upgrade_cmd,
             'umount /srv',
