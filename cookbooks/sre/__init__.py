@@ -431,7 +431,7 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
 
         try:
             with self._confctl.change_and_revert(
-                'pooled', 'yes', 'no', name="|".join(hosts.hosts.striter(), **kwargs)
+                'pooled', 'yes', 'no', name="|".join(hosts.hosts.striter()), **kwargs
             ):
                 self.wait_for_depool()
                 super().action(hosts)
