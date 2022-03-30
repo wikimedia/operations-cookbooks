@@ -5,13 +5,13 @@ from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
 
 
 class RollRestartVarnish(SREBatchBase):
-    """Roll restart Varnish frontend based on parameters.
+    r"""Roll restart Varnish frontend based on parameters.
 
     Example usage:
         cookbook sre.cdn.roll-restart-varnish --alias cp-text_codfw --reason 'Emergency restart' \
                 --grace-sleep 30 restart_daemons
         cookbook sre.cdn.roll-restart-varnish --query 'A:cp-eqiad and not P{cp1001*}' --reason 'Emergency restart' \
-                --batchsize 2 restart_daemons
+                --batchsize 2 restart_daemons --threads-limited 100000
 
     """
 
@@ -19,7 +19,7 @@ class RollRestartVarnish(SREBatchBase):
         """Argument parser"""
         parser = super().argument_parser()
         parser.add_argument(
-            '--threads_limited',
+            '--threads-limited',
             type=int,
             help=('Restart Varnish only if the varnish_main_threads_limited metric variation in the last 10 minutes '
                   'metric is above the given threshold.'))
