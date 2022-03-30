@@ -170,8 +170,9 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                 + ', '.join(self.allowed_aliases)
             )
         self._args = args
+        self._spicerack = spicerack
         self.query = self._query()
-        self.hosts = spicerack.remote().query(self.query)
+        self.hosts = self._spicerack.remote().query(self.query)
         if not self.hosts:
             raise ValueError(f'Cumin query ({self.query}) matched zero hosts')
 
@@ -179,8 +180,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         self.results = Results(action=args.action, hosts=self.hosts.hosts)
 
         reason = f'{args.action} {self.hosts.hosts}: {args.reason}'
-        self.reason = spicerack.admin_reason(reason, args.task_id)
-        self._spicerack = spicerack
+        self.reason = self._spicerack.admin_reason(reason, args.task_id)
         self.logger = getLogger('.'.join((self.__module__, self.__class__.__name__)))
 
     @property
