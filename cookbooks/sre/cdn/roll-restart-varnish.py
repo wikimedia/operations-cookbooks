@@ -51,7 +51,7 @@ class RollRestartVarnishRunner(SRELBBatchRunnerBase):
         metrics = []
         for dc in ALL_DATACENTERS:
             metrics += prometheus.query(
-                'irate(varnish_main_threads_limited{layer="frontend",job=~"varnish-text"}[10m])', dc)
+                'irate(varnish_main_threads_limited{layer="frontend"}[10m])', dc)
 
         threshold_hosts = []
         for metric in metrics:
