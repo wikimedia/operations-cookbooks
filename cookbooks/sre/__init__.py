@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from logging import getLogger
 from math import ceil
 from time import sleep
-from typing import List
+from typing import List, Union
 
 from cumin import nodeset, NodeSet
 from spicerack import Spicerack
@@ -219,6 +219,14 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         """Should return a list of scripts to run as post_scripts or an empty list"""
         return []
 
+    def _sleep(self, seconds: Union[int, float]) -> None:
+        """A DRY-RUN aware version of time.sleep()."""
+        if self._spicerack.dry_run:
+            self.logger.info('Would have sleeped for %s seconds', seconds)
+        else:
+            self.logger.info('Sleeping for %s seconds', seconds)
+            sleep(seconds)
+
     def _restart_daemons(self, hosts: RemoteHosts) -> None:
         """Restart daemons on a set of hosts with downtime
 
@@ -359,7 +367,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                 self.pre_action(batch)
                 self.action(batch)
                 self.post_action(batch)
-                sleep(self._args.grace_sleep)
+                self._sleep(self._args.grace_sleep)
                 self.results.success(batch.hosts)
             except Exception as error:  # pylint: disable=broad-except
                 # If an exception was raised within the context manager, we have some hosts
@@ -407,7 +415,7 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         By default this function just sleeps for `depool_sleep` seconds
 
         """
-        sleep(self.depool_sleep)
+        self._sleep(self.depool_sleep)
 
     def wait_for_repool(self):
         """Preform action to check a host is ready to be repooled.
@@ -415,7 +423,7 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         By default this function just sleeps for `repool_sleep` seconds
 
         """
-        sleep(self.repool_sleep)
+        self._sleep(self.repool_sleep)
 
     def action(self, hosts: RemoteHosts) -> None:
         """The main action to preform e.g. reboot, restart a service etc
