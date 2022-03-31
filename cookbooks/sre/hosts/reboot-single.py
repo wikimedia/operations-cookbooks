@@ -84,6 +84,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
 
     def run(self):
         """Reboot the host"""
+        ret = 0
         with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
             if self.phabricator is not None:
                 self.phabricator.task_comment(self.task_id, self.message)
@@ -107,6 +108,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
                     self.icinga_hosts.wait_for_optimal()
                     icinga_ok = True
                 except IcingaError:
+                    ret = 1
                     logger.error(
                         "The host's status is not optimal according to Icinga, "
                         "please check it.")
@@ -117,3 +119,5 @@ class RebootSingleHostRunner(CookbookRunnerBase):
                 else:
                     logger.warning(
                         "NOT repooling the services due to the host's Icinga status.")
+
+        return ret
