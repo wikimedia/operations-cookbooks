@@ -77,6 +77,11 @@ class RollRestartVarnishRunner(SRELBBatchRunnerBase):
         return aliases
 
     @property
+    def allowed_aliases_query(self) -> str:
+        """Override the parent property to optimize the query."""
+        return 'A:cp'  # This query must include all hosts matching all the allowed_aliases
+
+    @property
     def runtime_description(self):
         """Override the default runtime description"""
         query = self._args.query if self._args.query else f'A:{self._args.alias}'
