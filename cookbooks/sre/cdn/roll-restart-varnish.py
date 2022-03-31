@@ -9,9 +9,9 @@ class RollRestartVarnish(SREBatchBase):
 
     Example usage:
         cookbook sre.cdn.roll-restart-varnish --alias cp-text_codfw --reason 'Emergency restart' \
-                --grace-sleep 30 restart_daemons
+            --grace-sleep 30 restart_daemons
         cookbook sre.cdn.roll-restart-varnish --query 'A:cp-eqiad and not P{cp1001*}' --reason 'Emergency restart' \
-                --batchsize 2 restart_daemons --threads-limited 100000
+            --batchsize 2 restart_daemons --threads-limited 100000
 
     """
 
@@ -79,12 +79,12 @@ class RollRestartVarnishRunner(SRELBBatchRunnerBase):
     @property
     def runtime_description(self):
         """Override the default runtime description"""
-        if self._args.query:
-            query = self._args.query
-        else:
-            query = self.query
-        threads = 'with threads_limited > {self._args.threads_limited}' if self._args.threads_limited else ''
-        return f'rolling restart of Varnish{threads} on {query}'
+        query = self._args.query if self._args.query else f'A:{self._args.alias}'
+        threads = ''
+        if self._args.threads_limited is not None:
+            threads = f' with threads_limited > {self._args.threads_limited}'
+
+        return f'rolling restart of Varnish on {len(self.hosts)} hosts{threads} matching query {query}'
 
     @property
     def restart_daemons(self):
