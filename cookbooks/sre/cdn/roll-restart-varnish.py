@@ -43,7 +43,7 @@ class RollRestartVarnishRunner(SRELBBatchRunnerBase):
     def _query(self) -> str:
         """Return the formatted query filtered by the threads_limited parameter."""
         query = super()._query()
-        if not self._args.threads_limited:
+        if self._args.threads_limited is not None:
             return query
 
         prometheus = self._spicerack.prometheus()
