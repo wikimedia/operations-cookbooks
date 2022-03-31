@@ -58,7 +58,7 @@ def run(args, spicerack):
 
         with spicerack.alerting_hosts(remote_host.hosts).downtimed(reason, duration=timedelta(hours=args.downtime)):
             if args.depool:
-                remote_host.run_sync('depool', 'sleep 180')
+                remote_host.run_sync('depool', 'sleep 120')
 
             # explicit shutdown of Blazegraph instance, to ensure they are not killed by systemd if taking too long
             remote_host.run_sync(*('systemctl stop ' + service for service in services))
