@@ -171,7 +171,9 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             )
         self._args = args
         self._spicerack = spicerack
+        self.logger = getLogger('.'.join((self.__module__, self.__class__.__name__)))
         self.query = self._query()
+        self.logger.debug('Effective remote query is: %s', self.query)
         self.hosts = self._spicerack.remote().query(self.query)
         if not self.hosts:
             raise ValueError(f'Cumin query ({self.query}) matched zero hosts')
@@ -181,7 +183,6 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
         reason = f'{args.action} {self.hosts.hosts}: {args.reason}'
         self.reason = self._spicerack.admin_reason(reason, args.task_id)
-        self.logger = getLogger('.'.join((self.__module__, self.__class__.__name__)))
 
     @property
     def runtime_description(self) -> str:
