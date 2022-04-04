@@ -87,6 +87,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
 
     batch_default = 1
     batch_max = 40
+    grace_sleep = 1
 
     def argument_parser(self) -> Namespace:
         """Parse arguments"""
@@ -125,7 +126,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
         parser.add_argument(
             '--grace-sleep',
             type=int,
-            default=1,
+            default=self.grace_sleep,
             help='the amount of time to sleep in seconds between each batch',
         )
         parser.add_argument(
@@ -161,6 +162,8 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
     """
 
+    disable_puppet_on_restart = False
+
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Initialize the runner."""
         ensure_shell_is_durable()
@@ -178,6 +181,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         if not self.hosts:
             raise ValueError(f'Cumin query ({self.query}) matched zero hosts')
 
+        self.puppet = spicerack.puppet(self.hosts)
         self.number_of_batches = ceil(len(self.hosts.hosts) / args.batchsize)
         self.results = Results(action=args.action, hosts=self.hosts.hosts)
 
@@ -250,11 +254,15 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         try:
             duration = timedelta(minutes=20)
             with alerting_hosts.downtimed(self.reason, duration=duration):
-                confirm_on_failure(hosts.run_sync, *restart_cmds)
+                if self.disable_puppet_on_restart:
+                    with self.puppet.disabled(self.reason):
+                        confirm_on_failure(hosts.run_sync, *restart_cmds)
+                else:
+                    confirm_on_failure(hosts.run_sync, *restart_cmds)
                 icinga_hosts.wait_for_optimal()
             self.results.success(hosts.hosts)
         except IcingaError as error:
-            ask_confirmation(f'Failed to dowtime hosts: {error}')
+            ask_confirmation(f'Failed to downtime hosts: {error}')
             self.logger.warning(error)
 
         except AbortError as error:
