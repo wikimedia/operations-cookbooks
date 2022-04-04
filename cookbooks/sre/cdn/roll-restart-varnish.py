@@ -15,6 +15,8 @@ class RollRestartVarnish(SREBatchBase):
 
     """
 
+    grace_sleep = 60
+
     def argument_parser(self):
         """Argument parser"""
         parser = super().argument_parser()
@@ -36,6 +38,7 @@ class RollRestartVarnish(SREBatchBase):
 class RollRestartVarnishRunner(SRELBBatchRunnerBase):
     """An example reboot class"""
 
+    disable_puppet_on_restart = True
     depool_threshold = 2  # Maximum allowed batch size
     depool_sleep = 20  # Seconds to sleep after the depool before the restart
     repool_sleep = 15  # Seconds to sleep before the repool after the restart
