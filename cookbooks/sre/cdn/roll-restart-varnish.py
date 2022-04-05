@@ -46,25 +46,21 @@ class RollRestartVarnishRunner(SRELBBatchRunnerBase):
     def _query(self) -> str:
         """Return the formatted query filtered by the threads_limited parameter."""
         query = super()._query()
-        if self._args.threads_limited is None:
+        limit = self._args.threads_limited
+        if limit is None:
             return query
 
-        prometheus = self._spicerack.prometheus()
-        # TODO: avoid to cycle all DCs once spicerack.prometheus supports querying thanos
-        metrics = []
-        for dc in ALL_DATACENTERS:
-            metrics += prometheus.query(
-                'irate(varnish_main_threads_limited{layer="frontend"}[10m])', dc)
+        thanos = self._spicerack.thanos()
+        metrics = thanos.query(
+            f'irate(varnish_main_threads_limited{{prometheus="ops",layer="frontend"}}[10m]) > {limit}')
 
-        threshold_hosts = []
-        for metric in metrics:
-            if float(metric['value'][1]) > self._args.threads_limited:
-                threshold_hosts.append(metric['metric']['instance'].split(':')[0])
-
+        threshold_hosts = [metric['metric']['instance'].split(':')[0] for metric in metrics]
+        self.logger.info('Found %d hosts with varnish_main_threads_limited over the threshold of %d',
+                         len(threshold_hosts), limit)
         metric_query = ','.join(f'{host}*' for host in threshold_hosts)
         if not metric_query:
             raise RuntimeError('No matching varnish host has the irate at 10 minutes of varnish_main_threads_limited '
-                               f'over the threshold of {self._args.threads_limited}')
+                               f'over the threshold of {limit}')
 
         return f'{query} and P{{{metric_query}}}'
 
