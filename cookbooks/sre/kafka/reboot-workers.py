@@ -33,11 +33,7 @@ class RebootKafkaWorkers(CookbookBase):
             description=self.__doc__,
             cluster_choices=[
                 'main-eqiad', 'main-codfw', 'jumbo-eqiad',
-                'test-eqiad', 'logging-eqiad',
-                # TODO: allow logging-codfw once
-                # https://phabricator.wikimedia.org/T279342 is complete
-                # (and elasticsearch is no longer colocated kafka logging clusters)
-                # 'logging-codfw'
+                'test-eqiad', 'logging-eqiad', 'logging-codfw',
             ]
         )
 
