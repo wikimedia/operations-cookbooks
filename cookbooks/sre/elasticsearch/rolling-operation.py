@@ -39,7 +39,7 @@ class RollingOperation(CookbookBase):
 
         (Perform a plugin upgrade followed by rolling restart of relforge)
         cookbook sre.elasticsearch.rolling-operation relforge "relforge elasticsearch and plugin upgrade" \
-                --upgrade --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
+                --upgrade --without-lvs --nodes-per-run 1 --start-datetime 2021-03-24T23:55:35 --task-id T274204
     """
 
     # FIXME: turn --upgrade and --reboot into a single --operation or positional argument
