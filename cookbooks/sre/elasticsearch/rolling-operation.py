@@ -40,6 +40,11 @@ class RollingOperation(CookbookBase):
         (Perform a plugin upgrade followed by rolling restart of relforge)
         cookbook sre.elasticsearch.rolling-operation relforge "relforge elasticsearch and plugin upgrade" \
                 --upgrade --without-lvs --nodes-per-run 1 --start-datetime 2021-03-24T23:55:35 --task-id T274204
+
+        (Perform an elasticsearch upgrade followed by rolling restart of relforge)
+        cookbook sre.elasticsearch.rolling-operation relforge "relforge elasticsearch and plugin upgrade" \
+                --upgrade --allow-yellow --without-lvs --nodes-per-run 1 \
+                --start-datetime 2021-03-24T23:55:35 --task-id T274204
     """
 
     # FIXME: turn --upgrade and --reboot into a single --operation or positional argument
@@ -64,6 +69,9 @@ class RollingOperation(CookbookBase):
                             help='This cluster does not use LVS.')
         parser.add_argument('--no-wait-for-green', action='store_false', dest='wait_for_green',
                             help='Don\'t wait for green before starting the operation (still wait at the end).')
+        parser.add_argument('--allow-yellow', action='store_true', dest='allow_yellow',
+                            help='Allow proceeding with yellow status if there\'s no relocating|unassigned shards,'
+                                 ' on the second node group only.')
         parser.add_argument('--upgrade', action='store_true',
                             help='Upgrade Elasticsearch and its plugins')
         parser.add_argument('--reboot', action='store_true',
@@ -91,6 +99,7 @@ class RollingOperation(CookbookBase):
         nodes_per_run = args.nodes_per_run
         with_lvs = args.with_lvs
         wait_for_green = args.wait_for_green
+        allow_yellow = args.allow_yellow
         if args.upgrade:
             operation = Operation.UPGRADE
         elif args.reboot:
@@ -102,7 +111,7 @@ class RollingOperation(CookbookBase):
 
         return RollingOperationRunner(
             self.spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
-            nodes_per_run, with_lvs, wait_for_green, operation)
+            nodes_per_run, with_lvs, wait_for_green, allow_yellow, operation)
 
 
 class RollingOperationRunner(CookbookRunnerBase):
@@ -110,7 +119,7 @@ class RollingOperationRunner(CookbookRunnerBase):
 
     # pylint: disable=too-many-arguments
     def __init__(self, spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
-                 nodes_per_run, with_lvs, wait_for_green, operation):
+                 nodes_per_run, with_lvs, wait_for_green, allow_yellow, operation):
         """Create rolling operation for cluster."""
         self.spicerack = spicerack
 
@@ -121,6 +130,7 @@ class RollingOperationRunner(CookbookRunnerBase):
         self.start_datetime = start_datetime
         self.with_lvs = with_lvs
         self.wait_for_green = wait_for_green
+        self.allow_yellow = allow_yellow
         self.nodes_per_run = nodes_per_run
 
         self.operation = operation
@@ -134,11 +144,16 @@ class RollingOperationRunner(CookbookRunnerBase):
 
     def run(self):
         """Required by Spicerack API."""
+        groups_restarted = 0
         while True:
             if self.wait_for_green:
-                self.elasticsearch_clusters.wait_for_green()
+                if self.allow_yellow and groups_restarted == 1:
+                    self.elasticsearch_clusters.wait_for_yellow_w_no_moving_shards()
+                else:
+                    self.elasticsearch_clusters.wait_for_green()
 
-            logger.info('Fetch %d node(s) from %s to perform rolling restart on', self.nodes_per_run, self.clustergroup)
+            logger.info('(Group %d) Fetch %d node(s) from %s to perform the rolling restart',
+                        groups_restarted, self.nodes_per_run, self.clustergroup)
             nodes = self.elasticsearch_clusters.get_next_clusters_nodes(self.start_datetime, self.nodes_per_run)
             if nodes is None:
                 break
@@ -179,6 +194,7 @@ class RollingOperationRunner(CookbookRunnerBase):
                     except ElasticsearchClusterCheckError:
                         logger.info('Cluster not yet green, thawing writes and resume waiting for green')
 
+            groups_restarted += 1
             logger.info('Wait for green in %s before fetching next set of nodes', self.clustergroup)
             self.elasticsearch_clusters.wait_for_green()
 
