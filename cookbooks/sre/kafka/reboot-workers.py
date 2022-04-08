@@ -18,13 +18,12 @@ class RebootKafkaWorkers(CookbookBase):
     """Reboot all Kafka nodes in a cluster.
 
     The cookbook executes the following for each host in the cluster:
-      1) Stop the kafka-mirror and kafka processes
-      2) Reboot the node
-      3) Wait 900s to make sure that any unbalanced/under-replicated/etc.. partition recovers.
-      4) Force a prefered-replica-election to make sure that partition leaders are balanced
+      1) Reboot the node
+      2) Wait 900s to make sure that any unbalanced/under-replicated/etc.. partition recovers.
+      3) Force a prefered-replica-election to make sure that partition leaders are balanced
          before the next broker is restarted. This is not strictly needed since they should
          auto-rebalance, but there are rare use cases in which it might not happen.
-      5) Sleep for args.batch_sleep_seconds before the next reboot
+      4) Sleep for args.batch_sleep_seconds before the next reboot
     """
 
     def argument_parser(self):
@@ -74,10 +73,7 @@ class RebootKafkaWorkersRunner(CookbookRunnerBase):
 
         with self.alerting_hosts([host]).downtimed(self.admin_reason, duration=timedelta(minutes=30)):
             with puppet.disabled(self.admin_reason):
-                logger.info('Stopping kafka processes on host %s', host)
-
-                node.run_sync('systemctl stop kafka-mirror')
-                node.run_sync('systemctl stop kafka')
+                logger.info('Rebooting node %s', host)
 
                 reboot_time = datetime.utcnow()
                 node.reboot()
