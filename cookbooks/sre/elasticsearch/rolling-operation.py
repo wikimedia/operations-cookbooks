@@ -206,7 +206,7 @@ class RollingOperationRunner(CookbookRunnerBase):
                         nodes.wait_for_elasticsearch_up(timedelta(minutes=10))
 
                         # let's wait a bit to make sure everything has time to settle down
-                        sleep(120)
+                        sleep(20)
 
                         # TODO: remove this condition when a better implementation is found.
                         # NOTE: we repool nodes before thawing writes and re-enabling replication since they
