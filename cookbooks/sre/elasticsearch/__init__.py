@@ -7,7 +7,8 @@ from dateutil.parser import parse
 __title__ = __doc__
 logger = logging.getLogger(__name__)
 
-CLUSTERGROUPS = ('search_eqiad', 'search_codfw', 'relforge', 'cloudelastic')  # Used in imports for other files
+# Used in imports for other files
+CLUSTERGROUPS = ('search_eqiad', 'search_codfw', 'relforge', 'cloudelastic', 'logging-eqiad', 'logging-codfw')
 
 
 # TODO: Eventually we may want to move this to a more generic place (for example, spicerack itself)
