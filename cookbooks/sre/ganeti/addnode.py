@@ -83,7 +83,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
     def is_valid_bridge(self, bridge):
         """Ensure a that a bridge interface is correctly configured on the switches"""
         cmd = "ip -br link show master {bridge} ".format(bridge=bridge)
-        cmd += "| awk -F'@' '!/tap/{print $1}'"
+        cmd += "| awk '!/tap/{print $1}' | awk -F'@' '{print $1}'"
         try:
             interface = next(self.remote_host.run_sync(cmd))
 
