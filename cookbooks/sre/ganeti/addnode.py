@@ -85,7 +85,9 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         cmd = "ip -br link show master {bridge} ".format(bridge=bridge)
         cmd += "| awk '!/tap/{print $1}' | awk -F'@' '{print $1}'"
         try:
-            interface = next(self.remote_host.run_sync(cmd))
+            result = self.remote_host.run_sync(cmd)
+            for _, output in result:
+                interface = output.message().decode()
 
         except StopIteration:
             interface = None
@@ -99,13 +101,15 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         valid = True
         cmd = "bridge fdb show br {} dev {} | grep -vc permanent".format(bridge, interface)
         try:
-            bridge_check = next(self.remote_host.run_sync(cmd))
+            result = self.remote_host.run_sync(cmd)
+            for _, output in result:
+                bridge_check = output.message().decode()
 
         except StopIteration:
             valid = False
 
         if bridge_check != "0":
-            valid = False
+            valid = True
 
         if not valid:
             raise RuntimeError(
