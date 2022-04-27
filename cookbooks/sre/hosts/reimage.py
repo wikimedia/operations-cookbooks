@@ -149,6 +149,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.puppet = spicerack.puppet(self.remote_host)
         # The same as self.puppet but using the SSH key valid only during installation before the first Puppet run
         self.puppet_installer = spicerack.puppet(self.remote_installer)
+        self.puppet_configmaster = spicerack.puppet(self.remote.query('P:configmaster'))
 
         # DHCP automation
         try:
@@ -497,8 +498,18 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.ipmi.check_bootparams()
         self.host_actions.success('Checked BIOS boot parameters are back to normal')
 
-        # Run puppet locally to get the new host public keys
+        # Run puppet locally to get the new host public key, required to proceed
         self.puppet_localhost.run(quiet=True)
+        # Run puppet on configmaster.wikimedia.org to allow wmf-update-known-hosts-production to get the new public
+        # key and allow the user to SSH into the new host
+        try:
+            self.puppet_configmaster.run(quiet=True)
+            self.host_actions.success('configmaster.wikimedia.org updated with the host new SSH public key for '
+                                      'wmf-update-known-hosts-production')
+        except RemoteExecutionError:
+            self.host_actions.warning(f'//Unable to run puppet on {self.puppet_configmaster} to update '
+                                      'configmaster.wikimedia.org with the new host SSH public key for '
+                                      'wmf-update-known-hosts-production//')
 
         reboot_time = datetime.utcnow()
         self.remote_host.reboot()
