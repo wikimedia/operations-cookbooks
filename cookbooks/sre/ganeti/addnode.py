@@ -82,6 +82,11 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
 
     def is_valid_bridge(self, bridge):
         """Ensure a that a bridge interface is correctly configured on the switches"""
+        self.validate_state(
+            'ip -br link show type bridge dev {}'.format(bridge),
+            'No {} bridge configured'.format(bridge),
+        )
+
         cmd = "ip -br link show master {bridge} ".format(bridge=bridge)
         cmd += "| awk '!/tap/{print $1}' | awk -F'@' '{print $1}'"
         try:
@@ -140,25 +145,10 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
              'remove the stale swap entry from fstab as well'),
         )
 
-        self.validate_state(
-            'brctl show private | grep "en[o|p|s]"',
-            'No private bridge configured',
-        )
-
         self.is_valid_bridge('private')
-
-        self.validate_state(
-            'brctl show public | grep "en[o|p|s]"',
-            'No public bridge configured',
-        )
-
         self.is_valid_bridge('public')
 
         if self.fqdn in self.remote.query('A:eqiad').hosts:
-            self.validate_state(
-                'brctl show analytics | grep "en[o|p|s]"',
-                'No analytics bridge configured',
-            )
             self.is_valid_bridge('analytics')
 
         self.master.run_sync('gnt-node add --no-ssh-key-check -g "{group}" "{node}"'.format(
