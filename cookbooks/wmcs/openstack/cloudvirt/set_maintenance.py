@@ -12,9 +12,16 @@ from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
-from spicerack.icinga import ICINGA_DOMAIN, IcingaHosts
 
-from cookbooks.wmcs import CommonOpts, OpenstackAPI, OpenstackNotFound, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs import (
+    CommonOpts,
+    OpenstackAPI,
+    OpenstackNotFound,
+    SALLogger,
+    add_common_opts,
+    with_common_opts,
+    wrap_with_sudo_icinga,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -79,11 +86,8 @@ class SetMaintenanceRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point."""
-        icinga_hosts = IcingaHosts(
-            icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True),
-            target_hosts=[self.fqdn],
-        )
-        icinga_hosts.downtime(reason=self.spicerack.admin_reason("Setting maintenance mode."))
+        alerting_hosts = wrap_with_sudo_icinga(my_spicerack=self.spicerack).alerting_hosts(target_hosts=[self.fqdn])
+        downtime_id = alerting_hosts.downtime(reason=self.spicerack.admin_reason("Setting maintenance mode."))
         hostname = self.fqdn.split(".", 1)[0]
         self.openstack_api.aggregate_persist_on_host(host=self.spicerack.remote().query(self.fqdn))
 
@@ -97,5 +101,7 @@ class SetMaintenanceRunner(CookbookRunnerBase):
         except OpenstackNotFound as error:
             logging.info("%s", error)
 
-        self.sallogger.log(message=f"Set cloudvirt '{self.fqdn}' maintenance.")
+        self.sallogger.log(
+            message=f"Set cloudvirt '{self.fqdn}' maintenance (downtime id: {downtime_id}, use this to unset)."
+        )
         LOGGER.info("Host %s now in maintenance mode. No new VMs will be scheduled in it.", self.fqdn)

@@ -12,7 +12,6 @@ from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
-from spicerack.icinga import ICINGA_DOMAIN, IcingaHosts
 
 from cookbooks.wmcs import (
     AGGREGATES_FILE_PATH,
@@ -22,6 +21,7 @@ from cookbooks.wmcs import (
     SALLogger,
     add_common_opts,
     with_common_opts,
+    wrap_with_sudo_icinga,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -60,6 +60,12 @@ class UnsetMaintenance(CookbookBase):
                 f"use {AGGREGATES_FILE_PATH} if it exists, and fail otherwise). A safe choice would be just `ceph`"
             ),
         )
+        parser.add_argument(
+            "--downtime-id",
+            required=True,
+            default=None,
+            help="Downtime id that you got when downtiming before.",
+        )
 
         return parser
 
@@ -69,6 +75,7 @@ class UnsetMaintenance(CookbookBase):
             fqdn=args.fqdn,
             control_node_fqdn=args.control_node_fqdn,
             aggregates=args.aggregates,
+            downtime_id=args.downtime_id,
             spicerack=self.spicerack,
         )
 
@@ -81,6 +88,7 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
         common_opts: CommonOpts,
         fqdn: str,
         control_node_fqdn: str,
+        downtime_id: str,
         spicerack: Spicerack,
         aggregates: Optional[str] = None,
     ):
@@ -96,6 +104,7 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
+        self.downtime_id = downtime_id
 
     def run(self) -> Optional[int]:
         """Main entry point."""
@@ -121,14 +130,12 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
             except OpenstackNotFound as error:
                 logging.info("%s", error)
 
-        icinga_hosts = IcingaHosts(
-            icinga_host=self.spicerack.remote().query(self.spicerack.dns().resolve_cname(ICINGA_DOMAIN), use_sudo=True),
-            target_hosts=[self.fqdn],
-        )
-        icinga_hosts.remove_downtime()
+        alerting_hosts = wrap_with_sudo_icinga(my_spicerack=self.spicerack).alerting_hosts(target_hosts=[self.fqdn])
+        alerting_hosts.remove_downtime(downtime_id=self.downtime_id)
         self.sallogger.log(message=f"Unset cloudvirt '{self.fqdn}' maintenance.")
         LOGGER.info(
             "Host %s now in out of maintenance mode. New VMs will be scheduled in it (aggregates: %s).",
             self.fqdn,
             ",".join(aggregates_to_add),
         )
+        return 0

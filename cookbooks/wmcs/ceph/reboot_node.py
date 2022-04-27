@@ -114,27 +114,26 @@ class RebootNodeRunner(CookbookRunnerBase):
             controller.set_maintenance()
 
         node = self.spicerack.remote().query(f"D{{{self.fqdn_to_reboot}}}", use_sudo=True)
-        icinga_hosts = wrap_with_sudo_icinga(my_spicerack=self.spicerack).icinga_hosts(target_hosts=node.hosts)
-        icinga_hosts.downtime(
+        alerting_hosts = wrap_with_sudo_icinga(my_spicerack=self.spicerack).alerting_hosts(target_hosts=node.hosts)
+        with alerting_hosts.downtimed(
             reason=self.spicerack.admin_reason(
                 reason="Rebooting at user request through cookbook", task_id=self.common_opts.task_id
             ),
             duration=datetime.timedelta(minutes=20),
-        )
+        ):
 
-        reboot_time = datetime.datetime.utcnow()
-        node.reboot()
+            reboot_time = datetime.datetime.utcnow()
+            node.reboot()
 
-        node.wait_reboot_since(since=reboot_time)
-        LOGGER.info(
-            "Rebooted node %s, waiting for cluster to stabilize...",
-            self.fqdn_to_reboot,
-        )
-        controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
-        LOGGER.info("Cluster stable, continuing")
+            node.wait_reboot_since(since=reboot_time)
+            LOGGER.info(
+                "Rebooted node %s, waiting for cluster to stabilize...",
+                self.fqdn_to_reboot,
+            )
+            controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
+            LOGGER.info("Cluster stable, continuing")
 
-        if not self.skip_maintenance:
-            controller.unset_maintenance()
+            if not self.skip_maintenance:
+                controller.unset_maintenance()
 
-        icinga_hosts.remove_downtime()
         self.sallogger.log(message=f"Finished rebooting node {self.fqdn_to_reboot}")
