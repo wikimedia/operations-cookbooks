@@ -70,6 +70,9 @@ class Reimage(CookbookBase):
                   'starts/enable a production service before the host is ready.'))
         parser.add_argument('--httpbb', action='store_true',
                             help='run HTTP tests (httpbb) on the host after the reimage.')
+        parser.add_argument(
+            '--no-check-icinga', action='store_true',
+            help='Do not wait for optimal status in Icinga after the reimage and do not remove the Icinga downtime.')
         parser.add_argument('--os', choices=OS_VERSIONS, required=True,
                             help='the Debian version to install. One of %(choices)s')
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
@@ -381,6 +384,11 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         """Best effort attempt to wait for Icinga to be optimal, do not fail if not."""
         self.icinga_host.recheck_all_services()
         self.host_actions.success('Forced a re-check of all Icinga services for the host')
+        if self.args.no_check_icinga:
+            self.host_actions.warning('//Skipping waiting for Icinga optimal status and not removing the downtime, '
+                                      '--no-check-icinga was set//')
+            return
+
         try:
             self.icinga_host.wait_for_optimal()
             self.host_actions.success('Icinga status is optimal')
