@@ -113,7 +113,7 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         self.sallogger.log(message="Adding a new k8s worker node")
         k8s_worker_prefix = (
@@ -131,7 +131,7 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
             "--security-group",
             f"{self.common_opts.project}-k8s-full-connectivity",
             "--server-group",
-            self.k8s_worker_prefix,
+            k8s_worker_prefix,
             "--server-group-policy",
             OpenstackServerGroupPolicy.SOFT_ANTI_AFFINITY.value,
         ] + self.common_opts.to_cli_args()
@@ -145,7 +145,7 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         create_instance_cookbook = CreateInstanceWithPrefix(spicerack=self.spicerack)
         new_member = create_instance_cookbook.get_runner(
             args=create_instance_cookbook.argument_parser().parse_args(start_args)
-        ).run()
+        ).create_instance()
         node = self.spicerack.remote().query(f"D{{{new_member.server_fqdn}}}", use_sudo=True)
 
         device = "/dev/sdb"

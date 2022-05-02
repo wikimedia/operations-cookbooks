@@ -15,7 +15,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteHosts
 
-from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, run_one, with_common_opts
+from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, run_one_raw, with_common_opts
 
 
 class UploadImagesToRepo(CookbookBase):
@@ -77,9 +77,9 @@ class UploadImagesToRepo(CookbookBase):
 
 
 def _update_image(uploader_node: RemoteHosts, pull_url: str, push_url: str) -> None:
-    run_one(command=["docker", "pull", pull_url], node=uploader_node)
-    run_one(command=["docker", "tag", pull_url, push_url], node=uploader_node)
-    run_one(command=["docker", "push", push_url], node=uploader_node)
+    run_one_raw(command=["docker", "pull", pull_url], node=uploader_node)
+    run_one_raw(command=["docker", "tag", pull_url, push_url], node=uploader_node)
+    run_one_raw(command=["docker", "push", push_url], node=uploader_node)
 
 
 class UploadImagesToRepoRunner(CookbookRunnerBase):

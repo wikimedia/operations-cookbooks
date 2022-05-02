@@ -13,7 +13,7 @@ from typing import List
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, run_one, with_common_opts
+from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, run_one_raw, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -121,33 +121,33 @@ class ToolforgeComponentDeployRunner(CookbookRunnerBase):
 
         # create temp dir
         LOGGER.info("INFO: creating temp dir %s", self.random_dir)
-        run_one(node=deploy_node, command=["mkdir", self.random_dir], print_output=False, print_progress_bars=False)
+        run_one_raw(node=deploy_node, command=["mkdir", self.random_dir], print_output=False, print_progress_bars=False)
 
         # git clone
         cmd = f"cd {self.random_dir} ; git clone {self.git_url}"
         LOGGER.info("INFO: git cloning %s", self.git_url)
-        run_one(node=deploy_node, command=_sh_wrap(cmd), print_output=False, print_progress_bars=False)
+        run_one_raw(node=deploy_node, command=_sh_wrap(cmd), print_output=False, print_progress_bars=False)
 
         # git checkout branch
         repo_dir = f"{self.random_dir}/{self.git_name}"
         cmd = f"cd {repo_dir} ; git checkout {self.git_branch}"
         LOGGER.info("INFO: git checkout branch '%s' on %s", self.git_branch, repo_dir)
-        run_one(node=deploy_node, command=_sh_wrap(cmd), print_output=False, print_progress_bars=False)
+        run_one_raw(node=deploy_node, command=_sh_wrap(cmd), print_output=False, print_progress_bars=False)
 
         # get git hash for the SAL logger
         cmd = f"cd {repo_dir} ; git rev-parse --short HEAD"
-        git_hash = run_one(
+        git_hash = run_one_raw(
             node=deploy_node, command=_sh_wrap(cmd), last_line_only=True, print_output=False, print_progress_bars=False
         )
 
         # deploy!
         cmd = f"cd {repo_dir} ; {self.deployment_command}"
         LOGGER.info("INFO: deploying with %s", self.deployment_command)
-        run_one(node=deploy_node, command=_sh_wrap(cmd), print_progress_bars=False)
+        run_one_raw(node=deploy_node, command=_sh_wrap(cmd), print_progress_bars=False)
 
         # cleanup
         cmd = f"rm -rf --preserve-root=all {self.random_dir}"
         LOGGER.info("INFO: cleaning up temp dir %s", self.random_dir)
-        run_one(node=deploy_node, command=cmd.split(), is_safe=False, print_output=False, print_progress_bars=False)
+        run_one_raw(node=deploy_node, command=cmd.split(), is_safe=False, print_output=False, print_progress_bars=False)
 
         self.sallogger.log(message=f"deployed kubernetes component {self.git_url} ({git_hash})")

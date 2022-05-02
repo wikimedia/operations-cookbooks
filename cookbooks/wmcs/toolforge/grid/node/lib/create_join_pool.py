@@ -11,7 +11,6 @@ import datetime
 import logging
 from dataclasses import replace
 from enum import Enum
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -114,7 +113,7 @@ class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         if not self.instance_creation_opts.prefix:
             self.instance_creation_opts = replace(
@@ -134,7 +133,7 @@ class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
         create_instance_cookbook = CreateInstanceWithPrefix(spicerack=self.spicerack)
         response = create_instance_cookbook.get_runner(
             args=create_instance_cookbook.argument_parser().parse_args(start_args)
-        ).run()
+        ).create_instance()
         new_member_fqdn = response.server_fqdn
         node = self.spicerack.remote().query(f"D{{{new_member_fqdn}}}", use_sudo=True)
 

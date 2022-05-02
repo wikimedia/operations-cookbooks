@@ -16,13 +16,13 @@ Usage examples:
 import argparse
 import json
 import logging
-from typing import Optional
+from typing import Any, Dict
 
 import yaml
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import OutputFormat, run_one
+from cookbooks.wmcs import OutputFormat, run_one_as_dict
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class RemoveNodeFromHiera(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> "RemoveNodeFromHieraRunner":
         """Get Runner"""
         return RemoveNodeFromHieraRunner(
             fqdn_to_remove=args.fqdn_to_remove,
@@ -76,12 +76,16 @@ class RemoveNodeFromHieraRunner(CookbookRunnerBase):
         self.prefix = prefix
         self.fqdn_to_remove = fqdn_to_remove
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
+        self.remove_node_from_hiera()
+
+    def remove_node_from_hiera(self) -> Dict[str, Any]:
+        """Needed as we can't change the return type for the inherited run method."""
         control_node = self.spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True)
 
         etcd_prefix = self.prefix if self.prefix is not None else f"{self.project}-k8s-etcd"
-        response = run_one(
+        response = run_one_as_dict(
             node=control_node,
             command=["wmcs-enc-cli", "--openstack-project", self.project, "get_prefix_hiera", etcd_prefix],
             try_format=OutputFormat.YAML,

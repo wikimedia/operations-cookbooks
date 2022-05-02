@@ -6,7 +6,6 @@ Usage example: wmcs.vps.refresh_puppet_certs \
 """
 import argparse
 import logging
-from typing import Optional
 
 from cumin.transports import Command
 from spicerack import RemoteHosts, Spicerack
@@ -14,7 +13,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from spicerack.puppet import PuppetHosts, PuppetMaster
 from spicerack.remote import RemoteExecutionError
 
-from cookbooks.wmcs import run_one
+from cookbooks.wmcs import run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 
@@ -22,7 +21,9 @@ LOGGER = logging.getLogger(__name__)
 def _get_puppetmaster(spicerack: Spicerack, remote_host: RemoteHosts, puppetmaster: str) -> PuppetMaster:
     puppetmaster_fqdn = puppetmaster
     if puppetmaster_fqdn == "puppet":
-        puppetmaster_fqdn = run_one(node=remote_host, command=["dig", "+short", "-x", "$(dig +short puppet)"]).strip()
+        puppetmaster_fqdn = run_one_raw(
+            node=remote_host, command=["dig", "+short", "-x", "$(dig +short puppet)"]
+        ).strip()
         # remove the extra dot that dig appends
         puppetmaster_fqdn = puppetmaster_fqdn[:-1]
 
@@ -117,7 +118,7 @@ class RefreshPuppetCertsRunner(CookbookRunnerBase):
         self.ignore_failures = ignore_failures
         self.spicerack = spicerack
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point.
 
         Basic process:

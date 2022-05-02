@@ -7,7 +7,6 @@ Usage example:
 """
 import argparse
 import logging
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
@@ -67,7 +66,7 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
         self.force = force
         self.spicerack = spicerack
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         controller = CephClusterController(
             remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn

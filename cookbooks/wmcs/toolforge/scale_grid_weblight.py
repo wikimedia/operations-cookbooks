@@ -6,7 +6,6 @@ Usage example:
 """
 import argparse
 import logging
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -91,7 +90,7 @@ class ToolforgeScaleGridWeblightRunner(CookbookRunnerBase):
         self.debian_version = debian_version
         self.instance_creation_opts = instance_creation_opts
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         inner_args = (
             [

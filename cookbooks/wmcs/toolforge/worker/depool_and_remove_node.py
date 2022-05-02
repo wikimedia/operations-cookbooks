@@ -9,7 +9,7 @@ Usage example:
 """
 import argparse
 import logging
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
@@ -95,7 +95,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
             control_node_fqdn="cloudcontrol1003.wikimedia.org",
             project=self.common_opts.project,
         )
-        self._all_project_servers = None
+        self._all_project_servers: Optional[List[Dict[str, Any]]] = None
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
@@ -147,7 +147,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
 
         return f"{prefix_members[0]['Name']}.{self.common_opts.project}.eqiad1.wikimedia.cloud"
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         self.sallogger.log(
             message=f"Depooling and removing worker {self.fqdn_to_remove or ', will pick the oldest'}.",

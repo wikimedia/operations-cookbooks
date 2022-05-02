@@ -106,7 +106,7 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
         )
         self.downtime_id = downtime_id
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point."""
         hostname = self.fqdn.split(".", 1)[0]
         try:
@@ -138,4 +138,3 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
             self.fqdn,
             ",".join(aggregates_to_add),
         )
-        return 0

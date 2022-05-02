@@ -16,13 +16,13 @@ Usage examples:
 import argparse
 import json
 import logging
-from typing import Optional
+from typing import Any, Dict
 
 import yaml
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import OutputFormat, run_one
+from cookbooks.wmcs import OutputFormat, run_one_as_dict, run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class AddNodeToHiera(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> "AddNodeToHieraRunner":
         """Get Runner"""
         return AddNodeToHieraRunner(
             fqdn_to_add=args.fqdn_to_add,
@@ -76,12 +76,16 @@ class AddNodeToHieraRunner(CookbookRunnerBase):
         self.prefix = prefix
         self.fqdn_to_add = fqdn_to_add
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
+        self.add_node_to_hiera()
+
+    def add_node_to_hiera(self) -> Dict[str, Any]:
+        """Needed to be able to change the return type."""
         control_node = self.spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True)
 
         etcd_prefix = self.prefix if self.prefix is not None else f"{self.project}-k8s-etcd"
-        response = run_one(
+        response = run_one_as_dict(
             node=control_node,
             command=["wmcs-enc-cli", "--openstack-project", self.project, "get_prefix_hiera", etcd_prefix],
             is_safe=True,
@@ -111,7 +115,7 @@ class AddNodeToHieraRunner(CookbookRunnerBase):
             current_hiera_config_str = json.dumps(current_hiera_config)
             LOGGER.info("New hiera config:\n%s", current_hiera_config_str)
 
-            response = run_one(
+            run_one_raw(
                 node=control_node,
                 command=(
                     "wmcs-enc-cli",

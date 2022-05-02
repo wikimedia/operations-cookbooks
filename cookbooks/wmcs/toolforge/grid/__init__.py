@@ -12,7 +12,7 @@ from defusedxml import ElementTree
 from spicerack.puppet import PuppetHosts
 from spicerack.remote import Remote
 
-from cookbooks.wmcs import run_one
+from cookbooks.wmcs import run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class GridQueueTypesSet:
     def from_types_string(cls, types_string: Optional[str]) -> "GridQueueTypesSet":
         """Create a GridQueueStatesSet from qhost queue types string."""
         if not types_string:
-            return []
+            return cls(types=[])
 
         return cls(types=[GridQueueType(type_char) for type_char in types_string])
 
@@ -268,7 +268,6 @@ class GridController:
             )
 
         except GridNodeNotFound as error:
-            LOGGER.error()
             raise GridUnableToJoin(
                 f"Node {host_fqdn} did not join the cluster {self._master_node_fqdn}, you can try rerunning with "
                 "'--force' to try again, but might require manual intervention."
@@ -295,7 +294,7 @@ class GridController:
             GridNodeNotFound: when the node is not found in the cluster
 
         """
-        raw_output = run_one(
+        raw_output = run_one_raw(
             node=self._master_node,
             command=f"qhost -q -xml -h {host_fqdn}".split(),
             capture_errors=True,

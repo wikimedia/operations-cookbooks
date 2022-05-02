@@ -78,3 +78,4 @@ class ToolforgeGridNodeGetInfoRunner(CookbookRunnerBase):
         except GridNodeNotFound as e:
             print(f"ERROR: {e}")
             return 1
+        return 0

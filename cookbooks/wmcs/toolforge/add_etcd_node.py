@@ -104,7 +104,7 @@ class ToolforgeAddEtcdNodeRunner(CookbookRunnerBase):
         self.image = image
         self.flavor = flavor
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         etcd_prefix = self.etcd_prefix if self.etcd_prefix is not None else f"{self.project}-k8s-etcd"
 
@@ -127,7 +127,7 @@ class ToolforgeAddEtcdNodeRunner(CookbookRunnerBase):
         create_instance_cookbook = CreateInstanceWithPrefix(spicerack=self.spicerack)
         new_member = create_instance_cookbook.get_runner(
             args=create_instance_cookbook.argument_parser().parse_args(start_args)
-        ).run()
+        ).create_instance()
 
         add_node_to_cluster_args = [
             "--project",

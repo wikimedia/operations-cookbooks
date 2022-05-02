@@ -10,7 +10,6 @@ Usage example:
 import argparse
 import logging
 import time
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -85,7 +84,7 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(),

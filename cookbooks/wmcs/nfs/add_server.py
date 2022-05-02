@@ -12,13 +12,12 @@ Usage example:
 import argparse
 import json
 import logging
-from typing import Optional
 
 import yaml
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import OpenstackAPI, run_one
+from cookbooks.wmcs import OpenstackAPI, run_one_raw
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
     CreateInstanceWithPrefix,
     InstanceCreationOpts,
@@ -93,8 +92,12 @@ class NFSAddServerRunner(CookbookRunnerBase):
         self.prefix = prefix
         self.service_ip = service_ip
         self.instance_creation_opts = instance_creation_opts
+        if self.instance_creation_opts.network is None:
+            raise Exception("Missing network please provide one")
 
-    def run(self) -> Optional[int]:
+        self.network = self.instance_creation_opts.network
+
+    def run(self) -> None:
         """Main entry point"""
         prefix = self.prefix if self.prefix is not None else f"{self.volume}"
 
@@ -110,7 +113,7 @@ class NFSAddServerRunner(CookbookRunnerBase):
         create_instance_cookbook = CreateInstanceWithPrefix(spicerack=self.spicerack)
         new_server = create_instance_cookbook.get_runner(
             args=create_instance_cookbook.argument_parser().parse_args(start_args)
-        ).run()
+        ).create_instance()
 
         new_node = self.spicerack.remote().query(f"D{{{new_server.server_fqdn}}}", use_sudo=True)
         openstack_api = OpenstackAPI(
@@ -188,14 +191,14 @@ class NFSAddServerRunner(CookbookRunnerBase):
             )
 
         if self.service_ip:
-            new_server_ip = run_one(node=new_node, command=["dig", "+short", new_server.server_fqdn]).strip()
+            new_server_ip = run_one_raw(node=new_node, command=["dig", "+short", new_server.server_fqdn]).strip()
 
             host_port = openstack_api.port_get(new_server_ip)
 
-            service_ip_response = openstack_api.create_service_ip(self.volume, self.instance_creation_opts.network)
+            service_ip_response = openstack_api.create_service_ip(self.volume, self.network)
             service_ip = service_ip_response["fixed_ips"][0]["ip_address"]
 
-            logging.warning("The new service_ip is %s" % service_ip)
+            logging.warning("The new service_ip is %s", service_ip)
             openstack_api.attach_service_ip(service_ip, host_port[0]["ID"])
 
             zone_record = openstack_api.zone_get(f"svc.{self.project}.eqiad1.wikimedia.cloud.")

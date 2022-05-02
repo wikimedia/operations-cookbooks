@@ -8,7 +8,6 @@ Usage example:
 import argparse
 import importlib
 import logging
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
@@ -79,7 +78,7 @@ class UpgradeCephNodeRunner(CookbookRunnerBase):
         self.skip_maintenance = skip_maintenance
         self.spicerack = spicerack
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         LOGGER.info("Upgrading ceph node %s", self.to_upgrade_fqdn)
         controller = CephClusterController(remote=self.spicerack.remote(), controlling_node_fqdn=self.to_upgrade_fqdn)

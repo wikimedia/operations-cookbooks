@@ -7,7 +7,6 @@ Usage example:
 """
 import argparse
 import logging
-from typing import Optional
 
 import yaml
 from spicerack import Spicerack
@@ -90,7 +89,7 @@ class ToolforgeGridGetClusterStatusRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.only_failed = only_failed
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn)
         NoAliasDumper.add_representer(GridQueueType, GridQueueType.yaml_representer)

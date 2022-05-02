@@ -22,7 +22,6 @@ import yaml
 from ClusterShell.MsgTree import MsgTreeElem
 from cumin.transports import Command
 from spicerack import ICINGA_DOMAIN, Spicerack
-from spicerack.cookbook import CookbookRunnerBase
 from spicerack.remote import Remote, RemoteHosts
 from wmflib.interactive import ask_confirmation
 
@@ -76,7 +75,7 @@ class CommonOpts:
 
     project: str = "admin"
     task_id: Optional[str] = None
-    no_dologmsg: Optional[bool] = False
+    no_dologmsg: bool = False
 
     def to_cli_args(self) -> List[str]:
         """Helper to unwrap the options for use with argument parsers."""
@@ -116,7 +115,7 @@ def add_common_opts(parser: argparse.ArgumentParser, project_default: str = "adm
     return parser
 
 
-def with_common_opts(spicerack: Spicerack, args: argparse.Namespace, runner: CookbookRunnerBase) -> Callable:
+def with_common_opts(spicerack: Spicerack, args: argparse.Namespace, runner: Callable) -> Callable:
     """Helper to add CommonOpts to a cookbook instantation."""
     no_dologmsg = bool(spicerack.dry_run or args.no_dologmsg)
 
@@ -169,15 +168,7 @@ class OpenstackAPI:
         self.control_node_fqdn = control_node_fqdn
         self._control_node = remote.query(f"D{{{control_node_fqdn}}}", use_sudo=True)
 
-    def _run(
-        self, *command: List[str], is_safe: bool = False, capture_errors: bool = False, json_output=True, **kwargs
-    ) -> Union[Dict[str, Any], str]:
-        """Run an openstack command on a control node.
-
-        Returns the loaded json if able, otherwise the raw output.
-
-        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
-        """
+    def _get_full_command(self, *command: str, json_output: bool = True):
         # some commands don't have formatted output
         if json_output:
             format_args = ["-f", "json"]
@@ -186,9 +177,90 @@ class OpenstackAPI:
         if "delete" in command:
             format_args = []
 
-        full_command = ["env", f"OS_PROJECT_ID={self.project}", "wmcs-openstack", *command, *format_args]
+        return ["env", f"OS_PROJECT_ID={self.project}", "wmcs-openstack", *command, *format_args]
 
-        return run_one(
+    def _run_raw(
+        self, *command: str, is_safe: bool = False, capture_errors: bool = False, json_output=True, **kwargs
+    ) -> str:
+        """Run an openstack command on a control node.
+
+        Returns the raw output (not loaded from json).
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+        """
+        full_command = self._get_full_command(*command, json_output=json_output)
+        return run_one_raw(
+            command=full_command, node=self._control_node, is_safe=is_safe, capture_errors=capture_errors, **kwargs
+        )
+
+    def _run_formatted_as_dict(
+        self, *command: str, is_safe: bool = False, capture_errors: bool = False, **kwargs
+    ) -> Dict[str, Any]:
+        """Run an openstack command on a control node forcing json output.
+
+        Returns a dict with the formatted output (lodaded from json), usually for show commands.
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+
+        Example:
+            >>> self._run_formatted("port", "show")
+            {
+                "admin_state_up": true,
+                "allowed_address_pairs": [],
+                ...
+                "status": "ACTIVE",
+                "tags": [],
+                "trunk_details": null,
+                "updated_at": "2022-04-21T05:18:43Z"
+            }
+
+        """
+        full_command = self._get_full_command(*command, json_output=True)
+        return run_one_as_dict(
+            command=full_command, node=self._control_node, is_safe=is_safe, capture_errors=capture_errors, **kwargs
+        )
+
+    def _run_formatted_as_list(
+        self, *command: str, is_safe: bool = False, capture_errors: bool = False, **kwargs
+    ) -> List[Any]:
+        """Run an openstack command on a control node forcing json output.
+
+        Returns a list with the formatted output (lodaded from json), usually for `list` commands.
+
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+
+        Example:
+            >>> self._run_formatted_as_list("port", "list")
+            [
+                {
+                    "ID": "fb751dd4-05bb-4f23-822f-852f55591a11",
+                    "Name": "",
+                    "MAC Address": "fa:16:3e:25:48:ca",
+                    "Fixed IP Addresses": [
+                        {
+                            "subnet_id": "7adfcebe-b3d0-4315-92fe-e8365cc80668",
+                            "ip_address": "172.16.128.110"
+                        }
+                    ],
+                    "Status": "ACTIVE"
+                },
+                {
+                    "ID": "fb9a2e11-39af-4fa2-80a7-5f895d42b68a",
+                    "Name": "",
+                    "MAC Address": "fa:16:3e:7f:80:e8",
+                    "Fixed IP Addresses": [
+                        {
+                            "subnet_id": "7adfcebe-b3d0-4315-92fe-e8365cc80668",
+                            "ip_address": "172.16.128.115"
+                        }
+                    ],
+                    "Status": "DOWN"
+                },
+            ]
+
+        """
+        full_command = self._get_full_command(*command, json_output=True)
+        return run_one_formatted_as_list(
             command=full_command, node=self._control_node, is_safe=is_safe, capture_errors=capture_errors, **kwargs
         )
 
@@ -197,7 +269,7 @@ class OpenstackAPI:
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self._run("port", "create", "--network", _quote(network), _quote(ip_name), **kwargs)
+        return self._run_formatted_as_dict("port", "create", "--network", _quote(network), _quote(ip_name), **kwargs)
 
     def attach_service_ip(
         self, ip_address: str, server_port_id: OpenstackIdentifier, **kwargs
@@ -206,7 +278,7 @@ class OpenstackAPI:
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self._run(
+        return self._run_formatted_as_dict(
             "port",
             "set",
             "--allowed-address",
@@ -223,7 +295,7 @@ class OpenstackAPI:
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self._run(
+        return self._run_formatted_as_dict(
             "port",
             "unset",
             "--allowed-address",
@@ -236,22 +308,24 @@ class OpenstackAPI:
     def port_get(self, ip_address, **kwargs) -> List[Dict[str, Any]]:
         """Get port for specified IP address"""
         ip_filter = '--fixed-ip="ip-address=%s"' % ip_address
-        return self._run("port", "list", ip_filter, **kwargs)
+        return self._run_formatted_as_list("port", "list", ip_filter, **kwargs)
 
     def zone_get(self, name, **kwargs) -> List[Dict[str, Any]]:
         """Get zone record for specified dns zone"""
-        return self._run("zone", "list", "--name", name, **kwargs)
+        return self._run_formatted_as_list("zone", "list", "--name", name, **kwargs)
 
     def recordset_create(self, zone_id, record_type, name, record, **kwargs) -> List[Dict[str, Any]]:
         """Get zone record for specified dns zone"""
-        return self._run("recordset", "create", "--type", record_type, "--record", record, zone_id, name, **kwargs)
+        return self._run_formatted_as_list(
+            "recordset", "create", "--type", record_type, "--record", record, zone_id, name, **kwargs
+        )
 
     def server_list(self, **kwargs) -> List[Dict[str, Any]]:
         """Retrieve the list of servers for the project.
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self._run("server", "list", is_safe=True, **kwargs)
+        return self._run_formatted_as_list("server", "list", is_safe=True, **kwargs)
 
     def server_list_filter_exists(self, hostnames: List[str], **kwargs) -> List[str]:
         """Verify if all servers in the list exists.
@@ -287,33 +361,31 @@ class OpenstackAPI:
         Openstack, that's probably not the FQDN (and hopefully the hostname,
         but maybo not).
         """
-        self._run("server", "delete", name_to_remove, is_safe=False)
+        self._run_raw("server", "delete", name_to_remove, is_safe=False)
 
     def volume_create(self, name: OpenstackName, size: int) -> str:
         """Create a volume and return the ID of the created volume.
 
         --size is in GB
         """
-        out = self._run("volume", "create", "--size", str(size), "--type", "standard", name)
+        out = self._run_formatted_as_dict("volume", "create", "--size", str(size), "--type", "standard", name)
         return out["id"]
 
     def volume_attach(self, server_id: OpenstackID, volume_id: OpenstackID) -> None:
         """Attach a volume to a server"""
-        self._run("server", "add", "volume", server_id, volume_id, json_output=False)
+        self._run_raw("server", "add", "volume", server_id, volume_id, json_output=False)
 
     def volume_detach(self, server_id: OpenstackID, volume_id: OpenstackID) -> None:
         """Attach a volume to a server"""
-        self._run("server", "remove", "volume", server_id, volume_id, json_output=False)
+        self._run_raw("server", "remove", "volume", server_id, volume_id, json_output=False)
 
-    def server_from_id(self, server_id: OpenstackIdentifier) -> str:
+    def server_from_id(self, server_id: OpenstackIdentifier) -> Dict[str, Any]:
         """Given the ID of a server, return the server details"""
-        out = self._run("server", "show", server_id)
-        return out
+        return self._run_formatted_as_dict("server", "show", server_id)
 
-    def volume_from_id(self, volume_id: OpenstackIdentifier) -> str:
+    def volume_from_id(self, volume_id: OpenstackIdentifier) -> Dict[str, Any]:
         """Given the ID of a volume, return the volume details"""
-        out = self._run("volume", "show", volume_id)
-        return out
+        return self._run_formatted_as_dict("volume", "show", volume_id)
 
     def server_create(
         self,
@@ -336,7 +408,7 @@ class OpenstackAPI:
         if server_group_id:
             server_group_options.extend(["--hint", f"group={server_group_id}"])
 
-        out = self._run(
+        out = self._run_formatted_as_dict(
             "server",
             "create",
             "--flavor",
@@ -358,7 +430,7 @@ class OpenstackAPI:
         # once the following gets released:
         #  https://review.opendev.org/c/openstack/python-openstackclient/+/794237
         current_aggregates = self.aggregate_list(print_output=False)
-        server_aggregates: List[Dict[str, any]] = []
+        server_aggregates: List[Dict[str, Any]] = []
         for aggregate in current_aggregates:
             aggregate_details = self.aggregate_show(
                 aggregate=aggregate["Name"], print_output=False, print_progress_bars=False
@@ -373,17 +445,17 @@ class OpenstackAPI:
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self._run("security", "group", "list", is_safe=True, **kwargs)
+        return self._run_formatted_as_list("security", "group", "list", is_safe=True, **kwargs)
 
     def security_group_create(self, name: OpenstackName, description: str) -> None:
         """Create a security group."""
-        self._run("security", "group", "create", name, "--description", _quote(description))
+        self._run_raw("security", "group", "create", name, "--description", _quote(description))
 
     def security_group_rule_create(
         self, direction: OpenstackRuleDirection, remote_group: OpenstackName, security_group: OpenstackName
     ) -> None:
         """Create a rule inside the given security group."""
-        self._run(
+        self._run_raw(
             "security",
             "group",
             "rule",
@@ -436,11 +508,11 @@ class OpenstackAPI:
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self._run("server", "group", "list", is_safe=True, **kwargs)
+        return self._run_formatted_as_list("server", "group", "list", is_safe=True, **kwargs)
 
     def server_group_create(self, name: OpenstackName, policy: OpenstackServerGroupPolicy) -> None:
         """Create a server group."""
-        self._run(
+        self._run_raw(
             "--os-compute-api-version=2.15",  # needed to be 2.15 or higher for soft-* policies
             "server",
             "group",
@@ -479,18 +551,18 @@ class OpenstackAPI:
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self._run("aggregate", "list", "--long", is_safe=True, **kwargs)
+        return self._run_formatted_as_list("aggregate", "list", "--long", is_safe=True, **kwargs)
 
-    def aggregate_show(self, aggregate: OpenstackIdentifier, **kwargs) -> List[Dict[str, Any]]:
+    def aggregate_show(self, aggregate: OpenstackIdentifier, **kwargs) -> Dict[str, Any]:
         """Get the details of a given aggregate.
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self._run("aggregate", "show", aggregate, is_safe=True, **kwargs)
+        return self._run_formatted_as_dict("aggregate", "show", aggregate, is_safe=True, **kwargs)
 
     def aggregate_remove_host(self, aggregate_name: OpenstackName, host_name: OpenstackName) -> None:
         """Remove the given host from the aggregate."""
-        result = self._run(
+        result = self._run_raw(
             "aggregate",
             "remove",
             "host",
@@ -508,7 +580,7 @@ class OpenstackAPI:
 
     def aggregate_add_host(self, aggregate_name: OpenstackName, host_name: OpenstackName) -> None:
         """Add the given host to the aggregate."""
-        result = self._run("aggregate", "add", "host", aggregate_name, host_name, capture_errors=True)
+        result = self._run_raw("aggregate", "add", "host", aggregate_name, host_name, capture_errors=True)
         if "HTTP 404" in result:
             raise OpenstackNotFound(
                 f"Node {host_name} was not found in aggregate {aggregate_name}, did you try using the hostname "
@@ -529,10 +601,10 @@ class OpenstackAPI:
         )
 
     @staticmethod
-    def aggregate_load_from_host(host: RemoteHosts) -> None:
+    def aggregate_load_from_host(host: RemoteHosts) -> List[Dict[str, Any]]:
         """Load the persisted list of aggregates from the host."""
         try:
-            result = run_one(
+            result = run_one_formatted(
                 command=["cat", AGGREGATES_FILE_PATH],
                 node=host,
                 is_safe=True,
@@ -544,7 +616,10 @@ class OpenstackAPI:
         except Exception as error:
             raise OpenstackNotFound(f"Unable to cat the file {AGGREGATES_FILE_PATH} on host {host}") from error
 
-        return result
+        if isinstance(result, List):
+            return result
+
+        raise TypeError(f"Expected a list, got {result}")
 
     def drain_hypervisor(self, hypervisor_name: OpenstackName) -> None:
         """Drain a hypervisor."""
@@ -552,7 +627,7 @@ class OpenstackAPI:
             command=f"bash -c 'source /root/novaenv.sh && wmcs-drain-hypervisor {hypervisor_name}'",
             timeout=SECONDS_IN_MINUTE * MINUTES_IN_HOUR * 2,
         )
-        result = run_one(command=command, node=self._control_node, is_safe=False)
+        result = run_one_raw(command=command, node=self._control_node, is_safe=False)
 
         if not result:
             raise OpenstackMigrationError(
@@ -630,11 +705,11 @@ class CephClusterStatus:
         """Get osdmap set flags."""
         osd_maps = self.status_dict["health"]["checks"].get("OSDMAP_FLAGS")
         if not osd_maps:
-            return []
+            return set()
 
         raw_flags_line = osd_maps["summary"]["message"]
         if "flag(s) set" not in raw_flags_line:
-            return []
+            return set()
 
         # ex: "noout,norebalance flag(s) set"
         flags = raw_flags_line.split(" ")[0].split(",")
@@ -691,7 +766,7 @@ class CephClusterStatus:
                 f"The cluster is currently in an unhealthy status: \n{json.dumps(self.status_dict['health'], indent=4)}"
             )
 
-    def get_in_progress(self) -> None:
+    def get_in_progress(self) -> Dict[str, Any]:
         """Get the current in-progress events."""
         return self.status_dict.get("progress_events", {})
 
@@ -718,7 +793,10 @@ class CephOSDController:
 
     def get_available_devices(self) -> List[str]:
         """Get the current available devices in the node."""
-        structured_output = run_one(command=["lsblk", "--json"], node=self._node)
+        structured_output = run_one_formatted(command=["lsblk", "--json"], node=self._node)
+        if not isinstance(structured_output, dict):
+            raise TypeError(f"Was expecting a dict, got {structured_output}")
+
         if "blockdevices" not in structured_output:
             raise CephMalformedInfo(
                 f"Missing 'blockdevices' on lsblk output: {json.dumps(structured_output, indent=4)}"
@@ -763,7 +841,9 @@ class CephClusterController:
     def get_nodes(self) -> Dict[str, Any]:
         """Get the nodes currently in the cluster."""
         # There's usually a couple empty lines before the json data
-        return run_one(command=["ceph", "node", "ls", "-f", "json"], node=self._controlling_node, last_line_only=True)
+        return run_one_as_dict(
+            command=["ceph", "node", "ls", "-f", "json"], node=self._controlling_node, last_line_only=True
+        )
 
     def get_nodes_domain(self) -> str:
         """Get the network domain for the nodes in the cluster."""
@@ -786,18 +866,20 @@ class CephClusterController:
 
     def get_cluster_status(self) -> CephClusterStatus:
         """Get the current cluster status."""
-        cluster_status_output = run_one(command=["ceph", "status", "-f", "json"], node=self._controlling_node)
+        cluster_status_output = run_one_as_dict(command=["ceph", "status", "-f", "json"], node=self._controlling_node)
         return CephClusterStatus(status_dict=cluster_status_output)
 
     def set_osdmap_flag(self, flag: CephOSDFlag) -> None:
         """Set one of the osdmap flags."""
-        set_osdmap_flag_result = run_one(command=["ceph", "osd", "set", flag.value], node=self._controlling_node)
+        set_osdmap_flag_result = run_one_raw(command=["ceph", "osd", "set", flag.value], node=self._controlling_node)
         if set_osdmap_flag_result != f"{flag.value} is set":
             raise CephFlagSetError(f"Unable to set `{flag.value}` on the cluster, got output: {set_osdmap_flag_result}")
 
     def unset_osdmap_flag(self, flag: CephOSDFlag) -> None:
         """Unset one of the osdmap flags."""
-        unset_osdmap_flag_result = run_one(command=["ceph", "osd", "unset", flag.value], node=self._controlling_node)
+        unset_osdmap_flag_result = run_one_raw(
+            command=["ceph", "osd", "unset", flag.value], node=self._controlling_node
+        )
         if unset_osdmap_flag_result != f"{flag.value} is unset":
             raise CephFlagSetError(
                 f"Unable to unset `{flag.value}` on the cluster, got output: {unset_osdmap_flag_result}"
@@ -991,7 +1073,7 @@ class KubernetesController:
 
     def get_cluster_info(self) -> KubernetesClusterInfo:
         """Get cluster info."""
-        raw_output = run_one(
+        raw_output = run_one_raw(
             # cluster-info does not support json output format (there's a dump
             # command, but it's too verbose)
             command=["kubectl", "custer-info"],
@@ -999,19 +1081,19 @@ class KubernetesController:
         )
         return KubernetesClusterInfo.form_cluster_info_output(raw_output=raw_output)
 
-    def get_nodes(self, selector: Optional[str] = None) -> Dict[str, Any]:
+    def get_nodes(self, selector: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get the nodes currently in the cluster."""
         if selector:
             selector_cli = f"--selector='{selector}'"
         else:
             selector_cli = ""
 
-        output = run_one(
+        output = run_one_as_dict(
             command=["kubectl", "get", "nodes", "--output=json", selector_cli], node=self._controlling_node
         )
         return output["items"]
 
-    def get_node(self, node_hostname: str) -> Dict[str, Any]:
+    def get_node(self, node_hostname: str) -> List[Dict[str, Any]]:
         """Get only info for the the given node."""
         return self.get_nodes(selector=f"kubernetes.io/hostname={node_hostname}")
 
@@ -1022,7 +1104,7 @@ class KubernetesController:
         else:
             field_selector_cli = ""
 
-        output = run_one(
+        output = run_one_as_dict(
             command=["kubectl", "get", "pods", "--output=json", field_selector_cli], node=self._controlling_node
         )
         return output["items"]
@@ -1031,11 +1113,11 @@ class KubernetesController:
         """Get pods for node."""
         return self.get_pods(field_selector=f"spec.nodeName={node_hostname}")
 
-    def drain_node(self, node_hostname: str) -> Dict[str, Any]:
+    def drain_node(self, node_hostname: str) -> None:
         """Drain a node, it does not wait for the containers to be stopped though."""
         self._controlling_node.run_sync(f"kubectl drain --ignore-daemonsets --delete-local-data {node_hostname}")
 
-    def delete_node(self, node_hostname: str) -> Dict[str, Any]:
+    def delete_node(self, node_hostname: str) -> None:
         """Delete a node, it does not drain it, see drain_node for that."""
         current_nodes = self.get_nodes(selector=f"kubernetes.io/hostname={node_hostname}")
         if not current_nodes:
@@ -1093,7 +1175,7 @@ class KubeadmController:
 
     def get_new_token(self) -> str:
         """Creates a new bootstrap token."""
-        raw_output = run_one(command=["kubeadm", "token", "create"], node=self._controlling_node)
+        raw_output = run_one_raw(command=["kubeadm", "token", "create"], node=self._controlling_node)
         output = raw_output.splitlines()[-1].strip()
         if not output:
             raise KubeadmCreateTokenError(f"Error creating a new token:\nOutput:{raw_output}")
@@ -1102,7 +1184,7 @@ class KubeadmController:
 
     def delete_token(self, token: str) -> str:
         """Removes the given bootstrap token."""
-        raw_output = run_one(command=["kubeadm", "token", "delete", token], node=self._controlling_node)
+        raw_output = run_one_raw(command=["kubeadm", "token", "delete", token], node=self._controlling_node)
         if "deleted" not in raw_output:
             raise KubeadmDeleteTokenError(f"Error deleting token {token}:\nOutput:{raw_output}")
 
@@ -1110,7 +1192,7 @@ class KubeadmController:
 
     def get_ca_cert_hash(self) -> str:
         """Retrieves the CA cert hash to use when bootstrapping."""
-        raw_output = run_one(
+        raw_output = run_one_raw(
             command=[
                 "openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt",
                 "| openssl rsa -pubin -outform der 2>/dev/null",
@@ -1165,17 +1247,16 @@ class KubeadmController:
             control_kubeadm.delete_token(token=new_token)
 
 
-def run_one(
+def run_one_raw(
     command: Union[List[str], Command],
     node: RemoteHosts,
     capture_errors: bool = False,
     last_line_only: bool = False,
-    try_format: OutputFormat = OutputFormat.JSON,
     **kwargs,
-) -> Union[Dict[str, Any], str]:
+) -> str:
     """Run a command on a node.
 
-    Returns the loaded json if able, otherwise the raw output.
+    Returns the the raw output.
 
     Any extra kwargs will be passed to the RemoteHosts.run_sync function.
     """
@@ -1186,14 +1267,78 @@ def run_one(
         result = next(node.run_sync(command, **kwargs))
 
     except StopIteration:
-        result = None
+        return ""
 
-    if result is None:
-        raw_result = "{}"
-    else:
-        raw_result = result[1].message().decode()
-        if last_line_only:
-            raw_result = raw_result.splitlines()[-1]
+    raw_result = result[1].message().decode()
+    if last_line_only:
+        raw_result = raw_result.splitlines()[-1]
+
+    return raw_result
+
+
+def run_one_formatted_as_list(
+    command: Union[List[str], Command],
+    node: RemoteHosts,
+    capture_errors: bool = False,
+    last_line_only: bool = False,
+    try_format: OutputFormat = OutputFormat.JSON,
+    **kwargs,
+) -> List[Any]:
+    """Run one command and return a list of elements."""
+    result = run_one_formatted(
+        command=command,
+        node=node,
+        capture_errors=capture_errors,
+        last_line_only=last_line_only,
+        try_format=try_format,
+        **kwargs,
+    )
+    if not isinstance(result, list):
+        raise TypeError(f"Was expecting a list, got {result}")
+
+    return result
+
+
+def run_one_as_dict(
+    command: Union[List[str], Command],
+    node: RemoteHosts,
+    capture_errors: bool = False,
+    last_line_only: bool = False,
+    try_format: OutputFormat = OutputFormat.JSON,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Run a command and return a dict."""
+    result = run_one_formatted(
+        command=command,
+        node=node,
+        capture_errors=capture_errors,
+        last_line_only=last_line_only,
+        try_format=try_format,
+        **kwargs,
+    )
+    if not isinstance(result, dict):
+        raise TypeError(f"Was expecting a list, got {result}")
+
+    return result
+
+
+def run_one_formatted(
+    command: Union[List[str], Command],
+    node: RemoteHosts,
+    capture_errors: bool = False,
+    last_line_only: bool = False,
+    try_format: OutputFormat = OutputFormat.JSON,
+    **kwargs,
+) -> Union[List[Any], Dict[str, Any]]:
+    """Run a command on a node.
+
+    Returns the loaded json/yaml.
+
+    Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+    """
+    raw_result = run_one_raw(
+        command=command, node=node, capture_errors=capture_errors, last_line_only=last_line_only, **kwargs
+    )
 
     try:
         if try_format == OutputFormat.JSON:
@@ -1202,10 +1347,10 @@ def run_one(
         if try_format == OutputFormat.YAML:
             return yaml.safe_load(raw_result)
 
-    except (json.JSONDecodeError, yaml.YAMLError):
-        pass
+    except (json.JSONDecodeError, yaml.YAMLError) as error:
+        raise Exception("Unable to parse output of command as {try_format}:\n{raw_result}") from error
 
-    return raw_result
+    raise Exception("Unrecognized format {try_format}")
 
 
 def simple_create_file(dst_node: RemoteHosts, contents: str, remote_path: str, use_root: bool = True) -> None:
@@ -1218,7 +1363,7 @@ def simple_create_file(dst_node: RemoteHosts, contents: str, remote_path: str, u
 
     full_command.extend(["tee", remote_path])
 
-    return run_one(node=dst_node, command=full_command)
+    run_one_raw(node=dst_node, command=full_command)
 
 
 def natural_sort_key(element: str) -> List[Union[str, int]]:
@@ -1345,6 +1490,7 @@ class TestUtils:
         It will return a RemoteHosts that will return the given responses when run_sync is called in them.
         If side_effect is passed, it will override the responses and set that as side_effect of the mock on run_sync.
         """
+        responses = responses if responses is not None else []
         fake_hosts = mock.create_autospec(spec=RemoteHosts, spec_set=True)
         fake_remote = mock.create_autospec(spec=Remote, spec_set=True)
 
@@ -1372,7 +1518,7 @@ class CephTestUtils(TestUtils):
     @staticmethod
     def get_status_dict(overrides: Dict[str, Any] = None) -> Dict[str, Any]:
         """Generate a stub status dict to use when creating CephStatus"""
-        status_dict = {"health": {"status": {}, "checks": {}}}
+        status_dict: Dict[str, Any] = {"health": {"status": {}, "checks": {}}}
 
         def _merge_dict(to_update, source_dict):
             if not source_dict:
@@ -1424,7 +1570,7 @@ class CephTestUtils(TestUtils):
 
         If you pass any value, it will not ensure that it's still considered available.
         """
-        available_device = {"name": name, "type": device_type}
+        available_device: Dict[str, Any] = {"name": name, "type": device_type}
         if children is not None:
             available_device["children"] = children
 
@@ -1480,7 +1626,7 @@ class CmdChecklist:
 
     def run(self, **kwargs) -> CmdCheckListResults:
         """Run the cmd-checklist-runner testsuite."""
-        output_lines = run_one(
+        output_lines = run_one_raw(
             node=self.remote_hosts,
             command=["cmd-checklist-runner", "--config", self.config_file],
             is_safe=True,

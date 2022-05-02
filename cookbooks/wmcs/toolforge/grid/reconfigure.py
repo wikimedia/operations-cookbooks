@@ -8,7 +8,6 @@ Usage example:
 """
 import argparse
 import logging
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -69,7 +68,7 @@ class ToolforgeGridReconfigureRunner(CookbookRunnerBase):
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         self.sallogger.log(message="reconfiguring the grid by using grid-configurator")
 

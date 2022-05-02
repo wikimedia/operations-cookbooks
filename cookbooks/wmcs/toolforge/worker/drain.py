@@ -9,7 +9,6 @@ import argparse
 import json
 import logging
 import time
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
@@ -79,7 +78,7 @@ class DrainRunner(CookbookRunnerBase):
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         remote = self.spicerack.remote()
         self.sallogger.log(message=f"Draining node {self.hostname_to_drain}...")

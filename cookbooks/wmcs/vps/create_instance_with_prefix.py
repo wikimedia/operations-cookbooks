@@ -31,7 +31,7 @@ from cookbooks.wmcs import (
     OpenstackServerGroupPolicy,
     add_common_opts,
     natural_sort_key,
-    run_one,
+    run_one_raw,
     with_common_opts,
 )
 
@@ -74,7 +74,7 @@ class InstanceCreationOpts:
         if self.server_group:
             args.extend(["--server-group", self.server_group])
         if self.server_group_policy:
-            args.extend(["--server-group-policy", self.server_group_policy])
+            args.extend(["--server-group-policy", self.server_group_policy.value])
 
         return args
 
@@ -145,7 +145,7 @@ def add_instance_creation_options(parser: argparse.ArgumentParser) -> argparse.A
     return parser
 
 
-def with_instance_creation_options(args: argparse.Namespace, runner: CookbookRunnerBase) -> Callable:
+def with_instance_creation_options(args: argparse.Namespace, runner: Callable) -> Callable:
     """Wraps a CookbookRunnerBase to pass to it the intance creation options.
 
     This allows to fully encapsulate the instance creation options and avoid the need to change anything in the code
@@ -207,14 +207,14 @@ class CreateInstanceWithPrefix(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> "CreateInstanceWithPrefixRunner":
         """Get runner"""
         return with_common_opts(
             self.spicerack,
             args,
             with_instance_creation_options(
                 args,
-                CreateInstanceWithPrefixRunner,
+                runner=CreateInstanceWithPrefixRunner,
             ),
         )(
             security_group=args.security_group,
@@ -234,8 +234,8 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
         spicerack: Spicerack,
         instance_creation_opts: InstanceCreationOpts,
         server_group_policy: str,
+        security_group: str,
         server_group: Optional[str] = None,
-        security_group: Optional[str] = None,
         ssh_retries: int = 15,
     ):
         """Init"""
@@ -245,18 +245,25 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
             control_node_fqdn="cloudcontrol1003.wikimedia.org",
             project=self.common_opts.project,
         )
+        if instance_creation_opts.prefix is None:
+            raise Exception("Instance prefix missing, please pass one")
+
         self.prefix = instance_creation_opts.prefix
         self.flavor = instance_creation_opts.flavor
         self.network = instance_creation_opts.network
         self.image = instance_creation_opts.image
-        self.server_group = server_group or self.prefix
+        self.server_group = server_group if server_group is not None else self.prefix
         self.server_group_policy = server_group_policy
         self.spicerack = spicerack
         self.security_group = security_group
         self.ssh_retries = ssh_retries
 
-    def run(self) -> CreateServerResponse:  # pylint: disable=too-many-locals
+    def run(self) -> None:
         """Main entry point"""
+        self.create_instance()
+
+    def create_instance(self) -> CreateServerResponse:  # pylint: disable=too-many-locals
+        """We need this as `run` is an inherited function with a return type we should not override."""
         self.openstack_api.security_group_ensure(
             security_group=self.security_group,
         )
@@ -337,13 +344,13 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
             exceptions=(RemoteExecutionError,),
         )
         def try_to_reach_the_new_instance():
-            return run_one(node=new_prefix_node, command=["hostname"]).strip()
+            return run_one_raw(node=new_prefix_node, command=["hostname"]).strip()
 
         result = try_to_reach_the_new_instance()
 
         if "mesg: ttyname failed" in result:
             # Ugly workaround for https://gerrit.wikimedia.org/r/c/operations/software/spicerack/+/730270
-            run_one(
+            run_one_raw(
                 node=new_prefix_node,
                 command=["sed", "-i", "-e", "'s/mesg n || true/mesg n 2>/dev/null || true/'", "/root/.profile"],
             )

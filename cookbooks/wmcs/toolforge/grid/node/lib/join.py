@@ -91,7 +91,7 @@ class ToolforgeGridNodeJoinRunner(CookbookRunnerBase):
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
 
-    def _run(self, new_node_fqdn: str) -> Optional[int]:
+    def _run(self, new_node_fqdn: str):
         # a puppet run is required to make sure grid config files are generated
         LOGGER.info(
             "INFO: running puppet before adding node %s to the grid in %s", new_node_fqdn, self.common_opts.project
@@ -136,10 +136,11 @@ class ToolforgeGridNodeJoinRunner(CookbookRunnerBase):
         if not actual_nodes:
             # not an error because if the nodes are already joined, then a NOOP is expected anyway
             LOGGER.warning("WARNING: no nodes to operate on")
-            return
+            return 0
 
         for hostname in actual_nodes:
             self.sallogger.log(
                 message=f"trying to join node {hostname} to the grid cluster in {self.common_opts.project}.",
             )
             self._run(f"{hostname}.{self.common_opts.project}.eqiad1.wikimedia.cloud")
+        return 0

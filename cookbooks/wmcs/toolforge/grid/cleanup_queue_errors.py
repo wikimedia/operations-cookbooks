@@ -7,7 +7,6 @@ Usage example:
 """
 import argparse
 import logging
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -67,7 +66,7 @@ class ToolforgeGridCleanupQRunner(CookbookRunnerBase):
         if not self.master_hostname:
             self.master_hostname = f"{self.common_opts.project}-sgegrid-master"
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         master_fqdn = f"{self.master_hostname}.{self.common_opts.project}.eqiad1.wikimedia.cloud"
         LOGGER.info("INFO: using master node FQDN %s", master_fqdn)

@@ -14,13 +14,13 @@ calls such that they have the same puppet/hiera config.
 import argparse
 import json
 import logging
-from typing import Optional, Union
+from typing import Union
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import OpenstackAPI, OutputFormat, run_one
+from cookbooks.wmcs import OpenstackAPI, OutputFormat, run_one_as_dict, run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         self.force = force
         self.spicerack = spicerack
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(), control_node_fqdn="cloudcontrol1003.wikimedia.org", project=self.project
@@ -110,7 +110,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         # Verify that puppet/hiera config agrees between the two hosts
         control_node = self.spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True)
 
-        response = run_one(
+        response = run_one_as_dict(
             node=control_node,
             command=["wmcs-enc-cli", "--openstack-project", self.project, "get_node_consolidated_info", self.from_fqdn],
             try_format=OutputFormat.YAML,
@@ -136,7 +136,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
 
         mount_name = from_hiera["profile::wcms::nfs::standalone::volumes"][0]
 
-        response = run_one(
+        response = run_one_as_dict(
             node=control_node,
             command=["wmcs-enc-cli", "--openstack-project", self.project, "get_node_consolidated_info", self.to_fqdn],
             try_format=OutputFormat.YAML,
@@ -172,7 +172,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
 
         # locate the service IP
         service_fqdn = f"{volume_name}.svc.{self.project}.eqiad1.wikimedia.cloud"
-        service_ip = run_one(node=to_node, command=["dig", "+short", service_fqdn], last_line_only=True).strip()
+        service_ip = run_one_raw(node=to_node, command=["dig", "+short", service_fqdn], last_line_only=True).strip()
         if not service_ip:
             raise Exception(f"Unable to resolve service ip for service name {service_fqdn}")
         service_ip_port = openstack_api.port_get(service_ip)[0]
@@ -180,18 +180,18 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         if service_ip_port["Name"] != mount_name:
             raise Exception(f"service ip name mismatch. Expected {mount_name}, found {service_ip_port['Name']}")
 
-        to_ip = run_one(node=to_node, command=["dig", "+short", self.to_fqdn], last_line_only=True).strip()
+        to_ip = run_one_raw(node=to_node, command=["dig", "+short", self.to_fqdn], last_line_only=True).strip()
         to_port = openstack_api.port_get(to_ip)
-        from_ip = run_one(node=to_node, command=["dig", "+short", self.from_fqdn], last_line_only=True).strip()
+        from_ip = run_one_raw(node=to_node, command=["dig", "+short", self.from_fqdn], last_line_only=True).strip()
         from_port = openstack_api.port_get(from_ip)
 
         # See if wmcs-prepare-cinder-volume has already been run on the target host
         volume_path = f"/srv/{mount_name}"
         volume_prepared = False
 
-        response = run_one(node=to_node, command=["cat", "/etc/fstab"])
+        fstab_content = run_one_raw(node=to_node, command=["cat", "/etc/fstab"])
 
-        if volume_path in response:
+        if volume_path in fstab_content:
             volume_prepared = True
 
         # That's all our checks. No start actually doing things.
@@ -205,8 +205,8 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
 
         if not self.force:
             from_puppet.disable(reason)
-            run_one(node=from_node, command=["systemctl", "stop", "nfs-server.service"])
-            run_one(node=from_node, command=["umount", volume_path])
+            run_one_raw(node=from_node, command=["systemctl", "stop", "nfs-server.service"])
+            run_one_raw(node=from_node, command=["umount", volume_path])
 
         try:
             openstack_api.volume_detach(self.from_id, volume_id)
@@ -220,7 +220,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
             # Don't fail if it's already mounted.
             to_node.run_sync(f"mount {volume_path}; true")
         else:
-            run_one(
+            run_one_raw(
                 node=to_node,
                 command=[
                     "wmcs-prepare-cinder-volume",
@@ -238,7 +238,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         from_hiera["profile::wcms::nfs::standalone::cinder_attached"] = False
         from_hiera_str = json.dumps(from_hiera)
 
-        response = run_one(
+        run_one_raw(
             node=control_node,
             command=[
                 "wmcs-enc-cli",
@@ -254,7 +254,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
 
         to_hiera["profile::wcms::nfs::standalone::cinder_attached"] = True
         to_hiera_str = json.dumps(to_hiera)
-        response = run_one(
+        run_one_raw(
             node=control_node,
             command=[
                 "wmcs-enc-cli",
@@ -284,4 +284,4 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
 
         to_puppet.enable(reason)
         to_puppet.run()
-        run_one(node=to_node, command=["systemctl", "start", "nfs-server.service"])
+        run_one_raw(node=to_node, command=["systemctl", "start", "nfs-server.service"])

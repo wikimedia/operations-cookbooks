@@ -10,7 +10,6 @@ Usage example:
 import argparse
 import datetime
 import logging
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
@@ -100,7 +99,7 @@ class RebootNodeRunner(CookbookRunnerBase):
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         self.sallogger.log(message=f"Rebooting node {self.fqdn_to_reboot}")
 

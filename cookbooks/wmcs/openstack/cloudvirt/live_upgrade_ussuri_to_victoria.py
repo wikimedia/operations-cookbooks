@@ -7,7 +7,6 @@ Usage example: wmcs.openstack.cloudvirt.live_upgrade_ussuri_to_victoria \
 # pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import logging
-from typing import Optional
 
 from cumin.transports import Command
 from spicerack import Spicerack
@@ -56,7 +55,7 @@ class LiveUpgradeRunner(CookbookRunnerBase):
         self.fqdn_to_upgrade = fqdn_to_upgrade
         self.spicerack = spicerack
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point."""
         node_to_upgrade = self.spicerack.remote().query(f"D{{{self.fqdn_to_upgrade}}}", use_sudo=True)
         input(f"Start with {self.fqdn_to_upgrade}?")

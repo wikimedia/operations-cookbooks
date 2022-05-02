@@ -1,9 +1,9 @@
 import json
 from typing import Any, Dict, List, Optional, Type
 from unittest import mock
-from cumin.transports import Command
 
 import pytest
+from cumin.transports import Command
 
 from cookbooks.wmcs import (
     CephClusterController,
@@ -232,13 +232,13 @@ def test_unset_osdmap_flag_raising(unset_flag_command_output: str):
         },
     },
 )
-def test_set_maintenance_happy_path(commands_output: str, force: Optional[bool]):
+def test_set_maintenance_happy_path(commands_output: List[str], force: Optional[bool]):
     my_controller = CephClusterController(
         remote=CephTestUtils.get_fake_remote(responses=commands_output),
         controlling_node_fqdn="monhost1.local",
     )
 
-    my_controller.set_maintenance(force=force)
+    my_controller.set_maintenance(force=bool(force))
 
 
 @parametrize(
@@ -270,14 +270,14 @@ def test_set_maintenance_happy_path(commands_output: str, force: Optional[bool])
         },
     },
 )
-def test_set_maintenance_raising(commands_output: str, exception: Type[Exception], force: Optional[bool]):
+def test_set_maintenance_raising(commands_output: List[str], exception: Type[Exception], force: Optional[bool]):
     my_controller = CephClusterController(
         remote=CephTestUtils.get_fake_remote(responses=commands_output),
         controlling_node_fqdn="monhost1.local",
     )
 
     with pytest.raises(exception):
-        my_controller.set_maintenance(force=force)
+        my_controller.set_maintenance(force=bool(force))
 
 
 @parametrize(
@@ -314,13 +314,13 @@ def test_set_maintenance_raising(commands_output: str, exception: Type[Exception
         },
     },
 )
-def test_unset_maintenance_happy_path(commands_output: str, force: Optional[bool]):
+def test_unset_maintenance_happy_path(commands_output: List[str], force: Optional[bool]):
     my_controller = CephClusterController(
         remote=CephTestUtils.get_fake_remote(responses=commands_output),
         controlling_node_fqdn="monhost1.local",
     )
 
-    my_controller.unset_maintenance(force=force)
+    my_controller.unset_maintenance(force=bool(force))
 
 
 @parametrize(
@@ -352,14 +352,14 @@ def test_unset_maintenance_happy_path(commands_output: str, force: Optional[bool
         },
     },
 )
-def test_unset_maintenance_raising(commands_output: str, exception: Type[Exception], force: Optional[bool]):
+def test_unset_maintenance_raising(commands_output: List[str], exception: Type[Exception], force: Optional[bool]):
     my_controller = CephClusterController(
         remote=CephTestUtils.get_fake_remote(responses=commands_output),
         controlling_node_fqdn="monhost1.local",
     )
 
     with pytest.raises(exception):
-        my_controller.unset_maintenance(force=force)
+        my_controller.unset_maintenance(force=bool(force))
 
 
 @parametrize(
@@ -379,7 +379,7 @@ def test_unset_maintenance_raising(commands_output: str, exception: Type[Excepti
     }
 )
 def test_wait_for_progress_events_happy_path(
-    commands_output: str,
+    commands_output: List[str],
     time_ticks: List[int],
     timeout_seconds: Optional[int],
 ):
@@ -408,7 +408,7 @@ def test_wait_for_progress_events_happy_path(
     }
 )
 def test_wait_for_progress_events_raises(
-    commands_output: str,
+    commands_output: List[str],
     time_ticks: List[int],
     timeout_seconds: int,
 ):
@@ -445,7 +445,7 @@ def test_wait_for_progress_events_raises(
     }
 )
 def test_wait_for_cluster_health_happy_path(
-    commands_output: str,
+    commands_output: List[str],
     time_ticks: List[int],
     timeout_seconds: Optional[int],
     consider_maintenance_healthy: Optional[bool],
@@ -455,7 +455,7 @@ def test_wait_for_cluster_health_happy_path(
         controlling_node_fqdn="monhost1.local",
     )
 
-    params = {}
+    params: Dict[str, Any] = {}
     if consider_maintenance_healthy is not None:
         params["consider_maintenance_healthy"] = consider_maintenance_healthy
     if timeout_seconds is not None:
@@ -487,7 +487,7 @@ def test_wait_for_cluster_health_happy_path(
     }
 )
 def test_wait_for_cluster_health_raises(
-    commands_output: str,
+    commands_output: List[str],
     time_ticks: List[int],
     timeout_seconds: int,
     consider_maintenance_healthy: Optional[bool],
@@ -497,7 +497,7 @@ def test_wait_for_cluster_health_raises(
         controlling_node_fqdn="monhost1.local",
     )
 
-    params = {"timeout_seconds": timeout_seconds}
+    params: Dict[str, Any] = {"timeout_seconds": timeout_seconds}
     if consider_maintenance_healthy is not None:
         params["consider_maintenance_healthy"] = consider_maintenance_healthy
 
