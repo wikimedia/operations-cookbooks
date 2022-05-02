@@ -498,9 +498,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         puppet_first_run = confirm_on_failure(_first_puppet_run)
         self.host_actions.success(f'First Puppet run completed and logged in {self.output_filename}')
-        with open(self.output_filename, 'w', encoding='utf8') as output_file:
-            for _, output in puppet_first_run:
-                output_file.write(output.message().decode())
+        if puppet_first_run:
+            with open(self.output_filename, 'w', encoding='utf8') as output_file:
+                for _, output in puppet_first_run:
+                    output_file.write(output.message().decode())
 
         self.ipmi.remove_boot_override()
         self.ipmi.check_bootparams()
