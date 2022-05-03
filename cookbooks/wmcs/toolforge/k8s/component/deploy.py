@@ -5,9 +5,9 @@ Usage example: \
         --git-url https://gerrit.wikimedia.org/r/cloud/toolforge/jobs-framework-api \
 """
 import argparse
+import logging
 import random
 import string
-import logging
 from typing import List
 
 from spicerack import Spicerack

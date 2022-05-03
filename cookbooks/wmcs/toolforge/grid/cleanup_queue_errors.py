@@ -12,8 +12,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts, parser_type_str_hostname
-
+from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, parser_type_str_hostname, with_common_opts
 from cookbooks.wmcs.toolforge.grid import GridController
 
 LOGGER = logging.getLogger(__name__)

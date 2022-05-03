@@ -101,18 +101,22 @@ class ToolforgeScaleGridExecRunner(CookbookRunnerBase):
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        inner_args = [
-            "--security-group",
-            "execnode",
-            "--server-group",
-            f"{self.common_opts.project}-sgegrid-exec-nodes",
-            "--server-group-policy",
-            OpenstackServerGroupPolicy.SOFT_ANTI_AFFINITY.value,
-            "--debian-version",
-            self.debian_version.name.lower(),
-            "--nodetype",
-            "exec",
-        ] + self.common_opts.to_cli_args() + self.instance_creation_opts.to_cli_args()
+        inner_args = (
+            [
+                "--security-group",
+                "execnode",
+                "--server-group",
+                f"{self.common_opts.project}-sgegrid-exec-nodes",
+                "--server-group-policy",
+                OpenstackServerGroupPolicy.SOFT_ANTI_AFFINITY.value,
+                "--debian-version",
+                self.debian_version.name.lower(),
+                "--nodetype",
+                "exec",
+            ]
+            + self.common_opts.to_cli_args()
+            + self.instance_creation_opts.to_cli_args()
+        )
 
         create_node_cookbook = ToolforgeGridNodeCreateJoinPool(spicerack=self.spicerack)
         create_node_cookbook_arg_parser = create_node_cookbook.argument_parser()
