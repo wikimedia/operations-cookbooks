@@ -45,6 +45,8 @@ class RebootSingleVM(CookbookBase):
                                   'Cumin host are automatically added.'))
         parser.add_argument('-t', '--task-id',
                             help='An optional task ID to refer in the downtime message.')
+        parser.add_argument('--skip-puppet-check', help="Don't wait for a successful Puppet run.",
+                            action='store_true', default=False)
         parser.add_argument('--depool', help='Whether to run depool/pool on the VM around reboots.',
                             action='store_true')
         return parser
@@ -56,6 +58,7 @@ class RebootSingleVMRunner(CookbookRunnerBase):
     def __init__(self, args, spicerack):
         """Downtime a single VM and reboot it"""
         self.remote_host = spicerack.remote().query(args.vm)
+        self.args = args
         self.remote = spicerack.remote()
         self.cluster = spicerack.netbox_server(
             str(self.remote_host).split(".", maxsplit=1)[0]).as_dict()['cluster']['name']
@@ -102,7 +105,8 @@ class RebootSingleVMRunner(CookbookRunnerBase):
             reboot_time = datetime.utcnow()
             self.master.run_sync('/usr/sbin/gnt-instance reboot "{vm}"'.format(vm=self.remote_host))
             self.remote_host.wait_reboot_since(reboot_time)
-            self.puppet.wait_since(reboot_time)
+            if not self.args.skip_puppet_check:
+                self.puppet.wait_since(reboot_time)
             try:
                 self.icinga_hosts.wait_for_optimal()
                 icinga_ok = True
