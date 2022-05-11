@@ -2,9 +2,10 @@
 __title__ = __doc__
 import logging
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, Iterator, List, Optional
 
 import yaml
 from cumin.transports import Command
@@ -184,6 +185,14 @@ class GridNodeInfo:
         return all(queue.is_ok() for queue in self.queues_info.values())
 
 
+class GridNodeType(Enum):
+    """Represents a grid node type."""
+
+    EXEC = "exec"
+    WEBGEN = "webgen"
+    WEBLIGHT = "weblight"
+
+
 class GridController:
     """Grid cluster controller class."""
 
@@ -336,6 +345,18 @@ class GridController:
         # call this just to report upstream an exception
         self.get_node_info(hostname)
         self._master_node.run_sync(f"exec-manage repool {hostname}", print_output=False, print_progress_bars=False)
+
+    @contextmanager
+    def with_node_depooled(self, hostname: str) -> Iterator[None]:
+        """Context manager to perform operations while the specified node is depooled.
+
+        Raises:
+            GridNodeNotFound: when the node is not found in the cluster
+
+        """
+        self.depool_node(hostname)
+        yield
+        self.pool_node(hostname)
 
     def cleanup_queue_errors(self) -> None:
         """Cleans up queue errors."""

@@ -10,14 +10,13 @@ import argparse
 import datetime
 import logging
 from dataclasses import replace
-from enum import Enum
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
 from cookbooks.wmcs import CommonOpts, DebianVersion, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.toolforge.grid import GridController
+from cookbooks.wmcs.toolforge.grid import GridController, GridNodeType
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
     CreateInstanceWithPrefix,
     InstanceCreationOpts,
@@ -27,14 +26,6 @@ from cookbooks.wmcs.vps.create_instance_with_prefix import (
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 
 LOGGER = logging.getLogger(__name__)
-
-
-class GridNodeType(Enum):
-    """Represents a grid node type."""
-
-    EXEC = "exec"
-    WEBGEN = "webgen"
-    WEBLIGHT = "weblight"
 
 
 class ToolforgeGridNodeCreateJoinPool(CookbookBase):
