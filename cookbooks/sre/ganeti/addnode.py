@@ -145,6 +145,13 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
              'remove the stale swap entry from fstab as well'),
         )
 
+        self.validate_state(
+            'grep {node} /etc/ferm/conf.d/10_ganeti_ssh_cluster'.format(node=self.fqdn),
+            ('The node cannot be found in the Ferm config of the Ganeti master.'
+             'Make sure to add it to the profile::ganeti::nodes Hiera config.'),
+            run_on_masternode=True,
+        )
+
         self.is_valid_bridge('private')
         self.is_valid_bridge('public')
 
