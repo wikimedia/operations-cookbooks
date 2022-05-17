@@ -19,6 +19,7 @@ class Operation(Enum):
     RESTART = auto()
     REBOOT = auto()
     UPGRADE = auto()
+    REIMAGE = auto()
 
 
 class RollingOperation(CookbookBase):
@@ -36,6 +37,10 @@ class RollingOperation(CookbookBase):
         (Perform a rolling reboot of codfw)
         cookbook sre.elasticsearch.rolling-operation search_codfw "codfw cluster reboot" \
                 --reboot --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
+
+        (Perform a rolling reimage of codfw)
+        cookbook sre.elasticsearch.rolling-operation search_codfw "codfw cluster reimage" \
+                --reimage --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
 
         (Perform a plugin upgrade followed by rolling restart of relforge)
         cookbook sre.elasticsearch.rolling-operation relforge "relforge elasticsearch and plugin upgrade" \
@@ -78,6 +83,8 @@ class RollingOperation(CookbookBase):
                             help='Perform a full reboot [rather than only service restarts]')
         parser.add_argument('--restart', action='store_true',
                             help='Restart Elasticsearch services')
+        parser.add_argument('--reimage', action='store_true',
+                            help='Reimage Elasticsearch host. All data will be lost!')
         parser.add_argument('--write-queue-datacenters', choices=CORE_DATACENTERS, default=CORE_DATACENTERS, nargs='+',
                             help='Manually specify a list of specific datacenters to check the '
                                  'cirrus write queue rather than checking all core datacenters (default)')
@@ -106,22 +113,26 @@ class RollingOperation(CookbookBase):
             operation = Operation.REBOOT
         elif args.restart:
             operation = Operation.RESTART
+        elif args.reimage:
+            operation = Operation.REIMAGE
         else:
             raise RuntimeError("Please specify a valid operation.")
 
         return RollingOperationRunner(
-            self.spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
-            nodes_per_run, with_lvs, wait_for_green, allow_yellow, operation)
+            self.spicerack, args.task_id, elasticsearch_clusters, clustergroup,
+            reason, start_datetime, nodes_per_run, with_lvs, wait_for_green,
+            allow_yellow, operation)
 
 
 class RollingOperationRunner(CookbookRunnerBase):
     """Apply rolling operation to cluster."""
 
     # pylint: disable=too-many-arguments
-    def __init__(self, spicerack, elasticsearch_clusters, clustergroup, reason, start_datetime,
+    def __init__(self, spicerack, task_id, elasticsearch_clusters, clustergroup, reason, start_datetime,
                  nodes_per_run, with_lvs, wait_for_green, allow_yellow, operation):
         """Create rolling operation for cluster."""
         self.spicerack = spicerack
+        self.task_id = task_id
 
         self.elasticsearch_clusters = elasticsearch_clusters
         self.clustergroup = clustergroup
@@ -161,6 +172,9 @@ class RollingOperationRunner(CookbookRunnerBase):
             remote_hosts = nodes.get_remote_hosts()
             puppet = self.spicerack.puppet(remote_hosts)
 
+            logger.info('Starting work on the next batch of nodes.')
+            logger.info('#### Please don\'t kill this cookbook now. ####')
+
             with self.spicerack.alerting_hosts(remote_hosts.hosts).downtimed(
                     self.reason, duration=timedelta(minutes=30)):
                 with puppet.disabled(self.reason):
@@ -189,6 +203,7 @@ class RollingOperationRunner(CookbookRunnerBase):
                             nodes.pool_nodes()
 
                     logger.info('wait for green on all clusters before thawing writes. If not green, still thaw writes')
+                    logger.info('#### This cookbook can be safely killed now. ####')
                     try:
                         self.elasticsearch_clusters.wait_for_green(timedelta(minutes=5))
                     except ElasticsearchClusterCheckError:
@@ -229,3 +244,11 @@ class RollingOperationRunner(CookbookRunnerBase):
 
         if self.operation is Operation.RESTART:
             nodes.start_elasticsearch()
+
+        if self.operation is Operation.REIMAGE:
+            nodeset = nodes.get_remote_hosts().hosts
+            for node in nodeset:
+                hostname = node.split('.')[0]
+                self.spicerack.run_cookbook(
+                    'sre.hosts.reimage', ['-t', self.task_id, hostname]
+                )
