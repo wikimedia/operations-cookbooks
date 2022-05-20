@@ -397,6 +397,28 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         except IcingaError:  # Do not fail here, just report it to the user, not all hosts are optimal upon reimage
             self.host_actions.warning('//Icinga status is not optimal, downtime not removed//')
 
+    def _clear_dhcp_cache(self):
+        """If the host is in eqiad's row E/F clear the DHCP and MAC caches. Workaround for T306421."""
+        if self.netbox_data['site']['slug'] != 'eqiad' or self.netbox_data['rack']['name'][:1] not in ('E', 'F'):
+            return
+
+        netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
+        iface = netbox_host.primary_ip.assigned_object
+        switch_fqdn = iface.connected_endpoint.device.primary_ip.dns_name
+        switch = self.remote.query(f'D{{{switch_fqdn}}}')
+        ip = ipaddress.ip_interface(netbox_host.primary_ip4).ip
+        mac_command = f'facter -p networking.interfaces.{iface.name}.mac'
+        result = self.remote_host.run_sync(mac_command, is_safe=True, print_progress_bars=False, print_output=False)
+        for _, output in result:
+            mac = output.message().decode().strip()
+
+        commands = [
+            f'clear dhcp relay binding {ip} routing-instance PRODUCTION',
+            f'clear ethernet-switching mac-ip-table {mac}'
+        ]
+        switch.run_sync(*commands, print_progress_bars=False)
+        self.host_actions.success('Cleared switch DHCP cache and MAC table for the host IP and MAC (row E/F)')
+
     def _update_netbox_data(self):
         """Update Netbox data from PuppetDB running the Netbox script."""
         # Apparently pynetbox doesn't allow to execute a Netbox script
@@ -536,6 +558,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if self.netbox_server.status == 'planned':
             self.netbox_server.status = 'staged'
             self.host_actions.success('Updated Netbox status planned -> staged')
+
+        self._clear_dhcp_cache()
 
         # Comment on the Phabricator task
         logger.info('Reimage completed:\n%s\n', self.actions)
