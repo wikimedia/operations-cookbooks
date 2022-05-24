@@ -32,7 +32,7 @@ class Reimage(CookbookBase):
     All data will be lost unless a specific partman recipe to retain partition data is used.
 
     Usage:
-        cookbook sre.hosts.reimage -t T12345 example1001
+        cookbook sre.hosts.reimage --os bullseye -t T12345 example1001
     """
 
     def argument_parser(self):
