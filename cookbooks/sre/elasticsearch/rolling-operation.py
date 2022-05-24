@@ -249,6 +249,10 @@ class RollingOperationRunner(CookbookRunnerBase):
             nodeset = nodes.get_remote_hosts().hosts
             for node in nodeset:
                 hostname = node.split('.')[0]
-                self.spicerack.run_cookbook(
+                ret_val = self.spicerack.run_cookbook(
                     'sre.hosts.reimage', ['--os', 'bullseye', '-t', self.task_id, hostname]
                 )
+
+                if ret_val != 0:
+                    print("Got non-zero exit code of {} for reimage cookbook on host {}".format(ret_val, hostname))
+                    print("Letting the cookbook keep doing its thing, operator can decide what to do later")
