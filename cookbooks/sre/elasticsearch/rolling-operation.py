@@ -250,5 +250,5 @@ class RollingOperationRunner(CookbookRunnerBase):
             for node in nodeset:
                 hostname = node.split('.')[0]
                 self.spicerack.run_cookbook(
-                    'sre.hosts.reimage', ['-t', self.task_id, hostname]
+                    'sre.hosts.reimage', ['--os', 'bullseye', '-t', self.task_id, hostname]
                 )
