@@ -144,11 +144,11 @@ class NFSAddServerRunner(CookbookRunnerBase):
         current_roles = response["roles"]
 
         # Add nfs volume
-        current_hiera["profile::wcms::nfs::standalone::volumes"] = [self.volume]
+        current_hiera["profile::wmcs::nfs::standalone::volumes"] = [self.volume]
         if self.create_storage_volume_size > 0:
-            current_hiera["profile::wcms::nfs::standalone::cinder_attached"] = True
+            current_hiera["profile::wmcs::nfs::standalone::cinder_attached"] = True
         else:
-            current_hiera["profile::wcms::nfs::standalone::cinder_attached"] = False
+            current_hiera["profile::wmcs::nfs::standalone::cinder_attached"] = False
         current_hiera["mount_nfs"] = False
 
         current_hiera_str = json.dumps(current_hiera)

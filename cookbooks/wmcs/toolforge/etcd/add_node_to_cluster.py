@@ -49,13 +49,13 @@ class AddNodeToCluster(CookbookBase):
         parser.add_argument(
             "--new-member-fqdn",
             required=True,
-            help=("Fully quialified domain name of the member to add."),
+            help=("Fully qualified domain name of the member to add."),
         )
         parser.add_argument(
             "--skip-puppet-bootstrap",
             action="store_true",
             help=(
-                "Skip all the puppet bootstraping section, useful if you "
+                "Skip all the puppet bootstrapping section, useful if you "
                 "already did it and you are rerunning, or if you did it "
                 "manually"
             ),
@@ -190,7 +190,7 @@ class AddNodeToClusterRunner(CookbookRunnerBase):
         etcd_prefix = self.etcd_prefix if self.etcd_prefix is not None else f"{self.project}-k8s-etcd"
 
         if not self.skip_puppet_bootstrap:
-            LOGGER.info("Bootstraping puppet on the new member. Note that etcd will not be able to start yet.")
+            LOGGER.info("Bootstrapping puppet on the new member. Note that etcd will not be able to start yet.")
             refresh_puppet_certs_cookbook = RefreshPuppetCerts(spicerack=self.spicerack)
             refresh_puppet_certs_cookbook.get_runner(
                 args=refresh_puppet_certs_cookbook.argument_parser().parse_args(["--fqdn", self.new_member_fqdn]),
@@ -217,7 +217,7 @@ class AddNodeToClusterRunner(CookbookRunnerBase):
 
         etcd_members = list(sorted(hiera_data["profile::toolforge::k8s::etcd_nodes"], key=natural_sort_key))
         if self.skip_puppet_bootstrap:
-            LOGGER.info("Skipping the refresh of all the ssl certs in the cluster " "(--skip-puppet-bootstrap)")
+            LOGGER.info("Skipping the refresh of all the ssl certs in the cluster (--skip-puppet-bootstrap)")
         else:
             LOGGER.info("Refreshing certs on all etcd members (to get the new alt-names)")
             self._do_puppet_bootstrap(
@@ -227,7 +227,7 @@ class AddNodeToClusterRunner(CookbookRunnerBase):
 
         existing_etcd_member_fqdn = etcd_members[0]
         # this might happen when the new member is number 10, as the sorting is
-        # alphadecimal, so 10 goes before 1
+        # alphabetical, so 10 goes before 1
         if existing_etcd_member_fqdn == self.new_member_fqdn:
             existing_etcd_member_fqdn = etcd_members[1]
 

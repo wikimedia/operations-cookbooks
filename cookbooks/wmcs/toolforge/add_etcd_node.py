@@ -47,7 +47,7 @@ class ToolforgeAddEtcdNode(CookbookBase):
             "--skip-puppet-bootstrap",
             action="store_true",
             help=(
-                "Skip all the puppet bootstraping section, useful if you already did it and you are rerunning, or if "
+                "Skip all the puppet bootstrapping section, useful if you already did it and you are rerunning, or if "
                 "you did it manually."
             ),
         )

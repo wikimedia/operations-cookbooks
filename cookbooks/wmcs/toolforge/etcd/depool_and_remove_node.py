@@ -49,7 +49,7 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
         parser.add_argument(
             "--fqdn-to-remove",
             required=False,
-            help="FQDN of the node to remove, if none passed will remove the intance with the lower index.",
+            help="FQDN of the node to remove, if none passed will remove the instance with the lower index.",
         )
         parser.add_argument(
             "--etcd-prefix",

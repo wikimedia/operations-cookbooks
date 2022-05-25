@@ -48,7 +48,7 @@ def parser_type_list_hostnames(valuelist: List[str]):
 
 
 def parser_type_str_hostname(value: str):
-    """Validates datatype in arparser if a string is a hostname."""
+    """Validates datatype in argparser if a string is a hostname."""
     if "." in value:
         raise argparse.ArgumentTypeError(f"'{value}' contains a dot, likely not a short hostname")
 
@@ -116,7 +116,7 @@ def add_common_opts(parser: argparse.ArgumentParser, project_default: str = "adm
 
 
 def with_common_opts(spicerack: Spicerack, args: argparse.Namespace, runner: Callable) -> Callable:
-    """Helper to add CommonOpts to a cookbook instantation."""
+    """Helper to add CommonOpts to a cookbook instantiation."""
     no_dologmsg = bool(spicerack.dry_run or args.no_dologmsg)
 
     common_opts = CommonOpts(project=args.project, task_id=args.task_id, no_dologmsg=no_dologmsg)
@@ -142,7 +142,7 @@ class OpenstackMigrationError(OpenstackError):
 
 
 class OpenstackRuleDirection(Enum):
-    """Directior for the security group roule."""
+    """Direction for the security group rule."""
 
     INGRESS = auto()
     EGRESS = auto()
@@ -158,7 +158,7 @@ class OpenstackServerGroupPolicy(Enum):
 
 
 class OpenstackAPI:
-    """Class to interact with the Openstack API (undirectly for now)."""
+    """Class to interact with the Openstack API (indirectly for now)."""
 
     def __init__(
         self, remote: Remote, control_node_fqdn: str = "cloudcontrol1003.wikimedia.org", project: OpenstackName = ""
@@ -198,7 +198,7 @@ class OpenstackAPI:
     ) -> Dict[str, Any]:
         """Run an openstack command on a control node forcing json output.
 
-        Returns a dict with the formatted output (lodaded from json), usually for show commands.
+        Returns a dict with the formatted output (loaded from json), usually for show commands.
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
 
@@ -225,7 +225,7 @@ class OpenstackAPI:
     ) -> List[Any]:
         """Run an openstack command on a control node forcing json output.
 
-        Returns a list with the formatted output (lodaded from json), usually for `list` commands.
+        Returns a list with the formatted output (loaded from json), usually for `list` commands.
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
 
@@ -274,7 +274,7 @@ class OpenstackAPI:
     def attach_service_ip(
         self, ip_address: str, server_port_id: OpenstackIdentifier, **kwargs
     ) -> Dict[OpenstackName, Any]:
-        """Attach a specified service ip address to the specifed port
+        """Attach a specified service ip address to the specified port
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
@@ -291,7 +291,7 @@ class OpenstackAPI:
     def detach_service_ip(
         self, ip_address: str, mac_addr: str, server_port_id: OpenstackIdentifier, **kwargs
     ) -> Dict[str, Any]:
-        """Detach a specified service ip address from the specifed port
+        """Detach a specified service ip address from the specified port
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
@@ -307,7 +307,7 @@ class OpenstackAPI:
 
     def port_get(self, ip_address, **kwargs) -> List[Dict[str, Any]]:
         """Get port for specified IP address"""
-        ip_filter = '--fixed-ip="ip-address=%s"' % ip_address
+        ip_filter = f'--fixed-ip="ip-address={ip_address}"'
         return self._run_formatted_as_list("port", "list", ip_filter, **kwargs)
 
     def zone_get(self, name, **kwargs) -> List[Dict[str, Any]]:
@@ -357,9 +357,9 @@ class OpenstackAPI:
     def server_delete(self, name_to_remove: OpenstackName) -> None:
         """Delete a server.
 
-        Note that the name_to_remove is the name of the node as registeredin
+        Note that the name_to_remove is the name of the node as registered in
         Openstack, that's probably not the FQDN (and hopefully the hostname,
-        but maybo not).
+        but maybe not).
         """
         self._run_raw("server", "delete", name_to_remove, is_safe=False)
 
@@ -535,7 +535,7 @@ class OpenstackAPI:
     def server_group_by_name(self, name: OpenstackName, **kwargs) -> Optional[Dict[str, Any]]:
         """Retrieve the server group info given a name.
 
-        Raises OpenstackNotFound if thereś no server group found with the given name.
+        Raises OpenstackNotFound if there's no server group found with the given name.
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
@@ -691,7 +691,7 @@ class CephOSDFlag(Enum):
     # avoid snapshot trimming (async deletion of objects from deleted
     # snapshots)
     NOSNAPTRIM = "nosnaptrim"
-    # explitic hard limit the pg log (don't use, deprecated feature)
+    # explicit hard limit the pg log (don't use, deprecated feature)
     PGLOG_HARDLIMIT = "pglog_hardlimit"
 
 
@@ -1004,7 +1004,7 @@ class KubernetesError(Exception):
     """Parent class for all kubernetes related errors."""
 
 
-class KubernetesMalformedCluterInfo(KubernetesError):
+class KubernetesMalformedClusterInfo(KubernetesError):
     """Risen when the gotten cluster info is not formatted as expected."""
 
 
@@ -1053,7 +1053,7 @@ class KubernetesClusterInfo:
                 metrics_url = line.rsplit(" ", 1)[-1]
 
         if master_url is None or dns_url is None or metrics_url is None:
-            raise KubernetesMalformedCluterInfo(f"Unable to parse cluster info:\n{raw_output}")
+            raise KubernetesMalformedClusterInfo(f"Unable to parse cluster info:\n{raw_output}")
 
         return cls(master_url=master_url, dns_url=dns_url, metrics_url=metrics_url)
 
@@ -1076,7 +1076,7 @@ class KubernetesController:
         raw_output = run_one_raw(
             # cluster-info does not support json output format (there's a dump
             # command, but it's too verbose)
-            command=["kubectl", "custer-info"],
+            command=["kubectl", "cluster-info"],
             node=self._controlling_node,
         )
         return KubernetesClusterInfo.form_cluster_info_output(raw_output=raw_output)
@@ -1355,7 +1355,7 @@ def run_one_formatted(
 
 def simple_create_file(dst_node: RemoteHosts, contents: str, remote_path: str, use_root: bool = True) -> None:
     """Creates a file on the remote host/hosts with the given content."""
-    # this makes it esier to get away with quotes or similar
+    # this makes it easier to get away with quotes or similar
     base64_content = base64.b64encode(contents.encode("utf8"))
     full_command = ["echo", f"'{base64_content.decode()}'", "|", "base64", "--decode", "|"]
     if use_root:

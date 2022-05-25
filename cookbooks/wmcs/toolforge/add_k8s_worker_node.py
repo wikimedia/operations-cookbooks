@@ -149,7 +149,7 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         node = self.spicerack.remote().query(f"D{{{new_member.server_fqdn}}}", use_sudo=True)
 
         device = "/dev/sdb"
-        LOGGER.info("Making sure %s is ext4, docker ovelay storage needs it", device)
+        LOGGER.info("Making sure %s is ext4, docker overlay storage needs it", device)
         node.run_sync(
             # we have to remove the mount from fstab as the fstype will be wrong
             Command(

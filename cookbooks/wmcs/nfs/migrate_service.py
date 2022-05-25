@@ -127,14 +127,14 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
             )
 
         if (
-            "profile::wcms::nfs::standalone::volumes" not in from_hiera
-            or len(from_hiera["profile::wcms::nfs::standalone::volumes"]) != 1
+            "profile::wmcs::nfs::standalone::volumes" not in from_hiera
+            or len(from_hiera["profile::wmcs::nfs::standalone::volumes"]) != 1
         ):
             raise Exception(
-                f"Server {self.from_fqdn} must have exactly one value set for profile::wcms::nfs::standalone::volumes."
+                f"Server {self.from_fqdn} must have exactly one value set for profile::wmcs::nfs::standalone::volumes."
             )
 
-        mount_name = from_hiera["profile::wcms::nfs::standalone::volumes"][0]
+        mount_name = from_hiera["profile::wmcs::nfs::standalone::volumes"][0]
 
         response = run_one_as_dict(
             node=control_node,
@@ -152,22 +152,22 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
             )
 
         if (
-            "profile::wcms::nfs::standalone::volumes" not in to_hiera
-            or len(to_hiera["profile::wcms::nfs::standalone::volumes"]) != 1
-            or to_hiera["profile::wcms::nfs::standalone::volumes"][0] != mount_name
+            "profile::wmcs::nfs::standalone::volumes" not in to_hiera
+            or len(to_hiera["profile::wmcs::nfs::standalone::volumes"]) != 1
+            or to_hiera["profile::wmcs::nfs::standalone::volumes"][0] != mount_name
         ):
             raise Exception(
-                f"Server {self.to_fqdn} must have profile::wcms::nfs::standalone::volumes: ['{mount_name}']"
+                f"Server {self.to_fqdn} must have profile::wmcs::nfs::standalone::volumes: ['{mount_name}']"
             )
 
         if (
-            "profile::wcms::nfs::standalone::cinder_attached" in to_hiera
-            and to_hiera["profile::wcms::nfs::standalone::cinder_attached"]
+            "profile::wmcs::nfs::standalone::cinder_attached" in to_hiera
+            and to_hiera["profile::wmcs::nfs::standalone::cinder_attached"]
             and not self.force
         ):
             raise Exception(
                 f"Server {self.to_fqdn} already seems to have a volume attached "
-                "(profile::wcms::nfs::standalone::cinder_attached=True)"
+                "(profile::wmcs::nfs::standalone::cinder_attached=True)"
             )
 
         # locate the service IP
@@ -235,7 +235,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
             )
 
         # Tell puppet that cinder is detached on the old host and attached on the new one
-        from_hiera["profile::wcms::nfs::standalone::cinder_attached"] = False
+        from_hiera["profile::wmcs::nfs::standalone::cinder_attached"] = False
         from_hiera_str = json.dumps(from_hiera)
 
         run_one_raw(
@@ -252,7 +252,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
             is_safe=True,
         )
 
-        to_hiera["profile::wcms::nfs::standalone::cinder_attached"] = True
+        to_hiera["profile::wmcs::nfs::standalone::cinder_attached"] = True
         to_hiera_str = json.dumps(to_hiera)
         run_one_raw(
             node=control_node,

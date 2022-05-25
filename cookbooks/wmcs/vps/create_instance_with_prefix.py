@@ -146,14 +146,14 @@ def add_instance_creation_options(parser: argparse.ArgumentParser) -> argparse.A
 
 
 def with_instance_creation_options(args: argparse.Namespace, runner: Callable) -> Callable:
-    """Wraps a CookbookRunnerBase to pass to it the intance creation options.
+    """Wraps a CookbookRunnerBase to pass to it the instance creation options.
 
     This allows to fully encapsulate the instance creation options and avoid the need to change anything in the code
     that uses them (ex. if you add a new option to the creation options).
 
     Example:
     >> class MyCookbook(CookbookBase):
-    >>     def agrument_parser(self) -> argparse.ArgumentParser:
+    >>     def argument_parser(self) -> argparse.ArgumentParser:
     >>         my_parser = add_instance_creation_options(ArgumentParser(...))
     >>         # Add your options/arguments
     >>         my_parser.add_argument("--my-option1", default=None)
@@ -295,7 +295,7 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
 
         else:
             # the trimming by length of the prefix allows prefixes with trailing integers (ex. tools-sgeexec-09)
-            # so 1 will be extracted as id, instead of 901 for tools-sgexec-0901
+            # so 1 will be extracted as id, instead of 901 for tools-sgeexec-0901
             last_prefix_member_id = max(
                 int(member["Name"][len(self.prefix) :].rsplit("-", 1)[-1]) for member in other_prefix_members
             )
