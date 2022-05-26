@@ -27,7 +27,8 @@ class RollingOperation(CookbookBase):
 
     Will perform Elasticsearch service restarts by default.
     Optionally perform a full reboot instead of just service restarts,
-    and additionally can optionally perform a plugin upgrade in addition to the restart or reboot.
+    or perform a reimage of the cluster instead,
+    and additionally can optionally perform a plugin upgrade in addition to the restart/reboot/reimage.
 
     Usage examples:
         (Perform a rolling restart of eqiad)
@@ -37,6 +38,14 @@ class RollingOperation(CookbookBase):
         (Perform a rolling reboot of codfw)
         cookbook sre.elasticsearch.rolling-operation search_codfw "codfw cluster reboot" \
                 --reboot --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
+
+        (Perform a rolling reimage of relforge)
+        cookbook sre.elasticsearch.rolling-operation relforge "relforge cluster reimage" \
+                --reimage --nodes-per-run 1 --start-datetime 2021-03-24T23:55:35 --task-id T274204
+
+        (Perform a rolling reimage of cloudelastic)
+        cookbook sre.elasticsearch.rolling-operation cloudelastic "cloudelastic cluster reimage" \
+                --reimage --nodes-per-run 2 --start-datetime 2021-03-24T23:55:35 --task-id T274204
 
         (Perform a rolling reimage of codfw)
         cookbook sre.elasticsearch.rolling-operation search_codfw "codfw cluster reimage" \
