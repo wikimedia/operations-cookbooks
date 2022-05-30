@@ -95,7 +95,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
                 time.sleep(30)
             reboot_time = datetime.utcnow()
             self.remote_host.reboot()
-            self.remote_host.wait_reboot_since(reboot_time)
+            self.remote_host.wait_reboot_since(reboot_time, print_progress_bars=False)
             self.puppet.wait_since(reboot_time)
 
             # First let's try to check if icinga is already in optimal state.
