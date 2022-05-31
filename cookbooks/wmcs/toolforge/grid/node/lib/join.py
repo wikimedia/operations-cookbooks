@@ -5,7 +5,6 @@ Usage example:
         --project toolsbeta \\
         --nodes-query toolsbeta-sgewebgen-09-2,toolsbeta-sgeweblight-10-[10-12]
 """
-# pylint: disable=too-many-arguments
 import argparse
 import logging
 from typing import Optional
@@ -108,16 +107,16 @@ class ToolforgeGridNodeJoinRunner(CookbookRunnerBase):
     def run(self) -> Optional[int]:
         """Main entry point"""
         try:
-            remote_hosts = self.spicerack.remote().query("D{%s}" % (self.nodes_query))
+            remote_hosts = self.spicerack.remote().query(f"D{{{self.nodes_query}}}")
             requested_nodes = remote_hosts.hosts
         except InvalidQueryError as exc:
-            LOGGER.error(f"ERROR: invalid query: {exc}")
+            LOGGER.error("ERROR: invalid query: %s", exc)
             return 1
         except NodeSetParseError as exc:
-            LOGGER.error(f"ERROR: unable to parse nodeset syntax: {exc}")
+            LOGGER.error("ERROR: unable to parse nodeset syntax: %s", exc)
             return 1
         except RemoteError as exc:
-            LOGGER.error(f"ERROR: the cumin query failed: {exc.__context__}")
+            LOGGER.error("ERROR: the cumin query failed: %s", exc.__context__)
             return 1
 
         openstack_api = OpenstackAPI(

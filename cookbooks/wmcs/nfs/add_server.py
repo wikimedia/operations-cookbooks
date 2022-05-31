@@ -8,7 +8,7 @@ Usage example:
         toolsbeta-home toolsbeta-project
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
+# pylint: disable=too-many-locals,too-many-arguments
 import argparse
 import json
 import logging

@@ -109,7 +109,7 @@ class ToolforgeComponentBuildRunner(CookbookRunnerBase):
         docker_image_tag: str,
         docker_image_name: str,
         spicerack: Spicerack,
-    ):
+    ):  # pylint: disable=too-many-arguments
         """Init"""
         self.common_opts = common_opts
         self.registry_url = registry_url

@@ -94,7 +94,7 @@ class ToolforgeComponentDeployRunner(CookbookRunnerBase):
         git_branch: str,
         deployment_command: str,
         spicerack: Spicerack,
-    ):
+    ):  # pylint: disable=too-many-arguments
         """Init"""
         self.common_opts = common_opts
         self.deploy_node_hostname = deploy_node_hostname

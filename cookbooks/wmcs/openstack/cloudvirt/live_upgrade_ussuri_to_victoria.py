@@ -4,7 +4,6 @@ Usage example: wmcs.openstack.cloudvirt.live_upgrade_ussuri_to_victoria \
     --fqdn-to-upgrade cloudvirt1013.eqiad.wmnet
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import logging
 
@@ -86,4 +85,4 @@ class LiveUpgradeRunner(CookbookRunnerBase):
         LOGGER.info(
             "Those were the last lines of the journal, make sure everyting looks ok before upgrading the next host."
         )
-        LOGGER.info(f"{self.fqdn_to_upgrade} Done!!! \\o/")
+        LOGGER.info("%s Done!!! \\o/", self.fqdn_to_upgrade)

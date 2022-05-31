@@ -5,7 +5,7 @@ Usage example: wmcs.openstack.cloudvirt.unset_maintenance \
     --fqdn cloudvirt1013.eqiad.wmnet
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
+# pylint: disable=too-many-arguments
 import argparse
 import logging
 from typing import Optional

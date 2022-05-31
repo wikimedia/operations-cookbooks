@@ -81,13 +81,13 @@ class ToolforgeGridNodePoolRunner(CookbookRunnerBase):
     def run(self) -> Optional[int]:
         """Main entry point"""
         try:
-            remote_hosts = self.spicerack.remote().query("D{%s}" % (self.nodes_query))
+            remote_hosts = self.spicerack.remote().query(f"D{{{self.nodes_query}}}")
             requested_nodes = remote_hosts.hosts
         except InvalidQueryError as exc:
-            LOGGER.error(f"invalid query: {exc}")
+            LOGGER.error("invalid query: %s", exc)
             return 1
         except NodeSetParseError as exc:
-            LOGGER.error(f"invalid query: {exc}")
+            LOGGER.error("invalid query: %s", exc)
             return 1
 
         openstack_api = OpenstackAPI(
@@ -103,7 +103,7 @@ class ToolforgeGridNodePoolRunner(CookbookRunnerBase):
         for node in set(requested_nodes) - set(actual_nodes):
             LOGGER.warning("node %s is not a VM in project %s, ignoring", node, self.common_opts.project)
 
-        self._grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
+        _grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.grid_master_fqdn)
 
         counter = 0
         for hostname in actual_nodes:
@@ -113,7 +113,7 @@ class ToolforgeGridNodePoolRunner(CookbookRunnerBase):
                 continue
 
             try:
-                self._grid_controller.pool_node(hostname=hostname)
+                _grid_controller.pool_node(hostname=hostname)
                 LOGGER.info("repooled node %s", hostname)
                 counter += 1
             except GridNodeNotFound:

@@ -1,13 +1,12 @@
 """WMCS openstack - Safely reboot a cloudvirt node.
 
-This icludes putting in maintenance, draining, and unsetting maintenance.
+This includes putting in maintenance, draining, and unsetting maintenance.
 
 Usage example: wmcs.openstack.cloudvirt.safe_reboot \
     --control-node-fqdn cloudcontrol1003.wikimedia.org \
     --fqdn cloudvirt1013.eqiad.wmnet
 
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import logging
 from datetime import datetime

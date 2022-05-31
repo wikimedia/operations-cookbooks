@@ -10,7 +10,6 @@ Usage example:
 the old and new hosts must already have been created using similar add_server
 calls such that they have the same puppet/hiera config.
 """
-# pylint: disable=unsubscriptable-object,too-many-arguments
 import argparse
 import json
 import logging
@@ -80,15 +79,11 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         self.project = project
         self.force = force
         self.spicerack = spicerack
-
-    def run(self) -> None:
-        """Main entry point"""
-        openstack_api = OpenstackAPI(
+        self.openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(), control_node_fqdn="cloudcontrol1003.wikimedia.org", project=self.project
         )
-
-        self.from_server = openstack_api.server_from_id(self.from_id)
-        self.to_server = openstack_api.server_from_id(self.to_id)
+        self.from_server = self.openstack_api.server_from_id(self.from_id)
+        self.to_server = self.openstack_api.server_from_id(self.to_id)
 
         self.from_name = self.from_server["name"]
         self.to_name = self.to_server["name"]
@@ -96,12 +91,14 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         self.from_fqdn = f"{self.from_name}.{self.project}.eqiad1.wikimedia.cloud"
         self.to_fqdn = f"{self.to_name}.{self.project}.eqiad1.wikimedia.cloud"
 
+    def run(self) -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+        """Main entry point"""
         if not self.from_server["volumes_attached"] and self.force:
             LOGGER.warning("Source server has no volume attached, checking if target already has an attachment")
             volume_id = self.to_server["volumes_attached"][0]["id"]
         else:
             volume_id = self.from_server["volumes_attached"][0]["id"]
-        volume = openstack_api.volume_from_id(volume_id)
+        volume = self.openstack_api.volume_from_id(volume_id)
         volume_name = volume["name"]
 
         from_node = self.spicerack.remote().query(f"D{{{self.from_fqdn}}}", use_sudo=True)
@@ -175,15 +172,15 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         service_ip = run_one_raw(node=to_node, command=["dig", "+short", service_fqdn], last_line_only=True).strip()
         if not service_ip:
             raise Exception(f"Unable to resolve service ip for service name {service_fqdn}")
-        service_ip_port = openstack_api.port_get(service_ip)[0]
+        service_ip_port = self.openstack_api.port_get(service_ip)[0]
 
         if service_ip_port["Name"] != mount_name:
             raise Exception(f"service ip name mismatch. Expected {mount_name}, found {service_ip_port['Name']}")
 
         to_ip = run_one_raw(node=to_node, command=["dig", "+short", self.to_fqdn], last_line_only=True).strip()
-        to_port = openstack_api.port_get(to_ip)
+        to_port = self.openstack_api.port_get(to_ip)
         from_ip = run_one_raw(node=to_node, command=["dig", "+short", self.from_fqdn], last_line_only=True).strip()
-        from_port = openstack_api.port_get(from_ip)
+        from_port = self.openstack_api.port_get(from_ip)
 
         # See if wmcs-prepare-cinder-volume has already been run on the target host
         volume_path = f"/srv/{mount_name}"
@@ -209,11 +206,11 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
             run_one_raw(node=from_node, command=["umount", volume_path])
 
         try:
-            openstack_api.volume_detach(self.from_id, volume_id)
-            openstack_api.volume_attach(self.to_id, volume_id)
-        except Exception as error:
+            self.openstack_api.volume_detach(self.from_id, volume_id)
+            self.openstack_api.volume_attach(self.to_id, volume_id)
+        except Exception as error:  # pylint: disable=broad-except
             if not self.force:
-                LOGGER.warning("Ignoring exception due to --force: %s" % error)
+                LOGGER.warning("Ignoring exception due to --force: %s", error)
                 raise error
 
         if volume_prepared:
@@ -270,11 +267,11 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
 
         # Move the service ip
         try:
-            openstack_api.detach_service_ip(service_ip, from_port[0]["MAC Address"], from_port[0]["ID"])
-            openstack_api.attach_service_ip(service_ip, to_port[0]["ID"])
-        except Exception as error:
+            self.openstack_api.detach_service_ip(service_ip, from_port[0]["MAC Address"], from_port[0]["ID"])
+            self.openstack_api.attach_service_ip(service_ip, to_port[0]["ID"])
+        except Exception as error:  # pylint: disable=broad-except
             if not self.force:
-                LOGGER.warning("Ignoring exception due to --force: %s" % error)
+                LOGGER.warning("Ignoring exception due to --force: %s", error)
                 raise error
 
         # Apply all pending puppet changes
