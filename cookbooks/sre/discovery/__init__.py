@@ -147,7 +147,7 @@ def update_ttl(dnsdisc: Discovery, new_ttl: int) -> int:
 
     """
     # Get the old TTL
-    old_ttl = max([r.ttl for r in dnsdisc.resolve()])
+    old_ttl = max(r.ttl for r in dnsdisc.resolve())
     if old_ttl == new_ttl:
         logger.info('TTL already set to %d, nothing to do', new_ttl)
     else:

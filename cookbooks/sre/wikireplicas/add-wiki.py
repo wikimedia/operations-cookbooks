@@ -39,7 +39,7 @@ def run(args, spicerack):
     remote = spicerack.remote()
     replicas = remote.query("A:wikireplicas-all")
     s7_replicas = remote.query(
-        ("P{R:Profile::Mariadb::Section = 's7'} and " "P{P:wmcs::db::wikireplicas::mariadb_multiinstance}")
+        ("P{R:Profile::Mariadb::Section = 's7'} and P{P:wmcs::db::wikireplicas::mariadb_multiinstance}")
     )
     # Get a cloudcontrol host to run the DNS update on
     cloudcontrol = remote.query("A:cloudcontrol")
