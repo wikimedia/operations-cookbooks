@@ -322,7 +322,7 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
             security_group_ids=[default_security_group_id, security_group_id],
             server_group_id=server_group_id,
             image=self.image or other_prefix_members[-1]["Image"],
-            network=self.network or other_prefix_members[-1]["Networks"].split("=", 1)[0],
+            network=self.network or list(other_prefix_members[-1]["Networks"].keys())[0],
             name=new_prefix_member_name,
         )
 
