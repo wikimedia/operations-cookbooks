@@ -78,9 +78,9 @@ class NetworkTests(CookbookBase):
 class NetworkTestRunner(CookbookRunnerBase):
     """Runner for NetworkTests"""
 
-    def __init__(self, deployment: str, spicerack: Spicerack):
+    def __init__(self, deployment: Deployment, spicerack: Spicerack):
         """Init"""
-        self.deployment: Deployment = Deployment[deployment]
+        self.deployment: Deployment = deployment
         self.spicerack = spicerack
 
     def run(self) -> Optional[int]:
