@@ -87,7 +87,7 @@ class RollRestartVarnishRunner(SRELBBatchRunnerBase):
         if self._args.threads_limited is not None:
             threads = f' with threads_limited > {self._args.threads_limited}'
 
-        return f'rolling restart of Varnish on {len(self.hosts)} hosts{threads} matching query {query}'
+        return f'rolling restart of Varnish on {len(self.all_hosts)} hosts{threads} matching query {query}'
 
     @property
     def restart_daemons(self):

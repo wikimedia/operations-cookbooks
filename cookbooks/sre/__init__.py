@@ -8,8 +8,9 @@ from math import ceil
 from time import sleep
 from typing import List, Union
 
-from cumin import nodeset, NodeSet
+from cumin import nodeset, NodeSet, nodeset_fromlist
 from spicerack import Spicerack
+from spicerack.administrative import Reason
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.icinga import IcingaError
 from spicerack.remote import RemoteHosts
@@ -90,7 +91,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
     grace_sleep = 1
     valid_actions = ('reboot', 'restart_daemons')
 
-    def argument_parser(self) -> Namespace:
+    def argument_parser(self) -> ArgumentParser:
         """Parse arguments"""
         parser = ArgumentParser(
             description=self.__doc__, formatter_class=ArgparseFormatter
@@ -140,7 +141,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
 
 
 class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
-    """Reboot Runner Base class preforming generic actions to reboot a batch of hosts
+    """Reboot Runner Base class performing generic actions to reboot a batch of hosts
 
     At the very least children must implement the `allowed_aliases` property to return a list of
     aliases that the specific cookbook is allowed to execute on.
@@ -176,29 +177,34 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         self._args = args
         self._spicerack = spicerack
         self.logger = getLogger('.'.join((self.__module__, self.__class__.__name__)))
-        self.query = self._query()
-        self.logger.debug('Effective remote query is: %s', self.query)
-        self.hosts = self._spicerack.remote().query(self.query)
-        if not self.hosts:
-            raise ValueError(f'Cumin query ({self.query}) matched zero hosts')
+        self.host_groups = self._hosts()
+        self.all_hosts = nodeset_fromlist(group.hosts for group in self.host_groups)
+        self.results = Results(action=args.action, hosts=self.all_hosts)
 
-        self.puppet = spicerack.puppet(self.hosts)
-        self.number_of_batches = ceil(len(self.hosts.hosts) / args.batchsize)
-        self.results = Results(action=args.action, hosts=self.hosts.hosts)
-
-        reason = f'{args.action} {self.hosts.hosts}: {args.reason}'
-        self.reason = self._spicerack.admin_reason(reason, args.task_id)
+    def _reason(self, hosts: NodeSet) -> Reason:
+        """Return the reason for administrative actions on given hosts"""
+        reason = f'{self._args.action} {hosts}: {self._args.reason}'
+        return self._spicerack.admin_reason(reason, self._args.task_id)
 
     @property
     def runtime_description(self) -> str:
         """Required by spicerack api."""
-        return f'rolling {self._args.action} on {self.query}'
+        return f'rolling {self._args.action} on {self._query()}'
 
     def _query(self) -> str:
         """Return the formatted query"""
         if self._args.query is not None:
             return f'{self._args.query} and {self.allowed_aliases_query}'
         return f'A:{self._args.alias}'
+
+    def _hosts(self) -> List[RemoteHosts]:
+        """Return a list of RemoteHosts to sequentially operate on"""
+        query = self._query()
+        self.logger.debug('Effective remote query is: %s', query)
+        hosts = self._spicerack.remote().query(query)
+        if not hosts:
+            raise ValueError(f'Cumin query ({query}) matched zero hosts')
+        return [hosts]
 
     @property
     def restart_daemons(self) -> List:
@@ -250,13 +256,15 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         else:
             restart_cmds = [f"{systemd_cmd} restart {' '.join(self.restart_daemons)}"]
 
+        reason = self._reason(hosts.hosts)
+        puppet = self._spicerack.puppet(hosts.hosts)
         icinga_hosts = self._spicerack.icinga_hosts(hosts.hosts)
         alerting_hosts = self._spicerack.alerting_hosts(hosts.hosts)
         try:
             duration = timedelta(minutes=20)
-            with alerting_hosts.downtimed(self.reason, duration=duration):
+            with alerting_hosts.downtimed(reason, duration=duration):
                 if self.disable_puppet_on_restart:
-                    with self.puppet.disabled(self.reason):
+                    with puppet.disabled(reason):
                         confirm_on_failure(hosts.run_sync, *restart_cmds)
                 else:
                     confirm_on_failure(hosts.run_sync, *restart_cmds)
@@ -284,12 +292,13 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             hosts (`NodeSet`): A list of hosts to reboot
 
         """
+        reason = self._reason(hosts)
         puppet = self._spicerack.puppet(hosts)
         icinga_hosts = self._spicerack.icinga_hosts(hosts.hosts)
         alerting_hosts = self._spicerack.alerting_hosts(hosts.hosts)
         try:
             duration = timedelta(minutes=20)
-            with alerting_hosts.downtimed(self.reason, duration=duration):
+            with alerting_hosts.downtimed(reason, duration=duration):
                 reboot_time = datetime.utcnow()
                 confirm_on_failure(hosts.reboot, batch_size=len(hosts))
                 hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
@@ -335,7 +344,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                 raise
 
     def pre_action(self, hosts: RemoteHosts) -> None:
-        """Run this function before preforming the action on the batch of hosts
+        """Run this function before performing the action on the batch of hosts
 
         By default this function will run:
             self._run_scripts(hosts, self.pre_scripts)
@@ -347,7 +356,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         self._run_scripts(self.pre_scripts, hosts)
 
     def action(self, hosts: RemoteHosts) -> None:
-        """The main action to preform e.g. reboot, restart a service etc
+        """The main action to perform e.g. reboot, restart a service etc
 
         Arguments:
             hosts (`RemoteHosts`): a list of functions to run
@@ -359,7 +368,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             self._restart_daemons(hosts)
 
     def post_action(self, hosts: RemoteHosts) -> None:
-        """Run this function after preforming the action on the batch of hosts
+        """Run this function after performing the action on the batch of hosts
 
         By default this function will run:
             self._run_scripts(hosts, self.post_scripts)
@@ -370,25 +379,37 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         """
         self._run_scripts(self.post_scripts, hosts)
 
+    def group_action(self, host_group_idx, number_of_batches: int) -> None:
+        """Action to perform once for every host group, right before working on the first batch
+
+        Arguments:
+            host_group_idx (`int`): the index of the current host group in self.host_groups
+            number_of_batches (`int`): the total number of batches in this host group
+
+        """
+
     def batch_action(self) -> None:
-        """Cookbook to preform an action on hosts in batches"""
-        for batch in self.hosts.split(self.number_of_batches):
-            try:
-                self.pre_action(batch)
-                self.action(batch)
-                self.post_action(batch)
-                self._sleep(self._args.grace_sleep)
-                self.results.success(batch.hosts)
-            except Exception as error:  # pylint: disable=broad-except
-                # If an exception was raised within the context manager, we have some hosts
-                # left depooled, so we stop the loop for human inspection.
-                self.results.fail(batch.hosts)
-                self.logger.error(
-                    'Unrecoverable error. Stopping the rolling %s: %s',
-                    self._args.action,
-                    error,
-                )
-                break
+        """Cookbook to perform an action on all hosts per group in batches"""
+        for host_group_idx, host_group in enumerate(self.host_groups):
+            number_of_batches = ceil(len(host_group.hosts) / self._args.batchsize)
+            self.group_action(host_group_idx, number_of_batches)
+            for batch in host_group.split(number_of_batches):
+                try:
+                    self.pre_action(batch)
+                    self.action(batch)
+                    self.post_action(batch)
+                    self._sleep(self._args.grace_sleep)
+                    self.results.success(batch.hosts)
+                except Exception as error:  # pylint: disable=broad-except
+                    # If an exception was raised within the context manager, we have some hosts
+                    # left depooled, so we stop the loop for human inspection.
+                    self.results.fail(batch.hosts)
+                    self.logger.error(
+                        'Unrecoverable error. Stopping the rolling %s: %s',
+                        self._args.action,
+                        error,
+                    )
+                    break
 
         return self.results.report()
 
@@ -420,7 +441,7 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         return []
 
     def wait_for_depool(self):
-        """Preform action to check a host has been de-pooled.
+        """Perform action to check a host has been de-pooled.
 
         By default this function just sleeps for `depool_sleep` seconds
 
@@ -428,7 +449,7 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         self._sleep(self.depool_sleep)
 
     def wait_for_repool(self):
-        """Preform action to check a host is ready to be repooled.
+        """Perform action to check a host is ready to be repooled.
 
         By default this function just sleeps for `repool_sleep` seconds
 
@@ -436,7 +457,7 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         self._sleep(self.repool_sleep)
 
     def action(self, hosts: RemoteHosts) -> None:
-        """The main action to preform e.g. reboot, restart a service etc
+        """The main action to perform e.g. reboot, restart a service etc
 
         Arguments:
             hosts (`RemoteHosts`): a list of functions to run
