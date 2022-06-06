@@ -2,7 +2,6 @@
 import argparse
 import logging
 import re
-import subprocess
 import time
 
 from cumin.transports import Command
@@ -18,6 +17,7 @@ from spicerack.puppet import get_puppet_ca_hostname
 from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+from cookbooks.sre.network import configure_switch_interfaces
 
 
 logger = logging.getLogger(__name__)
@@ -105,7 +105,6 @@ def update_netbox(netbox, netbox_data, dry_run):
     if not dry_run:
         device.save()
 
-    switches = set()
     for interface in netbox.api.dcim.interfaces.filter(device_id=netbox_data['id']):
         if interface.mgmt_only:  # Ignore mgmt interfaces
             logger.debug('Skipping interface %s, mgmt_only=True', interface.name)
@@ -129,12 +128,6 @@ def update_netbox(netbox, netbox_data, dry_run):
             if not dry_run:
                 remote_interface.save()
 
-            # Get the switch FQDN
-            if remote_interface.device.virtual_chassis:
-                switches.add(remote_interface.device.virtual_chassis.name)
-            else:
-                switches.add(remote_interface.device.primary_ip.dns_name)
-
         else:
             logger.debug('Interface %s is not connected to an interface', interface.name)
         # Remote is done, now we tackle the IPs
@@ -145,8 +138,6 @@ def update_netbox(netbox, netbox_data, dry_run):
                     ip.delete()
         else:
             logger.debug('No IPs on interface %s', interface.name)
-
-    return switches
 
 
 class DecommissionHost(CookbookBase):
@@ -261,7 +252,6 @@ class DecommissionHostRunner(CookbookRunnerBase):
         netbox_server = self.spicerack.netbox_server(hostname)
         netbox_data = netbox_server.as_dict()
         ganeti = self.spicerack.ganeti()
-        switches = set()
 
         # Using the Direct Cumin backend to support also hosts already removed from PuppetDB
         remote_host = self.remote.query('D{' + fqdn + '}')
@@ -345,10 +335,13 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     '**Failed to power off, manual intervention required**: {e}'
                     .format(e=e))
 
-            switches = update_netbox(netbox, netbox_data, self.spicerack.dry_run)
+            update_netbox(netbox, netbox_data, self.spicerack.dry_run)
             self.spicerack.actions[fqdn].success(
-                'Set Netbox status to Decommissioning and deleted all non-mgmt interfaces '
-                'and related IPs')
+                '[Netbox] Set status to Decommissioning, deleted all non-mgmt IPs,  '
+                'updated switch interfaces (disabled, removed vlans, etc')
+
+            configure_switch_interfaces(self.remote, netbox, netbox_data, self.spicerack.verbose)
+            self.spicerack.actions[fqdn].success('Configured the linked switch interface(s)')
 
         if not self.spicerack.dry_run:
             logger.info('Sleeping for 20s to avoid race conditions...')
@@ -372,8 +365,6 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     .format(cluster=virtual_machine.cluster, e=e))
 
             self.sync_ganeti(fqdn, virtual_machine)
-
-        return switches
 
     def sync_ganeti(self, fqdn, virtual_machine):
         """Force a run of the Ganeti-Netbox sync systemd timer."""
@@ -406,10 +397,9 @@ class DecommissionHostRunner(CookbookRunnerBase):
         find_kerberos_credentials(self.kerberos_kadmin, self.decom_hosts)
         phabricator = self.spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
-        switches = set()
         for fqdn in self.decom_hosts:  # Doing one host at a time to track executed actions.
             try:
-                switches.update(self._decommission_host(fqdn))
+                self._decommission_host(fqdn)
             except Exception as e:  # pylint: disable=broad-except
                 message = 'Host steps raised exception'
                 logger.exception(message)
@@ -432,20 +422,6 @@ class DecommissionHostRunner(CookbookRunnerBase):
             self.spicerack.actions[COMMON_STEPS_KEY].failure(
                 '**{message}**: {e}'.format(message=message, e=e))
             has_failures = True
-
-        # Run homer once per needed ToR switch
-        for switch in switches:
-            logger.info('Running Homer on %s, it takes time ⏳ don\'t worry', switch)
-            try:
-                if not self.spicerack.dry_run:
-                    subprocess.run(['/usr/local/bin/homer',
-                                    switch, 'commit', str(self.reason)], check=True)
-            except subprocess.SubprocessError as e:
-                message = 'Failed to run Homer on {switch}'.format(switch=switch)
-                logger.exception(message)
-                self.spicerack.actions[COMMON_STEPS_KEY].failure(
-                    '**{message}**: {e}'.format(message=message, e=e))
-                has_failures = True
 
         suffix = ''
         if has_failures:
