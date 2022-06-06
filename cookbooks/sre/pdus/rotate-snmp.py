@@ -10,7 +10,8 @@ Usage example:
     cookbook sre.pdus.rotate-snmp --no-ro all
     cookbook sre.pdus.rotate-snmp --no-rw all --check_default
 """
-
+# pylint overrides are for https://bugs.python.org/issue31844 but on 3.10 it's fixed, so adding the useless suppression
+# pylint: disable=useless-suppression
 from base64 import b64encode
 from datetime import datetime
 from html.parser import HTMLParser
@@ -59,7 +60,6 @@ class PDUParser(HTMLParser):  # pylint: disable=abstract-method
         return self._form
 
 
-# pylint override is for https://bugs.python.org/issue31844
 class PDUParserV3(PDUParser):  # pylint: disable=abstract-method
     """Class for parsing Sentry v3 pages"""
 

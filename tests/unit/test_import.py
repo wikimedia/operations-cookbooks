@@ -32,7 +32,7 @@ def get_modules():
     for package in find_packages(base_path):
         modules.add(f"{base_package}.{package}")
         package_path = base_path / package.replace(".", "/")
-        for module_info in iter_modules([package_path]):
+        for module_info in iter_modules([str(package_path)]):
             if not module_info.ispkg:
                 modules.add(f"{base_package}.{package}.{module_info.name}")
 
