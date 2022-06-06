@@ -56,7 +56,7 @@ class ConvertSSDsRunner(CookbookRunnerBase):
         self.fqdn = netbox_server.mgmt_fqdn
         self.ipmi = spicerack.ipmi(self.fqdn)
         self.remote_host = spicerack.remote().query(netbox_server.fqdn)
-        self.puppet_host = spicerack.puppt(self.remote_host)
+        self.puppet_host = spicerack.puppet(self.remote_host)
         self.reason = spicerack.admin_reason('Converting SSDs to non-RAID')
         self.alerting_hosts = spicerack.alerting_hosts(self.remote_host.hosts)
 
