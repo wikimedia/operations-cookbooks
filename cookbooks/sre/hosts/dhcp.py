@@ -14,7 +14,7 @@ class Dhcp(CookbookBase):
     """Set the ephemeral DHCP for a given host, then give control to the user and clear the DHCP config on exit.
 
     Usage:
-        cookbook sre.hosts.dhcp example1001
+        cookbook sre.hosts.dhcp --os buster example1001
     """
 
     def argument_parser(self):
