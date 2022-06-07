@@ -17,10 +17,9 @@ from wmflib.interactive import ask_confirmation, confirm_on_failure
 
 __title__ = 'Update and deploy the DNS records generated from Netbox'
 logger = logging.getLogger(__name__)
-NETBOX_DOMAIN = 'netbox.wikimedia.org'
 NETBOX_BARE_REPO_PATH = '/srv/netbox-exports/dns.git'
 NETBOX_USER = 'netbox'
-NETBOX_HOSTS_QUERY = 'netbox*.wikimedia.org'
+NETBOX_HOSTS_QUERY = 'netbox[1-2]00*.wmnet'
 AUTHDNS_NETBOX_CHECKOUT_PATH = '/srv/git/netbox_dns_snippets'
 AUTHDNS_USER = 'netboxdns'
 AUTHDNS_HOSTS_QUERY = 'A:dns-auth'
@@ -53,8 +52,8 @@ def argument_parser():
 def run(args, spicerack):  # pylint: disable=too-many-locals
     """Required by Spicerack API."""
     remote = spicerack.remote()
-    netbox_hostname = spicerack.dns().resolve_cname(NETBOX_DOMAIN)
-    netbox_host = remote.query(netbox_hostname)
+    netbox_host = spicerack.netbox_master_host
+    netbox_hostname = str(netbox_host)
     netbox_hosts = remote.query(NETBOX_HOSTS_QUERY)
     reason = spicerack.admin_reason(args.message, task_id=args.task_id)
     # Always set an accessible CWD for runuser because the Python git module passes it to Popen
