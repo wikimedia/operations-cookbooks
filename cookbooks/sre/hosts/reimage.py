@@ -308,7 +308,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         try:
             self.remote_installer.run_sync(f'! {env_command}', print_output=False, print_progress_bars=False)
         except RemoteExecutionError:
-            ask_confirmation('Unable to verify that the host rebooted into the new OS, it might still be into the '
+            ask_confirmation('Unable to verify that the host rebooted into the new OS, it might still be in the '
                              f'Debian installer, please verify manually with: sudo install_console {self.fqdn}')
 
         result = self.remote_installer.run_sync('lsb_release -sc', print_output=False, print_progress_bars=False)
