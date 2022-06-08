@@ -85,16 +85,21 @@ class ConvertSSDsRunner(CookbookRunnerBase):
             drive_fqdd = drive_uri.split("/")[-1]
             drive_data = self.redfish.request('get', drive_uri).json()
             if drive_data['MediaType'] != 'SSD':
+                logger.debug('Skipping non SSD drive %s: %s', drive_fqdd, drive_data['MediaType'])
                 continue
 
-            if not drive_fqdd.startswith('Disk.Virtual'):
-                logger.info('Skipping non virtual drive %s', drive_fqdd)
+            if len(drive_data['Links']['Volumes']) != 1:
+                logger.warning('Skipping SSD drive %s, expected 1 linked volumes got %d: %s',
+                               drive_fqdd, len(drive_data['Links']['Volumes']), drive_data['Links']['Volumes'])
+                continue
+
+            linked_volume = drive_data['Links']['Volumes'][0]['@odata.id']
+            if not linked_volume.split("/")[-1].startswith('Disk.Virtual'):
+                logger.info('Skipping non virtual volume %s for SSD drive %s', linked_volume, drive_fqdd)
                 continue
 
             self.pd_array.append(drive_fqdd)
-
-            for volume in drive_data['Links']['Volumes']:
-                self.virtual_disks.add(volume['@odata.id'])
+            self.virtual_disks.add(linked_volume)
 
         logger.info('Found %d Physical disks to convert to non-RAID: %s', len(self.pd_array), self.pd_array)
         logger.info('Found %d Virtual disks to delete: %s', len(self.virtual_disks), self.virtual_disks)
