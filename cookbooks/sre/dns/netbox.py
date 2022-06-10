@@ -129,3 +129,4 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
             authdns_hosts.run_sync,
             'cd {git} && utils/deploy-check.py -g {netbox} --deploy'.format(
                 git=AUTHDNS_DNS_CHECKOUT_PATH, netbox=AUTHDNS_NETBOX_CHECKOUT_PATH))
+    spicerack.run_cookbook('sre.puppet.sync-netbox-hiera', [f'Triggered by {__name__}: {reason.reason}'])
