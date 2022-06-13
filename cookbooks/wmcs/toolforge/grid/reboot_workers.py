@@ -9,7 +9,6 @@ Usage example:
 import argparse
 import logging
 from datetime import datetime
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -100,7 +99,7 @@ class ToolforgeGridRebootWorkersRunner(CookbookRunnerBase):
             dry_run=common_opts.no_dologmsg,
         )
 
-    def run(self) -> Optional[int]:
+    def run(self) -> None:
         """Main entry point"""
         grid_controller = GridController(
             remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn

@@ -17,8 +17,8 @@ from cookbooks.wmcs import (
     OpenstackNotFound,
     SALLogger,
     add_common_opts,
+    downtime_host,
     with_common_opts,
-    wrap_with_sudo_icinga,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -84,9 +84,8 @@ class SetMaintenanceRunner(CookbookRunnerBase):
 
     def run(self) -> None:
         """Main entry point."""
-        alerting_hosts = wrap_with_sudo_icinga(my_spicerack=self.spicerack).alerting_hosts(target_hosts=[self.fqdn])
-        downtime_id = alerting_hosts.downtime(reason=self.spicerack.admin_reason("Setting maintenance mode."))
         hostname = self.fqdn.split(".", 1)[0]
+        downtime_id = downtime_host(spicerack=self.spicerack, host_name=hostname, comment="Setting maintenance mode.")
         self.openstack_api.aggregate_persist_on_host(host=self.spicerack.remote().query(self.fqdn))
 
         try:

@@ -20,8 +20,8 @@ from cookbooks.wmcs import (
     OpenstackNotFound,
     SALLogger,
     add_common_opts,
+    uptime_host,
     with_common_opts,
-    wrap_with_sudo_icinga,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -62,9 +62,9 @@ class UnsetMaintenance(CookbookBase):
         )
         parser.add_argument(
             "--downtime-id",
-            required=True,
+            required=False,
             default=None,
-            help="Downtime id that you got when downtiming before.",
+            help="Downtime id that you got when downtiming before, otherwise will remove all downtimes.",
         )
 
         return parser
@@ -88,8 +88,8 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
         common_opts: CommonOpts,
         fqdn: str,
         control_node_fqdn: str,
-        downtime_id: str,
         spicerack: Spicerack,
+        downtime_id: Optional[str] = None,
         aggregates: Optional[str] = None,
     ):
         """Init."""
@@ -130,8 +130,7 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
             except OpenstackNotFound as error:
                 logging.info("%s", error)
 
-        alerting_hosts = wrap_with_sudo_icinga(my_spicerack=self.spicerack).alerting_hosts(target_hosts=[self.fqdn])
-        alerting_hosts.remove_downtime(downtime_id=self.downtime_id)
+        uptime_host(spicerack=self.spicerack, host_name=hostname, silence_id=self.downtime_id)
         self.sallogger.log(message=f"Unset cloudvirt '{self.fqdn}' maintenance.")
         LOGGER.info(
             "Host %s now in out of maintenance mode. New VMs will be scheduled in it (aggregates: %s).",

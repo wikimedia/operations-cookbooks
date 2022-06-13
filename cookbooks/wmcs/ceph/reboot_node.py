@@ -19,8 +19,9 @@ from cookbooks.wmcs import (
     CommonOpts,
     SALLogger,
     add_common_opts,
+    downtime_host,
+    uptime_host,
     with_common_opts,
-    wrap_with_sudo_icinga,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -113,26 +114,27 @@ class RebootNodeRunner(CookbookRunnerBase):
             controller.set_maintenance()
 
         node = self.spicerack.remote().query(f"D{{{self.fqdn_to_reboot}}}", use_sudo=True)
-        alerting_hosts = wrap_with_sudo_icinga(my_spicerack=self.spicerack).alerting_hosts(target_hosts=node.hosts)
-        with alerting_hosts.downtimed(
-            reason=self.spicerack.admin_reason(
-                reason="Rebooting at user request through cookbook", task_id=self.common_opts.task_id
-            ),
-            duration=datetime.timedelta(minutes=20),
-        ):
+        host_name = self.fqdn_to_reboot.split(".", 1)[0]
+        silence_id = downtime_host(
+            spicerack=self.spicerack,
+            host_name=host_name,
+            comment="Rebooting with wmcs.ceph.reboot_node",
+            task_id=self.common_opts.task_id,
+        )
+        reboot_time = datetime.datetime.utcnow()
+        node.reboot()
 
-            reboot_time = datetime.datetime.utcnow()
-            node.reboot()
+        node.wait_reboot_since(since=reboot_time)
+        LOGGER.info(
+            "Rebooted node %s, waiting for cluster to stabilize...",
+            self.fqdn_to_reboot,
+        )
+        controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
+        LOGGER.info("Cluster stable, continuing")
 
-            node.wait_reboot_since(since=reboot_time)
-            LOGGER.info(
-                "Rebooted node %s, waiting for cluster to stabilize...",
-                self.fqdn_to_reboot,
-            )
-            controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
-            LOGGER.info("Cluster stable, continuing")
+        if not self.skip_maintenance:
+            controller.unset_maintenance()
 
-            if not self.skip_maintenance:
-                controller.unset_maintenance()
+        uptime_host(spicerack=self.spicerack, host_name=host_name, silence_id=silence_id)
 
         self.sallogger.log(message=f"Finished rebooting node {self.fqdn_to_reboot}")
