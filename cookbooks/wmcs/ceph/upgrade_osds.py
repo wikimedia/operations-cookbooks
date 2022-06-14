@@ -11,7 +11,7 @@ import logging
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephClusterController
+from cookbooks.wmcs import CephClusterController, CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.ceph.upgrade_ceph_node import UpgradeCephNode
 
 LOGGER = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ class UpgradeOsds(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
+        add_common_opts(parser)
         parser.add_argument(
             "--controlling-node-fqdn",
             required=True,
@@ -45,7 +46,7 @@ class UpgradeOsds(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return UpgradeOsdsRunner(
+        return with_common_opts(self.spicerack, args, UpgradeOsdsRunner)(
             controlling_node_fqdn=args.controlling_node_fqdn,
             force=args.force,
             spicerack=self.spicerack,
@@ -59,12 +60,16 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
         self,
         controlling_node_fqdn: str,
         force: bool,
+        common_opts: CommonOpts,
         spicerack: Spicerack,
     ):
         """Init"""
         self.controlling_node_fqdn = controlling_node_fqdn
         self.force = force
         self.spicerack = spicerack
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> None:
         """Main entry point"""
@@ -75,7 +80,7 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
 
         upgrade_ceph_node_cookbook = UpgradeCephNode(spicerack=self.spicerack)
         osd_nodes = list(controller.get_nodes()["osd"].keys())
-        LOGGER.info("Upgrading and rebooting the nodes %s", str(osd_nodes))
+        self.sallogger.log(f"Upgrading OSDs and rebooting the nodes {osd_nodes}")
 
         for index, osd_node in enumerate(osd_nodes):
             LOGGER.info("Upgrading node %s, %d done, %d to go", osd_node, index, len(osd_nodes) - index)
@@ -100,3 +105,4 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
             LOGGER.info("Cluster stable, continuing")
 
         controller.unset_maintenance()
+        self.sallogger.log(f"OSDs ({osd_nodes}) upgraded successfully B-)")

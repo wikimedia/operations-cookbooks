@@ -11,7 +11,7 @@ import logging
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephClusterController
+from cookbooks.wmcs import CephClusterController, CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.ceph.upgrade_ceph_node import UpgradeCephNode
 
 LOGGER = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ class UpgradeMons(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
+        add_common_opts(parser)
         parser.add_argument(
             "--controlling-node-fqdn",
             required=True,
@@ -45,7 +46,7 @@ class UpgradeMons(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return UpgradeMonsRunner(
+        return with_common_opts(self.spicerack, args, UpgradeMonsRunner)(
             controlling_node_fqdn=args.controlling_node_fqdn,
             force=args.force,
             spicerack=self.spicerack,
@@ -59,12 +60,16 @@ class UpgradeMonsRunner(CookbookRunnerBase):
         self,
         controlling_node_fqdn: str,
         force: bool,
+        common_opts: CommonOpts,
         spicerack: Spicerack,
     ):
         """Init"""
         self.controlling_node_fqdn = controlling_node_fqdn
         self.force = force
         self.spicerack = spicerack
+        self.sallogger = SALLogger(
+            project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
+        )
 
     def run(self) -> None:
         """Main entry point"""
@@ -75,7 +80,7 @@ class UpgradeMonsRunner(CookbookRunnerBase):
 
         upgrade_ceph_node_cookbook = UpgradeCephNode(spicerack=self.spicerack)
         monitor_nodes = list(controller.get_nodes()["mon"].keys())
-        LOGGER.info("Upgrading and rebooting the nodes %s", str(monitor_nodes))
+        self.sallogger.log(f"Upgrading MONs and rebooting the nodes {monitor_nodes}")
 
         for index, monitor_node in enumerate(monitor_nodes):
             LOGGER.info("Upgrading node %s, %d done, %d to go", monitor_node, index, len(monitor_nodes) - index)
@@ -100,3 +105,4 @@ class UpgradeMonsRunner(CookbookRunnerBase):
             LOGGER.info("Cluster stable, continuing")
 
         controller.unset_maintenance()
+        self.sallogger.log(f"MONs ({monitor_nodes}) upgraded successfully B-)")
