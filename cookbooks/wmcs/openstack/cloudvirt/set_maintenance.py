@@ -17,9 +17,9 @@ from cookbooks.wmcs import (
     OpenstackNotFound,
     SALLogger,
     add_common_opts,
-    downtime_host,
     with_common_opts,
 )
+from cookbooks.wmcs.lib.alerts import downtime_host
 
 LOGGER = logging.getLogger(__name__)
 

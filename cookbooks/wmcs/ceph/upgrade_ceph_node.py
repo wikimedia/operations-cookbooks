@@ -12,7 +12,8 @@ import logging
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephClusterController, CephOSDFlag, downtime_host, uptime_host
+from cookbooks.wmcs import CephClusterController, CephOSDFlag
+from cookbooks.wmcs.lib.alerts import downtime_host, uptime_host
 
 LOGGER = logging.getLogger(__name__)
 

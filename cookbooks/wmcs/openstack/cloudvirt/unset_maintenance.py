@@ -20,9 +20,9 @@ from cookbooks.wmcs import (
     OpenstackNotFound,
     SALLogger,
     add_common_opts,
-    uptime_host,
     with_common_opts,
 )
+from cookbooks.wmcs.lib.alerts import uptime_host
 
 LOGGER = logging.getLogger(__name__)
 
