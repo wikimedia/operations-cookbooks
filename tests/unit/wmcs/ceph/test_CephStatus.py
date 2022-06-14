@@ -1,4 +1,4 @@
-from cookbooks.wmcs import (
+from cookbooks.wmcs.lib.ceph import (
     CephClusterStatus,
     CephClusterUnhealthy,
     CephOSDFlag,
@@ -12,11 +12,7 @@ from typing import Dict, Any, Optional, List
 @pytest.mark.parametrize(
     **CephTestUtils.to_parametrize(
         test_cases={
-            "passes_if_HEALTH_OK": {
-                "status_dict": CephTestUtils.get_status_dict(
-                    {"health": {"status": "HEALTH_OK"}}
-                )
-            },
+            "passes_if_HEALTH_OK": {"status_dict": CephTestUtils.get_status_dict({"health": {"status": "HEALTH_OK"}})},
             "passes_if_HEALTH_WARN_and_AUTH_INSECURE_GLOBAL_ID_RECLAIM": {
                 "status_dict": CephTestUtils.get_status_dict(
                     {
@@ -32,9 +28,7 @@ from typing import Dict, Any, Optional, List
                     {
                         "health": {
                             "status": "HEALTH_WARN",
-                            "checks": {
-                                "AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED": "some value"
-                            },
+                            "checks": {"AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED": "some value"},
                         }
                     }
                 )
@@ -59,14 +53,10 @@ from typing import Dict, Any, Optional, List
         }
     )
 )
-def test_check_healthy_happy_path(
-    status_dict: Dict[str, Any], consider_maintenance_healthy: Optional[bool]
-):
+def test_check_healthy_happy_path(status_dict: Dict[str, Any], consider_maintenance_healthy: Optional[bool]):
     my_status = CephClusterStatus(status_dict=status_dict)
     if consider_maintenance_healthy is not None:
-        my_status.check_healthy(
-            consider_maintenance_healthy=consider_maintenance_healthy
-        )
+        my_status.check_healthy(consider_maintenance_healthy=consider_maintenance_healthy)
     else:
         my_status.check_healthy()
 
@@ -75,9 +65,7 @@ def test_check_healthy_happy_path(
     **CephTestUtils.to_parametrize(
         test_cases={
             "raises_if_HEALTH_CRITICAL": {
-                "status_dict": CephTestUtils.get_status_dict(
-                    {"health": {"status": "HEALTH_CRITICAL"}}
-                )
+                "status_dict": CephTestUtils.get_status_dict({"health": {"status": "HEALTH_CRITICAL"}})
             },
             "raises_if_maintenance_status_set_but_maintenance_considered_healthy_not_set": {
                 "status_dict": CephTestUtils.get_status_dict(
@@ -132,16 +120,12 @@ def test_check_healthy_happy_path(
         }
     )
 )
-def test_check_healthy_unhappy_path(
-    status_dict: Dict[str, Any], consider_maintenance_healthy: Optional[bool]
-):
+def test_check_healthy_unhappy_path(status_dict: Dict[str, Any], consider_maintenance_healthy: Optional[bool]):
     my_status = CephClusterStatus(status_dict=status_dict)
 
     with pytest.raises(CephClusterUnhealthy):
         if consider_maintenance_healthy is not None:
-            my_status.check_healthy(
-                consider_maintenance_healthy=consider_maintenance_healthy
-            )
+            my_status.check_healthy(consider_maintenance_healthy=consider_maintenance_healthy)
         else:
             my_status.check_healthy()
 
@@ -151,13 +135,7 @@ def test_check_healthy_unhappy_path(
         test_cases={
             "returns_no_flags_if_none_there": {
                 "status_dict": CephTestUtils.get_status_dict(
-                    {
-                        "health": {
-                            "checks": {
-                                "OSDMAP_FLAGS": {"summary": {"message": "no flags set"}}
-                            }
-                        }
-                    },
+                    {"health": {"checks": {"OSDMAP_FLAGS": {"summary": {"message": "no flags set"}}}}},
                 ),
                 "expected_flags": [],
             },
@@ -188,9 +166,7 @@ def test_check_healthy_unhappy_path(
         }
     )
 )
-def test_get_osndmap_set_flags_happy_path(
-    status_dict: Dict[str, Any], expected_flags: List[CephOSDFlag]
-):
+def test_get_osndmap_set_flags_happy_path(status_dict: Dict[str, Any], expected_flags: List[CephOSDFlag]):
     my_status = CephClusterStatus(status_dict=status_dict)
 
     gotten_flags = my_status.get_osdmap_set_flags()
@@ -198,9 +174,7 @@ def test_get_osndmap_set_flags_happy_path(
     def _order_key(flag):
         return flag.name
 
-    assert sorted(gotten_flags, key=_order_key) == sorted(
-        expected_flags, key=_order_key
-    )
+    assert sorted(gotten_flags, key=_order_key) == sorted(expected_flags, key=_order_key)
 
 
 @pytest.mark.parametrize(
@@ -215,17 +189,13 @@ def test_get_osndmap_set_flags_happy_path(
                 "expected_in_progress": {},
             },
             "returns_progress_events_if_theres_any": {
-                "status_dict": CephTestUtils.get_status_dict(
-                    {"progress_events": {"event1": {}, "event2": {}}}
-                ),
+                "status_dict": CephTestUtils.get_status_dict({"progress_events": {"event1": {}, "event2": {}}}),
                 "expected_in_progress": {"event1": {}, "event2": {}},
             },
         }
     )
 )
-def test_in_progress_happy_path(
-    status_dict: Dict[str, Any], expected_in_progress: Dict[str, Any]
-):
+def test_in_progress_happy_path(status_dict: Dict[str, Any], expected_in_progress: Dict[str, Any]):
     my_status = CephClusterStatus(status_dict=status_dict)
 
     gotten_in_progress = my_status.get_in_progress()
@@ -329,9 +299,7 @@ def test_in_progress_happy_path(
         }
     )
 )
-def test_in_is_cluster_status_just_maintenance_happy_path(
-    status_dict: Dict[str, Any], expected_return: bool
-):
+def test_in_is_cluster_status_just_maintenance_happy_path(status_dict: Dict[str, Any], expected_return: bool):
     my_status = CephClusterStatus(status_dict=status_dict)
 
     gotten_return = my_status.is_cluster_status_just_maintenance()

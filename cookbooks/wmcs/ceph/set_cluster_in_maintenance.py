@@ -11,7 +11,7 @@ import logging
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CephClusterController
+from cookbooks.wmcs.lib.ceph import CephClusterController
 
 LOGGER = logging.getLogger(__name__)
 

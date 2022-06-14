@@ -5,7 +5,7 @@ from unittest import mock
 import pytest
 from cumin.transports import Command
 
-from cookbooks.wmcs import (
+from cookbooks.wmcs.lib.ceph import (
     CephClusterController,
     CephClusterUnhealthy,
     CephFlagSetError,

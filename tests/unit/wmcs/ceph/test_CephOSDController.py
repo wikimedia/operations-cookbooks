@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from cookbooks.wmcs import (
+from cookbooks.wmcs.lib.ceph import (
     CephMalformedInfo,
     CephOSDController,
     CephTestUtils,
@@ -13,27 +13,17 @@ from cookbooks.wmcs import (
 
 def parametrize(params: Dict[str, Any]):
     def decorator(decorated):
-        return pytest.mark.parametrize(**CephTestUtils.to_parametrize(params))(
-            decorated
-        )
+        return pytest.mark.parametrize(**CephTestUtils.to_parametrize(params))(decorated)
 
     return decorator
 
 
 AVAILABLE_DEVICE_JSON = json.dumps(CephTestUtils.get_available_device())
 AVAILABLE_DEVICE_PATH = f"/dev/{CephTestUtils.get_available_device()['name']}"
-SYSTEM_DEVICE_JSON = json.dumps(
-    CephTestUtils.get_available_device(name=CephOSDController.SYSTEM_DEVICES[0])
-)
-NON_DISK_DEVICE_JSON = json.dumps(
-    CephTestUtils.get_available_device(device_type="non-disk")
-)
-MOUNTED_DEVICE_JSON = json.dumps(
-    CephTestUtils.get_available_device(mountpoint="/some/where")
-)
-FORMATTED_DEVICE_JSON = json.dumps(
-    CephTestUtils.get_available_device(children=["child1"])
-)
+SYSTEM_DEVICE_JSON = json.dumps(CephTestUtils.get_available_device(name=CephOSDController.SYSTEM_DEVICES[0]))
+NON_DISK_DEVICE_JSON = json.dumps(CephTestUtils.get_available_device(device_type="non-disk"))
+MOUNTED_DEVICE_JSON = json.dumps(CephTestUtils.get_available_device(mountpoint="/some/where"))
+FORMATTED_DEVICE_JSON = json.dumps(CephTestUtils.get_available_device(children=["child1"]))
 
 
 @parametrize(
@@ -64,9 +54,7 @@ FORMATTED_DEVICE_JSON = json.dumps(
         },
     },
 )
-def test_get_available_devices_happy_path(
-    expected_devices: List[str], lsblk_command_output: str
-):
+def test_get_available_devices_happy_path(expected_devices: List[str], lsblk_command_output: str):
     my_controller = CephOSDController(
         remote=CephTestUtils.get_fake_remote(responses=[lsblk_command_output]),
         node_fqdn="my-osd-fq.dn",
@@ -144,9 +132,7 @@ def test_initialize_and_start_osd_happy_path_raises_when_command_fails():
         },
     }
 )
-def test_add_all_available_devices_happy_path(
-    lsblk_command_output: str, interactive: bool
-):
+def test_add_all_available_devices_happy_path(lsblk_command_output: str, interactive: bool):
     my_controller = CephOSDController(
         remote=CephTestUtils.get_fake_remote(responses=[lsblk_command_output]),
         node_fqdn="my-osd-fq.dn",
@@ -155,7 +141,7 @@ def test_add_all_available_devices_happy_path(
     my_controller.add_all_available_devices(interactive=interactive)
 
 
-@patch("cookbooks.wmcs.ask_confirmation")
+@patch("cookbooks.wmcs.lib.ceph.ask_confirmation")
 def test_add_all_available_devices_asks_confirmation_if_interaciteve_is_True_and_theres_available_devices(
     mock_ask_confirmation,
 ):
@@ -175,7 +161,7 @@ def test_add_all_available_devices_asks_confirmation_if_interaciteve_is_True_and
     mock_ask_confirmation.assert_called()
 
 
-@patch("cookbooks.wmcs.ask_confirmation")
+@patch("cookbooks.wmcs.lib.ceph.ask_confirmation")
 def test_add_all_available_devices_does_not_ask_confirmation_if_interaciteve_is_False_and_theres_available_devices(
     mock_ask_confirmation,
 ):

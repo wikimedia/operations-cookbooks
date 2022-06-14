@@ -15,12 +15,12 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import (
-    CephClusterController,
     CommonOpts,
     SALLogger,
     add_common_opts,
     with_common_opts,
 )
+from cookbooks.wmcs.lib.ceph import CephClusterController
 from cookbooks.wmcs.lib.alerts import downtime_host, uptime_host
 
 LOGGER = logging.getLogger(__name__)
