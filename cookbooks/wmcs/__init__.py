@@ -322,6 +322,10 @@ class OpenstackAPI:
             "recordset", "create", "--type", record_type, "--record", record, zone_id, name, **kwargs
         )
 
+    def server_show(self, vm_name: OpenstackIdentifier) -> Dict[str, Any]:
+        """Get the information for a VM."""
+        return self._run_formatted_as_dict("server", "show", vm_name, is_safe=True)
+
     def server_list(self, **kwargs) -> List[Dict[str, Any]]:
         """Retrieve the list of servers for the project.
 
