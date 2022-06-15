@@ -39,6 +39,49 @@ class AlertManager:
         """
         return run_one_formatted_as_list(node=self.node, command=["amtool", "--output=json", "silence", "query", query])
 
+    def downtime_alert(self, alert_name: str, comment: str, duration: Optional[str] = None) -> SilenceID:
+        """Add a silence for an alert.
+
+        Examples of 'alert_name':
+        * "Ceph Cluster Health"
+
+        Examples of 'duration':
+        * 1h -> one hour
+        * 2d -> two days
+        """
+        command = [
+            "amtool",
+            "--output=json",
+            "silence",
+            "add",
+            f'--duration="{duration or "1h"}"',
+            f"--comment='{comment}'",
+            f"alertname={alert_name}",
+        ]
+        return run_one_raw(node=self.node, command=command)
+
+    def uptime_alert(self, alert_name: str) -> None:
+        """Remove a silence for an alert.
+
+        Examples of 'alert_name':
+        * "Ceph Cluster Health"
+        """
+        existing_silences = self.get_silences(query=f"alertname={alert_name}")
+        to_expire = [silence["id"] for silence in existing_silences]
+
+        if not to_expire:
+            LOGGER.info("No silences for 'alertname=%s' found.", alert_name)
+            return
+
+        command = [
+            "amtool",
+            "--output=json",
+            "silence",
+            "expire",
+            f"alertname={alert_name}",
+        ]
+        run_one_raw(node=self.node, command=command)
+
     def downtime_host(self, host_name: str, comment: str, duration: Optional[str] = None) -> SilenceID:
         """Add a silence for a host.
 
@@ -79,6 +122,7 @@ class AlertManager:
 
         if not to_expire:
             LOGGER.info("No silences for 'instance=%s' found.", host_name)
+            return
 
         command = [
             "amtool",
@@ -123,7 +167,7 @@ def downtime_host(
     return silence_id
 
 
-def uptime_host(spicerack: Spicerack, host_name: str, silence_id: Optional[SilenceID]) -> None:
+def uptime_host(spicerack: Spicerack, host_name: str, silence_id: Optional[SilenceID] = None) -> None:
     """Do whatever it takes to uptime a host, if silence_id passed, only that silence will be expired.
 
     Examples of 'host_name':
@@ -138,3 +182,48 @@ def uptime_host(spicerack: Spicerack, host_name: str, silence_id: Optional[Silen
 
     icinga_hosts = wrap_with_sudo_icinga(my_spicerack=spicerack).icinga_hosts(target_hosts=[host_name])
     icinga_hosts.remove_downtime()
+
+
+def downtime_alert(
+    spicerack: Spicerack,
+    alert_name: str,
+    duration: Optional[str] = None,
+    comment: Optional[str] = None,
+    task_id: Optional[str] = None,
+) -> SilenceID:
+    """Do whatever it takes to downtime a host.
+
+    Examples of 'alert_name':
+    * "Ceph Cluster Health"
+
+    Examples of 'duration':
+    * 1h -> one hour
+    * 2d -> two days
+    """
+    postfix = f"- from cookbook ran by {getpass.getuser()}@{socket.gethostname()}"
+    if task_id:
+        postfix = f" ({task_id}) {postfix}"
+    if comment:
+        final_comment = comment + postfix
+    else:
+        final_comment = "No comment" + postfix
+
+    alert_manager = AlertManager.from_remote(spicerack.remote())
+    return alert_manager.downtime_alert(alert_name=alert_name, duration=duration, comment=final_comment)
+
+
+def uptime_alert(
+    spicerack: Spicerack, alert_name: Optional[str] = None, silence_id: Optional[SilenceID] = None
+) -> None:
+    """Do whatever it takes to uptime an alert, if silence_id passed, only that silence will be expired.
+
+    Examples of 'alert_name':
+    * "Ceph Cluster Health"
+    """
+    alert_manager = AlertManager.from_remote(spicerack.remote())
+    if silence_id:
+        alert_manager.expire_silence(silence_id=silence_id)
+    elif alert_name:
+        alert_manager.uptime_alert(alert_name=alert_name)
+    else:
+        raise ValueError("You must pass either silence_id or alert_name")

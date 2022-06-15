@@ -15,6 +15,12 @@ from cookbooks.wmcs import TestUtils, run_one_as_dict, run_one_formatted, run_on
 
 
 LOGGER = logging.getLogger(__name__)
+# List of alerts that are triggered by the cluster aside from the specifics for each node
+CLUSTER_ALERTS = [
+    "Ceph Cluster Health",
+    "Ceph OSDs Down",
+    "Ceph Mon Quorum",
+]
 
 
 class CephException(Exception):

@@ -12,8 +12,9 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.lib.alerts import downtime_alert, uptime_alert
+from cookbooks.wmcs.lib.ceph import CLUSTER_ALERTS, CephClusterController
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
-from cookbooks.wmcs.lib.ceph import CephClusterController
 
 LOGGER = logging.getLogger(__name__)
 
@@ -82,6 +83,10 @@ class RollRebootOsdsRunner(CookbookRunnerBase):
 
         self.sallogger.log(message=f"Rebooting the nodes {','.join(osd_nodes)}")
 
+        for alert_name in CLUSTER_ALERTS:
+            downtime_alert(
+                spicerack=self.spicerack, alert_name=alert_name, duration="4h", task_id=self.common_opts.task_id
+            )
         controller.set_maintenance()
 
         reboot_node_cookbook = RebootNode(spicerack=self.spicerack)
@@ -109,4 +114,7 @@ class RollRebootOsdsRunner(CookbookRunnerBase):
             LOGGER.info("Cluster stable, continuing")
 
         controller.unset_maintenance()
+        for alert_name in CLUSTER_ALERTS:
+            uptime_alert(spicerack=self.spicerack, alert_name=alert_name)
+
         self.sallogger.log(message=f"Finished rebooting the nodes {osd_nodes}")
