@@ -88,6 +88,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
     batch_default = 1
     batch_max = 40
     grace_sleep = 1
+    valid_actions = ('reboot', 'restart_daemons')
 
     def argument_parser(self) -> Namespace:
         """Parse arguments"""
@@ -131,7 +132,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
         )
         parser.add_argument(
             'action',
-            choices=['reboot', 'restart_daemons'],
+            choices=self.valid_actions,
             help='Choose to reboot the server or restart the daemons related to this cookbook',
         )
 
@@ -354,7 +355,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         """
         if self._args.action == 'reboot':
             self._reboot(hosts)
-        else:
+        elif self._args.action == 'restart_daemons':
             self._restart_daemons(hosts)
 
     def post_action(self, hosts: RemoteHosts) -> None:
