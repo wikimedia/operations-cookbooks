@@ -285,7 +285,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             self.results.fail(hosts.hosts)
             raise
 
-    def _reboot(self, hosts: NodeSet) -> None:
+    def _reboot(self, hosts: RemoteHosts) -> None:
         """Reboot a set of hosts with downtime
 
         Arguments:
@@ -301,8 +301,12 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             with alerting_hosts.downtimed(reason, duration=duration):
                 reboot_time = datetime.utcnow()
                 confirm_on_failure(hosts.reboot, batch_size=len(hosts))
-                hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
-                puppet.wait_since(reboot_time)
+                # Avoid exceptions in dry_run mode:
+                # * "Uptime higher than threshold"
+                # * "Successful Puppet run too old"
+                if not self._spicerack.dry_run:
+                    hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
+                    puppet.wait_since(reboot_time)
                 icinga_hosts.wait_for_optimal()
             self.results.success(hosts.hosts)
         except IcingaError as error:
