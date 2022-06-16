@@ -16,6 +16,7 @@ class RollRestartVarnish(SREBatchBase):
     """
 
     grace_sleep = 60
+    valid_actions = ('restart_daemons',)
 
     def argument_parser(self):
         """Argument parser"""
@@ -30,8 +31,6 @@ class RollRestartVarnish(SREBatchBase):
     # Required
     def get_runner(self, args):
         """As specified by Spicerack API."""
-        if args.action == 'reboot':
-            raise RuntimeError('Only restart_daemons is allowed as action for this cookbook.')
         return RollRestartVarnishRunner(args, self.spicerack)
 
 
