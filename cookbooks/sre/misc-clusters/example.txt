@@ -15,6 +15,8 @@ class Reboot(SREBatchBase):
     # override the default batch size
     # Optional
     batch_default = 2
+    # override valid actions
+    valid_actions = ('reboot',)
 
     # add additional arguments
     # Optional
@@ -93,6 +95,13 @@ class RebootRunner(SREBatchRunnerBase):
         print('doing post action')
         super().post_reboot(hosts)
         print('finished post action')
+
+    # By default the cookbook will only have one host group. If you have more then one
+    # the group_action hook might come in handy
+    # Optional
+    def group_action(self, host_group_idx, number_of_batches: int) -> None:
+        """Action to perform once for every host group, right before working on the first batch"""
+        print(f'Processing host group {host_group_idx} in {number_of_batches} batches')
 
     # Optional
     def run(self):
