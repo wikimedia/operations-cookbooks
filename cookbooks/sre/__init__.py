@@ -262,7 +262,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             self.logger.info("Sleeping for %s seconds", seconds)
             sleep(seconds)
 
-    def _restart_daemons(self, hosts: RemoteHosts) -> None:
+    def _restart_daemons_action(self, hosts: RemoteHosts) -> None:
         """Restart daemons on a set of hosts with downtime
 
         Arguments:
@@ -308,7 +308,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             self.results.fail(hosts.hosts)
             raise
 
-    def _reboot(self, hosts: RemoteHosts) -> None:
+    def _reboot_action(self, hosts: RemoteHosts) -> None:
         """Reboot a set of hosts with downtime
 
         Arguments:
@@ -389,10 +389,11 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             hosts (`RemoteHosts`): a list of functions to run
 
         """
-        if self._args.action == "reboot":
-            self._reboot(hosts)
-        elif self._args.action == "restart_daemons":
-            self._restart_daemons(hosts)
+        action = self._args.action
+        try:
+            getattr(self, f"_{action}_action")(hosts)
+        except AttributeError as error:
+            raise RuntimeError(f"Invalid action ({action})") from error
 
     def post_action(self, hosts: RemoteHosts) -> None:
         """Run this function after performing the action on the batch of hosts

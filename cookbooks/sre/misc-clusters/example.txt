@@ -15,8 +15,21 @@ class Reboot(SREBatchBase):
     # override the default batch size
     # Optional
     batch_default = 2
-    # override valid actions
-    valid_actions = ('reboot',)
+
+    # Override the batch_max
+    # Optional
+    batch_max = 40
+
+    # Override the default grace sleep period
+    # Optional
+    grace_sleep = 1
+
+    # Override the default list of actions.  By default the action method will attempt to
+    # call functions name f'_{action}_action'.  e.g. if we add the action foobar then the
+    # action method will try to call _foobar_action passing in the current batch of remote hosts e.g.
+    #   self._foobar_action(hosts)
+    # Optional
+    valid_actions = ('reboot', 'restart_daemons')
 
     # add additional arguments
     # Optional
@@ -102,6 +115,12 @@ class RebootRunner(SREBatchRunnerBase):
     def group_action(self, host_group_idx, number_of_batches: int) -> None:
         """Action to perform once for every host group, right before working on the first batch"""
         print(f'Processing host group {host_group_idx} in {number_of_batches} batches')
+
+    # Optional
+    # when adding additional actions in SREBatchBase you will need to create a corrosponding method
+    # assume we have the action upgrade then we would need
+    def _upgrade_action(self, hosts):
+      """Perform upgrade action"""
 
     # Optional
     def run(self):
