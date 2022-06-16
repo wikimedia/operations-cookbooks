@@ -114,8 +114,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
         parser.add_argument(
             '--batchsize',
             help='Batch size to act upon',
-            type=lambda x: (int(x) <= self.batch_max)
-            or parser.error('max batchsize is ' + self.batch_max),
+            type=int, choices=range(1, self.batch_max + 1), metavar=f'[1-{self.batch_max}]',
             default=self.batch_default,
         )
         parser.add_argument('--reason', help='Administrative Reason', required=True)
