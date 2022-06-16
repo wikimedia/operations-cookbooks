@@ -70,6 +70,8 @@ class RollRebootK8sNodes(SREBatchBase):
 
     def get_runner(self, args: Namespace) -> "RollRebootK8sNodesRunner":
         """As specified by Spicerack API."""
+        if not args.alias:
+            raise RuntimeError("Alias (-a/--alias) is required for this cookbook, --query is not supported.")
         return RollRebootK8sNodesRunner(args, self.spicerack)
 
 
@@ -82,32 +84,33 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Initialize the runner."""
-        super().__init__(args, spicerack)
+        # Init k8s_client early, as it is used in _hosts() which will be called by super().__init__
         self.k8s_cli = Kubernetes(
-            self._args.group,
-            self._kubernetes_cluster_name(),
-            self._spicerack.dry_run,
+            group=args.group,
+            cluster=self._kubernetes_cluster_name(args.alias),
+            dry_run=spicerack.dry_run,
         )
         # Dictionary containing KubernetesNode instances for all hosts
         self._all_k8s_nodes = dict()
+        super().__init__(args, spicerack)
         # _first_batch is used to detect the fist batch run in each host_group
         self._first_batch = True
         # _host_group_idx stores the index of the host group currently in progress
         self._host_group_idx = 0
 
-    def _kubernetes_cluster_name(self) -> str:
+    def _kubernetes_cluster_name(self, alias: str) -> str:
         """Return the name of the kubernetes cluster used for credentials files (in /etc/kubernetes)
 
         Unfortunately, clusters are named differently in cumin aliases/conftool and hiera kubernetes_cluster_groups
         and the cluster group (main/wikikube and ml-serve) is not part of the kubernetes credential files.
         Also, transition from group name "main" to "wikikube" is not completed.
         """
-        datacenter = self._args.alias.rsplit("-", 1)[1]
-        if self._args.alias.startswith("wikikube-worker"):
+        datacenter = alias.rsplit("-", 1)[1]
+        if alias.startswith("wikikube-worker"):
             return datacenter
-        if self._args.alias.startswith("wikikube-staging-worker"):
+        if alias.startswith("wikikube-staging-worker"):
             return f"staging-{datacenter}"
-        if self._args.alias.startswith("ml-serve"):
+        if alias.startswith("ml-serve"):
             return f"ml-serve-{datacenter}"
 
     def _k8s_node_action(self, node_name: str, action: str) -> None:
@@ -127,6 +130,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         """Drain a kubernetes node"""
         return self._k8s_node_action(node_name, "drain")
 
+    @property
     def allowed_aliases(self) -> List:
         """Return a list of allowed aliases for this cookbook"""
         aliases = []
@@ -157,7 +161,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
             taint_groups[flat_taints].append(node_name)
 
         self.logger.info(
-            "Got %s nodes in %s taint-groups",
+            "Got %s nodes in %s taint-group(s)",
             len(all_hosts),
             len(taint_groups),
         )
@@ -203,5 +207,6 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         if self._first_batch:
             self._first_batch = False
             remaining_hosts = self.host_groups[self._host_group_idx].hosts - batch.hosts
-            for node_name in remaining_hosts.hosts:
+            self.logger.info("Cordoning remaining hosts in host group: %s", remaining_hosts)
+            for node_name in remaining_hosts:
                 self._cordon(node_name)
