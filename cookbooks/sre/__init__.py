@@ -230,6 +230,16 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         """Should return a list of scripts to run as post_scripts or an empty list"""
         return []
 
+    def _batchsize(self, number_of_hosts: int) -> int:
+        """Should return the batch size to use
+
+        Arguments:
+            number_of_hosts (`int`): Number of hosts in current host group
+
+        """
+        # pylint: disable=unused-argument
+        return self._args.batchsize
+
     def _sleep(self, seconds: Union[int, float]) -> None:
         """A DRY-RUN aware version of time.sleep()."""
         if self._spicerack.dry_run:
@@ -394,7 +404,8 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
     def batch_action(self) -> None:
         """Cookbook to perform an action on all hosts per group in batches"""
         for host_group_idx, host_group in enumerate(self.host_groups):
-            number_of_batches = ceil(len(host_group.hosts) / self._args.batchsize)
+            number_of_hosts = len(host_group.hosts)
+            number_of_batches = ceil(number_of_hosts / self._batchsize(number_of_hosts))
             self.group_action(host_group_idx, number_of_batches)
             for batch in host_group.split(number_of_batches):
                 try:

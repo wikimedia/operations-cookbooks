@@ -20,13 +20,14 @@ Pod's as far as possible by cordoning all hosts that are still to be rebooted
 rebooted).
 
 Usage example:
-    cookbook sre.k8s.reboot-nodes -D eqiad -c kubernetes-staging --batchsize 2
+    cookbook sre.k8s.reboot-nodes --alias wikikube-staging-worker-codfw -g main --batchsize 1 reboot
 
 This command will cause a rolling reboot of the nodes in the Kubernetes-staging
-cluster, 5% at a time per taint-group, waiting 45 seconds before rebooting.
+cluster, one at a time per taint-group, waiting 35 seconds before rebooting.
 """
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
+from math import ceil
 from typing import List
 
 from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
@@ -130,6 +131,18 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         """Drain a kubernetes node"""
         return self._k8s_node_action(node_name, "drain")
 
+    def _batchsize(self, number_of_hosts: int) -> int:
+        """Adjust the batch size to be no more than 20% of the host in each node/taint group"""
+        orig_batchsize = super()._batchsize
+        batchsize = ceil(min(20 * number_of_hosts / 100, orig_batchsize))
+        if batchsize != orig_batchsize:
+            self.logger.warn(
+                "Using reduced batchsize of %s due to small host group (%s hosts)",
+                batchsize,
+                number_of_hosts,
+            )
+        return batchsize
+
     @property
     def allowed_aliases(self) -> List:
         """Return a list of allowed aliases for this cookbook"""
@@ -161,10 +174,12 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
             taint_groups[flat_taints].append(node_name)
 
         self.logger.info(
-            "Got %s nodes in %s taint-group(s)",
+            "Got %s nodes in %s taint-group(s) %s",
             len(all_hosts),
             len(taint_groups),
+            [len(g) for g in taint_groups.values()],
         )
+
         # Build a list of RemoteHosts instances to return
         hosts = []
         for host_names in taint_groups.values():
@@ -207,6 +222,8 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         if self._first_batch:
             self._first_batch = False
             remaining_hosts = self.host_groups[self._host_group_idx].hosts - batch.hosts
-            self.logger.info("Cordoning remaining hosts in host group: %s", remaining_hosts)
+            self.logger.info(
+                "Cordoning remaining hosts in host group: %s", remaining_hosts
+            )
             for node_name in remaining_hosts:
                 self._cordon(node_name)
