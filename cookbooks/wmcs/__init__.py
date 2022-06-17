@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from functools import partial
 from itertools import chain
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union
 from unittest import mock
 
 import yaml
@@ -139,11 +139,128 @@ class OpenstackMigrationError(OpenstackError):
     """Thrown when there's an issue with migration."""
 
 
+class OpenstackBadQuota(OpenstackError):
+    """Thrown when the quota given is not known or incorrect."""
+
+
 class OpenstackRuleDirection(Enum):
     """Direction for the security group rule."""
 
     INGRESS = auto()
     EGRESS = auto()
+
+
+class OpenstackQuotaName(Enum):
+    """Known quota names"""
+
+    BACKUP_GIGABYTES = "backup-gigabytes"
+    BACKUPS = "backups"
+    CORES = "cores"
+    FIXED_IPS = "fixed-ips"
+    FLOATING_IPS = "floating-ips"
+    GIGABYTES = "gigabytes"
+    GIGABYTES_STANDARD = "gigabytes_standard"
+    GROUPS = "groups"
+    INJECTED_FILE_SIZE = "injected-file-size"
+    INJECTED_FILES = "injected-files"
+    INJECTED_PATH_SIZE = "injected-path-size"
+    INSTANCES = "instances"
+    KEY_PAIRS = "key-pairs"
+    NETWORKS = "networks"
+    PER_VOLUME_GIGABYTES = "per-volume-gigabytes"
+    PORTS = "ports"
+    PROPERTIES = "properties"
+    RAM = "ram"
+    RBAC_POLICIES = "rbac_policies"
+    ROUTERS = "routers"
+    SECGROUP_RULES = "secgroup-rules"
+    SECGROUPS = "secgroups"
+    SERVER_GROUP_MEMBERS = "server-group-members"
+    SERVER_GROUPS = "server-groups"
+    SNAPSHOTS = "snapshots"
+    SNAPSHOTS_STANDARD = "snapshots_standard"
+    SUBNET_POOLS = "subnet_pools"
+    SUBNETS = "subnets"
+    VOLUMES = "volumes"
+    VOLUMES_STANDARD = "volumes_standard"
+
+
+class Unit(Enum):
+    """Basic information storage units."""
+
+    GIGA = "G"
+    MEGA = "M"
+    KILO = "K"
+    UNIT = "B"
+
+    def next_unit(self) -> "Unit":
+        """Decreases the given unit by one order of magnitude."""
+        if self == Unit.GIGA:
+            return Unit.MEGA
+        if self == Unit.MEGA:
+            return Unit.KILO
+        if self == Unit.KILO:
+            return Unit.UNIT
+
+        raise OpenstackBadQuota(f"Unit {self} can't be lowered.")
+
+
+class OpenstackQuotaEntry(NamedTuple):
+    """Represents a specific entry for a quota."""
+
+    name: OpenstackQuotaName
+    value: int
+
+    def to_cli(self) -> str:
+        """Return the openstack cli equivalent of setting this quota entry."""
+        return f"--{self.name.value.lower().replace('_', '-')}={self.value}"
+
+    @classmethod
+    def from_human_spec(cls, name: OpenstackQuotaName, human_spec: str) -> "OpenstackQuotaEntry":
+        """Given a human spec (ex. 10G) and a quota name gives a quota entry with the right value."""
+        return cls(
+            name=name,
+            value=cls._human_to_quota_number(
+                human_spec=human_spec,
+                quota_name=name,
+            ),
+        )
+
+    @staticmethod
+    def _human_to_quota_number(human_spec: str, quota_name: OpenstackQuotaName) -> int:
+        """Maps from human strings (ex. 10G) to the string needed for the given quota.
+
+        This is to be able to translate "add 10G of ram" to the number that openstack expects for the ram, that is
+        megabytes.
+        """
+        if "gigabytes" in quota_name.value:
+            dst_unit = Unit.GIGA
+        elif quota_name == OpenstackQuotaName.RAM:
+            dst_unit = Unit.MEGA
+        else:
+            dst_unit = Unit.UNIT
+
+        try:
+            int(human_spec[-1:])
+            # expect that if no unit passed, it's using the one openstack expects
+            cur_unit = dst_unit
+            cur_value = int(human_spec)
+
+        except ValueError:
+            cur_unit = Unit(human_spec[-1:])
+            cur_value = int(human_spec[:-1])
+
+        while dst_unit != cur_unit:
+            cur_value *= 1024
+            try:
+                cur_unit = cur_unit.next_unit()
+            except OpenstackBadQuota as error:
+                raise OpenstackBadQuota(
+                    f"Unable to translate {human_spec} for {quota_name} (maybe the quota chosen does not support that "
+                    "unit?)"
+                ) from error
+
+        return cur_value
 
 
 class OpenstackServerGroupPolicy(Enum):
@@ -637,6 +754,50 @@ class OpenstackAPI:
                 "least."
             )
 
+    def quota_show(self) -> Dict[Union[str, OpenstackQuotaName], Any]:
+        """Get the quotas for a project.
+
+        Note that it will cast any known quota names to OpenstackQuotaName enums.
+        """
+        raw_quotas = self._run_formatted_as_dict("quota", "show")
+        final_quotas: Dict[Union[str, OpenstackQuotaName], Any] = {}
+        for quota_name, quota_value in raw_quotas.items():
+            try:
+                quota_entry = OpenstackQuotaEntry(name=OpenstackQuotaName(quota_name), value=quota_value)
+                final_quotas[quota_entry.name] = quota_entry
+
+            except ValueError:
+                final_quotas[quota_name] = quota_value
+
+        return final_quotas
+
+    def quota_set(self, *quotas: OpenstackQuotaEntry) -> None:
+        """Set a quota to the given value.
+
+        Note that this sets the final value, not an increase.
+        """
+        quotas_cli = [quota.to_cli() for quota in quotas]
+
+        self._run_raw("quota", "set", *quotas_cli)
+
+    def quota_increase(self, *quota_increases: OpenstackQuotaEntry) -> None:
+        """Set a quota to the given value.
+
+        Note that this sets the final value, not an increase.
+        """
+        current_quotas = self.quota_show()
+
+        increased_quotas: List[OpenstackQuotaEntry] = []
+
+        for new_quota in quota_increases:
+            if new_quota.name not in current_quotas:
+                raise OpenstackError(f"Quota {new_quota} was not found in the remote Openstack API.")
+
+            new_value = new_quota.value + current_quotas[new_quota.name].value
+            increased_quotas.append(OpenstackQuotaEntry(name=new_quota.name, value=new_value))
+
+        self.quota_set(*increased_quotas)
+
 
 class KubernetesError(Exception):
     """Parent class for all kubernetes related errors."""
@@ -1048,6 +1209,15 @@ class SALLogger:
     host: str = "wm-bot.wm-bot.wmcloud.org"
     port: int = 64835
     dry_run: bool = False
+
+    @classmethod
+    def from_common_opts(cls, common_opts: CommonOpts) -> "SALLogger":
+        """Get a SALLogger from some CommonOpts."""
+        return cls(
+            project=common_opts.project,
+            task_id=common_opts.task_id,
+            dry_run=common_opts.no_dologmsg,
+        )
 
     def log(
         self,
