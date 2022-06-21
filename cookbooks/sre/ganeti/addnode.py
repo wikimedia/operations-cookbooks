@@ -5,8 +5,8 @@ import logging
 
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.remote import RemoteExecutionError
 from cookbooks.sre.ganeti import get_locations
-
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
             for _, output in result:
                 bridge_check = output.message().decode()
 
-        except StopIteration:
+        except (StopIteration, RemoteExecutionError):
             valid = False
 
         if bridge_check != "0":
