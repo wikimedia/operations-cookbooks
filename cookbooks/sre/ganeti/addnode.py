@@ -103,22 +103,21 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
                 .format(self.fqdn, bridge)
             )
 
-        valid = True
+        valid_bridge = False
         cmd = "bridge fdb show br {} dev {} | grep -vc permanent".format(bridge, interface)
         try:
             result = self.remote_host.run_sync(cmd)
             for _, output in result:
                 bridge_check = output.message().decode()
+            if bridge_check != "0":
+                valid_bridge = True
 
         except (StopIteration, RemoteExecutionError):
-            valid = False
+            valid_bridge = False
 
-        if bridge_check != "0":
-            valid = True
-
-        if not valid:
+        if not valid_bridge:
             raise RuntimeError(
-                'The switch does not appear to be trunking the correct VLANs for the {} bridge.'.
+                'Switch is not trunking the correct VLANs for the {} bridge. Enable them in Netbox'.
                 format(bridge)
             )
 
