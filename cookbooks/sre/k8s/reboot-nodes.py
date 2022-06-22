@@ -133,7 +133,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
 
     def _batchsize(self, number_of_hosts: int) -> int:
         """Adjust the batch size to be no more than 20% of the host in each node/taint group"""
-        orig_batchsize = super()._batchsize
+        orig_batchsize = super()._batchsize(number_of_hosts)
         batchsize = ceil(min(20 * number_of_hosts / 100, orig_batchsize))
         if batchsize != orig_batchsize:
             self.logger.warn(
