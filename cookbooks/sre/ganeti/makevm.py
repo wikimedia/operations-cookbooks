@@ -138,8 +138,9 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
     def run(self):  # pylint: disable=too-many-locals
         """Create a new Ganeti VM as specified."""
         # Pre-allocate IPs
+        # TODO: simplify the VLAN detection logic
         if self.group.site in CORE_DATACENTERS or self.group.site in PER_RACK_VLAN_DATACENTERS:
-            location = self.group.name.lower().split['_'][-1]
+            location = self.group.name.lower().split('_')[-1].replace('-test', '')
             vlan_name = f'{self.network}1-{location}-{self.group.site}'
         else:
             vlan_name = f'{self.network}1-{self.group.site}'
