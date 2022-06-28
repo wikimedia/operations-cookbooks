@@ -273,7 +273,8 @@ class DecommissionHostRunner(CookbookRunnerBase):
                 '//Failed to downtime host on Icinga//')
 
         if netbox_server.virtual:
-            virtual_machine = ganeti.instance(fqdn, cluster=netbox_data['cluster']['name'])
+            ganeti_cluster = netbox.api.virtualization.virtual_machines.get(name=hostname).cluster.group
+            virtual_machine = ganeti.instance(fqdn, cluster=ganeti_cluster)
             self.spicerack.actions[fqdn].success('Found Ganeti VM')
 
             try:

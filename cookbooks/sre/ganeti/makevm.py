@@ -12,7 +12,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from spicerack.decorators import retry
 from spicerack.ganeti import INSTANCE_LINKS
 
-from cookbooks.sre.ganeti import get_locations
+from cookbooks.sre.ganeti import add_location_args
 
 logger = logging.getLogger(__name__)
 PRIMARY_INTERFACE_NAME = '##PRIMARY##'
@@ -30,9 +30,9 @@ class GanetiMakeVM(CookbookBase):
 
     Examples:
         Create a Ganeti VM vmname.codfw.wmnet in the codfw Ganeti cluster
-        on row B with 1 vCPUs, 3GB of RAM, 100GB of disk in the private network:
+        on group row_B with 1 vCPUs, 3GB of RAM, 100GB of disk in the private network:
 
-            makevm --vcpus 1 --memory 3 --disk 100 codfw_B vmhostname
+            makevm --vcpus 1 --memory 3 --disk 100 --cluster codfw --group row_B vmhostname
 
     """
 
@@ -42,7 +42,7 @@ class GanetiMakeVM(CookbookBase):
             """Type validator for argparse that accepts only positive integers."""
             value = int(param)
             if value <= 0:
-                raise argparse.ArgumentTypeError('{param} is not a positive integer'.format(param=param))
+                raise argparse.ArgumentTypeError(f'{param} is not a positive integer')
 
             return value
 
@@ -63,8 +63,7 @@ class GanetiMakeVM(CookbookBase):
             '--disk', type=positive_int, default=10, help='The amount of disk to allocate to the VM in GB.')
         parser.add_argument('--network', choices=INSTANCE_LINKS, default='private',
                             help='Specify the type of network to assign to the VM.')
-        parser.add_argument('location', choices=sorted(get_locations().keys()),
-                            help='The datacenter and row (only for multi-row clusters) where to create the VM.')
+        add_location_args(parser)
         parser.add_argument('hostname', type=validate_hostname, help='The hostname for the VM (not the FQDN).')
 
         return parser
@@ -79,7 +78,9 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
     def __init__(self, args, spicerack):
         """Create a new Virtual Machine in Ganeti."""
-        self.cluster, self.row, self.datacenter = get_locations()[args.location]
+        self.ganeti = spicerack.ganeti()
+        self.group = self.ganeti.get_group(args.group, cluster=args.cluster)
+        self.cluster = args.cluster
         self.hostname = args.hostname
         self.vcpus = args.vcpus
         self.memory = args.memory
@@ -88,13 +89,13 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         self.skip_v6 = args.skip_v6
         self.spicerack = spicerack
         self.netbox = self.spicerack.netbox(read_write=True)
-        self.fqdn = make_fqdn(self.hostname, self.network, self.datacenter)
+        self.fqdn = make_fqdn(self.hostname, self.network, self.group.site)
         self.allocated = []  # Store allocated IPs to rollback them on failure
         self.dns_propagated = False  # Whether to run the DNS cookbook on rollback
         self.need_netbox_sync = False  # Whether to sync the VM to Netbox on rollback
 
-        print('Ready to create Ganeti VM {a.fqdn} in the {a.cluster} cluster on row {a.row} with {a.vcpus} vCPUs, '
-              '{a.memory}GB of RAM, {a.disk}GB of disk in the {a.network} network.'.format(a=self))
+        print('Ready to create Ganeti VM {a.fqdn} in the {a.cluster} cluster on group {a.group.name} with {a.vcpus} '
+              'vCPUs, {a.memory}GB of RAM, {a.disk}GB of disk in the {a.network} network.'.format(a=self))
         ask_confirmation('Is this correct?')
 
         ensure_shell_is_durable()
@@ -102,7 +103,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for new host {}'.format(self.fqdn)
+        return f'for new host {self.fqdn}'
 
     def rollback(self):
         """Rollback IP and DNS assignments on failure."""
@@ -126,26 +127,26 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
     def _ganeti_netbox_sync(self):
         """Perform a sync from Ganeti to Netbox in the affected DC."""
-        logger.info('Syncing VMs in DC %s to Netbox', self.datacenter)
+        logger.info('Syncing VMs in DC %s to Netbox', self.group.site)
         cluster_id = ''
-        if self.datacenter in PER_RACK_VLAN_DATACENTERS:
-            cluster_id = self.cluster.split('.')[0][-2:]
+        if self.group.site in PER_RACK_VLAN_DATACENTERS:
+            cluster_id = self.group.cluster.fqdn.split('.')[0][-2:]
         self.spicerack.netbox_master_host.run_sync(
-            'systemctl start netbox_ganeti_{dc}{cluster_id}_sync.service'
-            .format(dc=self.datacenter, cluster_id=cluster_id))
+            f'systemctl start netbox_ganeti_{self.group.site}{cluster_id}_sync.service')
         self.need_netbox_sync = False
 
     def run(self):  # pylint: disable=too-many-locals
         """Create a new Ganeti VM as specified."""
         # Pre-allocate IPs
-        if self.datacenter in CORE_DATACENTERS or self.datacenter in PER_RACK_VLAN_DATACENTERS:
-            vlan_name = '{a.network}1-{row}-{a.datacenter}'.format(a=self, row=self.row.lower())
+        if self.group.site in CORE_DATACENTERS or self.group.site in PER_RACK_VLAN_DATACENTERS:
+            location = self.group.name.lower().split['_'][-1]
+            vlan_name = f'{self.network}1-{location}-{self.group.site}'
         else:
-            vlan_name = '{a.network}1-{a.datacenter}'.format(a=self)
+            vlan_name = f'{self.network}1-{self.group.site}'
 
         vlan = self.netbox.api.ipam.vlans.get(name=vlan_name, status='active')
         if not vlan:
-            raise RuntimeError('Failed to find VLAN with name {}'.format(vlan_name))
+            raise RuntimeError(f'Failed to find VLAN with name {vlan_name}')
 
         prefix_v4 = self.netbox.api.ipam.prefixes.get(vlan_id=vlan.id, family=4)
         prefix_v6 = self.netbox.api.ipam.prefixes.get(vlan_id=vlan.id, family=6)
@@ -155,8 +156,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         ip_v4 = self.netbox.api.ipam.ip_addresses.get(address=ip_v4_data['address'])
         ip_v4.dns_name = self.fqdn
         if not ip_v4.save():
-            raise RuntimeError(
-                'Failed to save DNS name for IP {} on Netbox'.format(ip_v4))
+            raise RuntimeError(f'Failed to save DNS name for IP {ip_v4} on Netbox')
 
         logger.info('Set DNS name of IP %s to %s', ip_v4, self.fqdn)
 
@@ -164,8 +164,8 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         # IPv6 prefix 2001:db8:3c4d:15::/64 the mapped IPv6 address 2001:db8:3c4d:15:10:0:0:1/64 is generated.
         prefix_v6_base, prefix_v6_mask = str(prefix_v6).split("/")
         mapped_v4 = str(ip_v4).split('/', maxsplit=1)[0].replace(".", ":")
-        ipv6_address = '{prefix}:{mapped}/{mask}'.format(
-            prefix=prefix_v6_base.rstrip(':'), mapped=mapped_v4, mask=prefix_v6_mask)
+        prefix_v6 = prefix_v6_base.rstrip(':')
+        ipv6_address = f'{prefix_v6}:{mapped_v4}/{prefix_v6_mask}'
         if self.skip_v6:
             dns_name_v6 = ''
         else:
@@ -177,20 +177,17 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         self._propagate_dns('Add')
 
         # Create the VM
-        ganeti = self.spicerack.ganeti()
-        instance = ganeti.instance(self.fqdn, cluster=self.cluster)
+        instance = self.ganeti.instance(self.fqdn, cluster=self.cluster)
 
         logger.info('The Ganeti\'s command output will be printed at the end.')
 
         self.need_netbox_sync = True
-        instance.add(
-            row=self.row, vcpus=self.vcpus, memory=self.memory,
-            disk=self.disk, link=self.network)
+        instance.add(group=self.group.name, vcpus=self.vcpus, memory=self.memory,  disk=self.disk, link=self.network)
 
         if self.spicerack.dry_run:
             logger.info('Skipping MAC address retrieval in DRY-RUN mode.')
         else:
-            mac = ganeti.rapi(self.cluster).fetch_instance_mac(self.fqdn)
+            mac = self.ganeti.rapi(self.cluster).fetch_instance_mac(self.fqdn)
             logger.info('MAC address for %s is: %s', self.fqdn, mac)
 
         self._ganeti_netbox_sync()
@@ -200,7 +197,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         def get_vm(netbox):
             vm = netbox.api.virtualization.virtual_machines.get(name=self.hostname)
             if not vm:
-                raise RuntimeError('VM {host} not yet found on Netbox'.format(host=self.hostname))
+                raise RuntimeError(f'VM {self.hostname} not yet found on Netbox')
 
             return vm
 
@@ -213,19 +210,17 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         ip_v4.assigned_object_id = iface.id
         ip_v4.assigned_object_type = 'virtualization.vminterface'
         if not ip_v4.save():
-            raise RuntimeError(
-                'Failed to attach IPv4 {} to interface {}'.format(ip_v4, iface))
+            raise RuntimeError(f'Failed to attach IPv4 {ip_v4} to interface {iface}')
 
         ip_v6.assigned_object_id = iface.id
         ip_v6.assigned_object_type = 'virtualization.vminterface'
         if not ip_v6.save():
-            raise RuntimeError(
-                'Failed to attach IPv6 {} to interface {}'.format(ip_v6, iface))
+            raise RuntimeError(f'Failed to attach IPv6 {ip_v6} to interface {iface}')
 
         vm.primary_ip4 = ip_v4
         vm.primary_ip6 = ip_v6
         if not vm.save():
-            raise RuntimeError('Failed to set primary IPv4/6 to VM {}'.format(vm))
+            raise RuntimeError(f'Failed to set primary IPv4/6 to VM {vm}')
 
         logger.info(
             'Attached IPv4 %s and IPv6 %s to VM %s and marked as primary IPs',

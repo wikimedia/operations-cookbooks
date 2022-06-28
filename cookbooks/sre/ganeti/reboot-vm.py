@@ -60,9 +60,13 @@ class RebootSingleVMRunner(CookbookRunnerBase):
         self.remote_host = spicerack.remote().query(args.vm)
         self.args = args
         self.remote = spicerack.remote()
-        self.cluster = spicerack.netbox_server(
-            str(self.remote_host).split(".", maxsplit=1)[0]).as_dict()['cluster']['name']
+        netbox = spicerack.netbox()
+        hostname = str(self.remote_host).split(".", maxsplit=1)[0]
+        vm = netbox.api.virtualization.virtual_machines.get(name=hostname)
+        if vm is None:
+            raise RuntimeError(f'Unable to find VM {hostname} on Netbox')
 
+        self.cluster = vm.cluster.group.name
         ganeti = spicerack.ganeti()
         self.master = self.remote.query(ganeti.rapi(self.cluster).master)
 

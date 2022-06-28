@@ -6,7 +6,7 @@ import logging
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
-from cookbooks.sre.ganeti import get_locations
+from cookbooks.sre.ganeti import add_location_args
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class GanetiAddNode(CookbookBase):
     a Ganeti cluster and eventually add it.
 
     Usage example:
-        cookbook sre.ganeti.addnode eqsin ganeti5004.eqsin.wmnet
+        cookbook sre.ganeti.addnode --cluster eqiad --group row_A ganeti5004.eqsin.wmnet
     """
 
     def argument_parser(self):
@@ -26,10 +26,8 @@ class GanetiAddNode(CookbookBase):
         parser = argparse.ArgumentParser(description=self.__doc__,
                                          formatter_class=ArgparseFormatter)
 
-        parser.add_argument('location', choices=sorted(get_locations().keys()),
-                            help='The Ganeti cluster to which the new node should be added.')
+        add_location_args(parser)
         parser.add_argument('fqdn', help='The FQDN of the new Ganeti node.')
-        parser.add_argument('group', help='The Ganeti group to add the node to.')
 
         return parser
 
@@ -43,14 +41,16 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
 
     def __init__(self, args, spicerack):
         """Add a new node to a Ganeti cluster."""
-        self.cluster, self.row, self.datacenter = get_locations()[args.location]
         ganeti = spicerack.ganeti()
+        # Validate cluster and group names, will raise if they're not correct.
+        ganeti.get_group(args.group, cluster=args.cluster)
         self.remote = spicerack.remote()
-        self.master = self.remote.query(ganeti.rapi(self.cluster).master)
+        self.master = self.remote.query(ganeti.rapi(args.cluster).master)
         self.remote_host = self.remote.query(args.fqdn)
-        self.fqdn = args.fqdn
-        self.group = args.group
 
+        self.cluster = args.cluster
+        self.group = args.group
+        self.fqdn = args.fqdn
         ensure_shell_is_durable()
 
         if len(self.remote_host) == 0:
@@ -62,7 +62,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for new host {} to {}'.format(self.fqdn, self.cluster)
+        return f'for new host {self.fqdn} to cluster {self.cluster} and group {self.group}'
 
     def validate_state(self, cmd, msg, *, run_on_masternode=False):
         """Ensure a given precondition for adding a Ganeti node and bail out if missed"""
@@ -76,18 +76,13 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
             status = None
 
         if not status:
-            raise RuntimeError(
-                '{} {}. Please fix and re-run the cookbook'.format(self.fqdn, msg)
-            )
+            raise RuntimeError(f'{self.fqdn} {msg}. Please fix and re-run the cookbook')
 
     def is_valid_bridge(self, bridge):
         """Ensure a that a bridge interface is correctly configured on the switches"""
-        self.validate_state(
-            'ip -br link show type bridge dev {}'.format(bridge),
-            'No {} bridge configured'.format(bridge),
-        )
+        self.validate_state(f'ip -br link show type bridge dev {bridge}', f'No {bridge} bridge configured')
 
-        cmd = "ip -br link show master {bridge} ".format(bridge=bridge)
+        cmd = f'ip -br link show master {bridge} '
         cmd += "| awk '!/tap/{print $1}' | awk -F'@' '{print $1}'"
         try:
             result = self.remote_host.run_sync(cmd)
@@ -99,12 +94,10 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
 
         if not interface:
             raise RuntimeError(
-                '{} Could not detect interface for bridge {}. Please fix and re-run the cookbook'
-                .format(self.fqdn, bridge)
-            )
+                f'{self.fqdn} Could not detect interface for bridge {bridge}. Please fix and re-run the cookbook')
 
         valid_bridge = False
-        cmd = "bridge fdb show br {} dev {} | grep -vc permanent".format(bridge, interface)
+        cmd = f'bridge fdb show br {bridge} dev {interface} | grep -vc permanent'
         try:
             result = self.remote_host.run_sync(cmd)
             for _, output in result:
@@ -117,20 +110,16 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
 
         if not valid_bridge:
             raise RuntimeError(
-                'Switch is not trunking the correct VLANs for the {} bridge. Enable them in Netbox'.
-                format(bridge)
-            )
+                f'Switch is not trunking the correct VLANs for the {bridge} bridge. Enable them in Netbox')
 
     def run(self):
         """Add a new node to a Ganeti cluster."""
-        print('Ready to add Ganeti node {} in the {} cluster'.format(self.fqdn, self.cluster))
+        print(f'Ready to add Ganeti node {self.fqdn} in the {self.cluster} cluster')
         ask_confirmation('Is this correct?')
 
         if self.fqdn not in self.remote.query('A:ganeti-all').hosts:
             raise RuntimeError(
-                '{} does have not have the Ganeti role applied. Please fix and re-run the cookbook'
-                .format(self.fqdn)
-            )
+                f'{self.fqdn} does have not have the Ganeti role applied. Please fix and re-run the cookbook')
 
         self.validate_state(
             'ls /dev/kvm',
@@ -145,7 +134,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         )
 
         self.validate_state(
-            'grep {node} /etc/ferm/conf.d/10_ganeti_ssh_cluster'.format(node=self.fqdn),
+            f'grep {self.fqdn} /etc/ferm/conf.d/10_ganeti_ssh_cluster',
             ('The node cannot be found in the Ferm config of the Ganeti master.'
              'Make sure to add it to the profile::ganeti::nodes Hiera config.'),
             run_on_masternode=True,
@@ -157,8 +146,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         if self.fqdn in self.remote.query('A:eqiad').hosts:
             self.is_valid_bridge('analytics')
 
-        self.master.run_sync('gnt-node add --no-ssh-key-check -g "{group}" "{node}"'.format(
-            group=self.group, node=self.fqdn))
+        self.master.run_sync(f'gnt-node add --no-ssh-key-check -g "{self.group}" "{self.fqdn}"')
         ask_confirmation('Has the node been added correctly?')
 
         self.master.run_sync('gnt-cluster verify')
