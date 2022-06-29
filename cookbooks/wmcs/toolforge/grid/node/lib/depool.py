@@ -12,14 +12,8 @@ from typing import List, Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import (
-    CommonOpts,
-    OpenstackAPI,
-    SALLogger,
-    add_common_opts,
-    parser_type_list_hostnames,
-    with_common_opts,
-)
+from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, parser_type_list_hostnames, with_common_opts
+from cookbooks.wmcs.lib.openstack import OpenstackAPI
 from cookbooks.wmcs.toolforge.grid import GridController, GridNodeNotFound
 
 LOGGER = logging.getLogger(__name__)

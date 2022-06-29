@@ -1,7 +1,8 @@
 import cumin
 import pytest
 
-from cookbooks.wmcs import OpenstackAPI, OpenstackBadQuota, OpenstackQuotaEntry, OpenstackQuotaName, TestUtils, Unit
+from cookbooks.wmcs import TestUtils
+from cookbooks.wmcs.lib.openstack import OpenstackAPI, OpenstackBadQuota, OpenstackQuotaEntry, OpenstackQuotaName, Unit
 
 
 @pytest.mark.parametrize(
@@ -114,12 +115,11 @@ def test_OpenstackQuotaEntry___init__works(human_str: str, quota_name: Openstack
             "RAM passing 20K": {
                 "human_str": "20K",
                 "quota_name": OpenstackQuotaName.RAM,
-                "expected_value": "20",
             },
         }
     )
 )
-def test_OpenstackQuotaEntry___init__raises(human_str: str, quota_name: OpenstackQuotaName, expected_value: str):
+def test_OpenstackQuotaEntry___init__raises(human_str: str, quota_name: OpenstackQuotaName):
     with pytest.raises(OpenstackBadQuota):
         OpenstackQuotaEntry.from_human_spec(human_spec=human_str, name=quota_name)
 

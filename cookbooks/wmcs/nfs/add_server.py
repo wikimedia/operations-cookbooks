@@ -17,7 +17,8 @@ import yaml
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import OpenstackAPI, run_one_raw
+from cookbooks.wmcs import run_one_raw
+from cookbooks.wmcs.lib.openstack import OpenstackAPI
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
     CreateInstanceWithPrefix,
     InstanceCreationOpts,

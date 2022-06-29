@@ -21,12 +21,11 @@ from cookbooks.wmcs import (
     CommonOpts,
     KubeadmController,
     KubernetesController,
-    OpenstackAPI,
-    OpenstackServerGroupPolicy,
     SALLogger,
     add_common_opts,
     with_common_opts,
 )
+from cookbooks.wmcs.lib.openstack import OpenstackAPI, OpenstackServerGroupPolicy
 from cookbooks.wmcs.vps.create_instance_with_prefix import CreateInstanceWithPrefix
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 

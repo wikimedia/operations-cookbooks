@@ -17,12 +17,12 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from cookbooks.wmcs import (
     CommonOpts,
     KubernetesController,
-    OpenstackAPI,
     SALLogger,
     add_common_opts,
     natural_sort_key,
     with_common_opts,
 )
+from cookbooks.wmcs.lib.openstack import OpenstackAPI
 from cookbooks.wmcs.toolforge.worker.drain import Drain
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
 
@@ -46,7 +46,7 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
             "--fqdn-to-remove",
             required=False,
             default=None,
-            help="FQDN of the node to remove, if none passed will remove the intance with the lower index.",
+            help="FQDN of the node to remove, if none passed will remove the instance with the lower index.",
         )
         parser.add_argument(
             "--control-node-fqdn",

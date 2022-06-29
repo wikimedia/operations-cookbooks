@@ -19,7 +19,8 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import OpenstackAPI, OutputFormat, run_one_as_dict, run_one_raw
+from cookbooks.wmcs import OutputFormat, run_one_as_dict, run_one_raw
+from cookbooks.wmcs.lib.openstack import OpenstackAPI
 
 LOGGER = logging.getLogger(__name__)
 

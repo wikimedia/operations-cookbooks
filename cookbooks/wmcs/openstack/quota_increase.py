@@ -13,15 +13,8 @@ from typing import List, Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import (
-    CommonOpts,
-    OpenstackAPI,
-    OpenstackQuotaEntry,
-    OpenstackQuotaName,
-    SALLogger,
-    add_common_opts,
-    with_common_opts,
-)
+from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.lib.openstack import OpenstackAPI, OpenstackQuotaEntry, OpenstackQuotaName
 
 LOGGER = logging.getLogger(__name__)
 

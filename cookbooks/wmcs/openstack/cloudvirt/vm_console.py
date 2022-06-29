@@ -2,7 +2,7 @@
 
 Usage example: wmcs.openstack.cloudvirt.vm_console \
     --control-node-fqdn cloudcontrol1003.wikimedia.org \
-    --vm-name fullstackd-20220613230939
+    --vm-name fullstack-20220613230939
     --project admin-monitoring
 
 """
@@ -15,7 +15,7 @@ from typing import List
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import OpenstackAPI
+from cookbooks.wmcs.lib.openstack import OpenstackAPI
 
 LOGGER = logging.getLogger(__name__)
 
