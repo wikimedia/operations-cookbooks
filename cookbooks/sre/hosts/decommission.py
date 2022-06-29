@@ -311,6 +311,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
 
             if can_connect:
                 try:
+                    remote_host.run_sync('swapoff -a')
                     # Call wipefs with globbing on all top level devices of type disk reported by lsblk
                     remote_host.run_sync((r"lsblk --all --output 'NAME,TYPE' --paths | "
                                           r"awk '/^\/.* disk$/{ print $1 }' | "
