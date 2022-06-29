@@ -365,6 +365,7 @@ def run_one_raw(
     node: RemoteHosts,
     capture_errors: bool = False,
     last_line_only: bool = False,
+    skip_first_line: bool = False,
     **kwargs,
 ) -> str:
     """Run a command on a node.
@@ -383,6 +384,9 @@ def run_one_raw(
         return ""
 
     raw_result = result[1].message().decode()
+    if skip_first_line:
+        raw_result = "\n".join(raw_result.splitlines()[1:])
+
     if last_line_only:
         raw_result = raw_result.splitlines()[-1]
 
@@ -394,6 +398,7 @@ def run_one_formatted_as_list(
     node: RemoteHosts,
     capture_errors: bool = False,
     last_line_only: bool = False,
+    skip_first_line: bool = False,
     try_format: OutputFormat = OutputFormat.JSON,
     **kwargs,
 ) -> List[Any]:
@@ -403,6 +408,7 @@ def run_one_formatted_as_list(
         node=node,
         capture_errors=capture_errors,
         last_line_only=last_line_only,
+        skip_first_line=skip_first_line,
         try_format=try_format,
         **kwargs,
     )
@@ -440,6 +446,7 @@ def run_one_formatted(
     node: RemoteHosts,
     capture_errors: bool = False,
     last_line_only: bool = False,
+    skip_first_line: bool = False,
     try_format: OutputFormat = OutputFormat.JSON,
     **kwargs,
 ) -> Union[List[Any], Dict[str, Any]]:
@@ -450,7 +457,12 @@ def run_one_formatted(
     Any extra kwargs will be passed to the RemoteHosts.run_sync function.
     """
     raw_result = run_one_raw(
-        command=command, node=node, capture_errors=capture_errors, last_line_only=last_line_only, **kwargs
+        command=command,
+        node=node,
+        capture_errors=capture_errors,
+        last_line_only=last_line_only,
+        skip_first_line=skip_first_line,
+        **kwargs,
     )
 
     try:
@@ -461,9 +473,9 @@ def run_one_formatted(
             return yaml.safe_load(raw_result)
 
     except (json.JSONDecodeError, yaml.YAMLError) as error:
-        raise Exception("Unable to parse output of command as {try_format}:\n{raw_result}") from error
+        raise Exception(f"Unable to parse output of command as {try_format}:\n{raw_result}") from error
 
-    raise Exception("Unrecognized format {try_format}")
+    raise Exception(f"Unrecognized format {try_format}")
 
 
 def simple_create_file(dst_node: RemoteHosts, contents: str, remote_path: str, use_root: bool = True) -> None:

@@ -329,3 +329,34 @@ def test_OpenstackAPI_quota_increase_happy_path():
     )
     fake_control_host = fake_remote.query.return_value
     fake_control_host.run_sync.assert_called_with(expected_command, is_safe=False)
+
+
+@pytest.mark.parametrize(
+    **TestUtils.to_parametrize(
+        test_cases={
+            "eqiad hostname": {
+                "node": "node1020",
+                "expected_domain": "eqiad.wmnet",
+            },
+            "codfw hostname": {
+                "node": "node2010",
+                "expected_domain": "codfw.wmnet",
+            },
+            "eqiad fqdn": {
+                "node": "node1020.eqiad.wmnet",
+                "expected_domain": "eqiad.wmnet",
+            },
+            "codfw fqdn": {
+                "node": "node2010.codfw.wmnet",
+                "expected_domain": "codfw.wmnet",
+            },
+        }
+    )
+)
+def test_openstack_get_nodes_domain(node: str, expected_domain: str):
+    fake_remote = TestUtils.get_fake_remote(responses=[""])
+    my_api = OpenstackAPI(remote=fake_remote, project="admin-monitoring", control_node_fqdn=node)
+
+    gotten_domain = my_api.get_nodes_domain()
+
+    assert gotten_domain == expected_domain
