@@ -39,7 +39,7 @@ class AlertManager:
         """
         return run_one_formatted_as_list(node=self.node, command=["amtool", "--output=json", "silence", "query", query])
 
-    def downtime_alert(self, alert_name: str, comment: str, duration: Optional[str] = None) -> SilenceID:
+    def downtime_alert(self, alert_name: str, comment: str, duration: str = "1h") -> SilenceID:
         """Add a silence for an alert.
 
         Examples of 'alert_name':
@@ -54,7 +54,7 @@ class AlertManager:
             "--output=json",
             "silence",
             "add",
-            f'--duration="{duration or "1h"}"',
+            f'--duration="{duration}"',
             f"--comment='{comment}'",
             f"alertname={alert_name}",
         ]
@@ -187,7 +187,7 @@ def uptime_host(spicerack: Spicerack, host_name: str, silence_id: Optional[Silen
 def downtime_alert(
     spicerack: Spicerack,
     alert_name: str,
-    duration: Optional[str] = None,
+    duration: str = "1h",
     comment: Optional[str] = None,
     task_id: Optional[str] = None,
 ) -> SilenceID:
