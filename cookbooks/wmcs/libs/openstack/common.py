@@ -448,14 +448,12 @@ class OpenstackAPI(CommandRunnerMixin):
         """
         return self.run_formatted_as_dict("port", "create", "--network", _quote(network), _quote(ip_name), **kwargs)
 
-    def attach_service_ip(
-        self, ip_address: str, server_port_id: OpenstackIdentifier, **kwargs
-    ) -> Dict[OpenstackName, Any]:
+    def attach_service_ip(self, ip_address: str, server_port_id: OpenstackIdentifier, **kwargs) -> str:
         """Attach a specified service ip address to the specified port
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self.run_formatted_as_dict(
+        return self.run_raw(
             "port",
             "set",
             "--allowed-address",
@@ -465,14 +463,12 @@ class OpenstackAPI(CommandRunnerMixin):
             **kwargs,
         )
 
-    def detach_service_ip(
-        self, ip_address: str, mac_addr: str, server_port_id: OpenstackIdentifier, **kwargs
-    ) -> Dict[str, Any]:
+    def detach_service_ip(self, ip_address: str, mac_addr: str, server_port_id: OpenstackIdentifier, **kwargs) -> str:
         """Detach a specified service ip address from the specified port
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self.run_formatted_as_dict(
+        return self.run_raw(
             "port",
             "unset",
             "--allowed-address",
@@ -491,9 +487,9 @@ class OpenstackAPI(CommandRunnerMixin):
         """Get zone record for specified dns zone"""
         return self.run_formatted_as_list("zone", "list", "--name", name, **kwargs)
 
-    def recordset_create(self, zone_id, record_type, name, record, **kwargs) -> List[Dict[str, Any]]:
+    def recordset_create(self, zone_id, record_type, name, record, **kwargs) -> Dict[str, Any]:
         """Get zone record for specified dns zone"""
-        return self.run_formatted_as_list(
+        return self.run_formatted_as_dict(
             "recordset", "create", "--type", record_type, "--record", record, zone_id, name, **kwargs
         )
 
