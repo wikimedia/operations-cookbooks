@@ -453,7 +453,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 logger.error(e)
                 self.host_actions.failure(f'**Failed to get Netbox script results, try manually**: {job_url}')
 
-    def run(self):  # pylint: disable=too-many-statements
+    def run(self):  # pylint: disable=too-many-statements,too-many-branches
         """Execute the reimage."""
         if self.phabricator is not None:
             self.phabricator.task_comment(
@@ -467,11 +467,12 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 self.host_actions.success('Downtimed on Icinga/Alertmanager')
 
             self._depool()
-            try:
-                self.puppet.disable(self.reason)
-                self.host_actions.success('Disabled Puppet')
-            except RemoteExecutionError:
-                self.host_actions.warning('//Unable to disable Puppet, the host may have been unreachable//')
+            if not self.args.no_pxe:
+                try:
+                    self.puppet.disable(self.reason)
+                    self.host_actions.success('Disabled Puppet')
+                except RemoteExecutionError:
+                    self.host_actions.warning('//Unable to disable Puppet, the host may have been unreachable//')
 
         self.puppet_master.delete(self.fqdn)
         self.host_actions.success('Removed from Puppet and PuppetDB if present')
