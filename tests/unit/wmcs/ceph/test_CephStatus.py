@@ -1,11 +1,8 @@
-from cookbooks.wmcs.lib.ceph import (
-    CephClusterStatus,
-    CephClusterUnhealthy,
-    CephOSDFlag,
-    CephTestUtils,
-)
+from typing import Any, Dict, List, Optional
+
 import pytest
-from typing import Dict, Any, Optional, List
+
+from cookbooks.wmcs.lib.ceph import CephClusterStatus, CephClusterUnhealthy, CephOSDFlag, CephTestUtils
 
 
 # the examples are trimmed down from the output of `ceph status -f json-pretty`

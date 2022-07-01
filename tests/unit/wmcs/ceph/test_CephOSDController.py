@@ -4,11 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from cookbooks.wmcs.lib.ceph import (
-    CephMalformedInfo,
-    CephOSDController,
-    CephTestUtils,
-)
+from cookbooks.wmcs.lib.ceph import CephMalformedInfo, CephOSDController, CephTestUtils
 
 
 def parametrize(params: Dict[str, Any]):

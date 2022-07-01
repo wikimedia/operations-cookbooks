@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Alert and downtime related library functions and classes."""
 import getpass
-import socket
 import logging
+import socket
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 

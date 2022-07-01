@@ -15,18 +15,9 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import (
-    CommonOpts,
-    SALLogger,
-    add_common_opts,
-    with_common_opts,
-)
+from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
-from cookbooks.wmcs.lib.ceph import (
-    CephClusterController,
-    CephOSDController,
-    CephOSDFlag,
-)
+from cookbooks.wmcs.lib.ceph import CephClusterController, CephOSDController, CephOSDFlag
 
 LOGGER = logging.getLogger(__name__)
 # This will not be used for the OSD

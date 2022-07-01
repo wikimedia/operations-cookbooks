@@ -13,13 +13,7 @@ from datetime import datetime
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import (
-    CommonOpts,
-    SALLogger,
-    DebianVersion,
-    add_common_opts,
-    with_common_opts,
-)
+from cookbooks.wmcs import CommonOpts, DebianVersion, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.toolforge.grid import GridController, GridNodeType
 
 LOGGER = logging.getLogger(__name__)
@@ -63,11 +57,7 @@ class ToolforgeGridRebootWorkers(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(
-            self.spicerack,
-            args,
-            ToolforgeGridRebootWorkersRunner,
-        )(
+        return with_common_opts(self.spicerack, args, ToolforgeGridRebootWorkersRunner)(
             queue=GridNodeType[args.queue.upper()],
             debian_version=DebianVersion[args.debian_version.upper()],
             master_node_fqdn=args.master_node_fqdn
@@ -101,13 +91,9 @@ class ToolforgeGridRebootWorkersRunner(CookbookRunnerBase):
 
     def run(self) -> None:
         """Main entry point"""
-        grid_controller = GridController(
-            remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn
-        )
+        grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn)
 
-        self.sallogger.log(
-            message=f"rebooting {self.debian_version.name.lower()} {self.queue.value} grid workers"
-        )
+        self.sallogger.log(message=f"rebooting {self.debian_version.name.lower()} {self.queue.value} grid workers")
 
         # stretch uses format -xxyy (where x is the debian version and y is the worker number),
         # but buster uses -xx-yy, filter on what's needed to match those reliably
@@ -130,13 +116,9 @@ class ToolforgeGridRebootWorkersRunner(CookbookRunnerBase):
             with grid_controller.with_node_depooled(node_name):
                 reboot_time = datetime.utcnow()
 
-                remote_node = self.spicerack.remote().query(
-                    f"D{{{node_fqdn}}}", use_sudo=True
-                )
+                remote_node = self.spicerack.remote().query(f"D{{{node_fqdn}}}", use_sudo=True)
 
                 remote_node.reboot()
                 remote_node.wait_reboot_since(reboot_time)
 
-        self.sallogger.log(
-            message=f"rebooted {self.debian_version.name.lower()} {self.queue.value} grid workers"
-        )
+        self.sallogger.log(message=f"rebooted {self.debian_version.name.lower()} {self.queue.value} grid workers")
