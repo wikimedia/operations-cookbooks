@@ -183,7 +183,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         logger.info('The Ganeti\'s command output will be printed at the end.')
 
         self.need_netbox_sync = True
-        instance.add(group=self.group.name, vcpus=self.vcpus, memory=self.memory,  disk=self.disk, link=self.network)
+        instance.add(group=self.group.name, vcpus=self.vcpus, memory=self.memory, disk=self.disk, link=self.network)
 
         if self.spicerack.dry_run:
             logger.info('Skipping MAC address retrieval in DRY-RUN mode.')
