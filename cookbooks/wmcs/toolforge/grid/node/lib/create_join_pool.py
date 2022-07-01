@@ -54,15 +54,17 @@ class ToolforgeGridNodeCreateJoinPool(CookbookBase):
         parser.add_argument(
             "--debian-version",
             required=True,
-            default=DebianVersion.BUSTER.name.lower(),
-            choices=[version.name.lower() for version in DebianVersion],
+            default=DebianVersion.BUSTER,
+            choices=list(DebianVersion),
+            type=DebianVersion.from_version_str,
             # TODO: Figure out the debian version from the image, or just not use it for the prefix
             help="Version of debian to use, as currently we are unable to get it from the image reliably.",
         )
         parser.add_argument(
             "--nodetype",
             required=True,
-            choices=[ntype.value for ntype in GridNodeType],
+            choices=list(GridNodeType),
+            type=GridNodeType,
             help="Type of the new grid node",
         )
 
@@ -75,7 +77,7 @@ class ToolforgeGridNodeCreateJoinPool(CookbookBase):
         )(
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
-            debian_version=DebianVersion[args.debian_version.upper()],
+            debian_version=args.debian_version,
             spicerack=self.spicerack,
             nodetype=args.nodetype,
         )

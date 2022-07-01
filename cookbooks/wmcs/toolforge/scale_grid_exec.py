@@ -6,12 +6,11 @@ Usage example:
 """
 import argparse
 import logging
-from enum import Enum
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, DebianVersion, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.openstack.common import OpenstackServerGroupPolicy
 from cookbooks.wmcs.toolforge.grid.node.lib.create_join_pool import ToolforgeGridNodeCreateJoinPool
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
@@ -21,13 +20,6 @@ from cookbooks.wmcs.vps.create_instance_with_prefix import (
 )
 
 LOGGER = logging.getLogger(__name__)
-
-
-class DebianVersion(Enum):
-    """Represents Debian release names/numbers."""
-
-    STRETCH = "09"
-    BUSTER = "10"
 
 
 class ToolforgeScaleGridExec(CookbookBase):
@@ -56,8 +48,9 @@ class ToolforgeScaleGridExec(CookbookBase):
         parser.add_argument(
             "--debian-version",
             required=True,
-            default=DebianVersion.BUSTER.name.lower(),
-            choices=[version.name.lower() for version in DebianVersion],
+            default=DebianVersion.BUSTER,
+            choices=list(DebianVersion),
+            type=DebianVersion.from_version_str,
             # TODO: Figure out the debian version from the image, or just not use it for the prefix
             help="Version of debian to use, as currently we are unable to get it from the image reliably.",
         )
@@ -76,7 +69,7 @@ class ToolforgeScaleGridExec(CookbookBase):
         )(
             grid_master_fqdn=args.grid_master_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
-            debian_version=DebianVersion[args.debian_version.upper()],
+            debian_version=args.debian_version,
             spicerack=self.spicerack,
         )
 

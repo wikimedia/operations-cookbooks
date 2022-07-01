@@ -5,14 +5,13 @@ import logging
 import time
 from copy import deepcopy
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
 from spicerack import Remote, Spicerack
 from wmflib.interactive import ask_confirmation
 
 from cookbooks.wmcs.libs.alerts import SilenceID, downtime_alert, uptime_alert
-from cookbooks.wmcs.libs.common import TestUtils, run_one_as_dict, run_one_formatted, run_one_raw
+from cookbooks.wmcs.libs.common import ArgparsableEnum, TestUtils, run_one_as_dict, run_one_formatted, run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 # List of alerts that are triggered by the cluster aside from the specifics for each node
@@ -48,7 +47,7 @@ class CephMalformedInfo(CephException):
     """Risen when the output of a command is not what was expected."""
 
 
-class CephOSDFlag(Enum):
+class CephOSDFlag(ArgparsableEnum):
     """Possible OSD flags."""
 
     # cluster marked as full and stops serving writes

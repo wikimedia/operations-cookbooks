@@ -13,7 +13,7 @@ from defusedxml import ElementTree
 from spicerack.puppet import PuppetHosts
 from spicerack.remote import Remote
 
-from cookbooks.wmcs.libs.common import run_one_raw
+from cookbooks.wmcs.libs.common import ArgparsableEnum, run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 
@@ -210,7 +210,7 @@ class GridNodeInfo:
         return all(queue.is_ok() for queue in self.queues_info.values())
 
 
-class GridNodeType(Enum):
+class GridNodeType(ArgparsableEnum):
     """Represents a grid node type."""
 
     EXEC = "exec"

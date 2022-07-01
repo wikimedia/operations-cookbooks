@@ -44,11 +44,42 @@ def parser_type_str_hostname(value: str):
     return value
 
 
+class ArgparsableEnum(Enum):
+    """Enum that behaves well with argparse.
+
+    Example usage:
+
+    class MyEnum(ArgparsableEnum):
+        OPT1 = "option 1"
+        OPT2 = "option 2"
+
+    parser.add_argument(
+        "--my-enum",
+        choices=list(MyEnum),
+        type=MyEnum,
+        default=MyEnum.OPT1,
+    )
+    """
+
+    def __str__(self):
+        """Needed to show the nice string values and for argparse to use those to call the `type` parameter."""
+        return self.value
+
+
 class DebianVersion(Enum):
     """Represents Debian release names/numbers."""
 
     STRETCH = "09"
     BUSTER = "10"
+
+    def __str__(self) -> str:
+        """Needed to show the nice string values and for argparse to use those to call the `type` parameter."""
+        return self.name.lower()
+
+    @classmethod
+    def from_version_str(cls, version_str: str) -> "DebianVersion":
+        """Helps when passing DebianVersion to argparse as type."""
+        return cls[version_str.upper()]
 
 
 class OutputFormat(Enum):

@@ -131,8 +131,9 @@ def add_instance_creation_options(parser: argparse.ArgumentParser) -> argparse.A
             "Server group policy to start the instance in. If it does not exist, it will create it with "
             "anti-affinity policy, will use the same as '--prefix' by default (ex. toolsbeta-test-k8s-etcd)."
         ),
-        choices=[policy.value for policy in OpenstackServerGroupPolicy],
-        default=OpenstackServerGroupPolicy.ANTI_AFFINITY.value,
+        choices=list(OpenstackServerGroupPolicy),
+        type=OpenstackServerGroupPolicy,
+        default=OpenstackServerGroupPolicy.ANTI_AFFINITY,
     )
     return parser
 
@@ -225,7 +226,7 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
         common_opts: CommonOpts,
         spicerack: Spicerack,
         instance_creation_opts: InstanceCreationOpts,
-        server_group_policy: str,
+        server_group_policy: OpenstackServerGroupPolicy,
         security_group: str,
         server_group: Optional[str] = None,
         ssh_retries: int = 15,
@@ -261,7 +262,7 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
         )
         self.openstack_api.server_group_ensure(
             server_group=self.server_group,
-            policy=OpenstackServerGroupPolicy(self.server_group_policy),
+            policy=self.server_group_policy,
         )
 
         all_project_servers = self.openstack_api.server_list(print_output=False)

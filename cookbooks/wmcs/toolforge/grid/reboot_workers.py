@@ -35,13 +35,15 @@ class ToolforgeGridRebootWorkers(CookbookBase):
         parser.add_argument(
             "--queue",
             required=True,
-            choices=[ntype.value for ntype in GridNodeType],
+            choices=list(GridNodeType),
+            type=GridNodeType,
             help="Only reboot workers in this queue.",
         )
         parser.add_argument(
             "--debian-version",
             required=True,
-            choices=[version.name.lower() for version in DebianVersion],
+            choices=list(DebianVersion),
+            type=DebianVersion.from_version_str,
             help="Only reboot workers using this Debian version.",
         )
         parser.add_argument(
@@ -57,9 +59,9 @@ class ToolforgeGridRebootWorkers(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(self.spicerack, args, ToolforgeGridRebootWorkersRunner)(
-            queue=GridNodeType[args.queue.upper()],
-            debian_version=DebianVersion[args.debian_version.upper()],
+        return with_common_opts(self.spicerack, args, ToolforgeGridRebootWorkersRunner,)(
+            queue=args.queue,
+            debian_version=args.debian_version,
             master_node_fqdn=args.master_node_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
             spicerack=self.spicerack,

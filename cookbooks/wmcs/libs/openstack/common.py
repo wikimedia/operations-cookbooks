@@ -12,6 +12,7 @@ from cumin.transports import Command
 from spicerack.remote import Remote, RemoteHosts
 
 from cookbooks.wmcs.libs.common import (
+    ArgparsableEnum,
     OutputFormat,
     run_one_as_dict,
     run_one_formatted,
@@ -273,7 +274,7 @@ class OpenstackBadQuota(OpenstackError):
     """Thrown when the quota given is not known or incorrect."""
 
 
-class OpenstackRuleDirection(Enum):
+class OpenstackRuleDirection(ArgparsableEnum):
     """Direction for the security group rule."""
 
     INGRESS = auto()
@@ -393,7 +394,7 @@ class OpenstackQuotaEntry(NamedTuple):
         return cur_value
 
 
-class OpenstackServerGroupPolicy(Enum):
+class OpenstackServerGroupPolicy(ArgparsableEnum):
     """Affinity for the server group."""
 
     SOFT_ANTI_AFFINITY = "soft-anti-affinity"
