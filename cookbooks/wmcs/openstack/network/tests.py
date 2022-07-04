@@ -10,40 +10,15 @@ Documentation:
 """
 import argparse
 import logging
-from enum import Enum
 from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CmdChecklist
+from cookbooks.wmcs.lib.openstack import Deployment, get_control_nodes
 
 LOGGER = logging.getLogger(__name__)
-
-
-class Deployment(Enum):
-    """Deployment enumerate"""
-
-    EQIAD1 = "eqiad1"
-    CODFW1DEV = "codfw1dev"
-
-    def __str__(self):
-        """String representation"""
-        return self.value
-
-
-all_control_nodes = {
-    Deployment.EQIAD1: [
-        "cloudcontrol1003.wikimedia.org",
-        "cloudcontrol1004.wikimedia.org",
-        "cloudcontrol1005.wikimedia.org",
-    ],
-    Deployment.CODFW1DEV: [
-        "cloudcontrol2001-dev.wikimedia.org",
-        "cloudcontrol2003-dev.wikimedia.org",
-        "cloudcontrol2004-dev.wikimedia.org",
-    ],
-}
 
 
 class NetworkTests(CookbookBase):
@@ -91,7 +66,7 @@ class NetworkTestRunner(CookbookRunnerBase):
         # TODO: once we can run cumin with the puppetdb backend from our laptop
         # this ugly harcoding can be replaced to something like:
         # query = f"P{{O:wmcs::openstack::{self.deployment}::control}}"
-        control_nodes = ",".join(all_control_nodes[self.deployment])
+        control_nodes = ",".join(get_control_nodes(self.deployment))
         query = f"D{{{control_nodes}}}"
         remote_hosts = self.spicerack.remote().query(query, use_sudo=True)
 

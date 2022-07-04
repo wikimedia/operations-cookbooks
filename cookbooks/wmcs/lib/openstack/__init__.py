@@ -26,9 +26,43 @@ MINUTES_IN_HOUR = 60
 SECONDS_IN_MINUTE = 60
 
 
+class Deployment(Enum):
+    """Deployment enumerate"""
+
+    EQIAD1 = "eqiad1"
+    CODFW1DEV = "codfw1dev"
+
+    def __str__(self):
+        """String representation"""
+        return self.value
+
+
+_OPENSTACK_NODES = {
+    Deployment.EQIAD1: {
+        "control-nodes": [
+            "cloudcontrol1003.wikimedia.org",
+            "cloudcontrol1004.wikimedia.org",
+            "cloudcontrol1005.wikimedia.org",
+        ],
+    },
+    Deployment.CODFW1DEV: {
+        "control-nodes": [
+            "cloudcontrol2001-dev.wikimedia.org",
+            "cloudcontrol2003-dev.wikimedia.org",
+            "cloudcontrol2004-dev.wikimedia.org",
+        ]
+    },
+}
+
+
 OpenstackID = str
 OpenstackName = str
 OpenstackIdentifier = Union[OpenstackID, OpenstackName]
+
+
+def get_control_nodes(deployment: Deployment) -> List[str]:
+    """Get all the control nodes (in the future with netbox or similar)."""
+    return _OPENSTACK_NODES[deployment]["control-nodes"]
 
 
 def _quote(mystr: str) -> str:
