@@ -1,8 +1,8 @@
-"""WMCS Openstack - Reboot a cloudgw node .
+"""WMCS Openstack - Reboot a cloudcontrol node .
 
 Usage example:
-    cookbook wmcs.openstack.cloudgw.reboot_node \
-    --fqdn-to-reboot cloudgw1002.eqiad.wmnet
+    cookbook wmcs.openstack.cloudcontrol.reboot_node \
+    --fqdn-to-reboot cloudcontrol1003.wikimedia.org
 
 """
 import argparse
@@ -21,7 +21,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class RebootNode(CookbookBase):
-    """WMCS Openstack cookbook to reboot a single cloudgws, handling failover."""
+    """WMCS Openstack cookbook to reboot a single cloudcontrols, handling failover."""
 
     title = __doc__
 
@@ -85,18 +85,20 @@ class RebootNodeRunner(CookbookRunnerBase):
 
         self.deployment = Deployment.get_for_node(self.fqdn_to_reboot)
 
-        known_cloudgws = get_gateway_nodes(self.deployment)
-        if not known_cloudgws:
-            raise Exception(f"No cloudgws found for deployment {self.deployment} :-S")
+        known_cloudcontrols = get_gateway_nodes(self.deployment)
+        if not known_cloudcontrols:
+            raise Exception(f"No cloudcontrols found for deployment {self.deployment} :-S")
 
-        if len(known_cloudgws) == 1 and not self.skip_checks:
+        if len(known_cloudcontrols) == 1 and not self.skip_checks:
             raise Exception(
-                f"There's only one gateway node for the deployment {self.deployment} ({known_cloudgws}), and the "
+                f"There's only one gateway node for the deployment {self.deployment} ({known_cloudcontrols}), and the "
                 "network will go dow if rebooted, pass --skip-checks to ignore."
             )
 
-        if self.fqdn_to_reboot not in known_cloudgws:
-            raise Exception(f"Host {self.fqdn_to_reboot} is not part of the cloudgw for deployment {self.deployment}")
+        if self.fqdn_to_reboot not in known_cloudcontrols:
+            raise Exception(
+                f"Host {self.fqdn_to_reboot} is not part of the cloudcontrol for deployment {self.deployment}"
+            )
 
         if not self.skip_checks:
             LOGGER.info("Checking the current state of the network...")
@@ -105,13 +107,13 @@ class RebootNodeRunner(CookbookRunnerBase):
 
     def run(self) -> None:
         """Main entry point"""
-        self.sallogger.log(f"Rebooting cloudgw host {self.fqdn_to_reboot}")
+        self.sallogger.log(f"Rebooting cloudcontrol host {self.fqdn_to_reboot}")
         node = self.spicerack.remote().query(f"D{{{self.fqdn_to_reboot}}}", use_sudo=True)
         host_name = self.fqdn_to_reboot.split(".", 1)[0]
         host_silence_id = downtime_host(
             spicerack=self.spicerack,
             host_name=host_name,
-            comment="Rebooting with wmcs.openstack.cloudgw.reboot_node",
+            comment="Rebooting with wmcs.openstack.cloudcontrol.reboot_node",
             task_id=self.common_opts.task_id,
         )
 
@@ -132,4 +134,4 @@ class RebootNodeRunner(CookbookRunnerBase):
         uptime_host(spicerack=self.spicerack, host_name=host_name, silence_id=host_silence_id)
         LOGGER.info("Silences removed.")
 
-        self.sallogger.log(f"Rebooted cloudgw host {self.fqdn_to_reboot}")
+        self.sallogger.log(f"Rebooted cloudcontrol host {self.fqdn_to_reboot}")

@@ -2,7 +2,7 @@
 
 Usage example:
     cookbook wmcs.openstack.roll_reboot_cloudnets \
-        --controlling-node-fqdn cloudcontrol1005.wikimedia.org
+        --deployment eqiad1
 
 """
 import argparse
@@ -12,7 +12,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.lib.openstack import OpenstackAPI
+from cookbooks.wmcs.lib.openstack import Deployment, OpenstackAPI, get_control_nodes
 from cookbooks.wmcs.lib.openstack.neutron import NeutronController
 from cookbooks.wmcs.openstack.cloudnet.reboot_node import RebootNode
 
@@ -33,9 +33,11 @@ class RollRebootCloudnets(CookbookBase):
         )
         add_common_opts(parser)
         parser.add_argument(
-            "--controlling-node-fqdn",
+            "--deployment",
             required=True,
-            help="FQDN of one of the nodes to manage the cluster.",
+            choices=list(Deployment),
+            type=Deployment,
+            help="Openstack deployment to roll reboot the cloudnets for.",
         )
         parser.add_argument(
             "--force",
@@ -49,7 +51,7 @@ class RollRebootCloudnets(CookbookBase):
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, RollRebootCloudnetsRunner,)(
-            controlling_node_fqdn=args.controlling_node_fqdn,
+            deployment=args.deployment,
             force=args.force,
             spicerack=self.spicerack,
         )
@@ -61,13 +63,13 @@ class RollRebootCloudnetsRunner(CookbookRunnerBase):
     def __init__(
         self,
         common_opts: CommonOpts,
-        controlling_node_fqdn: str,
+        deployment: Deployment,
         force: bool,
         spicerack: Spicerack,
     ):
         """Init"""
         self.common_opts = common_opts
-        self.controlling_node_fqdn = controlling_node_fqdn
+        self.controlling_node_fqdn = get_control_nodes(deployment=deployment)[0]
         self.force = force
         self.spicerack = spicerack
         self.sallogger = SALLogger(
@@ -98,8 +100,6 @@ class RollRebootCloudnetsRunner(CookbookRunnerBase):
         for index, cloudnet_node in enumerate(self.cloudnet_hosts):
             LOGGER.info("Rebooting node %s, %d done, %d to go", cloudnet_node, index, len(self.cloudnet_hosts) - index)
             args = [
-                "--controlling-node-fqdn",
-                self.controlling_node_fqdn,
                 "--fqdn-to-reboot",
                 f"{cloudnet_node}.{self.openstack_api.get_nodes_domain()}",
             ] + self.common_opts.to_cli_args()

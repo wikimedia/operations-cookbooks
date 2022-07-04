@@ -3,7 +3,6 @@
 This includes putting in maintenance, draining, and unsetting maintenance.
 
 Usage example: wmcs.openstack.cloudvirt.safe_reboot \
-    --control-node-fqdn cloudcontrol1003.wikimedia.org \
     --fqdn cloudvirt1013.eqiad.wmnet
 
 """
@@ -15,6 +14,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.lib.openstack import Deployment, get_control_nodes
 from cookbooks.wmcs.openstack.cloudvirt.drain import Drain
 from cookbooks.wmcs.openstack.cloudvirt.unset_maintenance import UnsetMaintenance
 
@@ -35,12 +35,6 @@ class SafeReboot(CookbookBase):
         )
         add_common_opts(parser)
         parser.add_argument(
-            "--control-node-fqdn",
-            required=False,
-            default="cloudcontrol1003.wikimedia.org",
-            help="FQDN of the control node to orchestrate from.",
-        )
-        parser.add_argument(
             "--fqdn",
             required=True,
             help="FQDN of the cloudvirt to SafeReboot.",
@@ -52,7 +46,6 @@ class SafeReboot(CookbookBase):
         """Get runner"""
         return with_common_opts(self.spicerack, args, SafeRebootRunner,)(
             fqdn=args.fqdn,
-            control_node_fqdn=args.control_node_fqdn,
             spicerack=self.spicerack,
         )
 
@@ -64,13 +57,12 @@ class SafeRebootRunner(CookbookRunnerBase):
         self,
         common_opts: CommonOpts,
         fqdn: str,
-        control_node_fqdn: str,
         spicerack: Spicerack,
     ):
         """Init"""
         self.common_opts = common_opts
         self.fqdn = fqdn
-        self.control_node_fqdn = control_node_fqdn
+        self.control_node_fqdn = get_control_nodes(deployment=Deployment.get_for_node(node=self.fqdn))[0]
         self.spicerack = spicerack
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
@@ -83,8 +75,6 @@ class SafeRebootRunner(CookbookRunnerBase):
         drain_cookbook.get_runner(
             args=drain_cookbook.argument_parser().parse_args(
                 args=[
-                    "--control-node-fqdn",
-                    self.control_node_fqdn,
                     "--fqdn",
                     self.fqdn,
                 ]
@@ -102,8 +92,6 @@ class SafeRebootRunner(CookbookRunnerBase):
         unset_maintenance_cookbook.get_runner(
             args=unset_maintenance_cookbook.argument_parser().parse_args(
                 args=[
-                    "--control-node-fqdn",
-                    self.control_node_fqdn,
                     "--fqdn",
                     self.fqdn,
                 ]

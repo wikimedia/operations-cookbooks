@@ -1,8 +1,7 @@
 """WMCS openstack - connect to the console of a VM
 
 Usage example: wmcs.openstack.cloudvirt.vm_console \
-    --control-node-fqdn cloudcontrol1003.wikimedia.org \
-    --vm-name fullstack-20220613230939
+    --vm-name fullstack-20220613230939 \
     --project admin-monitoring
 
 """
@@ -15,7 +14,7 @@ from typing import List
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.lib.openstack import OpenstackAPI
+from cookbooks.wmcs.lib.openstack import Deployment, OpenstackAPI, get_control_nodes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,10 +37,12 @@ class VMConsole(CookbookBase):
             help="Name of the project the vm is running in.",
         )
         parser.add_argument(
-            "--control-node-fqdn",
+            "--deployment",
             required=False,
-            default="cloudcontrol1003.wikimedia.org",
-            help="FQDN of the control node to orchestrate from.",
+            choices=list(Deployment),
+            type=Deployment,
+            default=Deployment.EQIAD1,
+            help="Openstack deployment where the VM is hosted.",
         )
         parser.add_argument(
             "--vm-name",
@@ -54,8 +55,8 @@ class VMConsole(CookbookBase):
         """Get runner"""
         return VMConsoleRunner(
             project=args.project,
+            deployment=args.deployment,
             vm_name=args.vm_name,
-            control_node_fqdn=args.control_node_fqdn,
             spicerack=self.spicerack,
         )
 
@@ -75,18 +76,18 @@ class VMConsoleRunner(CookbookRunnerBase):
     def __init__(
         self,
         project: str,
+        deployment: Deployment,
         vm_name: str,
-        control_node_fqdn: str,
         spicerack: Spicerack,
     ):
         """Init"""
         self.project = project
         self.vm_name = vm_name
-        self.control_node_fqdn = control_node_fqdn
+        self.control_node_fqdn = get_control_nodes(deployment=deployment)[0]
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
-            control_node_fqdn=control_node_fqdn,
+            control_node_fqdn=self.control_node_fqdn,
             project=project,
         )
 

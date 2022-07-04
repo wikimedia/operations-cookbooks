@@ -2,7 +2,6 @@
 
 Usage example:
     cookbook wmcs.openstack.cloudnet.reboot_node \
-    --controlling-node-fqdn cloudcontrol1005.wikimedia.org \
     --fqdn-to-reboot cloudnet1004.eqiad.wmnet
 
 """
@@ -15,7 +14,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.lib.alerts import downtime_alert, downtime_host, uptime_alert, uptime_host
-from cookbooks.wmcs.lib.openstack import OpenstackAPI
+from cookbooks.wmcs.lib.openstack import Deployment, OpenstackAPI, get_control_nodes
 from cookbooks.wmcs.lib.openstack.neutron import NetworkUnhealthy, NeutronAgentType, NeutronAlerts, NeutronController
 
 LOGGER = logging.getLogger(__name__)
@@ -35,11 +34,6 @@ class RebootNode(CookbookBase):
         )
         add_common_opts(parser)
         parser.add_argument(
-            "--controlling-node-fqdn",
-            required=True,
-            help="FQDN of one of the nodes to manage the cluster.",
-        )
-        parser.add_argument(
             "--fqdn-to-reboot",
             required=True,
             help="FQDN of the node to reboot.",
@@ -56,7 +50,6 @@ class RebootNode(CookbookBase):
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, RebootNodeRunner,)(
-            controlling_node_fqdn=args.controlling_node_fqdn,
             fqdn_to_reboot=args.fqdn_to_reboot,
             force=args.force,
             spicerack=self.spicerack,
@@ -69,15 +62,14 @@ class RebootNodeRunner(CookbookRunnerBase):
     def __init__(
         self,
         common_opts: CommonOpts,
-        controlling_node_fqdn: str,
         fqdn_to_reboot: str,
         force: bool,
         spicerack: Spicerack,
     ):
         """Init"""
         self.common_opts = common_opts
-        self.controlling_node_fqdn = controlling_node_fqdn
         self.fqdn_to_reboot = fqdn_to_reboot
+        self.controlling_node_fqdn = get_control_nodes(deployment=Deployment.get_for_node(node=self.fqdn_to_reboot))[0]
         self.force = force
         self.spicerack = spicerack
         self.sallogger = SALLogger(

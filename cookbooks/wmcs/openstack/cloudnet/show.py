@@ -2,7 +2,7 @@
 
 Usage example:
     cookbook wmcs.openstack.cloudnet.show \
-    --controlling-node-fqdn cloudcontrol1005.wikimedia.org
+        --deployment eqiad1
 
 """
 import argparse
@@ -11,7 +11,7 @@ import logging
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.lib.openstack import OpenstackAPI
+from cookbooks.wmcs.lib.openstack import Deployment, OpenstackAPI, get_control_nodes
 from cookbooks.wmcs.lib.openstack.neutron import NeutronAgentType, NeutronController
 
 LOGGER = logging.getLogger(__name__)
@@ -30,10 +30,12 @@ class Show(CookbookBase):
             formatter_class=ArgparseFormatter,
         )
         parser.add_argument(
-            "--controlling-node-fqdn",
-            required=False,
-            default="cloudcontrol1003.wikimedia.org",
-            help="FQDN of one of the nodes to manage the cluster.",
+            "--deployment",
+            required=True,
+            default=Deployment.EQIAD1,
+            choices=list(Deployment),
+            type=Deployment,
+            help="Site to get the info for",
         )
 
         return parser
@@ -41,7 +43,7 @@ class Show(CookbookBase):
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
         return ShowRunner(
-            controlling_node_fqdn=args.controlling_node_fqdn,
+            deployment=args.deployment,
             spicerack=self.spicerack,
         )
 
@@ -51,11 +53,11 @@ class ShowRunner(CookbookRunnerBase):
 
     def __init__(
         self,
-        controlling_node_fqdn: str,
+        deployment: Deployment,
         spicerack: Spicerack,
     ):
         """Init"""
-        self.controlling_node_fqdn = controlling_node_fqdn
+        self.controlling_node_fqdn = get_control_nodes(deployment=deployment)[0]
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(),

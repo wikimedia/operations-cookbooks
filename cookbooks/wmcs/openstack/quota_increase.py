@@ -3,6 +3,7 @@
 Usage example: wmcs.openstack.quota_increase \
     --project admin-monitoring \
     --gigabytes 30G \
+    --deployment eqiad1 \
     --instances 5
 
 """
@@ -14,7 +15,13 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.lib.openstack import OpenstackAPI, OpenstackQuotaEntry, OpenstackQuotaName
+from cookbooks.wmcs.lib.openstack import (
+    Deployment,
+    OpenstackAPI,
+    OpenstackQuotaEntry,
+    OpenstackQuotaName,
+    get_control_nodes,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,10 +40,11 @@ class QuotaIncrease(CookbookBase):
         )
         add_common_opts(parser)
         parser.add_argument(
-            "--control-node-fqdn",
-            required=False,
-            default="cloudcontrol1003.wikimedia.org",
-            help="FQDN of the control node to orchestrate from.",
+            "--deployment",
+            required=True,
+            choices=list(Deployment),
+            type=Deployment,
+            help="Openstack deployment to act on.",
         )
         parser.add_argument(
             "--gigabytes",
@@ -69,7 +77,7 @@ class QuotaIncrease(CookbookBase):
             floating_ips=args.floating_ips,
             ram=args.ram,
             gigabytes=args.gigabytes,
-            control_node_fqdn=args.control_node_fqdn,
+            deployment=args.deployment,
         )
 
 
@@ -84,17 +92,17 @@ class QuotaIncreaseRunner(CookbookRunnerBase):
         floating_ips: Optional[str],
         ram: Optional[str],
         gigabytes: Optional[str],
-        control_node_fqdn: str,
+        deployment: Deployment,
         spicerack: Spicerack,
     ):  # pylint: disable=too-many-arguments
         """Init"""
         self.common_opts = common_opts
         self.vm_name = vm_name
-        self.control_node_fqdn = control_node_fqdn
+        self.control_node_fqdn = get_control_nodes(deployment=deployment)[0]
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
-            control_node_fqdn=control_node_fqdn,
+            control_node_fqdn=self.control_node_fqdn,
             project=self.common_opts.project,
         )
         self.increases: List[OpenstackQuotaEntry] = []

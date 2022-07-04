@@ -37,7 +37,7 @@ class Deployment(Enum):
         return self.value
 
     @classmethod
-    def get_deployment_for_node(cls, node: str) -> "Deployment":
+    def get_for_node(cls, node: str) -> "Deployment":
         """Retrieve the deployment given a node fqdn/name.
 
         This tries several strategies in priority order:

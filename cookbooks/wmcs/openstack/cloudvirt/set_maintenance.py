@@ -1,7 +1,6 @@
 """WMCS openstack - set a cloudvirt node in maintenance
 
 Usage example: wmcs.openstack.cloudvirt.set_maintenance \
-    --control-node-fqdn cloudcontrol1003.wikimedia.org
     --fqdn cloudvirt1013.eqiad.wmnet
 
 """
@@ -13,7 +12,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.lib.alerts import downtime_host
-from cookbooks.wmcs.lib.openstack import OpenstackAPI, OpenstackNotFound
+from cookbooks.wmcs.lib.openstack import Deployment, OpenstackAPI, OpenstackNotFound, get_control_nodes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,12 +31,6 @@ class SetMaintenance(CookbookBase):
         )
         add_common_opts(parser)
         parser.add_argument(
-            "--control-node-fqdn",
-            required=False,
-            default="cloudcontrol1003.wikimedia.org",
-            help="FQDN of the control node to orchestrate from.",
-        )
-        parser.add_argument(
             "--fqdn",
             required=True,
             help="FQDN of the cloudvirt to set in maintenance.",
@@ -49,7 +42,6 @@ class SetMaintenance(CookbookBase):
         """Get runner"""
         return with_common_opts(self.spicerack, args, SetMaintenanceRunner,)(
             fqdn=args.fqdn,
-            control_node_fqdn=args.control_node_fqdn,
             spicerack=self.spicerack,
         )
 
@@ -61,15 +53,14 @@ class SetMaintenanceRunner(CookbookRunnerBase):
         self,
         common_opts: CommonOpts,
         fqdn: str,
-        control_node_fqdn: str,
         spicerack: Spicerack,
     ):
         """Init."""
         self.fqdn = fqdn
-        self.control_node_fqdn = control_node_fqdn
+        self.control_node_fqdn = get_control_nodes(deployment=Deployment.get_for_node(node=self.fqdn))[0]
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
-            control_node_fqdn=control_node_fqdn,
+            control_node_fqdn=self.control_node_fqdn,
         )
         self.spicerack = spicerack
         self.sallogger = SALLogger(
