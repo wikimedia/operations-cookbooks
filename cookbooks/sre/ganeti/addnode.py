@@ -18,7 +18,7 @@ class GanetiAddNode(CookbookBase):
     a Ganeti cluster and eventually add it.
 
     Usage example:
-        cookbook sre.ganeti.addnode --cluster eqiad --group row_A ganeti5004.eqsin.wmnet
+        cookbook sre.ganeti.addnode --cluster eqiad --group A ganeti5004.eqsin.wmnet
     """
 
     def argument_parser(self):
