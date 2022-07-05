@@ -53,6 +53,11 @@ class ConfigSwitchInterfacesRunner(CookbookRunnerBase):
         if self.netbox_data['is_virtual']:
             logger.error("This cookbook is intended for baremetal hosts only")
 
+    @property
+    def runtime_description(self):
+        """Return a nicely formatted string that represents the cookbook action."""
+        return f"for host {self.netbox_data['name']}"
+
     def run(self):
         """Required by Spicerack API."""
         configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
