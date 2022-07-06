@@ -6,7 +6,8 @@ import logging
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
-from cookbooks.sre.ganeti import add_location_args
+
+from cookbooks.sre.ganeti import add_location_args, set_default_group
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,8 @@ class GanetiAddNode(CookbookBase):
     a Ganeti cluster and eventually add it.
 
     Usage example:
-        cookbook sre.ganeti.addnode --cluster eqiad --group A ganeti5004.eqsin.wmnet
+        cookbook sre.ganeti.addnode --cluster eqiad --group A ganeti1001.eqiad.wmnet
+        cookbook sre.ganeti.addnode --cluster eqsin ganeti5004.eqsin.wmnet
     """
 
     def argument_parser(self):
@@ -33,6 +35,7 @@ class GanetiAddNode(CookbookBase):
 
     def get_runner(self, args):
         """As specified by Spicerack API."""
+        set_default_group(self.spicerack.netbox(), args)
         return GanetiAddNodeRunner(args, self.spicerack)
 
 

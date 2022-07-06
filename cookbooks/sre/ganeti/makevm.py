@@ -12,7 +12,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from spicerack.decorators import retry
 from spicerack.ganeti import INSTANCE_LINKS
 
-from cookbooks.sre.ganeti import add_location_args
+from cookbooks.sre.ganeti import add_location_args, set_default_group
 
 logger = logging.getLogger(__name__)
 PRIMARY_INTERFACE_NAME = '##PRIMARY##'
@@ -33,6 +33,7 @@ class GanetiMakeVM(CookbookBase):
         on group B with 1 vCPUs, 3GB of RAM, 100GB of disk in the private network:
 
             makevm --vcpus 1 --memory 3 --disk 100 --cluster codfw --group B vmhostname
+            makevm --vcpus 1 --memory 3 --disk 100 --cluster eqsin vmhostname
 
     """
 
@@ -70,6 +71,7 @@ class GanetiMakeVM(CookbookBase):
 
     def get_runner(self, args):
         """As specified by Spicerack API."""
+        set_default_group(self.spicerack.netbox(), args)
         return GanetiMakeVMRunner(args, self.spicerack)
 
 
