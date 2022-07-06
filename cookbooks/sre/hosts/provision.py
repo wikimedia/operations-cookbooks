@@ -12,6 +12,7 @@ from spicerack.redfish import DellSCPPowerStatePolicy, DellSCPRebootPolicy, Redf
 from spicerack.remote import RemoteError
 from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
 
+from cookbooks.sre.network import configure_switch_interfaces
 
 DNS_ADDRESS = '10.3.0.1'
 DELL_DEFAULT = 'calvin'
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class Provision(CookbookBase):
-    """Provision a new physical host setting up it's BIOS, management console and NICs.
+    """Provision a new physical host setting up it's BIOS, management console, NICs, network.
 
     Actions performed:
         * Validate that the host is a physical host and the vendor is supported (only Dell at this time)
@@ -36,6 +37,7 @@ class Provision(CookbookBase):
           retry to apply them, or the user can apply them manually (via web console or ssh) and then skip the step.
         * [unless --no-users is set] Update the root's user password with the production management password
         * Checks that it can connect via remote IPMI
+        * Configures the network switch
 
     Usage:
         cookbook sre.hosts.provision example1001
@@ -51,6 +53,10 @@ class Provision(CookbookBase):
             '--no-dhcp',
             action='store_true',
             help='Skips the DHCP setting, assuming that the management console is already reachable')
+        parser.add_argument(
+            '--no-switch',
+            action='store_true',
+            help='Skips the network switch config')
         parser.add_argument(
             '--no-users',
             action='store_true',
@@ -81,6 +87,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         self.fqdn = self.netbox_server.mgmt_fqdn
         self.ipmi = spicerack.ipmi(self.fqdn)
         self.remote = spicerack.remote()
+        self.verbose = spicerack.verbose
         if self.netbox_server.virtual:
             raise RuntimeError(f'Host {self.args.host} is a virtual machine. VMs are not supported.')
 
@@ -199,6 +206,9 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             self.redfish.change_user_password('root', self.mgmt_password)
 
         self.ipmi.check_connection()
+
+        if not self.args.no_switch:
+            configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
 
     def rollback(self):
         """Rollback the DHCP setup if present."""
