@@ -33,14 +33,19 @@ class AlertManager:
         """Get all silences enabled filtering with query.
 
         Some examples of 'query':
-        * alertname=foo
-        * instance=bar
-        * alertname=~.*foo.*
+        * "alertname=foo"
+        * "instance=bar"
+        * "'alertname=~.*foo.*' 'service=~.*ceph.*'"
         """
         return run_one_formatted_as_list(node=self.node, command=["amtool", "--output=json", "silence", "query", query])
 
-    def downtime_alert(self, alert_name: str, comment: str, duration: str = "1h") -> SilenceID:
+    def downtime_alert(
+        self, alert_name: str, comment: str, duration: str = "1h", extra_queries: List[str] = None
+    ) -> SilenceID:
         """Add a silence for an alert.
+
+        extra_queries is a list of label/match pairs, for example:
+        * ["service=~.*ceph.*", "instance=cloudcontrtol1005"]
 
         Examples of 'alert_name':
         * "Ceph Cluster Health"
@@ -49,6 +54,15 @@ class AlertManager:
         * 1h -> one hour
         * 2d -> two days
         """
+        if alert_name:
+            query = f"'alertname={alert_name}'"
+        else:
+            query = ""
+
+        if extra_queries:
+            for new_query in extra_queries:
+                query = f"{query} '{new_query}'"
+
         command = [
             "amtool",
             "--output=json",
@@ -56,21 +70,36 @@ class AlertManager:
             "add",
             f'--duration="{duration}"',
             f"--comment='{comment}'",
-            f"alertname={alert_name}",
+            query,
         ]
         return run_one_raw(node=self.node, command=command)
 
-    def uptime_alert(self, alert_name: str) -> None:
+    def uptime_alert(self, alert_name: Optional[str] = None, extra_queries: List[str] = None) -> None:
         """Remove a silence for an alert.
+
+        extra_queries is a list of label/match pairs, for example:
+        * ["service=~.*ceph.*", "instance=cloudcontrtol1005"]
 
         Examples of 'alert_name':
         * "Ceph Cluster Health"
         """
-        existing_silences = self.get_silences(query=f"alertname={alert_name}")
+        if alert_name:
+            query = f"'alertname={alert_name}'"
+        else:
+            query = ""
+
+        if extra_queries:
+            for new_query in extra_queries:
+                query = f"{query} '{new_query}'"
+
+        if not query:
+            raise ValueError("Either alert_name or extra_queries should be passed.")
+
+        existing_silences = self.get_silences(query=query)
         to_expire = [silence["id"] for silence in existing_silences]
 
         if not to_expire:
-            LOGGER.info("No silences for 'alertname=%s' found.", alert_name)
+            LOGGER.info("No silences matching '%s' found.", query)
             return
 
         command = [
@@ -78,8 +107,7 @@ class AlertManager:
             "--output=json",
             "silence",
             "expire",
-            f"alertname={alert_name}",
-        ]
+        ] + to_expire
         run_one_raw(node=self.node, command=command)
 
     def downtime_host(self, host_name: str, comment: str, duration: Optional[str] = None) -> SilenceID:
@@ -186,10 +214,11 @@ def uptime_host(spicerack: Spicerack, host_name: str, silence_id: Optional[Silen
 
 def downtime_alert(
     spicerack: Spicerack,
-    alert_name: str,
+    alert_name: str = "",
     duration: str = "1h",
     comment: Optional[str] = None,
     task_id: Optional[str] = None,
+    extra_queries: List[str] = None,
 ) -> SilenceID:
     """Do whatever it takes to downtime a host.
 
@@ -209,11 +238,16 @@ def downtime_alert(
         final_comment = "No comment" + postfix
 
     alert_manager = AlertManager.from_remote(spicerack.remote())
-    return alert_manager.downtime_alert(alert_name=alert_name, duration=duration, comment=final_comment)
+    return alert_manager.downtime_alert(
+        alert_name=alert_name, duration=duration, comment=final_comment, extra_queries=extra_queries
+    )
 
 
 def uptime_alert(
-    spicerack: Spicerack, alert_name: Optional[str] = None, silence_id: Optional[SilenceID] = None
+    spicerack: Spicerack,
+    alert_name: Optional[str] = None,
+    silence_id: Optional[SilenceID] = None,
+    extra_queries: List[str] = None,
 ) -> None:
     """Do whatever it takes to uptime an alert, if silence_id passed, only that silence will be expired.
 
@@ -223,7 +257,7 @@ def uptime_alert(
     alert_manager = AlertManager.from_remote(spicerack.remote())
     if silence_id:
         alert_manager.expire_silence(silence_id=silence_id)
-    elif alert_name:
-        alert_manager.uptime_alert(alert_name=alert_name)
+    elif alert_name or extra_queries:
+        alert_manager.uptime_alert(alert_name=alert_name, extra_queries=extra_queries)
     else:
-        raise ValueError("You must pass either silence_id or alert_name")
+        raise ValueError("You must pass either silence_id or alert_name and/or extra_queries")

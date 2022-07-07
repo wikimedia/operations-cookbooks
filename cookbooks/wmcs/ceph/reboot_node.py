@@ -99,13 +99,15 @@ class RebootNodeRunner(CookbookRunnerBase):
         self.sallogger.log(message=f"Rebooting node {self.fqdn_to_reboot}")
 
         controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn
+            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn, spicerack=self.spicerack
         )
         if not self.force:
             controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
 
         if not self.skip_maintenance:
-            controller.set_maintenance()
+            silences = controller.set_maintenance(task_id=self.common_opts.task_id, reason="Rebooting node")
+        else:
+            silences = []
 
         node = self.spicerack.remote().query(f"D{{{self.fqdn_to_reboot}}}", use_sudo=True)
         host_name = self.fqdn_to_reboot.split(".", 1)[0]
@@ -127,7 +129,7 @@ class RebootNodeRunner(CookbookRunnerBase):
         LOGGER.info("Cluster stable, continuing")
 
         if not self.skip_maintenance:
-            controller.unset_maintenance()
+            controller.unset_maintenance(silences=silences)
 
         uptime_host(spicerack=self.spicerack, host_name=host_name, silence_id=silence_id)
 

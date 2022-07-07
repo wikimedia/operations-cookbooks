@@ -630,18 +630,27 @@ class TestUtils:
 
         fake_remote.query.return_value = fake_hosts
 
-        def _get_fake_msg_tree(response: str):
+        def _get_fake_msg_tree(msg_tree_response: str):
             fake_msg_tree = mock.create_autospec(spec=MsgTreeElem, spec_set=True)
-            fake_msg_tree.message.return_value = response.encode()
+            fake_msg_tree.message.return_value = msg_tree_response.encode()
             return fake_msg_tree
 
         if side_effect is not None:
             fake_hosts.run_sync.side_effect = side_effect
         else:
             # the return type of run_sync is Iterator[Tuple[NodeSet, MsgTreeElem]]
-            fake_hosts.run_sync.return_value = ((None, _get_fake_msg_tree(response=response)) for response in responses)
+            fake_hosts.run_sync.return_value = (
+                (None, _get_fake_msg_tree(msg_tree_response=response)) for response in responses
+            )
 
         return fake_remote
+
+    @staticmethod
+    def get_fake_spicerack(fake_remote: mock.MagicMock) -> mock.MagicMock:
+        """Create a fake spicerack."""
+        fake_spicerack = mock.create_autospec(spec=Spicerack, spec_set=True)
+        fake_spicerack.remote.return_value = fake_remote
+        return fake_spicerack
 
 
 class CmdChecklistParsingError(Exception):

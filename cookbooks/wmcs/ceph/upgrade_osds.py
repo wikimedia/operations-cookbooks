@@ -75,9 +75,9 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
     def run(self) -> None:
         """Main entry point"""
         controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn
+            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn, spicerack=self.spicerack
         )
-        controller.set_maintenance()
+        silences = controller.set_maintenance(reason="Upgrading osds")
 
         upgrade_ceph_node_cookbook = UpgradeCephNode(spicerack=self.spicerack)
         osd_nodes = list(controller.get_nodes()["osd"].keys())
@@ -105,5 +105,5 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
             controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
             LOGGER.info("Cluster stable, continuing")
 
-        controller.unset_maintenance()
+        controller.unset_maintenance(silences=silences)
         self.sallogger.log(f"OSDs ({osd_nodes}) upgraded successfully B-)")

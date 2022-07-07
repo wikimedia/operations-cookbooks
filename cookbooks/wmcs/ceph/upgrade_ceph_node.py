@@ -79,12 +79,16 @@ class UpgradeCephNodeRunner(CookbookRunnerBase):
     def run(self) -> None:
         """Main entry point"""
         LOGGER.info("Upgrading ceph node %s", self.to_upgrade_fqdn)
-        controller = CephClusterController(remote=self.spicerack.remote(), controlling_node_fqdn=self.to_upgrade_fqdn)
+        controller = CephClusterController(
+            remote=self.spicerack.remote(), controlling_node_fqdn=self.to_upgrade_fqdn, spicerack=self.spicerack
+        )
         # make sure we make cluster info commands on another node
         controller.change_controlling_node()
 
         if not self.skip_maintenance:
-            controller.set_maintenance(force=self.force)
+            silences = controller.set_maintenance(
+                force=self.force, reason=f"Upgrading the ceph node {self.to_upgrade_fqdn}."
+            )
 
         # Can't use sre upgrade-and-reboot due to it using alertmanager's api to downtime hosts
         remote_host = self.spicerack.remote().query(self.to_upgrade_fqdn, use_sudo=True)
@@ -120,4 +124,4 @@ class UpgradeCephNodeRunner(CookbookRunnerBase):
         controller.set_osdmap_flag(CephOSDFlag("norebalance"))
 
         if not self.skip_maintenance:
-            controller.unset_maintenance(force=self.force)
+            controller.unset_maintenance(force=self.force, silences=silences)

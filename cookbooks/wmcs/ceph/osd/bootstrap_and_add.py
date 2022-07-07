@@ -124,7 +124,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
             message=f"Adding new OSDs {self.new_osd_fqdns} to the cluster",
         )
         cluster_controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn
+            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn, spicerack=self.spicerack
         )
         # this avoids rebalancing after each osd is added
         cluster_controller.set_osdmap_flag(CephOSDFlag("norebalance"))

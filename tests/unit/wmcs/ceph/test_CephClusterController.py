@@ -4,8 +4,10 @@ from unittest import mock
 
 import pytest
 from cumin.transports import Command
+from spicerack import Spicerack
 
 from cookbooks.wmcs.lib.ceph import (
+    CLUSTER_ALERT_MATCHES,
     CephClusterController,
     CephClusterUnhealthy,
     CephFlagSetError,
@@ -59,9 +61,11 @@ def parametrize(params: Dict[str, Any]):
     }
 )
 def test_get_nodes_happy_path(expected_nodes: List[str], nodes_command_output: str):
+    fake_remote = CephTestUtils.get_fake_remote(responses=[nodes_command_output])
     my_controller = CephClusterController(
-        remote=CephTestUtils.get_fake_remote(responses=[nodes_command_output]),
+        remote=fake_remote,
         controlling_node_fqdn="my.dummy.controll.er",
+        spicerack=CephTestUtils.get_fake_spicerack(fake_remote=fake_remote),
     )
 
     gotten_nodes = my_controller.get_nodes()
@@ -78,9 +82,11 @@ def test_get_nodes_happy_path(expected_nodes: List[str], nodes_command_output: s
     },
 )
 def test_change_controlling_node_happy_path(expected_controlling_node: str, nodes_command_output: str):
+    fake_remote = CephTestUtils.get_fake_remote(responses=[nodes_command_output])
     my_controller = CephClusterController(
-        remote=CephTestUtils.get_fake_remote(responses=[nodes_command_output]),
+        remote=fake_remote,
         controlling_node_fqdn="monhost1.local",
+        spicerack=CephTestUtils.get_fake_spicerack(fake_remote=fake_remote),
     )
 
     my_controller.change_controlling_node()
@@ -96,9 +102,11 @@ def test_change_controlling_node_happy_path(expected_controlling_node: str, node
     },
 )
 def test_change_controlling_node_raising(nodes_command_output: str):
+    fake_remote = CephTestUtils.get_fake_remote(responses=[nodes_command_output])
     my_controller = CephClusterController(
-        remote=CephTestUtils.get_fake_remote(responses=[nodes_command_output]),
+        remote=fake_remote,
         controlling_node_fqdn="monhost1.local",
+        spicerack=CephTestUtils.get_fake_spicerack(fake_remote=fake_remote),
     )
 
     with pytest.raises(CephNoControllerNode):
@@ -114,9 +122,11 @@ def test_change_controlling_node_raising(nodes_command_output: str):
     },
 )
 def test_get_cluster_status_happy_path(status_command_output: str, expected_status_dict: Dict[str, Any]):
+    fake_remote = CephTestUtils.get_fake_remote(responses=[status_command_output])
     my_controller = CephClusterController(
-        remote=CephTestUtils.get_fake_remote(responses=[status_command_output]),
+        remote=fake_remote,
         controlling_node_fqdn="monhost1.local",
+        spicerack=CephTestUtils.get_fake_spicerack(fake_remote=fake_remote),
     )
 
     my_status = my_controller.get_cluster_status()
@@ -132,9 +142,11 @@ def test_get_cluster_status_happy_path(status_command_output: str, expected_stat
     },
 )
 def test_set_osdmap_flag_happy_path(set_flag_command_output: str):
+    fake_remote = CephTestUtils.get_fake_remote(responses=[set_flag_command_output])
     my_controller = CephClusterController(
-        remote=CephTestUtils.get_fake_remote(responses=[set_flag_command_output]),
+        remote=fake_remote,
         controlling_node_fqdn="monhost1.local",
+        spicerack=CephTestUtils.get_fake_spicerack(fake_remote=fake_remote),
     )
 
     my_controller.set_osdmap_flag(flag=CephOSDFlag.NOREBALANCE)
@@ -152,9 +164,11 @@ def test_set_osdmap_flag_happy_path(set_flag_command_output: str):
     },
 )
 def test_set_osdmap_flag_raising(set_flag_command_output: str):
+    fake_remote = CephTestUtils.get_fake_remote(responses=[set_flag_command_output])
     my_controller = CephClusterController(
-        remote=CephTestUtils.get_fake_remote(responses=[set_flag_command_output]),
+        remote=fake_remote,
         controlling_node_fqdn="monhost1.local",
+        spicerack=CephTestUtils.get_fake_spicerack(fake_remote=fake_remote),
     )
 
     with pytest.raises(CephFlagSetError):
@@ -173,9 +187,11 @@ def test_set_osdmap_flag_raising(set_flag_command_output: str):
     },
 )
 def test_unset_osdmap_flag_happy_path(unset_flag_command_output: str):
+    fake_remote = CephTestUtils.get_fake_remote(responses=[unset_flag_command_output])
     my_controller = CephClusterController(
-        remote=CephTestUtils.get_fake_remote(responses=[unset_flag_command_output]),
+        remote=fake_remote,
         controlling_node_fqdn="monhost1.local",
+        spicerack=CephTestUtils.get_fake_spicerack(fake_remote=fake_remote),
     )
 
     my_controller.unset_osdmap_flag(flag=CephOSDFlag.NOREBALANCE)
@@ -193,9 +209,11 @@ def test_unset_osdmap_flag_happy_path(unset_flag_command_output: str):
     },
 )
 def test_unset_osdmap_flag_raising(unset_flag_command_output: str):
+    fake_remote = CephTestUtils.get_fake_remote(responses=[unset_flag_command_output])
     my_controller = CephClusterController(
-        remote=CephTestUtils.get_fake_remote(responses=[unset_flag_command_output]),
+        remote=fake_remote,
         controlling_node_fqdn="monhost1.local",
+        spicerack=CephTestUtils.get_fake_spicerack(fake_remote=fake_remote),
     )
 
     with pytest.raises(CephFlagSetError):
@@ -236,9 +254,10 @@ def test_set_maintenance_happy_path(commands_output: List[str], force: Optional[
     my_controller = CephClusterController(
         remote=CephTestUtils.get_fake_remote(responses=commands_output),
         controlling_node_fqdn="monhost1.local",
+        spicerack=mock.MagicMock(spec=Spicerack),
     )
 
-    my_controller.set_maintenance(force=bool(force))
+    my_controller.set_maintenance(force=bool(force), reason="Doing some tests")
 
 
 @parametrize(
@@ -274,50 +293,47 @@ def test_set_maintenance_raising(commands_output: List[str], exception: Type[Exc
     my_controller = CephClusterController(
         remote=CephTestUtils.get_fake_remote(responses=commands_output),
         controlling_node_fqdn="monhost1.local",
+        spicerack=mock.MagicMock(spec=Spicerack),
     )
 
     with pytest.raises(exception):
-        my_controller.set_maintenance(force=bool(force))
+        my_controller.set_maintenance(force=bool(force), reason="Doing tests")
 
 
 @parametrize(
     {
         "Does nothing if cluster not in maintenance": {
-            "commands_output": [
-                json.dumps(CephTestUtils.get_ok_status_dict()),
-                "noout should not try to be unset",
-                "norebalance should not try to be unset",
-            ],
+            "commands_output": [json.dumps(CephTestUtils.get_ok_status_dict())]
+            + [json.dumps([])] * len(CLUSTER_ALERT_MATCHES),
         },
         "Passes if cluster in maintenance": {
             "commands_output": [
                 json.dumps(CephTestUtils.get_maintenance_status_dict()),
                 "noout is unset",
                 "norebalance is unset",
-            ],
+            ]
+            + [json.dumps([])] * len(CLUSTER_ALERT_MATCHES),
         },
         "Passes if cluster not healthy but force is True": {
-            "commands_output": [
-                json.dumps(CephTestUtils.get_warn_status_dict()),
-                "noout is unset",
-                "norebalance is unset",
-            ],
+            "commands_output": [json.dumps(CephTestUtils.get_warn_status_dict())]
+            + [json.dumps([])] * len(CLUSTER_ALERT_MATCHES),
             "force": True,
         },
         "Passes but does not unset flags if cluster unhealthy and force is True": {
             "commands_output": [
                 json.dumps(CephTestUtils.get_warn_status_dict()),
-                "noout was never unset",
-                "norebalance was never unset",
-            ],
+            ]
+            + [json.dumps([])] * len(CLUSTER_ALERT_MATCHES),
             "force": True,
         },
     },
 )
 def test_unset_maintenance_happy_path(commands_output: List[str], force: Optional[bool]):
+    fake_remote = CephTestUtils.get_fake_remote(responses=commands_output)
     my_controller = CephClusterController(
-        remote=CephTestUtils.get_fake_remote(responses=commands_output),
+        remote=fake_remote,
         controlling_node_fqdn="monhost1.local",
+        spicerack=CephTestUtils.get_fake_spicerack(fake_remote=fake_remote),
     )
 
     my_controller.unset_maintenance(force=bool(force))
@@ -326,11 +342,7 @@ def test_unset_maintenance_happy_path(commands_output: List[str], force: Optiona
 @parametrize(
     {
         "Raises if cluster unhealthy and not force": {
-            "commands_output": [
-                json.dumps(CephTestUtils.get_warn_status_dict()),
-                "noout should not try to be set",
-                "norebalance should not try to be set",
-            ],
+            "commands_output": [json.dumps(CephTestUtils.get_warn_status_dict())],
             "force": False,
             "exception": CephClusterUnhealthy,
         },
@@ -356,6 +368,7 @@ def test_unset_maintenance_raising(commands_output: List[str], exception: Type[E
     my_controller = CephClusterController(
         remote=CephTestUtils.get_fake_remote(responses=commands_output),
         controlling_node_fqdn="monhost1.local",
+        spicerack=mock.MagicMock(spec=Spicerack),
     )
 
     with pytest.raises(exception):
@@ -386,6 +399,7 @@ def test_wait_for_progress_events_happy_path(
     my_controller = CephClusterController(
         remote=CephTestUtils.get_fake_remote(responses=commands_output),
         controlling_node_fqdn="monhost1.local",
+        spicerack=mock.MagicMock(spec=Spicerack),
     )
 
     with mock.patch("cookbooks.wmcs.time.time", side_effect=time_ticks), mock.patch("cookbooks.wmcs.time.sleep"):
@@ -415,6 +429,7 @@ def test_wait_for_progress_events_raises(
     my_controller = CephClusterController(
         remote=CephTestUtils.get_fake_remote(responses=commands_output),
         controlling_node_fqdn="monhost1.local",
+        spicerack=mock.MagicMock(spec=Spicerack),
     )
 
     with mock.patch("cookbooks.wmcs.time.time", side_effect=time_ticks), mock.patch(
@@ -453,6 +468,7 @@ def test_wait_for_cluster_health_happy_path(
     my_controller = CephClusterController(
         remote=CephTestUtils.get_fake_remote(responses=commands_output),
         controlling_node_fqdn="monhost1.local",
+        spicerack=mock.MagicMock(spec=Spicerack),
     )
 
     params: Dict[str, Any] = {}
@@ -495,6 +511,7 @@ def test_wait_for_cluster_health_raises(
     my_controller = CephClusterController(
         remote=CephTestUtils.get_fake_remote(responses=commands_output),
         controlling_node_fqdn="monhost1.local",
+        spicerack=mock.MagicMock(spec=Spicerack),
     )
 
     params: Dict[str, Any] = {"timeout_seconds": timeout_seconds}

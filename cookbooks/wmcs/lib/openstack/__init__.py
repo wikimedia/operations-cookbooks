@@ -52,12 +52,11 @@ class Deployment(Enum):
 
         if node.count(".") >= 2:
             domain = node.rsplit(".", 2)[1]
-            try:
-                return cls(domain)
-            except ValueError:
-                pass
+            for deployment in cls:
+                if deployment.value.startswith(domain):
+                    return deployment
 
-        deploy_match = re.match(r"[^.]*(?<deployment_number>\d)+", node)
+        deploy_match = re.match(r"[^.]*(?P<deployment_number>\d)+", node)
         if deploy_match:
             if deploy_match.groupdict()["deployment_number"] == 1:
                 return cls.EQIAD1

@@ -8,17 +8,19 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
-from spicerack import Remote
+from spicerack import Remote, Spicerack
 from wmflib.interactive import ask_confirmation
 
 from cookbooks.wmcs import TestUtils, run_one_as_dict, run_one_formatted, run_one_raw
+from cookbooks.wmcs.lib.alerts import SilenceID, downtime_alert, uptime_alert
 
 LOGGER = logging.getLogger(__name__)
 # List of alerts that are triggered by the cluster aside from the specifics for each node
-CLUSTER_ALERTS = [
-    "Ceph Cluster Health",
-    "Ceph OSDs Down",
-    "Ceph Mon Quorum",
+CLUSTER_ALERT_MATCHES = [
+    "alertname=Ceph Cluster Health",
+    "alertname=Ceph OSDs Down",
+    "alertname=Ceph Mon Quorum",
+    "service=.*ceph.*",
 ]
 
 
@@ -218,11 +220,12 @@ class CephOSDController:
 class CephClusterController:
     """Controller for a CEPH cluster."""
 
-    def __init__(self, remote: Remote, controlling_node_fqdn: str):
+    def __init__(self, remote: Remote, controlling_node_fqdn: str, spicerack: Spicerack):
         """Init."""
         self._remote = remote
         self._controlling_node_fqdn = controlling_node_fqdn
         self._controlling_node = self._remote.query(f"D{{{self._controlling_node_fqdn}}}", use_sudo=True)
+        self._spicerack = spicerack
 
     def get_nodes(self) -> Dict[str, Any]:
         """Get the nodes currently in the cluster."""
@@ -271,12 +274,50 @@ class CephClusterController:
                 f"Unable to unset `{flag.value}` on the cluster, got output: {unset_osdmap_flag_result}"
             )
 
-    def set_maintenance(self, force: bool = False) -> None:
-        """Set maintenance."""
+    def downtime_cluster_alerts(
+        self, reason: str, duration: str = "4h", task_id: Optional[str] = None
+    ) -> List[SilenceID]:
+        """Downtime all the known cluster-wide alerts (the ones not related to a specific ceph node)."""
+        silences = []
+        # we match each set of alerts individually
+        for alert_match in CLUSTER_ALERT_MATCHES:
+            silences.append(
+                downtime_alert(
+                    spicerack=self._spicerack,
+                    duration=duration,
+                    task_id=task_id,
+                    comment=f"Downtiming alert from cookbook - {reason}",
+                    extra_queries=[alert_match],
+                )
+            )
+
+        return silences
+
+    def uptime_cluster_alerts(self, silences: Optional[List[SilenceID]]) -> None:
+        """Enable again all the alert for the cluster.
+
+        If specific silences are passed, only those are removed, if none are passed, it will remove any existing
+        silence for cluster alerts.
+        """
+        if silences:
+            for silence in silences:
+                uptime_alert(spicerack=self._spicerack, silence_id=silence)
+
+        else:
+            # we match each individually
+            for alert_match in CLUSTER_ALERT_MATCHES:
+                uptime_alert(spicerack=self._spicerack, extra_queries=[alert_match])
+
+    def set_maintenance(self, reason: str, force: bool = False, task_id: Optional[str] = None) -> List[SilenceID]:
+        """Set maintenance and mute any cluster-wide alerts.
+
+        Returns the list of alert silences, to pass back to unset_maintenance for example.
+        """
+        silences = self.downtime_cluster_alerts(task_id=task_id, reason=reason)
         cluster_status = self.get_cluster_status()
         if cluster_status.is_cluster_status_just_maintenance():
             LOGGER.info("Cluster already in maintenance status.")
-            return
+            return silences
 
         try:
             cluster_status.check_healthy()
@@ -299,9 +340,13 @@ class CephClusterController:
 
         self.set_osdmap_flag(flag=CephOSDFlag("noout"))
         self.set_osdmap_flag(flag=CephOSDFlag("norebalance"))
+        return silences
 
-    def unset_maintenance(self, force: bool = False) -> None:
-        """Unset maintenance."""
+    def unset_maintenance(self, force: bool = False, silences: Optional[List[SilenceID]] = None) -> None:
+        """Unset maintenance and remove any cluster-wide alert silences.
+
+        If no silences passed, it will remove all the existing silences for the cluster if any.
+        """
         cluster_status = self.get_cluster_status()
         try:
             cluster_status.check_healthy(consider_maintenance_healthy=True)
@@ -328,6 +373,8 @@ class CephClusterController:
 
         else:
             LOGGER.info("Cluster already out of maintenance status.")
+
+        self.uptime_cluster_alerts(silences=silences)
 
     def wait_for_in_progress_events(self, timeout_seconds: int = 600) -> None:
         """Wait until a cluster in progress events have finished."""

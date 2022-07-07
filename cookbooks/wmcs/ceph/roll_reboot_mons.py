@@ -13,8 +13,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
-from cookbooks.wmcs.lib.alerts import downtime_alert, uptime_alert
-from cookbooks.wmcs.lib.ceph import CLUSTER_ALERTS, CephClusterController
+from cookbooks.wmcs.lib.ceph import CephClusterController
 
 LOGGER = logging.getLogger(__name__)
 
@@ -77,21 +76,13 @@ class RollRebootMonsRunner(CookbookRunnerBase):
     def run(self) -> None:
         """Main entry point"""
         controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn
+            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn, spicerack=self.spicerack
         )
-        silences = []
-        for alert_name in CLUSTER_ALERTS:
-            silences.append(
-                downtime_alert(
-                    spicerack=self.spicerack, alert_name=alert_name, duration="4h", task_id=self.common_opts.task_id
-                )
-            )
-
         mon_nodes = list(controller.get_nodes()["mon"].keys())
 
         self.sallogger.log(message=f"Rebooting the nodes {','.join(mon_nodes)}")
 
-        controller.set_maintenance()
+        silences = controller.set_maintenance(task_id=self.common_opts.task_id, reason="Roll rebooting mons")
 
         reboot_node_cookbook = RebootNode(spicerack=self.spicerack)
         for index, mon_node in enumerate(mon_nodes):
@@ -120,8 +111,6 @@ class RollRebootMonsRunner(CookbookRunnerBase):
             controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
             LOGGER.info("Cluster stable, continuing")
 
-        controller.unset_maintenance()
-        for silence in silences:
-            uptime_alert(spicerack=self.spicerack, silence_id=silence)
+        controller.unset_maintenance(silences=silences)
 
         self.sallogger.log(message=f"Finished rebooting the nodes {mon_nodes}")
