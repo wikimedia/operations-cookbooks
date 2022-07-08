@@ -5,8 +5,8 @@ import cumin
 import pytest
 
 from cookbooks.wmcs import TestUtils
-from cookbooks.wmcs.lib.openstack import OpenstackAPI
-from cookbooks.wmcs.lib.openstack.neutron import (
+from cookbooks.wmcs.libs.openstack import OpenstackAPI
+from cookbooks.wmcs.libs.openstack.neutron import (
     NetworkUnhealthy,
     NeutronAgent,
     NeutronAgentHAState,

@@ -148,7 +148,7 @@ class RefreshPuppetCertsRunner(CookbookRunnerBase):
         else:
             # We have to make sure in any case that the puppet config is refreshed to do the puppetmaster switch.
             # The tag makes only run the puppet config related manifests.
-            remote_host.run_sync(Command("puppet agent --test --tags base::puppet", ok_codes=list(range(255))))
+            run_one_raw(node=remote_host, command=Command("puppet agent --test --tags base::puppet", ok_codes=[]))
 
         post_puppetmasters = node_to_bootstrap.get_ca_servers()
         if post_puppetmasters != pre_puppetmasters:

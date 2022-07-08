@@ -13,7 +13,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.toolforge.grid import GridController
+from cookbooks.wmcs.libs.grid import GridController
 
 LOGGER = logging.getLogger(__name__)
 

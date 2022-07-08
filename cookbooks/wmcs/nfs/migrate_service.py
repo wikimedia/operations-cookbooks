@@ -15,12 +15,13 @@ import json
 import logging
 from typing import Union
 
+from cumin.transports import Command
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
 from cookbooks.wmcs import OutputFormat, run_one_as_dict, run_one_raw
-from cookbooks.wmcs.lib.openstack import OpenstackAPI
+from cookbooks.wmcs.libs.openstack import OpenstackAPI
 
 LOGGER = logging.getLogger(__name__)
 
@@ -216,7 +217,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
 
         if volume_prepared:
             # Don't fail if it's already mounted.
-            to_node.run_sync(f"mount {volume_path}; true")
+            run_one_raw(command=Command(command=f"mount {volume_path}", ok_codes=[]), node=to_node)
         else:
             run_one_raw(
                 node=to_node,

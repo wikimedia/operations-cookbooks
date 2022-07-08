@@ -12,7 +12,7 @@ import yaml
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.toolforge.grid import (
+from cookbooks.wmcs.libs.grid import (
     GridController,
     GridQueueState,
     GridQueueStatesSet,

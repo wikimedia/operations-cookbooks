@@ -14,7 +14,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, DebianVersion, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.toolforge.grid import GridController, GridNodeType
+from cookbooks.wmcs.libs.grid import GridController, GridNodeType
 
 LOGGER = logging.getLogger(__name__)
 

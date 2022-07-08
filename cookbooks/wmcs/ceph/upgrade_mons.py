@@ -13,7 +13,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.ceph.upgrade_ceph_node import UpgradeCephNode
-from cookbooks.wmcs.lib.ceph import CephClusterController
+from cookbooks.wmcs.libs.ceph import CephClusterController
 
 LOGGER = logging.getLogger(__name__)
 

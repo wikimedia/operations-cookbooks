@@ -22,7 +22,7 @@ import yaml
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import OutputFormat, run_one_as_dict
+from cookbooks.wmcs import OutputFormat, run_one_as_dict, run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 
@@ -114,9 +114,16 @@ class RemoveNodeFromHieraRunner(CookbookRunnerBase):
             # usage as cli parameter, and it's valid yaml :)
             current_hiera_config_str = json.dumps(current_hiera_config)
             LOGGER.info("New hiera config:\n%s", current_hiera_config_str)
-            control_node.run_sync(
-                f"wmcs-enc-cli --openstack-project {self.project} set_prefix_hiera {etcd_prefix} "
-                f"'{current_hiera_config_str}'"
+            run_one_raw(
+                node=control_node,
+                command=[
+                    "wmcs-enc-cli",
+                    "--openstack-project",
+                    self.project,
+                    "set_prefix_hiera",
+                    etcd_prefix,
+                    f"'{current_hiera_config_str}'",
+                ],
             )
         else:
             LOGGER.info("Hiera config was already correct.")

@@ -6,7 +6,7 @@ import pytest
 from cumin.transports import Command
 from spicerack import Spicerack
 
-from cookbooks.wmcs.lib.ceph import (
+from cookbooks.wmcs.libs.ceph import (
     CLUSTER_ALERT_MATCHES,
     CephClusterController,
     CephClusterUnhealthy,

@@ -228,7 +228,10 @@ class KubernetesController:
 
     def drain_node(self, node_hostname: str) -> None:
         """Drain a node, it does not wait for the containers to be stopped though."""
-        self._controlling_node.run_sync(f"kubectl drain --ignore-daemonsets --delete-local-data {node_hostname}")
+        run_one_raw(
+            command=["kubectl", "drain", "--ignore-daemonsets", "--delete-local-data", node_hostname],
+            node=self._controlling_node,
+        )
 
     def delete_node(self, node_hostname: str) -> None:
         """Delete a node, it does not drain it, see drain_node for that."""
@@ -236,7 +239,7 @@ class KubernetesController:
         if not current_nodes:
             LOGGER.info("Node %s was not part of this kubernetes cluster, ignoring", node_hostname)
 
-        self._controlling_node.run_sync(f"kubectl delete node {node_hostname}")
+        run_one_raw(command=["kubectl", "delete", "node", node_hostname], node=self._controlling_node)
 
     def is_node_ready(self, node_hostname: str) -> bool:
         """Ready means in 'Ready' status."""
@@ -329,10 +332,17 @@ class KubeadmController:
         ca_cert_hash = control_kubeadm.get_ca_cert_hash()
         new_token = control_kubeadm.get_new_token()
         try:
-            self._controlling_node.run_sync(
-                f"kubeadm join {join_address} "
-                f"--token {new_token} "
-                f"--discovery-token-ca-cert-hash sha256:{ca_cert_hash}"
+            run_one_raw(
+                command=[
+                    "kubeadm",
+                    "join",
+                    join_address,
+                    "--token",
+                    new_token,
+                    "--discovery-token-ca-cert-hash",
+                    f"sha256:{ca_cert_hash}",
+                ],
+                node=self._controlling_node,
             )
 
             if not wait_for_ready:

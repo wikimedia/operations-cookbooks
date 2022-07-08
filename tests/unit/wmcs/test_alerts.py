@@ -5,7 +5,7 @@ import cumin
 import pytest
 
 from cookbooks.wmcs import TestUtils
-from cookbooks.wmcs.lib.alerts import AlertManager
+from cookbooks.wmcs.libs.alerts import AlertManager
 
 
 def get_stub_silence(silence_id: str):

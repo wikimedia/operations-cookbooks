@@ -12,8 +12,9 @@ import logging
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.lib.alerts import downtime_host, uptime_host
-from cookbooks.wmcs.lib.ceph import CephClusterController, CephOSDFlag
+from cookbooks.wmcs import run_one_raw
+from cookbooks.wmcs.libs.alerts import downtime_host, uptime_host
+from cookbooks.wmcs.libs.ceph import CephClusterController, CephOSDFlag
 
 LOGGER = logging.getLogger(__name__)
 
@@ -104,11 +105,17 @@ class UpgradeCephNodeRunner(CookbookRunnerBase):
 
         with puppet.disabled(puppet_reason):
             # Upgrade all packages, leave config files untouched, do not prompt
-            upgrade_cmd = (
-                "DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' "
-                "-o Dpkg::Options::='--force-confold' dist-upgrade"
-            )
-            remote_host.run_sync(upgrade_cmd)
+            upgrade_cmd = [
+                "DEBIAN_FRONTEND=noninteractive",
+                "apt-get",
+                "-y",
+                "-o",
+                "Dpkg::Options::='--force-confdef'",
+                "-o",
+                "Dpkg::Options::='--force-confold'",
+                "dist-upgrade",
+            ]
+            run_one_raw(command=upgrade_cmd, node=remote_host)
 
             reboot_time = datetime.datetime.utcnow()
             remote_host.reboot()

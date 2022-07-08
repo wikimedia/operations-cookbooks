@@ -17,8 +17,8 @@ from spicerack.puppet import PuppetHosts
 from spicerack.remote import RemoteError
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.lib.openstack import OpenstackAPI
-from cookbooks.wmcs.toolforge.grid import GridController
+from cookbooks.wmcs.libs.grid import GridController
+from cookbooks.wmcs.libs.openstack import OpenstackAPI
 
 LOGGER = logging.getLogger(__name__)
 

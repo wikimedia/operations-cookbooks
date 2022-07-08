@@ -22,7 +22,7 @@ from cookbooks.wmcs import (
     natural_sort_key,
     with_common_opts,
 )
-from cookbooks.wmcs.lib.openstack import OpenstackAPI
+from cookbooks.wmcs.libs.openstack import OpenstackAPI
 from cookbooks.wmcs.toolforge.worker.drain import Drain
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
 

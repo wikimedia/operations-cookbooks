@@ -23,9 +23,10 @@ from cookbooks.wmcs import (
     KubernetesController,
     SALLogger,
     add_common_opts,
+    run_one_raw,
     with_common_opts,
 )
-from cookbooks.wmcs.lib.openstack import OpenstackAPI, OpenstackServerGroupPolicy
+from cookbooks.wmcs.libs.openstack import OpenstackAPI, OpenstackServerGroupPolicy
 from cookbooks.wmcs.vps.create_instance_with_prefix import CreateInstanceWithPrefix
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 
@@ -149,16 +150,17 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
 
         device = "/dev/sdb"
         LOGGER.info("Making sure %s is ext4, docker overlay storage needs it", device)
-        node.run_sync(
+        run_one_raw(
+            node=node,
             # we have to remove the mount from fstab as the fstype will be wrong
-            Command(
+            command=Command(
                 f"grep '{device}.*ext4' /proc/mounts "
                 "|| { "
                 f"    sudo umount {device} 2>/dev/null; "
                 f"    sudo -i mkfs.ext4 {device}; "
                 f"    sudo sed -i -e '\\|^.*/var/lib/docker\\s.*|d' /etc/fstab; "
                 "}"
-            )
+            ),
         )
 
         LOGGER.info("Making sure that the proper puppetmaster is setup for the new node %s", new_member.server_fqdn)

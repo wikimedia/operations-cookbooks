@@ -13,12 +13,11 @@ import argparse
 import json
 import logging
 
-import yaml
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import run_one_raw
-from cookbooks.wmcs.lib.openstack import OpenstackAPI
+from cookbooks.wmcs import OutputFormat, run_one_as_dict, run_one_raw
+from cookbooks.wmcs.libs.openstack import OpenstackAPI
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
     CreateInstanceWithPrefix,
     InstanceCreationOpts,
@@ -128,18 +127,16 @@ class NFSAddServerRunner(CookbookRunnerBase):
 
         control_node = self.spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True)
         # Get current puppet config
-        response = yaml.safe_load(
-            next(
-                control_node.run_sync(
-                    (
-                        f"wmcs-enc-cli --openstack-project {self.project} "
-                        "get_node_consolidated_info {new_server.server_fqdn}"
-                    ),
-                    is_safe=True,
-                )
-            )[1]
-            .message()
-            .decode()
+        response = run_one_as_dict(
+            command=[
+                "wmcs-enc-cli",
+                "--openstack-project",
+                self.project,
+                "get_node_consolidated_info",
+                new_server.server_fqdn,
+            ],
+            node=control_node,
+            try_format=OutputFormat.YAML,
         )
         current_hiera = response["hiera"]
         current_roles = response["roles"]
@@ -153,42 +150,48 @@ class NFSAddServerRunner(CookbookRunnerBase):
         current_hiera["mount_nfs"] = False
 
         current_hiera_str = json.dumps(current_hiera)
-        response = yaml.safe_load(
-            next(
-                control_node.run_sync(
-                    (
-                        f"wmcs-enc-cli --openstack-project {self.project} "
-                        f"set_prefix_hiera {new_server.server_fqdn} '{current_hiera_str}'"
-                    )
-                )
-            )[1]
-            .message()
-            .decode()
+        response = run_one_as_dict(
+            command=[
+                "wmcs-enc-cli",
+                "--openstack-project",
+                self.project,
+                "set_prefix_hiera",
+                new_server.server_fqdn,
+                f"'{current_hiera_str}'",
+            ],
+            node=control_node,
+            try_format=OutputFormat.YAML,
         )
 
         # Add nfs server puppet role
         current_roles.append("role::wmcs::nfs::standalone")
         current_roles_str = json.dumps(current_roles)
-        response = yaml.safe_load(
-            next(
-                control_node.run_sync(
-                    (
-                        f"wmcs-enc-cli --openstack-project {self.project} "
-                        f"set_prefix_roles {new_server.server_fqdn} '{current_roles_str}'"
-                    )
-                )
-            )[1]
-            .message()
-            .decode()
+        response = run_one_as_dict(
+            command=[
+                "wmcs-enc-cli",
+                "--openstack-project",
+                self.project,
+                "set_prefix_roles",
+                new_server.server_fqdn,
+                f"'{current_roles_str}'",
+            ],
+            node=control_node,
+            try_format=OutputFormat.YAML,
         )
 
         if self.create_storage_volume_size > 0:
-            new_node.run_sync(
-                (
-                    "wmcs-prepare-cinder-volume --device sdb --options "
-                    "'rw,nofail,x-systemd.device-timeout=2s,noatime,data=ordered' "
-                    f"--mountpoint '/srv/{self.volume}' --force"
-                )
+            run_one_raw(
+                command=[
+                    "wmcs-prepare-cinder-volume",
+                    "--device",
+                    "sdb",
+                    "--options",
+                    "'rw,nofail,x-systemd.device-timeout=2s,noatime,data=ordered'",
+                    "--mountpoint",
+                    f"'/srv/{self.volume}'",
+                    "--force",
+                ],
+                node=new_node,
             )
 
         if self.service_ip:
@@ -208,4 +211,4 @@ class NFSAddServerRunner(CookbookRunnerBase):
             )
 
         # Apply all pending changes
-        new_node.run_sync("/usr/local/sbin/run-puppet-agent")
+        run_one_raw(node=new_node, command=["/usr/local/sbin/run-puppet-agent"])

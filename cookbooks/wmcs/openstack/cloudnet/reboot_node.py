@@ -13,9 +13,9 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.lib.alerts import downtime_alert, downtime_host, uptime_alert, uptime_host
-from cookbooks.wmcs.lib.openstack import Deployment, OpenstackAPI, get_control_nodes
-from cookbooks.wmcs.lib.openstack.neutron import NetworkUnhealthy, NeutronAgentType, NeutronAlerts, NeutronController
+from cookbooks.wmcs.libs.alerts import downtime_alert, downtime_host, uptime_alert, uptime_host
+from cookbooks.wmcs.libs.openstack import Deployment, OpenstackAPI, get_control_nodes
+from cookbooks.wmcs.libs.openstack.neutron import NetworkUnhealthy, NeutronAgentType, NeutronAlerts, NeutronController
 
 LOGGER = logging.getLogger(__name__)
 

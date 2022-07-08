@@ -11,7 +11,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.lib.openstack import Deployment, get_gateway_nodes
+from cookbooks.wmcs.libs.openstack import Deployment, get_gateway_nodes
 from cookbooks.wmcs.openstack.cloudgw.reboot_node import RebootNode
 from cookbooks.wmcs.openstack.network.tests import NetworkTests
 

@@ -12,7 +12,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.toolforge.grid import GridController, GridNodeNotFound
+from cookbooks.wmcs.libs.grid import GridController, GridNodeNotFound
 
 LOGGER = logging.getLogger(__name__)
 

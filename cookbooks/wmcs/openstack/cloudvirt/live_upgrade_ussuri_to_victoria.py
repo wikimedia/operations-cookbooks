@@ -11,6 +11,8 @@ from cumin.transports import Command
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
+from cookbooks.wmcs import run_one_raw
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -58,31 +60,60 @@ class LiveUpgradeRunner(CookbookRunnerBase):
         """Main entry point."""
         node_to_upgrade = self.spicerack.remote().query(f"D{{{self.fqdn_to_upgrade}}}", use_sudo=True)
         input(f"Start with {self.fqdn_to_upgrade}?")
-        node_to_upgrade.run_async("puppet agent --enable")
-        node_to_upgrade.run_sync(Command("run-puppet-agent", ok_codes=list(range(255))))
-        node_to_upgrade.run_sync("apt update")
-        node_to_upgrade.run_sync(
-            "DEBIAN_FRONTEND=noninteractive apt-get install -y python3-libvirt python3-os-vif nova-compute "
-            "neutron-common nova-compute-kvm neutron-linuxbridge-agent python3-neutron  python3-eventlet "
-            "python3-oslo.messaging python3-taskflow python3-tooz python3-keystoneauth1 python3-positional "
-            "python3-requests python3-urllib3 "
-            '-o "Dpkg::Options::=--force-confdef" '
-            '-o "Dpkg::Options::=--force-confold"'
+        run_one_raw(node=node_to_upgrade, command=["puppet", "agent", "--enable"])
+        run_one_raw(node=node_to_upgrade, command=Command("run-puppet-agent", ok_codes=[]))
+        run_one_raw(node=node_to_upgrade, command=["apt", "update"])
+        run_one_raw(
+            node=node_to_upgrade,
+            command=[
+                "DEBIAN_FRONTEND=noninteractive",
+                "apt-get",
+                "install",
+                "-y",
+                "python3-libvirt",
+                "python3-os-vif",
+                "nova-compute",
+                "neutron-common",
+                "nova-compute-kvm",
+                "neutron-linuxbridge-agent",
+                "python3-neutron ",
+                "python3-eventlet",
+                "python3-oslo.messaging",
+                "python3-taskflow",
+                "python3-tooz",
+                "python3-keystoneauth1",
+                "python3-positional",
+                "python3-requests",
+                "python3-urllib3",
+                "-o",
+                '"Dpkg::Options::=--force-confdef"',
+                "-o",
+                '"Dpkg::Options::=--force-confold"',
+            ],
         )
-        node_to_upgrade.run_sync(
-            "DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y --allow-downgrades "
-            '-o "Dpkg::Options::=--force-confdef" '
-            '-o "Dpkg::Options::=--force-confold"'
+        run_one_raw(
+            node=node_to_upgrade,
+            command=[
+                "DEBIAN_FRONTEND=noninteractive",
+                "apt-get",
+                "dist-upgrade",
+                "-y",
+                "--allow-downgrades",
+                "-o",
+                '"Dpkg::Options::=--force-confdef"',
+                "-o",
+                '"Dpkg::Options::=--force-confold"',
+            ],
         )
-        node_to_upgrade.run_sync(Command("run-puppet-agent", ok_codes=list(range(255))))
-        node_to_upgrade.run_sync("systemctl restart neutron-linuxbridge-agent")
-        node_to_upgrade.run_sync("systemctl stop libvirtd")
-        node_to_upgrade.run_sync("systemctl start libvirtd-tls.socket")
-        node_to_upgrade.run_sync("systemctl start libvirtd")
-        node_to_upgrade.run_sync("run-puppet-agent")
-        node_to_upgrade.run_sync("systemctl restart nova-compute")
-        node_to_upgrade.run_sync("journalctl -n 500")
+        run_one_raw(node=node_to_upgrade, command=Command("run-puppet-agent", ok_codes=[]))
+        run_one_raw(node=node_to_upgrade, command=["systemctl", "restart", "neutron-linuxbridge-agent"])
+        run_one_raw(node=node_to_upgrade, command=["systemctl", "stop", "libvirtd"])
+        run_one_raw(node=node_to_upgrade, command=["systemctl", "start", "libvirtd-tls.socket"])
+        run_one_raw(node=node_to_upgrade, command=["systemctl", "start", "libvirtd"])
+        run_one_raw(node=node_to_upgrade, command=["run-puppet-agent"])
+        run_one_raw(node=node_to_upgrade, command=["systemctl", "restart", "nova-compute"])
+        run_one_raw(node=node_to_upgrade, command=["journalctl", "-n", "500"])
         LOGGER.info(
-            "Those were the last lines of the journal, make sure everyting looks ok before upgrading the next host."
+            "Those were the last lines of the journal, make sure everything looks ok before upgrading the next host."
         )
         LOGGER.info("%s Done!!! \\o/", self.fqdn_to_upgrade)

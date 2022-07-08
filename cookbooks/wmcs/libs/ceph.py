@@ -12,7 +12,7 @@ from spicerack import Remote, Spicerack
 from wmflib.interactive import ask_confirmation
 
 from cookbooks.wmcs import TestUtils, run_one_as_dict, run_one_formatted, run_one_raw
-from cookbooks.wmcs.lib.alerts import SilenceID, downtime_alert, uptime_alert
+from cookbooks.wmcs.libs.alerts import SilenceID, downtime_alert, uptime_alert
 
 LOGGER = logging.getLogger(__name__)
 # List of alerts that are triggered by the cluster aside from the specifics for each node
@@ -201,11 +201,11 @@ class CephOSDController:
 
         NOTE: this destroys all the information in the device!
         """
-        self._node.run_sync(f"ceph-volume lvm zap {device_path}")
+        run_one_raw(command=["ceph-volume", "lvm", "zap", device_path], node=self._node)
 
     def initialize_and_start_osd(self, device_path: str) -> None:
         """Setup and start a new osd on the given device."""
-        self._node.run_sync(f"ceph-volume lvm create --bluestore --data {device_path}")
+        run_one_raw(command=["ceph-volume", "lvm", "create", "--bluestore", "--data", device_path], node=self._node)
 
     def add_all_available_devices(self, interactive: bool = True) -> None:
         """Discover and add all the available devices of the node as new OSDs."""
