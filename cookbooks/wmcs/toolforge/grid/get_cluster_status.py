@@ -88,15 +88,15 @@ class ToolforgeGridGetClusterStatusRunner(CookbookRunnerBase):
         self.project = project
         self.spicerack = spicerack
         self.only_failed = only_failed
+        self.grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn)
 
     def run(self) -> None:
         """Main entry point"""
-        grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn)
         NoAliasDumper.add_representer(GridQueueType, GridQueueType.yaml_representer)
         NoAliasDumper.add_representer(GridQueueTypesSet, GridQueueTypesSet.yaml_representer)
         NoAliasDumper.add_representer(GridQueueState, GridQueueState.yaml_representer)
         NoAliasDumper.add_representer(GridQueueStatesSet, GridQueueStatesSet.yaml_representer)
-        nodes_info = grid_controller.get_nodes_info()
+        nodes_info = self.grid_controller.get_nodes_info()
         if self.only_failed:
             filtered_info = {
                 node_name: node_info for node_name, node_info in nodes_info.items() if not node_info.is_ok()
@@ -104,4 +104,12 @@ class ToolforgeGridGetClusterStatusRunner(CookbookRunnerBase):
         else:
             filtered_info = nodes_info
 
+        print("###### Nodes")
         print(yaml.dump(filtered_info, Dumper=NoAliasDumper))
+
+        if not all(node_info.is_ok() for node_info in nodes_info.values()):
+            print("###### Failed queues extended info")
+            queue_infos = [
+                queue_info for queue_info in self.grid_controller.get_queues_info() if not queue_info.is_ok()
+            ]
+            print(yaml.dump(queue_infos, Dumper=NoAliasDumper))

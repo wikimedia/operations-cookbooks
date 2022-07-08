@@ -5,7 +5,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 import yaml
 from cumin.transports import Command
@@ -124,19 +124,23 @@ class GridQueueInfo:
 
     name: str
     types: Optional[str] = None
-    slots_used: Optional[int] = None
     slots: Optional[int] = None
+    slots_used: Optional[int] = None
     slots_resv: Optional[int] = None
-    statuses: Optional[GridQueueStatesSet] = None
+    slots_total: Optional[int] = None
+    states: Optional[GridQueueStatesSet] = None
+    messages: Optional[List[str]] = None
+    load_avg: Optional[float] = None
+    arch: Optional[str] = None
 
     @classmethod
-    def from_xml(cls, xml_obj: ElementTree) -> "GridQueueInfo":
+    def from_node_info_xml(cls, xml_obj: ElementTree) -> "GridQueueInfo":
         """Create a GridQueueInfo from qhost xml output queue node."""
         info_params = {"name": xml_obj.attrib.get("name")}
         for queuevalue_xml in xml_obj.iter("queuevalue"):
             value_type = queuevalue_xml.attrib.get("name")
             if value_type == "state_string":
-                info_params["statuses"] = GridQueueStatesSet.from_state_string(state_string=queuevalue_xml.text)
+                info_params["states"] = GridQueueStatesSet.from_state_string(state_string=queuevalue_xml.text)
             elif value_type == "qtype_string":
                 info_params["types"] = GridQueueTypesSet.from_types_string(types_string=queuevalue_xml.text)
             else:
@@ -144,9 +148,30 @@ class GridQueueInfo:
 
         return cls(**info_params)
 
+    @classmethod
+    def from_queue_info_xml(cls, xml_obj: ElementTree) -> "GridQueueInfo":
+        """Create a GridQueueInfo from qstat -E explain Queue-List entry."""
+        info_params: Dict[str, Any] = {}
+        for list_entry_xml in xml_obj:
+            value_type = list_entry_xml.tag
+            if value_type == "state":
+                info_params["states"] = GridQueueStatesSet.from_state_string(state_string=list_entry_xml.text)
+            elif value_type == "qtype":
+                info_params["types"] = GridQueueTypesSet.from_types_string(types_string=list_entry_xml.text)
+            elif value_type == "message":
+                if "messages" in info_params:
+                    info_params["messages"].append(list_entry_xml.text)
+                else:
+                    info_params["messages"] = [list_entry_xml.text]
+            else:
+                info_params[value_type] = list_entry_xml.text if list_entry_xml.text != "-" else None
+
+        return cls(**info_params)
+
     def is_ok(self):
         """Return if this queue is in a 'running' state."""
-        return self.statuses.is_ok()
+        # when loading the data from qstat, the states is empty unless in error
+        return self.states.is_ok() if self.states is not None else True
 
 
 @dataclass(frozen=True)
@@ -175,7 +200,7 @@ class GridNodeInfo:
             info_params[value_type] = hostvalue_xml.text if hostvalue_xml.text != "-" else None
 
         for queue_xml in xml_obj.iter("queue"):
-            queue_info = GridQueueInfo.from_xml(xml_obj=queue_xml)
+            queue_info = GridQueueInfo.from_node_info_xml(xml_obj=queue_xml)
             info_params["queues_info"][queue_info.name] = queue_info
 
         return cls(**info_params)
@@ -322,6 +347,22 @@ class GridController:
             return GridNodeInfo.from_xml(xml_obj=node_xml)
 
         raise GridNodeNotFound(f"Unable to find node {host_fqdn}, output:\n{raw_output}")
+
+    def get_queues_info(self) -> List[GridQueueInfo]:
+        """Retrieve the extended queues info, including messages."""
+        raw_output = run_one_raw(
+            node=self._master_node,
+            command=["qstat", "-explain", "E", "-xml"],
+            capture_errors=True,
+            print_output=False,
+            print_progress_bars=False,
+        )
+        parsed_xml = ElementTree.fromstring(raw_output)
+        queues_info: List[GridQueueInfo] = []
+        for queue_list_xml in parsed_xml[0]:
+            queues_info.append(GridQueueInfo.from_queue_info_xml(xml_obj=queue_list_xml))
+
+        return queues_info
 
     def depool_node(self, host_fqdn: str) -> None:
         """Depools a node from the grid.
