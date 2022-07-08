@@ -273,3 +273,116 @@ def get_junos_live_interface_config(remote_host: RemoteHosts, interface: str, pr
         logger.error('Network device returned invalid data: "%s". Error: %s', results_raw, e)
         return None
     return junos_interface_to_netbox(interface_json, old_junos)
+
+
+def get_junos_optics(remote_host: RemoteHosts, interface: str, print_output: bool = False) -> Dict:
+    """Returns the oper optical status for a given interface
+
+    Arguments:
+        remote_host: Spicerack RemoteHosts instance
+        interface: target interface name
+        print_output: Display a more verbose output
+
+    Returns:
+        Dict of relevant input/ouput optic levels/power or None
+
+    """
+    logger.debug("Fetching the interface optical status")
+    results_raw = remote_host.run_sync(f"show interfaces diagnostics optics {interface} | display json",
+                                       is_safe=True,
+                                       print_output=print_output,
+                                       print_progress_bars=False)
+
+    result_json = parse_results(results_raw, json_output=True)
+    if not result_json:
+        logger.error("Interface %s either incorrect or not optical", interface)
+        return {}
+    optics_diag = result_json['interface-information'][0]['physical-interface'][0]['optics-diagnostics'][0]
+    interface_optic = {}
+    for key in ('laser-output-power',
+                'laser-output-power-dbm',
+                'rx-signal-avg-optical-power',
+                'rx-signal-avg-optical-power-dbm'):
+        try:
+            interface_optic[key] = optics_diag.get(key)[0].get('data')
+        except TypeError:
+            logger.error("Key '%s' not present in returned data", key)
+    if ('rx-signal-avg-optical-power-dbm' in interface_optic
+       and float(interface_optic['rx-signal-avg-optical-power-dbm']) < -30):
+        logger.error('RX power too low')
+    return interface_optic
+
+
+def get_junos_interface(remote_host: RemoteHosts, interface: str, print_output: bool = False) -> Dict:
+    """Returns the interface status of a given interface
+
+    Arguments:
+        remote_host: Spicerack RemoteHosts instance
+        interface: target interface name
+        print_output: Display a more verbose output
+
+    Returns:
+        Dict of relevant interface metrics or None
+
+    """
+    logger.debug("Fetching the interface status")
+    results_raw = remote_host.run_sync(f"show interfaces {interface} extensive | display json",
+                                       is_safe=True,
+                                       print_output=print_output,
+                                       print_progress_bars=False)
+
+    result_json = parse_results(results_raw, json_output=True)
+    if not result_json:
+        logger.error("Interface %s not found on the device", interface)
+        return None
+    physical_interface = result_json['interface-information'][0]['physical-interface'][0]
+    interface_status = {}
+    for key in ('admin-status',
+                'oper-status',
+                'interface-flapped'):
+        try:
+            interface_status[key] = physical_interface.get(key)[0].get('data')
+        except TypeError:
+            logger.error("Key '%s' not present in returned data", key)
+
+    interface_status['errors'] = {}
+    for list_type in ('input-error-list', 'output-error-list'):
+        input_error_list = physical_interface[list_type][0]
+        for key in input_error_list.keys():
+            value = int(input_error_list.get(key, [{}])[0].get('data', 0))
+            if value > 0:
+                interface_status['errors'][key] = value
+
+    logger.debug("Clear the interface statistics")
+    remote_host.run_sync(f"clear interfaces statistics {interface}",
+                         print_output=print_output,
+                         print_progress_bars=False)
+
+    return interface_status
+
+
+def get_junos_logs(remote_host: RemoteHosts, match: str, print_output: bool = False, last: int = 10) -> str:
+    """Returns system logs
+
+    Arguments:
+        remote_host: Spicerack RemoteHosts instance
+        match: pattern to find in the logs (grep)
+        print_output: Display a more verbose output
+        last: limit the output to the last X lines matching
+
+    Returns:
+        Log messages or None
+
+    """
+    logger.debug("Fetching log lines containing %s", match)
+    # TODO catch invalid characters
+    results_raw = remote_host.run_sync((f'show log messages | match "{match}" |'
+                                        f' except UI_CMDLINE_READ_LINE | last {last}'),
+                                       is_safe=True,
+                                       print_output=print_output,
+                                       print_progress_bars=False)
+
+    result = parse_results(results_raw)
+    if not result:
+        logger.debug("No logs matching %s", match)
+    return result
