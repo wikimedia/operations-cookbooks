@@ -54,7 +54,9 @@ class RollRebootK8sNodes(SREBatchBase):
 
     batch_default = 1
     batch_max = 5
-    grace_sleep = 10
+    # Wait for 30 seconds between batches.
+    # This should allow mandatory pods to become ready on the previously drained nodes.
+    grace_sleep = 30
     valid_actions = ("reboot",)
 
     def argument_parser(self) -> ArgumentParser:
@@ -80,8 +82,12 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
     """Group all nodes of a Kubernetes cluster by taints and perform rolling reboots on a per taint-group basis"""
 
     depool_threshold = 5  # Maximum allowed batch size
-    depool_sleep = 35  # Seconds to sleep after the depool before the restart
-    repool_sleep = 5  # Seconds to sleep before the repool after the restart
+    # Seconds to sleep after the depool.
+    # This happens after nodes have been cordoned.
+    depool_sleep = 35
+    # Seconds to sleep before the repool.
+    # As this happens prior to uncordoning, we can rely on grace_sleep and don't wait for repool.
+    repool_sleep = 0
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Initialize the runner."""
@@ -159,11 +165,16 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         for node_name in all_hosts.hosts:
             try:
                 k8s_node = self.k8s_cli.get_node(node_name)
+                # Error out if a node is cordoned as the cookbook would unconditionally uncordon it later
+                if not k8s_node.is_schedulable():
+                    raise RuntimeError(
+                        f"Node {node_name} is cordoned. Only run this cookbook with all nodes uncordoned."
+                    )
                 self._all_k8s_nodes[node_name] = k8s_node
                 flat_taints = (
                     ""
-                    if k8s_node._node.spec.taints is None
-                    else flatten_taints(k8s_node._node.spec.taints)
+                    if k8s_node.taints is []
+                    else flatten_taints(k8s_node.taints)
                 )
             except KubernetesApiError:
                 # This node is not registered in kubernetes API.
@@ -203,6 +214,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         Cordoning first is to prevent evicted Pods from being scheduled on nodes
         that are to be rebooted in this batch.
         """
+        # The node(s) will be drained prior to being depooled. Not ideal but okay for now.
         for node_name in batch.hosts:
             self._cordon(node_name)
         for node_name in batch.hosts:
