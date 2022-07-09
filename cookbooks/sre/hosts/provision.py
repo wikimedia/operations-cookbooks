@@ -190,9 +190,25 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             self._dhcp_active = True
 
         try:
+            self.redfish.check_connection()
+            storage = self.redfish.request('get', '/redfish/v1/Systems/System.Embedded.1/Storage/').json()
+            has_raid = False
+            for storage_member in storage['Members']:
+                if storage_member['@odata.id'].split('/')[-1].startswith('RAID'):
+                    has_raid = True
+                    break
+        except Exception:  # pylint: disable=broad-except
+            logger.warning('Unable to detect if there is Hardware RAID on the host, assuming yes.')
+            has_raid = True
+
+        if has_raid:
+            ask_confirmation('Detected Hardware RAID. Please configure the RAID at this point (the password is still '
+                             'DELL default one). Proceed only once the RAID is properly configured.')
+
+        try:
             self._config()
         except Exception:  # pylint: disable=broad-except
-            logger.warning('First attempt to load the new configuration, auto-retrying once')
+            logger.warning('First attempt to load the new configuration failed, auto-retrying once')
             confirm_on_failure(self._config)
 
         if not self.args.no_dhcp:
