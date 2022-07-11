@@ -157,11 +157,17 @@ class CommandRunnerMixin:
         """Simple mixin to provide command running functions to a class."""
         self.command_runner_node = command_runner_node
 
-    def _get_full_command(self, *command: str, json_output: bool = True):
+    def _get_full_command(self, *command: str, json_output: bool = True, project_as_arg: bool = False):
         raise NotImplementedError
 
     def run_raw(
-        self, *command: str, is_safe: bool = False, capture_errors: bool = False, json_output=True, **kwargs
+        self,
+        *command: str,
+        is_safe: bool = False,
+        capture_errors: bool = False,
+        json_output=True,
+        project_as_arg: bool = False,
+        **kwargs,
     ) -> str:
         """Run an openstack command on a control node.
 
@@ -169,7 +175,7 @@ class CommandRunnerMixin:
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        full_command = self._get_full_command(*command, json_output=json_output)
+        full_command = self._get_full_command(*command, json_output=json_output, project_as_arg=project_as_arg)
         return run_one_raw(
             command=full_command,
             node=self.command_runner_node,
@@ -179,7 +185,7 @@ class CommandRunnerMixin:
         )
 
     def run_formatted_as_dict(
-        self, *command: str, is_safe: bool = False, capture_errors: bool = False, **kwargs
+        self, *command: str, is_safe: bool = False, capture_errors: bool = False, project_as_arg: bool = False, **kwargs
     ) -> Dict[str, Any]:
         """Run an openstack command on a control node forcing json output.
 
@@ -200,7 +206,7 @@ class CommandRunnerMixin:
             }
 
         """
-        full_command = self._get_full_command(*command, json_output=True)
+        full_command = self._get_full_command(*command, json_output=True, project_as_arg=project_as_arg)
         return run_one_as_dict(
             command=full_command,
             node=self.command_runner_node,
@@ -210,7 +216,7 @@ class CommandRunnerMixin:
         )
 
     def run_formatted_as_list(
-        self, *command: str, is_safe: bool = False, capture_errors: bool = False, **kwargs
+        self, *command: str, is_safe: bool = False, capture_errors: bool = False, project_as_arg: bool = False, **kwargs
     ) -> List[Any]:
         """Run an openstack command on a control node forcing json output.
 
@@ -248,7 +254,7 @@ class CommandRunnerMixin:
             ]
 
         """
-        full_command = self._get_full_command(*command, json_output=True)
+        full_command = self._get_full_command(*command, json_output=True, project_as_arg=project_as_arg)
         return run_one_formatted_as_list(
             command=full_command,
             node=self.command_runner_node,
@@ -415,7 +421,7 @@ class OpenstackAPI(CommandRunnerMixin):
         self.control_node = remote.query(f"D{{{control_node_fqdn}}}", use_sudo=True)
         super().__init__(command_runner_node=self.control_node)
 
-    def _get_full_command(self, *command: str, json_output: bool = True):
+    def _get_full_command(self, *command: str, json_output: bool = True, project_as_arg: bool = False):
         # some commands don't have formatted output
         if json_output:
             format_args = ["-f", "json"]
@@ -423,6 +429,10 @@ class OpenstackAPI(CommandRunnerMixin):
             format_args = []
         if "delete" in command:
             format_args = []
+
+        # some commands require passing the project as an argument and cannot use OS_PROJECT_ID
+        if project_as_arg:
+            return ["wmcs-openstack", *command, self.project, *format_args]
 
         return ["env", f"OS_PROJECT_ID={self.project}", "wmcs-openstack", *command, *format_args]
 
@@ -817,7 +827,9 @@ class OpenstackAPI(CommandRunnerMixin):
 
         Note that it will cast any known quota names to OpenstackQuotaName enums.
         """
-        raw_quotas = self.run_formatted_as_dict("quota", "show")
+        # OS_PROJECT_ID=PROJECT wmcs-openstack quota show displays the admin project!
+        # This must be run as wmcs-openstack quota show PROJECT
+        raw_quotas = self.run_formatted_as_dict("quota", "show", project_as_arg=True)
         final_quotas: Dict[Union[str, OpenstackQuotaName], Any] = {}
         for quota_name, quota_value in raw_quotas.items():
             try:
@@ -836,7 +848,7 @@ class OpenstackAPI(CommandRunnerMixin):
         """
         quotas_cli = [quota.to_cli() for quota in quotas]
 
-        self.run_raw("quota", "set", *quotas_cli)
+        self.run_raw("quota", "set", *quotas_cli, json_output=False, project_as_arg=True)
 
     def quota_increase(self, *quota_increases: OpenstackQuotaEntry) -> None:
         """Set a quota to the given value.
@@ -855,3 +867,12 @@ class OpenstackAPI(CommandRunnerMixin):
             increased_quotas.append(OpenstackQuotaEntry(name=new_quota.name, value=new_value))
 
         self.quota_set(*increased_quotas)
+
+        # Validate quota was updated as expected
+        new_quotas = self.quota_show()
+        for new_quota in increased_quotas:
+            if new_quota.value != new_quotas[new_quota.name].value:
+                raise OpenstackError(
+                    f"{new_quotas[new_quota.name]} quota of {new_quotas[new_quota.name].value} "
+                    f"does not match expected value of {new_quota.value}"
+                )

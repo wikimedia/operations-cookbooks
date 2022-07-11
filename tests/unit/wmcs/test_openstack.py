@@ -1,3 +1,5 @@
+from unittest import mock
+
 import cumin
 import pytest
 
@@ -176,56 +178,56 @@ def test_summing_up_two_quota_entries(
 
 def test_OpenstackAPI_quota_show_happy_path():
     fake_remote = TestUtils.get_fake_remote(
+        # openstack quota show -f json admin-monitoring
         responses=[
             """{
-  "backup-gigabytes": 1000,
-  "backups": 0,
-  "cores": 15,
-  "fixed-ips": -1,
-  "floating-ips": 0,
-  "gigabytes": 80,
-  "gigabytes___DEFAULT__": -1,
-  "gigabytes_standard": -1,
-  "groups": 4,
-  "injected-file-size": 10240,
-  "injected-files": 5,
-  "injected-path-size": 255,
-  "instances": 15,
-  "key-pairs": 100,
-  "location": {
-    "cloud": "",
-    "region_name": "eqiad1-r",
-    "zone": null,
-    "project": {
-      "id": "admin",
-      "name": "admin",
-      "domain_id": "default",
-      "domain_name": "default"
-    }
-  },
-  "networks": 100,
-  "per-volume-gigabytes": -1,
-  "ports": 500,
-  "project": "admin-monitoring",
-  "project_name": "admin-monitoring",
-  "properties": 128,
-  "ram": 32768,
-  "rbac_policies": 10,
-  "routers": 10,
-  "secgroup-rules": 100,
-  "secgroups": 40,
-  "server-group-members": 10,
-  "server-groups": 10,
-  "snapshots": 4,
-  "snapshots___DEFAULT__": -1,
-  "snapshots_standard": -1,
-  "subnet_pools": -1,
-  "subnets": 100,
-  "volumes": 8,
-  "volumes___DEFAULT__": -1,
-  "volumes_standard": -1
-}
-"""  # openstack quota show -f json admin-monitoring
+                "backup-gigabytes":1000,
+                "backups":0,
+                "cores":15,
+                "fixed-ips":-1,
+                "floating-ips":0,
+                "gigabytes":80,
+                "gigabytes___DEFAULT__":-1,
+                "gigabytes_standard":-1,
+                "groups":4,
+                "injected-file-size":10240,
+                "injected-files":5,
+                "injected-path-size":255,
+                "instances":15,
+                "key-pairs":100,
+                "location":{
+                    "cloud":"",
+                    "region_name":"eqiad1-r",
+                    "zone":null,
+                    "project":{
+                        "id":"admin",
+                        "name":"admin",
+                        "domain_id":"default",
+                        "domain_name":"default"
+                    }
+                },
+                "networks":100,
+                "per-volume-gigabytes":-1,
+                "ports":500,
+                "project":"admin-monitoring",
+                "project_name":"admin-monitoring",
+                "properties":128,
+                "ram":32768,
+                "rbac_policies":10,
+                "routers":10,
+                "secgroup-rules":100,
+                "secgroups":40,
+                "server-group-members":10,
+                "server-groups":10,
+                "snapshots":4,
+                "snapshots___DEFAULT__":-1,
+                "snapshots_standard":-1,
+                "subnet_pools":-1,
+                "subnets":100,
+                "volumes":8,
+                "volumes___DEFAULT__":-1,
+                "volumes_standard":-1
+            }"""
         ]
     )
     my_api = OpenstackAPI(remote=fake_remote, project="admin-monitoring", control_node_fqdn="dummy.host")
@@ -249,13 +251,7 @@ def test_OpenstackAPI_quota_set_happy_path():
         OpenstackQuotaEntry(name=OpenstackQuotaName.FLOATING_IPS, value=30),
     )
     expected_command = cumin.transports.Command(
-        (
-            "env OS_PROJECT_ID=admin-monitoring wmcs-openstack quota set "
-            "--cores=10 "
-            "--gigabytes=20 "
-            "--floating-ips=30 "
-            "-f json"
-        ),
+        ("wmcs-openstack quota set --cores=10 --gigabytes=20 --floating-ips=30 admin-monitoring"),
         ok_codes=[0],
     )
     fake_control_host = fake_remote.query.return_value
@@ -264,57 +260,152 @@ def test_OpenstackAPI_quota_set_happy_path():
 
 def test_OpenstackAPI_quota_increase_happy_path():
     fake_remote = TestUtils.get_fake_remote(
+        # openstack quota show -f json admin-monitoring
         responses=[
             """{
-  "backup-gigabytes": 1000,
-  "backups": 0,
-  "cores": 15,
-  "fixed-ips": -1,
-  "floating-ips": 0,
-  "gigabytes": 80,
-  "gigabytes___DEFAULT__": -1,
-  "gigabytes_standard": -1,
-  "groups": 4,
-  "injected-file-size": 10240,
-  "injected-files": 5,
-  "injected-path-size": 255,
-  "instances": 15,
-  "key-pairs": 100,
-  "location": {
-    "cloud": "",
-    "region_name": "eqiad1-r",
-    "zone": null,
-    "project": {
-      "id": "admin",
-      "name": "admin",
-      "domain_id": "default",
-      "domain_name": "default"
-    }
-  },
-  "networks": 100,
-  "per-volume-gigabytes": -1,
-  "ports": 500,
-  "project": "admin-monitoring",
-  "project_name": "admin-monitoring",
-  "properties": 128,
-  "ram": 32768,
-  "rbac_policies": 10,
-  "routers": 10,
-  "secgroup-rules": 100,
-  "secgroups": 40,
-  "server-group-members": 10,
-  "server-groups": 10,
-  "snapshots": 4,
-  "snapshots___DEFAULT__": -1,
-  "snapshots_standard": -1,
-  "subnet_pools": -1,
-  "subnets": 100,
-  "volumes": 8,
-  "volumes___DEFAULT__": -1,
-  "volumes_standard": -1
-}
-""",  # openstack quota show -f json admin-monitoring
-            "",
+                "backup-gigabytes":1000,
+                "backups":0,
+                "cores":15,
+                "fixed-ips":-1,
+                "floating-ips":0,
+                "gigabytes":80,
+                "gigabytes___DEFAULT__":-1,
+                "gigabytes_standard":-1,
+                "groups":4,
+                "injected-file-size":10240,
+                "injected-files":5,
+                "injected-path-size":255,
+                "instances":15,
+                "key-pairs":100,
+                "location":{
+                    "cloud":"",
+                    "region_name":"eqiad1-r",
+                    "zone":null,
+                    "project":{
+                        "id":"admin",
+                        "name":"admin",
+                        "domain_id":"default",
+                        "domain_name":"default"
+                    }
+                },
+                "networks":100,
+                "per-volume-gigabytes":-1,
+                "ports":500,
+                "project":"admin-monitoring",
+                "project_name":"admin-monitoring",
+                "properties":128,
+                "ram":32768,
+                "rbac_policies":10,
+                "routers":10,
+                "secgroup-rules":100,
+                "secgroups":40,
+                "server-group-members":10,
+                "server-groups":10,
+                "snapshots":4,
+                "snapshots___DEFAULT__":-1,
+                "snapshots_standard":-1,
+                "subnet_pools":-1,
+                "subnets":100,
+                "volumes":8,
+                "volumes___DEFAULT__":-1,
+                "volumes_standard":-1
+            }""",
+            """{
+                "backup-gigabytes":1000,
+                "backups":0,
+                "cores":15,
+                "fixed-ips":-1,
+                "floating-ips":0,
+                "gigabytes":80,
+                "gigabytes___DEFAULT__":-1,
+                "gigabytes_standard":-1,
+                "groups":4,
+                "injected-file-size":10240,
+                "injected-files":5,
+                "injected-path-size":255,
+                "instances":15,
+                "key-pairs":100,
+                "location":{
+                    "cloud":"",
+                    "region_name":"eqiad1-r",
+                    "zone":null,
+                    "project":{
+                        "id":"admin",
+                        "name":"admin",
+                        "domain_id":"default",
+                        "domain_name":"default"
+                    }
+                },
+                "networks":100,
+                "per-volume-gigabytes":-1,
+                "ports":500,
+                "project":"admin-monitoring",
+                "project_name":"admin-monitoring",
+                "properties":128,
+                "ram":32768,
+                "rbac_policies":10,
+                "routers":10,
+                "secgroup-rules":100,
+                "secgroups":40,
+                "server-group-members":10,
+                "server-groups":10,
+                "snapshots":4,
+                "snapshots___DEFAULT__":-1,
+                "snapshots_standard":-1,
+                "subnet_pools":-1,
+                "subnets":100,
+                "volumes":8,
+                "volumes___DEFAULT__":-1,
+                "volumes_standard":-1
+            }""",
+            """{
+                "backup-gigabytes":1000,
+                "backups":0,
+                "cores":25,
+                "fixed-ips":-1,
+                "floating-ips":30,
+                "gigabytes":100,
+                "gigabytes___DEFAULT__":-1,
+                "gigabytes_standard":-1,
+                "groups":4,
+                "injected-file-size":10240,
+                "injected-files":5,
+                "injected-path-size":255,
+                "instances":15,
+                "key-pairs":100,
+                "location":{
+                    "cloud":"",
+                    "region_name":"eqiad1-r",
+                    "zone":null,
+                    "project":{
+                        "id":"admin",
+                        "name":"admin",
+                        "domain_id":"default",
+                        "domain_name":"default"
+                    }
+                },
+                "networks":100,
+                "per-volume-gigabytes":-1,
+                "ports":500,
+                "project":"admin-monitoring",
+                "project_name":"admin-monitoring",
+                "properties":128,
+                "ram":32768,
+                "rbac_policies":10,
+                "routers":10,
+                "secgroup-rules":100,
+                "secgroups":40,
+                "server-group-members":10,
+                "server-groups":10,
+                "snapshots":4,
+                "snapshots___DEFAULT__":-1,
+                "snapshots_standard":-1,
+                "subnet_pools":-1,
+                "subnets":100,
+                "volumes":8,
+                "volumes___DEFAULT__":-1,
+                "volumes_standard":-1
+            }""",
         ]
     )
     my_api = OpenstackAPI(remote=fake_remote, project="admin-monitoring", control_node_fqdn="dummy.host")
@@ -323,18 +414,25 @@ def test_OpenstackAPI_quota_increase_happy_path():
         OpenstackQuotaEntry(name=OpenstackQuotaName.GIGABYTES, value=20),
         OpenstackQuotaEntry(name=OpenstackQuotaName.FLOATING_IPS, value=30),
     )
-    expected_command = cumin.transports.Command(
-        (
-            "env OS_PROJECT_ID=admin-monitoring wmcs-openstack quota set "
-            "--cores=25 "
-            "--gigabytes=100 "
-            "--floating-ips=30 "
-            "-f json"
-        ),
+
+    expected_show_command = cumin.transports.Command(
+        ("wmcs-openstack quota show admin-monitoring -f json"),
         ok_codes=[0],
     )
+
+    expected_set_command = cumin.transports.Command(
+        ("wmcs-openstack quota set --cores=25 --gigabytes=100 --floating-ips=30 admin-monitoring"),
+        ok_codes=[0],
+    )
+
     fake_control_host = fake_remote.query.return_value
-    fake_control_host.run_sync.assert_called_with(expected_command, is_safe=False)
+    assert fake_control_host.run_sync.call_count == 3
+    calls = [
+        mock.call(expected_show_command, is_safe=False),
+        mock.call(expected_set_command, is_safe=False),
+        mock.call(expected_show_command, is_safe=False),
+    ]
+    fake_control_host.run_sync.assert_has_calls(calls)
 
 
 @pytest.mark.parametrize(

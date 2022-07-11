@@ -239,7 +239,7 @@ class NeutronController(CommandRunnerMixin):
         self.control_node = openstack_api.control_node
         super().__init__(command_runner_node=self.control_node)
 
-    def _get_full_command(self, *command: str, json_output: bool = True):
+    def _get_full_command(self, *command: str, json_output: bool = True, project_as_arg: bool = False):
         cmd = ["source", "/root/novaenv.sh", "&&", "neutron", *command]
         if json_output:
             cmd.extend(["--format", "json"])

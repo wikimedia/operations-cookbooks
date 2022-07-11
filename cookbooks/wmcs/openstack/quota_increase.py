@@ -71,12 +71,12 @@ class QuotaIncrease(CookbookBase):
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
         return with_common_opts(spicerack=self.spicerack, args=args, runner=QuotaIncreaseRunner)(
-            project=args.project,
-            vm_name=args.vm_name,
             cores=args.cores,
             floating_ips=args.floating_ips,
             ram=args.ram,
             gigabytes=args.gigabytes,
+            control_node_fqdn=args.control_node_fqdn,
+            spicerack=self.spicerack,
             deployment=args.deployment,
         )
 
@@ -87,7 +87,6 @@ class QuotaIncreaseRunner(CookbookRunnerBase):
     def __init__(
         self,
         common_opts: CommonOpts,
-        vm_name: str,
         cores: Optional[str],
         floating_ips: Optional[str],
         ram: Optional[str],
@@ -97,7 +96,6 @@ class QuotaIncreaseRunner(CookbookRunnerBase):
     ):  # pylint: disable=too-many-arguments
         """Init"""
         self.common_opts = common_opts
-        self.vm_name = vm_name
         self.control_node_fqdn = get_control_nodes(deployment=deployment)[0]
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
@@ -143,4 +141,4 @@ class QuotaIncreaseRunner(CookbookRunnerBase):
             return
 
         self.openstack_api.quota_increase(*self.increases)
-        self.sallogger.log("Increased quotas by {self.increases}")
+        self.sallogger.log(f"Increased quotas by {self.increases}")
