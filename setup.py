@@ -6,6 +6,13 @@ from setuptools import find_packages, setup
 # For prod add the libs to modules/profile/manifests/spicerack.pp
 install_requires = [
     'prettytable',
+    # Force urllib3 and pyyaml version as required by {'elasticsearch-curator'} from spicerack
+    # As of 2022-07-12,
+    # On Ubuntu Jammy, (setuptools 59.6.0, pip 22.0.2, python 3.10.4) this is required.
+    # On Debian Bookworm, (setuptools 59.6.0, pip 22.1.1, python 3.10.5) this is not needed.
+    # Remove once upstream conflict is resolved
+    'urllib3==1.26.4',
+    'pyyaml==5.4.1',
     'python-dateutil',
     'wikimedia-spicerack',
     # [fixme]: The dnspython requirement is not reflected in puppet and should be
