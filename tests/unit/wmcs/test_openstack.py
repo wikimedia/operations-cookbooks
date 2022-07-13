@@ -2,7 +2,13 @@ import cumin
 import pytest
 
 from cookbooks.wmcs import TestUtils
-from cookbooks.wmcs.libs.openstack import OpenstackAPI, OpenstackBadQuota, OpenstackQuotaEntry, OpenstackQuotaName, Unit
+from cookbooks.wmcs.libs.openstack.common import (
+    OpenstackAPI,
+    OpenstackBadQuota,
+    OpenstackQuotaEntry,
+    OpenstackQuotaName,
+    Unit,
+)
 
 
 @pytest.mark.parametrize(

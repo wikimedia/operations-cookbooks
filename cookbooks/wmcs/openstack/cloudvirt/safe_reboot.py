@@ -14,7 +14,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack import Deployment, get_control_nodes
+from cookbooks.wmcs.libs.openstack.common import Deployment, get_control_nodes
 from cookbooks.wmcs.openstack.cloudvirt.drain import Drain
 from cookbooks.wmcs.openstack.cloudvirt.unset_maintenance import UnsetMaintenance
 

@@ -14,7 +14,7 @@ from typing import List
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.libs.openstack import Deployment, OpenstackAPI, get_control_nodes
+from cookbooks.wmcs.libs.openstack.common import Deployment, OpenstackAPI, get_control_nodes
 
 LOGGER = logging.getLogger(__name__)
 

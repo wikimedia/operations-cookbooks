@@ -17,7 +17,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import OutputFormat, run_one_as_dict, run_one_raw
-from cookbooks.wmcs.libs.openstack import OpenstackAPI
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
     CreateInstanceWithPrefix,
     InstanceCreationOpts,

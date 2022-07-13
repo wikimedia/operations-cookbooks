@@ -11,7 +11,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack import Deployment, OpenstackAPI, get_control_nodes
+from cookbooks.wmcs.libs.openstack.common import Deployment, OpenstackAPI, get_control_nodes
 from cookbooks.wmcs.openstack.cloudvirt.set_maintenance import SetMaintenance
 
 LOGGER = logging.getLogger(__name__)

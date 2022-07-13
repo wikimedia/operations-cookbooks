@@ -12,7 +12,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack import OpenstackServerGroupPolicy
+from cookbooks.wmcs.libs.openstack.common import OpenstackServerGroupPolicy
 from cookbooks.wmcs.toolforge.grid.node.lib.create_join_pool import ToolforgeGridNodeCreateJoinPool
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
     InstanceCreationOpts,

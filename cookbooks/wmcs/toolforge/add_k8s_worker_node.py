@@ -26,7 +26,7 @@ from cookbooks.wmcs import (
     run_one_raw,
     with_common_opts,
 )
-from cookbooks.wmcs.libs.openstack import OpenstackAPI, OpenstackServerGroupPolicy
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, OpenstackServerGroupPolicy
 from cookbooks.wmcs.vps.create_instance_with_prefix import CreateInstanceWithPrefix
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 

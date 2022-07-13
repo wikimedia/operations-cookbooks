@@ -12,7 +12,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.alerts import downtime_host
-from cookbooks.wmcs.libs.openstack import Deployment, OpenstackAPI, OpenstackNotFound, get_control_nodes
+from cookbooks.wmcs.libs.openstack.common import Deployment, OpenstackAPI, OpenstackNotFound, get_control_nodes
 
 LOGGER = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from cookbooks.wmcs.libs.openstack import (
+from cookbooks.wmcs.libs.openstack.common import (
     CommandRunnerMixin,
     OpenstackAPI,
     OpenstackError,

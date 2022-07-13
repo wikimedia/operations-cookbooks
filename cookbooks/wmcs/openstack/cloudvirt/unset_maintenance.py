@@ -13,7 +13,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.alerts import uptime_host
-from cookbooks.wmcs.libs.openstack import (
+from cookbooks.wmcs.libs.openstack.common import (
     AGGREGATES_FILE_PATH,
     Deployment,
     OpenstackAPI,

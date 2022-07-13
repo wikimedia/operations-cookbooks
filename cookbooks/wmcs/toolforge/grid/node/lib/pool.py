@@ -16,7 +16,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.grid import GridController, GridNodeNotFound
-from cookbooks.wmcs.libs.openstack import OpenstackAPI
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 
 LOGGER = logging.getLogger(__name__)
 
