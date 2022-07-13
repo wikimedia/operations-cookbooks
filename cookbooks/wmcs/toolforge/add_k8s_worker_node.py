@@ -17,7 +17,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs import (
+from cookbooks.wmcs.libs.common import (
     CommonOpts,
     KubeadmController,
     KubernetesController,

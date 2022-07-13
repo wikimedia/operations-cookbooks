@@ -12,8 +12,8 @@ from datetime import datetime
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.alerts import downtime_alert, downtime_host, uptime_alert, uptime_host
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.openstack.common import Deployment, OpenstackAPI, get_control_nodes
 from cookbooks.wmcs.libs.openstack.neutron import NetworkUnhealthy, NeutronAgentType, NeutronAlerts, NeutronController
 

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import cumin
 import pytest
 
-from cookbooks.wmcs import TestUtils
+from cookbooks.wmcs.libs.common import TestUtils
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.libs.openstack.neutron import (
     NetworkUnhealthy,

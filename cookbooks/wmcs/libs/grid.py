@@ -13,7 +13,7 @@ from defusedxml import ElementTree
 from spicerack.puppet import PuppetHosts
 from spicerack.remote import Remote
 
-from cookbooks.wmcs import run_one_raw
+from cookbooks.wmcs.libs.common import run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 

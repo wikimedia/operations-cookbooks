@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Optional, Type
 import cumin
 import pytest
 
-from cookbooks.wmcs import TestUtils
 from cookbooks.wmcs.libs.alerts import AlertManager
+from cookbooks.wmcs.libs.common import TestUtils
 
 
 def get_stub_silence(silence_id: str):

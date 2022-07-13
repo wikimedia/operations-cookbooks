@@ -12,7 +12,13 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CmdChecklist, CommonOpts, add_common_opts, parser_type_str_hostname, with_common_opts
+from cookbooks.wmcs.libs.common import (
+    CmdChecklist,
+    CommonOpts,
+    add_common_opts,
+    parser_type_str_hostname,
+    with_common_opts,
+)
 
 LOGGER = logging.getLogger(__name__)
 

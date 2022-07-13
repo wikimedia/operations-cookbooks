@@ -18,7 +18,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.remote import Remote, RemoteHosts
 
-from cookbooks.wmcs import OutputFormat, natural_sort_key, run_one_as_dict, run_one_raw, simple_create_file
+from cookbooks.wmcs.libs.common import OutputFormat, natural_sort_key, run_one_as_dict, run_one_raw, simple_create_file
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.toolforge.etcd.remove_node_from_hiera import RemoveNodeFromHiera
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts

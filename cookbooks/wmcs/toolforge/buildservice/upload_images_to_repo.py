@@ -15,7 +15,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteHosts
 
-from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, run_one_raw, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, run_one_raw, with_common_opts
 
 
 class UploadImagesToRepo(CookbookBase):

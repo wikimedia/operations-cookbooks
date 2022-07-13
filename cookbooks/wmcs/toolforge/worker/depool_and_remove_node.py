@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import (
+from cookbooks.wmcs.libs.common import (
     CommonOpts,
     KubernetesController,
     SALLogger,

@@ -13,7 +13,7 @@ import time
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import (
+from cookbooks.wmcs.libs.common import (
     K8S_SYSTEM_NAMESPACES,
     CommonOpts,
     KubernetesController,

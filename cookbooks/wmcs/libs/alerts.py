@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from spicerack import Spicerack
 from spicerack.remote import Remote, RemoteHosts
 
-from cookbooks.wmcs import run_one_formatted_as_list, run_one_raw, wrap_with_sudo_icinga
+from cookbooks.wmcs.libs.common import run_one_formatted_as_list, run_one_raw, wrap_with_sudo_icinga
 
 SilenceID = str
 

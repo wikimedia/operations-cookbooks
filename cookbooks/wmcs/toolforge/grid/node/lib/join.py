@@ -16,7 +16,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 from spicerack.remote import RemoteError
 
-from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.grid import GridController
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 

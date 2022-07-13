@@ -15,7 +15,7 @@ from typing import Optional
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CmdChecklist
+from cookbooks.wmcs.libs.common import CmdChecklist
 from cookbooks.wmcs.libs.openstack.common import Deployment, get_control_nodes
 
 LOGGER = logging.getLogger(__name__)

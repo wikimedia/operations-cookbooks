@@ -11,7 +11,7 @@ import yaml
 from cumin.transports import Command
 from spicerack.remote import Remote, RemoteHosts
 
-from cookbooks.wmcs import (
+from cookbooks.wmcs.libs.common import (
     OutputFormat,
     run_one_as_dict,
     run_one_formatted,

@@ -1,7 +1,7 @@
 import cumin
 import pytest
 
-from cookbooks.wmcs import TestUtils
+from cookbooks.wmcs.libs.common import TestUtils
 from cookbooks.wmcs.libs.openstack.common import (
     OpenstackAPI,
     OpenstackBadQuota,

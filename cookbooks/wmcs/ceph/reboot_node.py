@@ -14,9 +14,9 @@ import logging
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.alerts import downtime_host, uptime_host
 from cookbooks.wmcs.libs.ceph import CephClusterController
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
 
