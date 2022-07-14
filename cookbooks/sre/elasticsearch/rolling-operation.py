@@ -1,6 +1,7 @@
 """Perform rolling operations on elasticsearch servers"""
 import argparse
 import logging
+from contextlib import ExitStack
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from time import sleep
@@ -187,8 +188,10 @@ class RollingOperationRunner(CookbookRunnerBase):
             with self.spicerack.alerting_hosts(remote_hosts.hosts).downtimed(
                     self.reason, duration=timedelta(minutes=30)):
                 with puppet.disabled(self.reason):
-                    logger.info('Stopping elasticsearch replication in a safe way on %s', self.clustergroup)
-                    with self.elasticsearch_clusters.stopped_replication():
+                    with ExitStack() as stack:
+                        if self.operation is not Operation.REIMAGE:
+                            logger.info('Stopping elasticsearch replication in a safe way on %s', self.clustergroup)
+                            stack.enter_context(self.elasticsearch_clusters.stopped_replication())
                         self.elasticsearch_clusters.flush_markers()
 
                         # TODO: remove this condition when a better implementation is found.
