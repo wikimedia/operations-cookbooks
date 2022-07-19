@@ -81,7 +81,7 @@ def junos_set_interface_config(netbox_data: Dict, live_interface: Dict,  # pylin
             commands.append(f"delete interfaces {nb_switch_interface}")
 
         commands.extend([f'set interfaces {nb_switch_interface} description "DISABLED {device_name}"',
-                         f"set interfaces {nb_switch_interface} disabled",
+                         f"set interfaces {nb_switch_interface} disable",
                          ])
 
     else:  # the interface is enabled in Netbox
