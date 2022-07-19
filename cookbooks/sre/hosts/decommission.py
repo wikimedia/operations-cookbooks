@@ -273,7 +273,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
             self.spicerack.actions[fqdn].success('Found Ganeti VM')
 
             try:
-                virtual_machine.shutdown()
+                virtual_machine.shutdown(timeout=0)
                 self.spicerack.actions[fqdn].success('VM shutdown')
             except RemoteExecutionError as e:
                 self.spicerack.actions[fqdn].failure(
