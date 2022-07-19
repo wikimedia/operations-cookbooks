@@ -409,10 +409,6 @@ class DecommissionHostRunner(CookbookRunnerBase):
             if self.spicerack.actions[fqdn].has_failures:
                 has_failures = True
 
-        if not self.spicerack.dry_run:
-            logger.info('Sleeping for 3 minutes to get netbox caches in sync')
-            time.sleep(180)
-
         try:
             self.spicerack.run_cookbook(
                 'sre.dns.netbox', [f'{self.decom_hosts} decommissioned, removing all IPs except the asset tag one'])
