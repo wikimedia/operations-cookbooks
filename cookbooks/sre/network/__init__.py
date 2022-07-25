@@ -1,6 +1,8 @@
 """Network Cookbooks"""
 import json
 import logging
+
+from ipaddress import ip_address
 from typing import Dict, List
 
 from spicerack.netbox import Netbox
@@ -386,3 +388,81 @@ def get_junos_logs(remote_host: RemoteHosts, match: str, print_output: bool = Fa
     if not result:
         logger.debug("No logs matching %s", match)
     return result
+
+
+def get_junos_bgp_peer(remote_host: RemoteHosts, peer_ip: str, print_output: bool = False) -> Dict:
+    """Returns informations about a BGP peer
+
+    Arguments:
+        remote_host: Spicerack RemoteHosts instance
+        peer_ip: target peer IP (v4 or v6)
+        print_output: Display a more verbose output
+
+    Returns:
+        Dict of relevant peer data
+
+    """
+    # TODO: replace with SNMP or LibreNMS API to speed up and get time since last up?
+    logger.debug("Fetching BGP status for peer %s", peer_ip)
+    results_raw = remote_host.run_sync(f"show bgp neighbor {peer_ip} | display json",
+                                       is_safe=True,
+                                       print_output=print_output,
+                                       print_progress_bars=False)
+
+    result_json = parse_results(results_raw, json_output=True)
+    # Even if the peer is not configured some json is returned
+    if not result_json:
+        logger.error("Problem while trying to get data for BGP peer %s", peer_ip)
+        return {'status': 'Error fetching status'}
+
+    if 'bgp-peer' not in result_json['bgp-information'][0]:
+        return {'status': 'Not configured'}
+    bgp_peer = result_json['bgp-information'][0]['bgp-peer'][0]
+    peer_state = bgp_peer['peer-state'][0]['data']
+    return {'status': peer_state}
+
+
+def get_junos_bgp_summary(remote_host: RemoteHosts, print_output: bool = False) -> Dict:
+    """Returns summary of all BGP session on device
+
+    Arguments:
+        remote_host: Spicerack RemoteHosts instance
+        print_output: Display a more verbose output
+
+    Returns:
+        Dict of relevant BGP summary data
+
+    """
+    # TODO: replace with SNMP or LibreNMS API to speed up and get time since last up?
+    logger.debug("Fetching BGP summary")
+    results_raw = remote_host.run_sync("show bgp summary | display json",
+                                       is_safe=True,
+                                       print_output=print_output,
+                                       print_progress_bars=False)
+
+    result_json = parse_results(results_raw, json_output=True)
+    # Even if the peer is not configured some json is returned
+    if not result_json or 'bgp-peer' not in result_json['bgp-information'][0]:
+        # This should never happen as all routers have BGP
+        # Raising an error to make sure cookbooks don't think
+        # it's just a missing session
+        raise RuntimeError("Router didn't return any valid BGP data")
+
+    bgp_peers = result_json['bgp-information'][0]['bgp-peer']
+
+    formatted_peers = {}
+
+    for bgp_peer in bgp_peers:
+        peer_address = ip_address(bgp_peer['peer-address'][0]['data'])
+        peer_as = int(bgp_peer['peer-as'][0]['data'])
+        formatted_peers[peer_address] = {'peer-as': peer_as}
+        # TODO add received/accepted prefix count
+        for key in ('elapsed-time',
+                    'description',
+                    'peer-state'):
+            try:
+                formatted_peers[peer_address][key] = bgp_peer.get(key)[0].get('data')
+            except TypeError:
+                logger.error("Key '%s' not present in returned data for %s", key, peer_address)
+
+    return formatted_peers

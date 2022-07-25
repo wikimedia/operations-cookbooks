@@ -2,7 +2,10 @@
 
 from setuptools import find_packages, setup
 
+# The below list is only for CI
+# For prod add the libs to modules/profile/manifests/spicerack.pp
 install_requires = [
+    'prettytable',
     'python-dateutil',
     'wikimedia-spicerack',
     # [fixme]: The dnspython requirement is not reflected in puppet and should be
