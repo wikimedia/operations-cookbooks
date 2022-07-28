@@ -34,6 +34,9 @@ class NetboxHiera(CookbookBase):
             formatter_class=ArgparseFormatter,
         )
         parser.add_argument(
+            '-c', '--check', help='Check if there are new changes, forces a returncode of 1 if there are'
+        )
+        parser.add_argument(
             '-t', '--task-id', help='The Phabricator task ID (e.g. T12345).'
         )
         parser.add_argument(
@@ -65,6 +68,9 @@ class NetboxHieraRunner(CookbookRunnerBase):
 
         """
         config = load_yaml_config(spicerack.config_dir / "netbox" / "config.yaml")
+        if args.check and not spicerack.dry_run:
+            # Force dry-run mode
+            raise RuntimeError("check mode must also be run in --dry-run mode!")
         self.args = args
         self.reposync = spicerack.reposync('netbox-hiera')
         self.puppetmasters = spicerack.remote().query("A:puppetmaster")
@@ -127,13 +133,16 @@ class NetboxHieraRunner(CookbookRunnerBase):
         if self.args.sha:
             self.reposync.force_sync()
             self.update_puppetmasters(self.args.sha)
-            return
+            return 0
         try:
             with self.reposync.update(str(self.reason)) as working_dir:
                 self._write_hiera_files(working_dir)
         except RepoSyncNoChangeError:
             print('No Changes to apply')
-            return
+            return 0
         if self.reposync.hexsha is None:
-            raise RuntimeError("No hexsha value recived from reposyn.  Something went wrong!")
+            raise RuntimeError("No hexsha value received from reposync.  Something went wrong!")
+        if self.args.check:
+            return 1
         self.update_puppetmasters(self.reposync.hexsha)
+        return 0
