@@ -128,12 +128,12 @@ class NetboxHieraRunner(CookbookRunnerBase):
             self.reposync.force_sync()
             self.update_puppetmasters(self.args.sha)
             return
-        with self.reposync.update(str(self.reason)) as working_dir:
-            try:
+        try:
+            with self.reposync.update(str(self.reason)) as working_dir:
                 self._write_hiera_files(working_dir)
-            except RepoSyncNoChangeError:
-                print('No Changes to apply')
-                return
+        except RepoSyncNoChangeError:
+            print('No Changes to apply')
+            return
         if self.reposync.hexsha is None:
             raise RuntimeError("No hexsha value recived from reposyn.  Something went wrong!")
         self.update_puppetmasters(self.reposync.hexsha)
