@@ -80,7 +80,7 @@ def junos_set_interface_config(netbox_data: Dict, live_interface: Dict,  # pylin
             # Delete the interface to clear all its properties
             commands.append(f"delete interfaces {nb_switch_interface}")
 
-        commands.extend([f'set interfaces {nb_switch_interface} description "DISABLED {device_name}"',
+        commands.extend([f'set interfaces {nb_switch_interface} description "DISABLED"',
                          f"set interfaces {nb_switch_interface} disable",
                          ])
 
