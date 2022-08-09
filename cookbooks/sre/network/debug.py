@@ -20,12 +20,23 @@ class Debug(CookbookBase):
         cookbook sre.network.debug -t T123456 interface 678
     """
 
+    def validate_object_id(self, value: str):
+        """Ensure the user provides a correctly formated object_id"""
+        try:
+            int(value)
+        except ValueError as exc:
+            if value.count(':') == 0:
+                raise argparse.ArgumentTypeError('object_id must be int or colon seperated string') from exc
+        return value
+
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         parser.add_argument('entity', choices=['circuit', 'interface'])
-        parser.add_argument('netbox_id', help='Netbox numerical ID (see url or top right corner)')
+        parser.add_argument('object_id',
+                            type=self.validate_object_id,
+                            help='Netbox numerical ID or device:interface couple (eg. cr1-ulsfo:xe-1/2/3')
         return parser
 
     def get_runner(self, args):
@@ -50,12 +61,21 @@ class DebugRunner(CookbookRunnerBase):
     def run(self):
         """Required by Spicerack API."""
         if self.args.entity == 'interface':
+            if ':' in self.args.object_id:
+                device_name, interface_name = self.args.object_id.split(':', 1)
+                nb_interface = self.netbox.api.dcim.interfaces.get(device=device_name,
+                                                                   name=interface_name)
+                if not nb_interface:
+                    raise RuntimeError(f"No Netbox interface matching {self.args.object_id}")
+                netbox_id = nb_interface.id
+            else:
+                netbox_id = self.args.object_id
             # "z" references the remote side of the interface
-            z_nb_interface = self.debug_interface(self.args.netbox_id)
+            z_nb_interface = self.debug_interface(netbox_id)
             if z_nb_interface:
                 self.debug_interface(z_nb_interface.id)
         elif self.args.entity == 'circuit':
-            self.debug_circuit(self.args.netbox_id)
+            self.debug_circuit(self.args.object_id)
 
         if self.phabricator is not None and self.task_comment:
             self.phabricator.task_comment(
@@ -65,7 +85,7 @@ class DebugRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return f"for Netbox {self.args.entity} ID {self.args.netbox_id}"
+        return f"for Netbox {self.args.entity} ID {self.args.object_id}"
 
     def debug_interface(self, netbox_id):
         """Debug commands and light analysis for single interface."""
