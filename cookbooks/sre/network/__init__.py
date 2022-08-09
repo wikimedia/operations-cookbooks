@@ -66,7 +66,7 @@ def junos_set_interface_config(netbox_data: Dict, live_interface: Dict,  # pylin
     # We want to disable the interface if it's disabled in Netbox
     if not nb_switch_interface.enabled:
         # If there is already something configured and the interface is enabled: clear it
-        if live_interface and not live_interface['enabled']:
+        if live_interface and live_interface['enabled']:
             # But first a safeguard
             if device_name not in live_interface['description']:
                 logger.error("Need to disable %s:%s, "
