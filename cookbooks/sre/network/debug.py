@@ -17,6 +17,7 @@ class Debug(CookbookBase):
     Usage example:
         cookbook -d sre.network.debug circuit 123
         cookbook -d sre.network.debug interface 345
+        cookbook sre.network.debug -t T123456 interface 678
     """
 
     def argument_parser(self):
@@ -49,7 +50,10 @@ class DebugRunner(CookbookRunnerBase):
     def run(self):
         """Required by Spicerack API."""
         if self.args.entity == 'interface':
-            self.debug_interface(self.args.netbox_id)
+            # "z" references the remote side of the interface
+            z_nb_interface = self.debug_interface(self.args.netbox_id)
+            if z_nb_interface:
+                self.debug_interface(z_nb_interface.id)
         elif self.args.entity == 'circuit':
             self.debug_circuit(self.args.netbox_id)
 
@@ -65,11 +69,17 @@ class DebugRunner(CookbookRunnerBase):
 
     def debug_interface(self, netbox_id):
         """Debug commands and light analysis for single interface."""
-        nb_interface = self.netbox.api.dcim.interfaces.get(id=netbox_id)
+        connected_int = None
+        nb_interface = self.netbox.api.dcim.interfaces.get(netbox_id)
         if not nb_interface:
             raise RuntimeError(f"No Netbox interface with ID {netbox_id}")
+        if nb_interface.connected_endpoint_type == 'dcim.interface':
+            connected_int = nb_interface.connected_endpoint
         message = f'Interface {nb_interface.device}:{nb_interface.name}'
         logger.info('%s', message)
+        if nb_interface.device.device_type.manufacturer.slug != 'juniper':
+            logger.info('Not a Juniper device, skipping')
+            return connected_int
         self.task_comment.append(f'\n---\n**{message}**')
         if nb_interface.connected_endpoint and not nb_interface.connected_endpoint_reachable:
             message = '⚠️ Endpoint unreachable according to Netbox, check the path and cables status'
@@ -96,10 +106,11 @@ class DebugRunner(CookbookRunnerBase):
         if logs:
             logger.info('%s', logs)
             self.task_comment.append(f'```name=Logs for {remote_host}:{nb_interface.name}\n' + logs + '\n```')
+        return connected_int
 
     def debug_circuit(self, netbox_id):
         """Debug commands and light analysis for circuits."""
-        nb_circuit = self.netbox.api.circuits.circuits.get(id=netbox_id)
+        nb_circuit = self.netbox.api.circuits.circuits.get(netbox_id)
         if not nb_circuit:
             raise RuntimeError(f"No Netbox circuit with ID {netbox_id}")
         logger.info('%s circuit %s', nb_circuit.provider, nb_circuit.cid)
