@@ -1,7 +1,7 @@
 """WMCS Ceph - Bootstrap a new osd
 
 Usage example:
-    cookbook wmcs.ceph.osd.boostrap_and_add \
+    cookbook wmcs.ceph.osd.bootstrap_and_add \
         --new-osd-fqdn cloudcephosd1016.eqiad.wmnet \
         --task-id T12345
 
@@ -82,13 +82,12 @@ class BootstrapAndAdd(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(self.spicerack, args, BootstrapAndAddRunner,)(
+        return with_common_opts(self.spicerack, args, BootstrapAndAddRunner)(
             new_osd_fqdns=args.new_osd_fqdn,
             yes_i_know=args.yes_i_know_what_im_doing,
             skip_reboot=args.skip_reboot,
             wait_for_rebalance=args.wait_for_rebalance,
             controlling_node_fqdn=args.controlling_node_fqdn,
-            task_id=args.task_id,
             spicerack=self.spicerack,
         )
 
