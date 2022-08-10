@@ -76,7 +76,14 @@ class ShowRunner(CookbookRunnerBase):
             str(agent) for agent in all_agents if agent.agent_type == NeutronAgentType.LINUX_BRIDGE_AGENT
         ]
         cloudnets = self.neutron_controller.get_cloudnets()
+        routers = self.neutron_controller.router_list()
+        routers_str = ""
+        for router in routers:
+            agents_on_router = self.neutron_controller.list_agents_hosting_router(router=router.router_id)
+            routers_str += f"{router}\n        "
+            routers_str += "\n        ".join(str(agent) for agent in agents_on_router)
 
+        LOGGER.info("Got Routers:\n    %s", routers_str)
         LOGGER.info("Got L3 Agents:\n    %s", "\n    ".join(l3_agents))
         LOGGER.info("Got dhcp Agents:\n    %s", "\n    ".join(dhcp_agents))
         LOGGER.info("Got metadata Agents:\n    %s", "\n    ".join(metadata_agents))

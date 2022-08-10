@@ -122,6 +122,10 @@ class NeutronPartialRouter:
             has_ha=data["ha"],
         )
 
+    def __str__(self) -> str:
+        """Return the string representation of this class."""
+        return f"{self.name}: router_id:{self.router_id} tenant_id:{self.tenant_id} has_ha:{self.has_ha}"
+
 
 @dataclass(frozen=True)
 class NeutronRouter(NeutronPartialRouter):
@@ -220,9 +224,9 @@ class NeutronAgent:
             f"{self.host} ({self.agent_type}): "
             f"{'ADMIN_UP' if self.admin_state_up else 'ADMIN_DOWN'} "
             f"{'ALIVE' if self.alive else 'DEAD'} "
-            f"ha_state:{self.ha_state} "
+            f"ha_state:{self.ha_state if self.ha_state is not None else 'NotFetched'} "
             f"id:{self.agent_id} "
-            f"binary:{self.binary}"
+            f"binary:{self.binary if self.binary is not None else 'NotFetched'}"
         )
 
     def is_healthy(self) -> bool:
