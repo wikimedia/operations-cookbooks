@@ -15,7 +15,7 @@ from requests import post
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.netbox import NetboxError, NetboxServer
-from spicerack.redfish import RedfishError, Redfish
+from spicerack.redfish import ChassisResetPolicy, RedfishError, Redfish
 from wmflib.interactive import ask_confirmation, ask_input
 
 from cookbooks.sre.hardware import DellAPI, DellDriverType, DellDriverCategory
@@ -107,8 +107,9 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         self.force = args.force
         self.yes = args.yes
         self.component = args.component
+        self.new = args.new
 
-        if args.new:
+        if self.new:
             self.hosts = [args.query]
         else:
             self.hosts = self.spicerack.remote().query(args.query).hosts
@@ -570,10 +571,13 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         self._ask_confirmation(
             f"{netbox_host.fqdn} {driver_category.name}: About to reboot to apply update, please confirm"
         )
-        self.spicerack.run_cookbook(
-            "sre.hosts.reboot-single",
-            [netbox_host.fqdn, '--reason', 'bios upgrade']
-        )
+        if self.new:
+            redfish_host.chassis_reset(ChassisResetPolicy.FORCE_RESTART)
+        else:
+            self.spicerack.run_cookbook(
+                "sre.hosts.reboot-single",
+                [netbox_host.fqdn, '--reason', 'bios upgrade']
+            )
         self.poll_id(redfish_host, job_id, True)
         current_version = self.get_version(redfish_host, driver_category)
         logger.info(
