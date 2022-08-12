@@ -66,6 +66,12 @@ class FirmwareUpgrade(CookbookBase):
             action="store_true",
         )
         parser.add_argument(
+            "-n",
+            "--new",
+            help="The server is a new server and as such not in puppetdb.",
+            action="store_true",
+        )
+        parser.add_argument(
             "-c",
             "--component",
             help="force a specific type of upgrade: %(choices)s",
@@ -102,7 +108,11 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         self.yes = args.yes
         self.component = args.component
 
-        self.hosts = self.spicerack.remote().query(args.query).hosts
+        if args.new:
+            self.hosts = [args.query]
+        else:
+            self.hosts = self.spicerack.remote().query(args.query).hosts
+
         for host in self.hosts:
             netbox_server = spicerack.netbox_server(host.split('.'))
             manufacturer = netbox_server.as_dict()['device_type']['manufacturer']['slug']
@@ -110,6 +120,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                 raise RuntimeError(f"{host}: unable to upgrade virtual host")
             if manufacturer != 'dell':
                 raise RuntimeError(f"{host}: unable to upgrade, unsupported manufacturer ({manufacturer})")
+
         session = spicerack.requests_session('cookbook.sre.hardware.firmware-upgrade')
         session.proxies = spicerack.requests_proxies
         self.dell_api = DellAPI(session)
