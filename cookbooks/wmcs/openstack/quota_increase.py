@@ -75,7 +75,6 @@ class QuotaIncrease(CookbookBase):
             floating_ips=args.floating_ips,
             ram=args.ram,
             gigabytes=args.gigabytes,
-            control_node_fqdn=args.control_node_fqdn,
             spicerack=self.spicerack,
             deployment=args.deployment,
         )
