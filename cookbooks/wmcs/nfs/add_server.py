@@ -117,7 +117,7 @@ class NFSAddServerRunner(CookbookRunnerBase):
 
         new_node = self.spicerack.remote().query(f"D{{{new_server.server_fqdn}}}", use_sudo=True)
         openstack_api = OpenstackAPI(
-            remote=self.spicerack.remote(), control_node_fqdn="cloudcontrol1003.wikimedia.org", project=self.project
+            remote=self.spicerack.remote(), control_node_fqdn="cloudcontrol1005.wikimedia.org", project=self.project
         )
 
         if self.create_storage_volume_size > 0:
@@ -125,7 +125,7 @@ class NFSAddServerRunner(CookbookRunnerBase):
 
             openstack_api.volume_attach(new_server.server_id, new_volume)
 
-        control_node = self.spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True)
+        control_node = self.spicerack.remote().query("D{cloudcontrol1005.wikimedia.org}", use_sudo=True)
         # Get current puppet config
         response = run_one_as_dict(
             command=[

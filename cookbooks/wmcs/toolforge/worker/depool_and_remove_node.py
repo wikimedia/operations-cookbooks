@@ -92,7 +92,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
-            control_node_fqdn="cloudcontrol1003.wikimedia.org",
+            control_node_fqdn="cloudcontrol1005.wikimedia.org",
             project=self.common_opts.project,
         )
         self._all_project_servers: Optional[List[Dict[str, Any]]] = None

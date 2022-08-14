@@ -2,7 +2,7 @@
 
 Usage example:
     cookbook wmcs.openstack.cloudcontrol.reboot_node \
-    --fqdn-to-reboot cloudcontrol1003.wikimedia.org
+    --fqdn-to-reboot cloudcontrol1005.wikimedia.org
 
 """
 import argparse

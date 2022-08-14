@@ -82,7 +82,7 @@ class AddNodeToHieraRunner(CookbookRunnerBase):
 
     def add_node_to_hiera(self) -> Dict[str, Any]:
         """Needed to be able to change the return type."""
-        control_node = self.spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True)
+        control_node = self.spicerack.remote().query("D{cloudcontrol1005.wikimedia.org}", use_sudo=True)
 
         etcd_prefix = self.prefix if self.prefix is not None else f"{self.project}-k8s-etcd"
         response = run_one_as_dict(

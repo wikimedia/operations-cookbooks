@@ -75,9 +75,9 @@ _OPENSTACK_NODES = {
             "cloudgw1002.eqiad.wmnet",
         ],
         "control-nodes": [
-            "cloudcontrol1003.wikimedia.org",
-            "cloudcontrol1004.wikimedia.org",
             "cloudcontrol1005.wikimedia.org",
+            "cloudcontrol1006.wikimedia.org",
+            "cloudcontrol1007.wikimedia.org",
         ],
     },
     Deployment.CODFW1DEV: {
@@ -413,7 +413,7 @@ class OpenstackAPI(CommandRunnerMixin):
     """Class to interact with the Openstack API (indirectly for now)."""
 
     def __init__(
-        self, remote: Remote, control_node_fqdn: str = "cloudcontrol1003.wikimedia.org", project: OpenstackName = ""
+        self, remote: Remote, control_node_fqdn: str = "cloudcontrol1005.wikimedia.org", project: OpenstackName = ""
     ):
         """Init."""
         self.project = project

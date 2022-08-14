@@ -82,7 +82,7 @@ class RemoveNodeFromHieraRunner(CookbookRunnerBase):
 
     def remove_node_from_hiera(self) -> Dict[str, Any]:
         """Needed as we can't change the return type for the inherited run method."""
-        control_node = self.spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True)
+        control_node = self.spicerack.remote().query("D{cloudcontrol1005.wikimedia.org}", use_sudo=True)
 
         etcd_prefix = self.prefix if self.prefix is not None else f"{self.project}-k8s-etcd"
         response = run_one_as_dict(

@@ -82,7 +82,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         self.force = force
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
-            remote=self.spicerack.remote(), control_node_fqdn="cloudcontrol1003.wikimedia.org", project=self.project
+            remote=self.spicerack.remote(), control_node_fqdn="cloudcontrol1005.wikimedia.org", project=self.project
         )
         self.from_server = self.openstack_api.server_from_id(self.from_id)
         self.to_server = self.openstack_api.server_from_id(self.to_id)
@@ -107,7 +107,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         to_node = self.spicerack.remote().query(f"D{{{self.to_fqdn}}}", use_sudo=True)
 
         # Verify that puppet/hiera config agrees between the two hosts
-        control_node = self.spicerack.remote().query("D{cloudcontrol1003.wikimedia.org}", use_sudo=True)
+        control_node = self.spicerack.remote().query("D{cloudcontrol1005.wikimedia.org}", use_sudo=True)
 
         response = run_one_as_dict(
             node=control_node,

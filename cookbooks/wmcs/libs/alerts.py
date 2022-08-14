@@ -114,7 +114,7 @@ class AlertManager:
         """Add a silence for a host.
 
         Examples of 'host_name':
-        * cloudcontrol1003
+        * cloudcontrol1005
         * cloudcephmon1001
 
         Examples of 'duration':
@@ -171,7 +171,7 @@ def downtime_host(
     """Do whatever it takes to downtime a host.
 
     Examples of 'host_name':
-    * cloudcontrol1003
+    * cloudcontrol1005
     * cloudcephmon1001
 
     Examples of 'duration':
@@ -199,7 +199,7 @@ def uptime_host(spicerack: Spicerack, host_name: str, silence_id: Optional[Silen
     """Do whatever it takes to uptime a host, if silence_id passed, only that silence will be expired.
 
     Examples of 'host_name':
-    * cloudcontrol1003
+    * cloudcontrol1005
     * cloudcephmon1001
     """
     alert_manager = AlertManager.from_remote(spicerack.remote())

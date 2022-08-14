@@ -235,7 +235,7 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
         self.common_opts = common_opts
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
-            control_node_fqdn="cloudcontrol1003.wikimedia.org",
+            control_node_fqdn="cloudcontrol1005.wikimedia.org",
             project=self.common_opts.project,
         )
         if instance_creation_opts.prefix is None:
