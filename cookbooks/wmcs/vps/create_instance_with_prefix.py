@@ -25,6 +25,7 @@ from spicerack.remote import RemoteExecutionError
 from wmflib.decorators import retry
 
 from cookbooks.wmcs.libs.common import CommonOpts, add_common_opts, natural_sort_key, run_one_raw, with_common_opts
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, OpenstackIdentifier, OpenstackServerGroupPolicy
 
 LOGGER = logging.getLogger(__name__)
@@ -234,9 +235,7 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.openstack_api = OpenstackAPI(
-            remote=spicerack.remote(),
-            control_node_fqdn="cloudcontrol1005.wikimedia.org",
-            project=self.common_opts.project,
+            remote=spicerack.remote(), cluster_name=OpenstackClusterName.EQIAD1, project=self.common_opts.project
         )
         if instance_creation_opts.prefix is None:
             raise Exception("Instance prefix missing, please pass one")

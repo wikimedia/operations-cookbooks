@@ -21,13 +21,14 @@ from cookbooks.wmcs.libs.common import (
     with_common_opts,
 )
 from cookbooks.wmcs.libs.grid import GridController, GridNodeNotFound
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
 
 LOGGER = logging.getLogger(__name__)
 
 
-class ToolofrgeRemoveGridNode(CookbookBase):
+class ToolforgeRemoveGridNode(CookbookBase):
     """Toolforge cookbook to reboot grid exec nodes"""
 
     title = __doc__
@@ -60,7 +61,7 @@ class ToolofrgeRemoveGridNode(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(self.spicerack, args, ToolofrgeRemoveGridNodeRunner,)(
+        return with_common_opts(self.spicerack, args, ToolforgeRemoveGridNodeRunner,)(
             node_hostnames=args.node_hostnames,
             master_node_fqdn=args.master_node_fqdn
             or f"{args.project}-sgegrid-master.{args.project}.eqiad1.wikimedia.cloud",
@@ -68,8 +69,8 @@ class ToolofrgeRemoveGridNode(CookbookBase):
         )
 
 
-class ToolofrgeRemoveGridNodeRunner(CookbookRunnerBase):
-    """Runner for ToolofrgeRemoveGridNode"""
+class ToolforgeRemoveGridNodeRunner(CookbookRunnerBase):
+    """Runner for ToolforgeRemoveGridNode"""
 
     def __init__(
         self,
@@ -92,9 +93,7 @@ class ToolofrgeRemoveGridNodeRunner(CookbookRunnerBase):
     def run(self) -> Optional[int]:
         """Main entry point"""
         openstack_api = OpenstackAPI(
-            remote=self.spicerack.remote(),
-            control_node_fqdn="cloudcontrol1005.wikimedia.org",
-            project=self.common_opts.project,
+            remote=self.spicerack.remote(), cluster_name=OpenstackClusterName.EQIAD1, project=self.common_opts.project
         )
         grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn)
 

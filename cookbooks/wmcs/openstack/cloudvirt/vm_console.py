@@ -15,7 +15,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
-from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_control_nodes
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 
 LOGGER = logging.getLogger(__name__)
 
@@ -84,13 +84,8 @@ class VMConsoleRunner(CookbookRunnerBase):
         """Init"""
         self.project = project
         self.vm_name = vm_name
-        self.control_node_fqdn = get_control_nodes(cluster_name=cluster_name)[0]
         self.spicerack = spicerack
-        self.openstack_api = OpenstackAPI(
-            remote=spicerack.remote(),
-            control_node_fqdn=self.control_node_fqdn,
-            project=project,
-        )
+        self.openstack_api = OpenstackAPI(remote=spicerack.remote(), cluster_name=cluster_name, project=project)
 
     def run(self) -> None:
         """Main entry point"""

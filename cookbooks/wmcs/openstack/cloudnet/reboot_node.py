@@ -14,7 +14,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs.libs.alerts import downtime_alert, downtime_host, uptime_alert, uptime_host
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_control_nodes_from_node
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_node_cluster_name
 from cookbooks.wmcs.libs.openstack.neutron import NetworkUnhealthy, NeutronAgentType, NeutronAlerts, NeutronController
 
 LOGGER = logging.getLogger(__name__)
@@ -69,15 +69,15 @@ class RebootNodeRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.fqdn_to_reboot = fqdn_to_reboot
-        self.controlling_node_fqdn = get_control_nodes_from_node(node=self.fqdn_to_reboot)[0]
         self.force = force
         self.spicerack = spicerack
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
+        cluster_name = get_node_cluster_name(node=self.fqdn_to_reboot)
         self.openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(),
-            control_node_fqdn=self.controlling_node_fqdn,
+            cluster_name=cluster_name,
             project=self.common_opts.project,
         )
         self.neutron_controller = NeutronController(openstack_api=self.openstack_api)

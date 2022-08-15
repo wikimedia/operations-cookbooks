@@ -13,7 +13,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
-from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_control_nodes
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.libs.openstack.neutron import NeutronController
 from cookbooks.wmcs.openstack.cloudnet.reboot_node import RebootNode
 
@@ -70,16 +70,13 @@ class RollRebootCloudnetsRunner(CookbookRunnerBase):
     ):
         """Init"""
         self.common_opts = common_opts
-        self.controlling_node_fqdn = get_control_nodes(cluster_name=cluster_name)[0]
         self.force = force
         self.spicerack = spicerack
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
         self.openstack_api = OpenstackAPI(
-            remote=self.spicerack.remote(),
-            control_node_fqdn=self.controlling_node_fqdn,
-            project=self.common_opts.project,
+            remote=self.spicerack.remote(), cluster_name=cluster_name, project=self.common_opts.project
         )
         self.neutron_controller = NeutronController(openstack_api=self.openstack_api)
         self.cloudnet_hosts = self.neutron_controller.get_cloudnets()

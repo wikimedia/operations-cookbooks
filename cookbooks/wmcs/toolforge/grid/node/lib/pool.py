@@ -16,6 +16,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.grid import GridController, GridNodeNotFound
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 
 LOGGER = logging.getLogger(__name__)
@@ -92,9 +93,7 @@ class ToolforgeGridNodePoolRunner(CookbookRunnerBase):
             return 1
 
         openstack_api = OpenstackAPI(
-            remote=self.spicerack.remote(),
-            control_node_fqdn="cloudcontrol1005.wikimedia.org",
-            project=self.common_opts.project,
+            remote=self.spicerack.remote(), cluster_name=OpenstackClusterName.EQIAD1, project=self.common_opts.project
         )
 
         actual_nodes = openstack_api.server_list_filter_exists(

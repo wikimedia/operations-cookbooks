@@ -4,6 +4,7 @@ import cumin
 import pytest
 
 from cookbooks.wmcs.libs.common import TestUtils
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import (
     OpenstackAPI,
     OpenstackBadQuota,
@@ -230,7 +231,7 @@ def test_OpenstackAPI_quota_show_happy_path():
             }"""
         ]
     )
-    my_api = OpenstackAPI(remote=fake_remote, project="admin-monitoring", control_node_fqdn="dummy.host")
+    my_api = OpenstackAPI(remote=fake_remote, project="admin-monitoring", cluster_name=OpenstackClusterName.CODFW1DEV)
     gotten_quotas = my_api.quota_show()
 
     fake_remote.query.assert_called_once()
@@ -244,7 +245,7 @@ def test_OpenstackAPI_quota_show_happy_path():
 
 def test_OpenstackAPI_quota_set_happy_path():
     fake_remote = TestUtils.get_fake_remote(responses=[""])
-    my_api = OpenstackAPI(remote=fake_remote, project="admin-monitoring", control_node_fqdn="dummy.host")
+    my_api = OpenstackAPI(remote=fake_remote, project="admin-monitoring", cluster_name=OpenstackClusterName.CODFW1DEV)
     my_api.quota_set(
         OpenstackQuotaEntry(name=OpenstackQuotaName.CORES, value=10),
         OpenstackQuotaEntry(name=OpenstackQuotaName.GIGABYTES, value=20),
@@ -408,7 +409,7 @@ def test_OpenstackAPI_quota_increase_happy_path():
             }""",
         ]
     )
-    my_api = OpenstackAPI(remote=fake_remote, project="admin-monitoring", control_node_fqdn="dummy.host")
+    my_api = OpenstackAPI(remote=fake_remote, project="admin-monitoring", cluster_name=OpenstackClusterName.CODFW1DEV)
     my_api.quota_increase(
         OpenstackQuotaEntry(name=OpenstackQuotaName.CORES, value=10),
         OpenstackQuotaEntry(name=OpenstackQuotaName.GIGABYTES, value=20),
@@ -433,34 +434,3 @@ def test_OpenstackAPI_quota_increase_happy_path():
         mock.call(expected_show_command, is_safe=False),
     ]
     fake_control_host.run_sync.assert_has_calls(calls)
-
-
-@pytest.mark.parametrize(
-    **TestUtils.to_parametrize(
-        test_cases={
-            "eqiad hostname": {
-                "node": "node1020",
-                "expected_domain": "eqiad.wmnet",
-            },
-            "codfw hostname": {
-                "node": "node2010",
-                "expected_domain": "codfw.wmnet",
-            },
-            "eqiad fqdn": {
-                "node": "node1020.eqiad.wmnet",
-                "expected_domain": "eqiad.wmnet",
-            },
-            "codfw fqdn": {
-                "node": "node2010.codfw.wmnet",
-                "expected_domain": "codfw.wmnet",
-            },
-        }
-    )
-)
-def test_openstack_get_nodes_domain(node: str, expected_domain: str):
-    fake_remote = TestUtils.get_fake_remote(responses=[""])
-    my_api = OpenstackAPI(remote=fake_remote, project="admin-monitoring", control_node_fqdn=node)
-
-    gotten_domain = my_api.get_nodes_domain()
-
-    assert gotten_domain == expected_domain

@@ -12,7 +12,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
-from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_control_nodes
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.libs.openstack.neutron import NeutronAgentType, NeutronController
 
 LOGGER = logging.getLogger(__name__)
@@ -58,11 +58,10 @@ class ShowRunner(CookbookRunnerBase):
         spicerack: Spicerack,
     ):
         """Init"""
-        self.controlling_node_fqdn = get_control_nodes(cluster_name=cluster_name)[0]
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(),
-            control_node_fqdn=self.controlling_node_fqdn,
+            cluster_name=cluster_name,
             project="admin",
         )
         self.neutron_controller = NeutronController(openstack_api=self.openstack_api)

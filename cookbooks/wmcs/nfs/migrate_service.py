@@ -20,7 +20,8 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs.libs.common import OutputFormat, run_one_as_dict, run_one_raw
+from cookbooks.wmcs.libs.common import OutputFormat, run_one_raw
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 
 LOGGER = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         self.force = force
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
-            remote=self.spicerack.remote(), control_node_fqdn="cloudcontrol1005.wikimedia.org", project=self.project
+            remote=self.spicerack.remote(), cluster_name=OpenstackClusterName.EQIAD1, project=self.project
         )
         self.from_server = self.openstack_api.server_from_id(self.from_id)
         self.to_server = self.openstack_api.server_from_id(self.to_id)
@@ -107,11 +108,12 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         to_node = self.spicerack.remote().query(f"D{{{self.to_fqdn}}}", use_sudo=True)
 
         # Verify that puppet/hiera config agrees between the two hosts
-        control_node = self.spicerack.remote().query("D{cloudcontrol1005.wikimedia.org}", use_sudo=True)
-
-        response = run_one_as_dict(
-            node=control_node,
-            command=["wmcs-enc-cli", "--openstack-project", self.project, "get_node_consolidated_info", self.from_fqdn],
+        response = self.openstack_api.run_formatted_as_dict(
+            "wmcs-enc-cli",
+            "--openstack-project",
+            self.project,
+            "get_node_consolidated_info",
+            self.from_fqdn,
             try_format=OutputFormat.YAML,
             is_safe=True,
         )
@@ -135,9 +137,12 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
 
         mount_name = from_hiera["profile::wmcs::nfs::standalone::volumes"][0]
 
-        response = run_one_as_dict(
-            node=control_node,
-            command=["wmcs-enc-cli", "--openstack-project", self.project, "get_node_consolidated_info", self.to_fqdn],
+        response = self.openstack_api.run_formatted_as_dict(
+            "wmcs-enc-cli",
+            "--openstack-project",
+            self.project,
+            "get_node_consolidated_info",
+            self.to_fqdn,
             try_format=OutputFormat.YAML,
             is_safe=True,
         )
@@ -237,32 +242,26 @@ class NFSServiceMigrateVolumeRunner(CookbookRunnerBase):
         from_hiera["profile::wmcs::nfs::standalone::cinder_attached"] = False
         from_hiera_str = json.dumps(from_hiera)
 
-        run_one_raw(
-            node=control_node,
-            command=[
-                "wmcs-enc-cli",
-                "--openstack-project",
-                self.project,
-                "set_prefix_hiera",
-                self.from_fqdn,
-                _quote(from_hiera_str),
-            ],
+        self.openstack_api.run_raw(
+            "wmcs-enc-cli",
+            "--openstack-project",
+            self.project,
+            "set_prefix_hiera",
+            self.from_fqdn,
+            _quote(from_hiera_str),
             try_format=OutputFormat.YAML,
             is_safe=True,
         )
 
         to_hiera["profile::wmcs::nfs::standalone::cinder_attached"] = True
         to_hiera_str = json.dumps(to_hiera)
-        run_one_raw(
-            node=control_node,
-            command=[
-                "wmcs-enc-cli",
-                "--openstack-project",
-                self.project,
-                "set_prefix_hiera",
-                self.to_fqdn,
-                _quote(to_hiera_str),
-            ],
+        self.openstack_api.run_raw(
+            "wmcs-enc-cli",
+            "--openstack-project",
+            self.project,
+            "set_prefix_hiera",
+            self.to_fqdn,
+            _quote(to_hiera_str),
             try_format=OutputFormat.YAML,
             is_safe=True,
         )

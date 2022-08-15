@@ -16,12 +16,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
-from cookbooks.wmcs.libs.openstack.common import (
-    OpenstackAPI,
-    OpenstackQuotaEntry,
-    OpenstackQuotaName,
-    get_control_nodes,
-)
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, OpenstackQuotaEntry, OpenstackQuotaName
 
 LOGGER = logging.getLogger(__name__)
 
@@ -95,12 +90,9 @@ class QuotaIncreaseRunner(CookbookRunnerBase):
     ):  # pylint: disable=too-many-arguments
         """Init"""
         self.common_opts = common_opts
-        self.control_node_fqdn = get_control_nodes(cluster_name)[0]
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
-            remote=spicerack.remote(),
-            control_node_fqdn=self.control_node_fqdn,
-            project=self.common_opts.project,
+            remote=spicerack.remote(), cluster_name=cluster_name, project=self.common_opts.project
         )
         self.increases: List[OpenstackQuotaEntry] = []
         if cores:

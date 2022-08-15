@@ -17,7 +17,7 @@ from cookbooks.wmcs.libs.openstack.common import (
     AGGREGATES_FILE_PATH,
     OpenstackAPI,
     OpenstackNotFound,
-    get_control_nodes_from_node,
+    get_node_cluster_name,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -82,11 +82,7 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
     ):
         """Init."""
         self.fqdn = fqdn
-        self.control_node_fqdn = get_control_nodes_from_node(node=self.fqdn)[0]
-        self.openstack_api = OpenstackAPI(
-            remote=spicerack.remote(),
-            control_node_fqdn=self.control_node_fqdn,
-        )
+        self.openstack_api = OpenstackAPI(remote=spicerack.remote(), cluster_name=get_node_cluster_name(node=self.fqdn))
         self.aggregates = aggregates
         self.spicerack = spicerack
         self.sallogger = SALLogger(

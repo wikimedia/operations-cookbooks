@@ -22,6 +22,7 @@ from cookbooks.wmcs.libs.common import (
     natural_sort_key,
     with_common_opts,
 )
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.toolforge.worker.drain import Drain
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
@@ -91,9 +92,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         self.control_node_fqdn = control_node_fqdn
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
-            remote=spicerack.remote(),
-            control_node_fqdn="cloudcontrol1005.wikimedia.org",
-            project=self.common_opts.project,
+            remote=spicerack.remote(), cluster_name=OpenstackClusterName.EQIAD1, project=self.common_opts.project
         )
         self._all_project_servers: Optional[List[Dict[str, Any]]] = None
         self.sallogger = SALLogger(

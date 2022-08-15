@@ -14,6 +14,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from spicerack.puppet import PuppetMaster
 
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, run_one_raw, with_common_opts
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 
 LOGGER = logging.getLogger(__name__)
@@ -68,7 +69,7 @@ class RemoveInstanceRunner(CookbookRunnerBase):
         self.common_opts = common_opts
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
-            control_node_fqdn="cloudcontrol1005.wikimedia.org",
+            cluster_name=OpenstackClusterName.EQIAD1,
             project=self.common_opts.project,
         )
 

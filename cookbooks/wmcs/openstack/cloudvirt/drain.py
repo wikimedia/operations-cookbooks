@@ -11,7 +11,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_control_nodes_from_node
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_node_cluster_name
 from cookbooks.wmcs.openstack.cloudvirt.set_maintenance import SetMaintenance
 
 LOGGER = logging.getLogger(__name__)
@@ -58,12 +58,8 @@ class DrainRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.fqdn = fqdn
-        self.control_node_fqdn = get_control_nodes_from_node(node=self.fqdn)[0]
         self.spicerack = spicerack
-        self.openstack_api = OpenstackAPI(
-            remote=spicerack.remote(),
-            control_node_fqdn=self.control_node_fqdn,
-        )
+        self.openstack_api = OpenstackAPI(remote=spicerack.remote(), cluster_name=get_node_cluster_name(node=self.fqdn))
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )

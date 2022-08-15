@@ -360,12 +360,16 @@ class OpenstackAPI(CommandRunnerMixin):
     """Class to interact with the Openstack API (indirectly for now)."""
 
     def __init__(
-        self, remote: Remote, control_node_fqdn: str = "cloudcontrol1005.wikimedia.org", project: OpenstackName = ""
+        self,
+        remote: Remote,
+        cluster_name: OpenstackClusterName = OpenstackClusterName.EQIAD1,
+        project: OpenstackName = "",
     ):
         """Init."""
         self.project = project
-        self.control_node_fqdn = control_node_fqdn
-        self.control_node = remote.query(f"D{{{control_node_fqdn}}}", use_sudo=True)
+        self.cluster_name = cluster_name
+        self.control_node_fqdn = get_control_nodes(cluster_name)[0]
+        self.control_node = remote.query(f"D{{{self.control_node_fqdn}}}", use_sudo=True)
         super().__init__(command_runner_node=self.control_node)
 
     def _get_full_command(self, *command: str, json_output: bool = True, project_as_arg: bool = False):

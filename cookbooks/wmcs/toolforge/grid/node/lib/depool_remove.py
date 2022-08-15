@@ -22,6 +22,7 @@ from cookbooks.wmcs.libs.common import (
     with_common_opts,
 )
 from cookbooks.wmcs.libs.grid import GridController, GridNodeNotFound
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.vps.remove_instance import RemoveInstance
 
@@ -88,7 +89,7 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
         """Main entry point"""
         openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(),
-            control_node_fqdn="cloudcontrol1005.wikimedia.org",
+            cluster_name=OpenstackClusterName.EQIAD1,
             project=self.common_opts.project,
         )
         if not openstack_api.server_exists(self.node_hostname, print_output=False):
