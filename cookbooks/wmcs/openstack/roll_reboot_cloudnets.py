@@ -2,7 +2,7 @@
 
 Usage example:
     cookbook wmcs.openstack.roll_reboot_cloudnets \
-        --deployment eqiad1
+        --cluster-name eqiad1
 
 """
 import argparse
@@ -12,7 +12,8 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack.common import Deployment, OpenstackAPI, get_control_nodes
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_control_nodes
 from cookbooks.wmcs.libs.openstack.neutron import NeutronController
 from cookbooks.wmcs.openstack.cloudnet.reboot_node import RebootNode
 
@@ -33,11 +34,11 @@ class RollRebootCloudnets(CookbookBase):
         )
         add_common_opts(parser)
         parser.add_argument(
-            "--deployment",
+            "--cluster-name",
             required=True,
-            choices=list(Deployment),
-            type=Deployment,
-            help="Openstack deployment to roll reboot the cloudnets for.",
+            choices=list(OpenstackClusterName),
+            type=OpenstackClusterName,
+            help="Openstack cluster to roll reboot the cloudnets for.",
         )
         parser.add_argument(
             "--force",
@@ -51,7 +52,7 @@ class RollRebootCloudnets(CookbookBase):
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, RollRebootCloudnetsRunner,)(
-            deployment=args.deployment,
+            cluster_name=args.cluster_name,
             force=args.force,
             spicerack=self.spicerack,
         )
@@ -63,13 +64,13 @@ class RollRebootCloudnetsRunner(CookbookRunnerBase):
     def __init__(
         self,
         common_opts: CommonOpts,
-        deployment: Deployment,
+        cluster_name: OpenstackClusterName,
         force: bool,
         spicerack: Spicerack,
     ):
         """Init"""
         self.common_opts = common_opts
-        self.controlling_node_fqdn = get_control_nodes(deployment=deployment)[0]
+        self.controlling_node_fqdn = get_control_nodes(cluster_name=cluster_name)[0]
         self.force = force
         self.spicerack = spicerack
         self.sallogger = SALLogger(

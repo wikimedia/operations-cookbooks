@@ -14,7 +14,8 @@ from typing import List
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.libs.openstack.common import Deployment, OpenstackAPI, get_control_nodes
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_control_nodes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,12 +38,12 @@ class VMConsole(CookbookBase):
             help="Name of the project the vm is running in.",
         )
         parser.add_argument(
-            "--deployment",
+            "--cluster-name",
             required=False,
-            choices=list(Deployment),
-            type=Deployment,
-            default=Deployment.EQIAD1,
-            help="Openstack deployment where the VM is hosted.",
+            choices=list(OpenstackClusterName),
+            type=OpenstackClusterName,
+            default=OpenstackClusterName.EQIAD1,
+            help="Openstack cluster_name where the VM is hosted.",
         )
         parser.add_argument(
             "--vm-name",
@@ -55,7 +56,7 @@ class VMConsole(CookbookBase):
         """Get runner"""
         return VMConsoleRunner(
             project=args.project,
-            deployment=args.deployment,
+            cluster_name=args.cluster_name,
             vm_name=args.vm_name,
             spicerack=self.spicerack,
         )
@@ -76,14 +77,14 @@ class VMConsoleRunner(CookbookRunnerBase):
     def __init__(
         self,
         project: str,
-        deployment: Deployment,
+        cluster_name: OpenstackClusterName,
         vm_name: str,
         spicerack: Spicerack,
     ):
         """Init"""
         self.project = project
         self.vm_name = vm_name
-        self.control_node_fqdn = get_control_nodes(deployment=deployment)[0]
+        self.control_node_fqdn = get_control_nodes(cluster_name=cluster_name)[0]
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),

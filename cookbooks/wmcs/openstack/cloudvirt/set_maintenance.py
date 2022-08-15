@@ -12,7 +12,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs.libs.alerts import downtime_host
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack.common import Deployment, OpenstackAPI, OpenstackNotFound, get_control_nodes
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, OpenstackNotFound, get_control_nodes_from_node
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class SetMaintenanceRunner(CookbookRunnerBase):
     ):
         """Init."""
         self.fqdn = fqdn
-        self.control_node_fqdn = get_control_nodes(deployment=Deployment.get_for_node(node=self.fqdn))[0]
+        self.control_node_fqdn = get_control_nodes_from_node(node=self.fqdn)[0]
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
             control_node_fqdn=self.control_node_fqdn,

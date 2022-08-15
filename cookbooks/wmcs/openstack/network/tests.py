@@ -1,8 +1,8 @@
 """WMCS openstack network tests - Run a network testsuite
 
 Usage example:
-  cookbook wmcs.openstack.network.tests --deployment codfw1dev
-  cookbook wmcs.openstack.network.tests --deployment eqiad1
+  cookbook wmcs.openstack.network.tests --cluster_name codfw1dev
+  cookbook wmcs.openstack.network.tests --cluster_name eqiad1
 
 Documentation:
   https://wikitech.wikimedia.org/wiki/Portal:Cloud_VPS/Admin/Network/Tests
@@ -16,7 +16,8 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.common import CmdChecklist
-from cookbooks.wmcs.libs.openstack.common import Deployment, get_control_nodes
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
+from cookbooks.wmcs.libs.openstack.common import get_control_nodes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,12 +36,11 @@ class NetworkTests(CookbookBase):
         )
 
         parser.add_argument(
-            "-d",
-            "--deployment",
-            help="openstack deployment where to run the tests",
-            type=Deployment,
-            choices=list(Deployment),
-            default=Deployment.CODFW1DEV,
+            "--cluster-name",
+            help="openstack cluster_name where to run the tests",
+            type=OpenstackClusterName,
+            choices=list(OpenstackClusterName),
+            default=OpenstackClusterName.CODFW1DEV,
         )
 
         return parser
@@ -48,7 +48,7 @@ class NetworkTests(CookbookBase):
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
         return NetworkTestRunner(
-            deployment=args.deployment,
+            cluster_name=args.cluster_name,
             spicerack=self.spicerack,
         )
 
@@ -56,27 +56,19 @@ class NetworkTests(CookbookBase):
 class NetworkTestRunner(CookbookRunnerBase):
     """Runner for NetworkTests"""
 
-    def __init__(self, deployment: Deployment, spicerack: Spicerack):
+    def __init__(self, cluster_name: OpenstackClusterName, spicerack: Spicerack):
         """Init"""
-        self.deployment: Deployment = deployment
+        self.cluster_name: OpenstackClusterName = cluster_name
         self.spicerack = spicerack
 
     def run(self) -> Optional[int]:
         """Main entry point"""
-        # TODO: once we can run cumin with the puppetdb backend from our laptop
-        # this ugly harcoding can be replaced to something like:
-        # query = f"P{{O:wmcs::openstack::{self.deployment}::control}}"
-        control_nodes = ",".join(get_control_nodes(self.deployment))
-        query = f"D{{{control_nodes}}}"
-        remote_hosts = self.spicerack.remote().query(query, use_sudo=True)
-
-        # only interested in one control node
-        for i in remote_hosts.split(len(remote_hosts)):
-            control_node = i
-            break
+        control_node = get_control_nodes(self.cluster_name)[0]
+        query = f"D{{{control_node}}}"
+        remote_host = self.spicerack.remote().query(query, use_sudo=True)
 
         checklist = CmdChecklist(
-            name="Cloud VPS network tests", remote_hosts=control_node, config_file="/etc/networktests/networktests.yaml"
+            name="Cloud VPS network tests", remote_hosts=remote_host, config_file="/etc/networktests/networktests.yaml"
         )
         results = checklist.run(print_progress_bars=False)
         return checklist.evaluate(results)

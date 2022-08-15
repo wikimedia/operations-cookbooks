@@ -1,7 +1,7 @@
 """WMCS Openstack - Rolling reboot of all the cloudgw.
 
 Usage example:
-    cookbook wmcs.openstack.roll_reboot_cloudgws --deployment eqiad1
+    cookbook wmcs.openstack.roll_reboot_cloudgws --cluster_name eqiad1
 
 """
 import argparse
@@ -11,7 +11,8 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack.common import Deployment, get_gateway_nodes
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
+from cookbooks.wmcs.libs.openstack.common import get_gateway_nodes
 from cookbooks.wmcs.openstack.cloudgw.reboot_node import RebootNode
 from cookbooks.wmcs.openstack.network.tests import NetworkTests
 
@@ -32,11 +33,11 @@ class RollRebootCloudgws(CookbookBase):
         )
         add_common_opts(parser)
         parser.add_argument(
-            "--deployment",
+            "--cluster-name",
             required=True,
-            choices=list(Deployment),
-            type=Deployment,
-            help="Deployment to roll-reboot the cloudgws for.",
+            choices=list(OpenstackClusterName),
+            type=OpenstackClusterName,
+            help="Cluster/deployment to roll-reboot the cloudgws for.",
         )
         parser.add_argument(
             "--force",
@@ -51,14 +52,14 @@ class RollRebootCloudgws(CookbookBase):
         """Get runner"""
         return with_common_opts(self.spicerack, args, RollRebootCloudgwsRunner,)(
             force=args.force,
-            deployment=args.deployment,
+            cluster_name=args.cluster_name,
             spicerack=self.spicerack,
         )
 
 
-def check_network_ok(deployment: Deployment, spicerack: Spicerack) -> None:
+def check_network_ok(cluster_name: OpenstackClusterName, spicerack: Spicerack) -> None:
     """Run the network tests and check if they pass."""
-    args = ["--deployment", str(deployment)]
+    args = ["--cluster_name", str(cluster_name)]
     network_test_cookbook = NetworkTests(spicerack=spicerack)
     if network_test_cookbook.get_runner(args=network_test_cookbook.argument_parser().parse_args(args)).run() != 0:
         raise Exception("Network tests failed, see logs or run the cookbook for details.")
@@ -71,7 +72,7 @@ class RollRebootCloudgwsRunner(CookbookRunnerBase):
         self,
         common_opts: CommonOpts,
         force: bool,
-        deployment: Deployment,
+        cluster_name: OpenstackClusterName,
         spicerack: Spicerack,
     ):
         """Init"""
@@ -81,18 +82,18 @@ class RollRebootCloudgwsRunner(CookbookRunnerBase):
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
-        self.deployment = deployment
-        self.cloudgw_hosts = get_gateway_nodes(deployment=deployment)
+        self.cluster_name = cluster_name
+        self.cloudgw_hosts = get_gateway_nodes(cluster_name=cluster_name)
         if not self.force:
             LOGGER.info("Checking the current state of the network...")
-            check_network_ok(deployment=self.deployment, spicerack=self.spicerack)
+            check_network_ok(cluster_name=self.cluster_name, spicerack=self.spicerack)
             LOGGER.info("Network up and running!")
 
     def run(self) -> None:
         """Main entry point"""
         self.sallogger.log(
             message=(
-                f"Rebooting all the cloudgw nodes from the {self.deployment} deployment: "
+                f"Rebooting all the cloudgw nodes from the {self.cluster_name} cluster_name: "
                 + ",".join(self.cloudgw_hosts)
             )
         )
@@ -115,7 +116,7 @@ class RollRebootCloudgwsRunner(CookbookRunnerBase):
             )
             if not self.force:
                 LOGGER.info("Checking if the network is still up and running...")
-                check_network_ok(deployment=self.deployment, spicerack=self.spicerack)
+                check_network_ok(cluster_name=self.cluster_name, spicerack=self.spicerack)
                 LOGGER.info("Network up and running! Will continue.")
 
         self.sallogger.log(message=f"Finished rebooting the cloudgw nodes {self.cloudgw_hosts}")

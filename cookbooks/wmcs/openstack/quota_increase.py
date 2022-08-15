@@ -3,7 +3,7 @@
 Usage example: wmcs.openstack.quota_increase \
     --project admin-monitoring \
     --gigabytes 30G \
-    --deployment eqiad1 \
+    --cluster-name eqiad1 \
     --instances 5
 
 """
@@ -15,8 +15,8 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import (
-    Deployment,
     OpenstackAPI,
     OpenstackQuotaEntry,
     OpenstackQuotaName,
@@ -40,11 +40,11 @@ class QuotaIncrease(CookbookBase):
         )
         add_common_opts(parser)
         parser.add_argument(
-            "--deployment",
+            "--cluster-name",
             required=True,
-            choices=list(Deployment),
-            type=Deployment,
-            help="Openstack deployment to act on.",
+            choices=list(OpenstackClusterName),
+            type=OpenstackClusterName,
+            help="Openstack cluster/deployment to act on.",
         )
         parser.add_argument(
             "--gigabytes",
@@ -76,7 +76,7 @@ class QuotaIncrease(CookbookBase):
             ram=args.ram,
             gigabytes=args.gigabytes,
             spicerack=self.spicerack,
-            deployment=args.deployment,
+            cluster_name=args.cluster_name,
         )
 
 
@@ -90,12 +90,12 @@ class QuotaIncreaseRunner(CookbookRunnerBase):
         floating_ips: Optional[str],
         ram: Optional[str],
         gigabytes: Optional[str],
-        deployment: Deployment,
+        cluster_name: OpenstackClusterName,
         spicerack: Spicerack,
     ):  # pylint: disable=too-many-arguments
         """Init"""
         self.common_opts = common_opts
-        self.control_node_fqdn = get_control_nodes(deployment=deployment)[0]
+        self.control_node_fqdn = get_control_nodes(cluster_name)[0]
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(),
@@ -137,6 +137,7 @@ class QuotaIncreaseRunner(CookbookRunnerBase):
     def run(self) -> None:
         """Main entry point"""
         if not self.increases:
+            print("Nothing to increase, did you forget to pass any options?")
             return
 
         self.openstack_api.quota_increase(*self.increases)

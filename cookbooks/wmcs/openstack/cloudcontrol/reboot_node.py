@@ -14,7 +14,8 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs.libs.alerts import downtime_host, uptime_host
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack.common import Deployment, get_gateway_nodes
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
+from cookbooks.wmcs.libs.openstack.common import get_gateway_nodes, get_node_cluster_name
 from cookbooks.wmcs.openstack.network.tests import NetworkTests
 
 LOGGER = logging.getLogger(__name__)
@@ -56,9 +57,9 @@ class RebootNode(CookbookBase):
         )
 
 
-def check_network_ok(deployment: Deployment, spicerack: Spicerack) -> None:
+def check_network_ok(cluster_name: OpenstackClusterName, spicerack: Spicerack) -> None:
     """Run the network tests and check if they pass."""
-    args = ["--deployment", str(deployment)]
+    args = ["--cluster_name", str(cluster_name)]
     network_test_cookbook = NetworkTests(spicerack=spicerack)
     if network_test_cookbook.get_runner(args=network_test_cookbook.argument_parser().parse_args(args)).run() != 0:
         raise Exception("Network tests failed, see logs or run the cookbook for details.")
@@ -83,26 +84,26 @@ class RebootNodeRunner(CookbookRunnerBase):
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
 
-        self.deployment = Deployment.get_for_node(self.fqdn_to_reboot)
+        self.cluster_name = get_node_cluster_name(self.fqdn_to_reboot)
 
-        known_cloudcontrols = get_gateway_nodes(self.deployment)
+        known_cloudcontrols = get_gateway_nodes(cluster_name=self.cluster_name)
         if not known_cloudcontrols:
-            raise Exception(f"No cloudcontrols found for deployment {self.deployment} :-S")
+            raise Exception(f"No cloudcontrols found for cluster_name {self.cluster_name} :-S")
 
         if len(known_cloudcontrols) == 1 and not self.skip_checks:
             raise Exception(
-                f"There's only one gateway node for the deployment {self.deployment} ({known_cloudcontrols}), and the "
-                "network will go dow if rebooted, pass --skip-checks to ignore."
+                f"There's only one gateway node for the cluster_name {self.cluster_name} ({known_cloudcontrols}), and "
+                "the network will go dow if rebooted, pass --skip-checks to ignore."
             )
 
         if self.fqdn_to_reboot not in known_cloudcontrols:
             raise Exception(
-                f"Host {self.fqdn_to_reboot} is not part of the cloudcontrol for deployment {self.deployment}"
+                f"Host {self.fqdn_to_reboot} is not part of the cloudcontrol for cluster_name {self.cluster_name}"
             )
 
         if not self.skip_checks:
             LOGGER.info("Checking the current state of the network...")
-            check_network_ok(deployment=self.deployment, spicerack=self.spicerack)
+            check_network_ok(cluster_name=self.cluster_name, spicerack=self.spicerack)
             LOGGER.info("Network up and running!")
 
     def run(self) -> None:
@@ -128,7 +129,7 @@ class RebootNodeRunner(CookbookRunnerBase):
 
         if not self.skip_checks:
             LOGGER.info("Checking if the network is up and running")
-            check_network_ok(deployment=self.deployment, spicerack=self.spicerack)
+            check_network_ok(cluster_name=self.cluster_name, spicerack=self.spicerack)
             LOGGER.info("Network up and running!")
 
         uptime_host(spicerack=self.spicerack, host_name=host_name, silence_id=host_silence_id)

@@ -2,7 +2,7 @@
 
 Usage example:
     cookbook wmcs.openstack.cloudnet.show \
-        --deployment eqiad1
+        --cluster_name eqiad1
 
 """
 import argparse
@@ -11,7 +11,8 @@ import logging
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.libs.openstack.common import Deployment, OpenstackAPI, get_control_nodes
+from cookbooks.wmcs.libs.inventory import OpenstackClusterName
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_control_nodes
 from cookbooks.wmcs.libs.openstack.neutron import NeutronAgentType, NeutronController
 
 LOGGER = logging.getLogger(__name__)
@@ -30,11 +31,11 @@ class Show(CookbookBase):
             formatter_class=ArgparseFormatter,
         )
         parser.add_argument(
-            "--deployment",
+            "--cluster-name",
             required=True,
-            default=Deployment.EQIAD1,
-            choices=list(Deployment),
-            type=Deployment,
+            default=OpenstackClusterName.EQIAD1,
+            choices=list(OpenstackClusterName),
+            type=OpenstackClusterName,
             help="Site to get the info for",
         )
 
@@ -43,7 +44,7 @@ class Show(CookbookBase):
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
         return ShowRunner(
-            deployment=args.deployment,
+            cluster_name=args.cluster_name,
             spicerack=self.spicerack,
         )
 
@@ -53,11 +54,11 @@ class ShowRunner(CookbookRunnerBase):
 
     def __init__(
         self,
-        deployment: Deployment,
+        cluster_name: OpenstackClusterName,
         spicerack: Spicerack,
     ):
         """Init"""
-        self.controlling_node_fqdn = get_control_nodes(deployment=deployment)[0]
+        self.controlling_node_fqdn = get_control_nodes(cluster_name=cluster_name)[0]
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(),

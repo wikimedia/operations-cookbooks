@@ -14,7 +14,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 
 from cookbooks.wmcs.libs.alerts import downtime_alert, downtime_host, uptime_alert, uptime_host
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack.common import Deployment, OpenstackAPI, get_control_nodes
+from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_control_nodes_from_node
 from cookbooks.wmcs.libs.openstack.neutron import NetworkUnhealthy, NeutronAgentType, NeutronAlerts, NeutronController
 
 LOGGER = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class RebootNodeRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.fqdn_to_reboot = fqdn_to_reboot
-        self.controlling_node_fqdn = get_control_nodes(deployment=Deployment.get_for_node(node=self.fqdn_to_reboot))[0]
+        self.controlling_node_fqdn = get_control_nodes_from_node(node=self.fqdn_to_reboot)[0]
         self.force = force
         self.spicerack = spicerack
         self.sallogger = SALLogger(

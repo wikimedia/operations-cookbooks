@@ -13,9 +13,9 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.alerts import SilenceID
-from cookbooks.wmcs.libs.ceph import CephClusterController
+from cookbooks.wmcs.libs.ceph import CephClusterController, get_mon_nodes, get_node_cluster_name
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack.common import Deployment
+from cookbooks.wmcs.libs.inventory import CephClusterName
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,10 +32,13 @@ class UnSetClusterInMaintenance(CookbookBase):
             description=__doc__,
             formatter_class=ArgparseFormatter,
         )
+        # TODO: replace with a cluster name selection
         parser.add_argument(
-            "--monitor-node-fqdn",
+            "--cluster-name",
             required=True,
-            help="FQDN of one of the monitor nodes to manage the cluster.",
+            choices=list(CephClusterName),
+            type=CephClusterName,
+            help="Ceph cluster to unset the maintenance of.",
         )
         parser.add_argument(
             "--force",
@@ -60,7 +63,7 @@ class UnSetClusterInMaintenance(CookbookBase):
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
         return with_common_opts(spicerack=self.spicerack, args=args, runner=UnSetClusterInMaintenanceRunner)(
-            monitor_node_fqdn=args.monitor_node_fqdn,
+            cluster_name=args.cluster_name,
             force=args.force,
             spicerack=self.spicerack,
             silence_ids=args.silence_ids,
@@ -72,26 +75,27 @@ class UnSetClusterInMaintenanceRunner(CookbookRunnerBase):
 
     def __init__(
         self,
-        monitor_node_fqdn: str,
+        cluster_name: CephClusterName,
         force: bool,
         spicerack: Spicerack,
         common_opts: CommonOpts,
         silence_ids: Optional[List[SilenceID]],
     ):
         """Init"""
-        self.monitor_node_fqdn = monitor_node_fqdn
         self.force = force
         self.spicerack = spicerack
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
+        mon_node = get_mon_nodes(cluster_name=cluster_name)[0]
+
         self.controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=self.monitor_node_fqdn, spicerack=self.spicerack
+            remote=self.spicerack.remote(), controlling_node_fqdn=mon_node, spicerack=self.spicerack
         )
         self.silence_ids = silence_ids
-        self.deployment = Deployment.get_for_node(self.monitor_node_fqdn)
+        self.cluster_name = get_node_cluster_name(node=mon_node)
 
     def run(self) -> None:
         """Main entry point"""
         self.controller.unset_maintenance(force=self.force, silences=self.silence_ids)
-        self.sallogger.log(f"Ceph cluster at {self.deployment} set out of maintenance.")
+        self.sallogger.log(f"Ceph cluster at {self.cluster_name} set out of maintenance.")

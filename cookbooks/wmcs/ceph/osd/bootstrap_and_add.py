@@ -25,7 +25,7 @@ OS_DEVICES = ["sda", "sdb"]
 
 
 class BootstrapAndAdd(CookbookBase):
-    """WMCS Ceph cookbook to bootsrap and add a new OSD."""
+    """WMCS Ceph cookbook to bootstrap and add a new OSD."""
 
     title = __doc__
 

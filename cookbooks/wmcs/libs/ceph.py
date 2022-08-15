@@ -5,13 +5,19 @@ import logging
 import time
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, cast
 
 from spicerack import Remote, Spicerack
 from wmflib.interactive import ask_confirmation
 
 from cookbooks.wmcs.libs.alerts import SilenceID, downtime_alert, uptime_alert
 from cookbooks.wmcs.libs.common import ArgparsableEnum, TestUtils, run_one_as_dict, run_one_formatted, run_one_raw
+from cookbooks.wmcs.libs.inventory import (
+    CephClusterName,
+    CephNodeRoleName,
+    generic_get_node_cluster_name,
+    get_nodes_by_role,
+)
 
 LOGGER = logging.getLogger(__name__)
 # List of alerts that are triggered by the cluster aside from the specifics for each node
@@ -500,3 +506,18 @@ class CephTestUtils(TestUtils):
             available_device["mountpoint"] = mountpoint
 
         return available_device
+
+
+def get_mon_nodes(cluster_name: CephClusterName) -> List[str]:
+    """Get the list of mon nodes given a cluster."""
+    return get_nodes_by_role(cluster_name, role_name=CephNodeRoleName.MON)
+
+
+def get_osd_nodes(cluster_name: CephClusterName) -> List[str]:
+    """Get the list of osd nodes given a cluster."""
+    return get_nodes_by_role(cluster_name, role_name=CephNodeRoleName.OSD)
+
+
+def get_node_cluster_name(node: str) -> CephClusterName:
+    """Wrapper casting to the right type."""
+    return cast(CephClusterName, generic_get_node_cluster_name(node))

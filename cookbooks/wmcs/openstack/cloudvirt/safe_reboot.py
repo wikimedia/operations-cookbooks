@@ -14,7 +14,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
-from cookbooks.wmcs.libs.openstack.common import Deployment, get_control_nodes
+from cookbooks.wmcs.libs.openstack.common import get_control_nodes_from_node
 from cookbooks.wmcs.openstack.cloudvirt.drain import Drain
 from cookbooks.wmcs.openstack.cloudvirt.unset_maintenance import UnsetMaintenance
 
@@ -62,7 +62,7 @@ class SafeRebootRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.fqdn = fqdn
-        self.control_node_fqdn = get_control_nodes(deployment=Deployment.get_for_node(node=self.fqdn))[0]
+        self.control_node_fqdn = get_control_nodes_from_node(node=self.fqdn)[0]
         self.spicerack = spicerack
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg

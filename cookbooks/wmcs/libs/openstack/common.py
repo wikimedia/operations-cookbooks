@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from enum import Enum, auto
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Type, Union
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Type, Union, cast
 
 import yaml
 from cumin.transports import Command
@@ -20,6 +20,12 @@ from cookbooks.wmcs.libs.common import (
     run_one_raw,
     simple_create_file,
 )
+from cookbooks.wmcs.libs.inventory import (
+    OpenstackClusterName,
+    OpenstackNodeRoleName,
+    generic_get_node_cluster_name,
+    get_nodes_by_role,
+)
 
 LOGGER = logging.getLogger(__name__)
 AGGREGATES_FILE_PATH = "/etc/wmcs_host_aggregates.yaml"
@@ -27,87 +33,24 @@ MINUTES_IN_HOUR = 60
 SECONDS_IN_MINUTE = 60
 
 
-class Deployment(Enum):
-    """Deployment enumerate"""
-
-    EQIAD1 = "eqiad1"
-    CODFW1DEV = "codfw1dev"
-
-    def __str__(self):
-        """String representation"""
-        return self.value
-
-    @classmethod
-    def get_for_node(cls, node: str) -> "Deployment":
-        """Retrieve the deployment given a node fqdn/name.
-
-        This tries several strategies in priority order:
-        * Check the known deployments (see the get_*_nodes functions)
-        * Check the hosts domain name (<deployment>.wmnet)
-        * Check the host name (<name>YXXX.<domain>, where Y symbolizes the deployment)
-        """
-        for deployment in list(Deployment):
-            for node_group in _OPENSTACK_NODES[deployment].values():
-                if node in node_group:
-                    return deployment
-
-        if node.count(".") >= 2:
-            domain = node.rsplit(".", 2)[1]
-            for deployment in cls:
-                if deployment.value.startswith(domain):
-                    return deployment
-
-        deploy_match = re.match(r"[^.]*(?P<deployment_number>\d)+", node)
-        if deploy_match:
-            if deploy_match.groupdict()["deployment_number"] == 1:
-                return cls.EQIAD1
-            if deploy_match.groupdict()["deployment_number"] == 2:
-                return cls.CODFW1DEV
-
-        raise Exception(f"Unable to guess deployment for node {node}")
-
-
-# Use FQDNs here
-_OPENSTACK_NODES = {
-    Deployment.EQIAD1: {
-        "gateway-nodes": [
-            "cloudgw1001.eqiad.wmnet",
-            "cloudgw1002.eqiad.wmnet",
-        ],
-        "control-nodes": [
-            "cloudcontrol1005.wikimedia.org",
-            "cloudcontrol1006.wikimedia.org",
-            "cloudcontrol1007.wikimedia.org",
-        ],
-    },
-    Deployment.CODFW1DEV: {
-        "gateway-nodes": [
-            "cloudgw2001-dev.codfw.wmnet",
-            "cloudgw2002-dev.codfw.wmnet",
-            "cloudgw2003-dev.codfw.wmnet",
-        ],
-        "control-nodes": [
-            "cloudcontrol2001-dev.wikimedia.org",
-            "cloudcontrol2003-dev.wikimedia.org",
-            "cloudcontrol2004-dev.wikimedia.org",
-        ],
-    },
-}
-
-
 OpenstackID = str
 OpenstackName = str
 OpenstackIdentifier = Union[OpenstackID, OpenstackName]
 
 
-def get_control_nodes(deployment: Deployment) -> List[str]:
+def get_control_nodes(cluster_name: OpenstackClusterName) -> List[str]:
     """Get all the FQDNs of the control nodes (in the future with netbox or similar)."""
-    return _OPENSTACK_NODES[deployment]["control-nodes"]
+    return get_nodes_by_role(cluster_name, role_name=OpenstackNodeRoleName.CONTROL)
 
 
-def get_gateway_nodes(deployment: Deployment) -> List[str]:
+def get_control_nodes_from_node(node: str) -> List[str]:
+    """Get all the FQDNs of the control nodes from the cluster a given a node is part of."""
+    return get_control_nodes(cluster_name=get_node_cluster_name(node))
+
+
+def get_gateway_nodes(cluster_name: OpenstackClusterName) -> List[str]:
     """Get all the FQDNs of the gateway nodes (in the future with netbox or similar)."""
-    return _OPENSTACK_NODES[deployment]["gateway-nodes"]
+    return get_nodes_by_role(cluster_name, role_name=OpenstackNodeRoleName.GATEWAY)
 
 
 def _quote(mystr: str) -> str:
@@ -880,3 +823,8 @@ class OpenstackAPI(CommandRunnerMixin):
                     f"{new_quotas[new_quota.name]} quota of {new_quotas[new_quota.name].value} "
                     f"does not match expected value of {new_quota.value}"
                 )
+
+
+def get_node_cluster_name(node: str) -> OpenstackClusterName:
+    """Wrapper casting to the specific openstack type."""
+    return cast(OpenstackClusterName, generic_get_node_cluster_name(node))
