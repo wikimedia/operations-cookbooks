@@ -158,8 +158,8 @@ class CephClusterStatus:
         return self.status_dict.get("progress_events", {})
 
 
-class CephOSDController:
-    """Controller for a CEPH node."""
+class CephOSDNodeController:
+    """Controller for a CEPH OSD node."""
 
     SYSTEM_DEVICES = ["sda", "sdb"]
 
@@ -483,7 +483,7 @@ class CephTestUtils(TestUtils):
 
     @staticmethod
     def get_available_device(
-        name: str = f"{CephOSDController.SYSTEM_DEVICES[0]}_non_matching_part",
+        name: str = f"{CephOSDNodeController.SYSTEM_DEVICES[0]}_non_matching_part",
         device_type: str = "disk",
         children: Optional[List[Any]] = None,
         mountpoint: Optional[str] = None,

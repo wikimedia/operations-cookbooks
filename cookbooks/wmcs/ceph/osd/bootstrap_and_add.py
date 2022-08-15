@@ -16,7 +16,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from spicerack.puppet import PuppetHosts
 
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
-from cookbooks.wmcs.libs.ceph import CephClusterController, CephOSDController, CephOSDFlag
+from cookbooks.wmcs.libs.ceph import CephClusterController, CephOSDFlag, CephOSDNodeController
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
@@ -150,7 +150,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
                     args=reboot_node_cookbook.argument_parser().parse_args(reboot_args)
                 ).run()
 
-            CephOSDController(remote=self.spicerack.remote(), node_fqdn=new_osd_fqdn).add_all_available_devices(
+            CephOSDNodeController(remote=self.spicerack.remote(), node_fqdn=new_osd_fqdn).add_all_available_devices(
                 interactive=(not self.yes_i_know)
             )
             self.sallogger.log(
