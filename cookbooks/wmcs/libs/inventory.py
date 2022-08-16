@@ -180,9 +180,9 @@ _INVENTORY = {
                     name=CephClusterName.CODFW1,
                     nodes_by_role={
                         CephNodeRoleName.MON: [
-                            "cloudcephmon2001-dev.codfw.wmnet",
-                            "cloudcephmon2002-dev.codfw.wmnet",
-                            "cloudcephmon2003-dev.codfw.wmnet",
+                            "cloudcephmon2004-dev.codfw.wmnet",
+                            "cloudcephmon2005-dev.codfw.wmnet",
+                            "cloudcephmon2006-dev.codfw.wmnet",
                         ]
                     },
                 )
