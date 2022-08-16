@@ -13,7 +13,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.alerts import downtime_host, uptime_host
-from cookbooks.wmcs.libs.ceph import CephClusterController, CephOSDFlag
+from cookbooks.wmcs.libs.ceph import CephClusterController, CephOSDFlag, get_node_cluster_name
 from cookbooks.wmcs.libs.common import run_one_raw
 
 LOGGER = logging.getLogger(__name__)
@@ -76,18 +76,20 @@ class UpgradeCephNodeRunner(CookbookRunnerBase):
         self.force = force
         self.skip_maintenance = skip_maintenance
         self.spicerack = spicerack
+        self.controller = CephClusterController(
+            remote=self.spicerack.remote(),
+            cluster_name=get_node_cluster_name(to_upgrade_fqdn),
+            spicerack=self.spicerack,
+        )
 
     def run(self) -> None:
         """Main entry point"""
         LOGGER.info("Upgrading ceph node %s", self.to_upgrade_fqdn)
-        controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=self.to_upgrade_fqdn, spicerack=self.spicerack
-        )
         # make sure we make cluster info commands on another node
-        controller.change_controlling_node()
+        self.controller.change_controlling_node()
 
         if not self.skip_maintenance:
-            silences = controller.set_maintenance(
+            silences = self.controller.set_maintenance(
                 force=self.force, reason=f"Upgrading the ceph node {self.to_upgrade_fqdn}."
             )
 
@@ -126,9 +128,9 @@ class UpgradeCephNodeRunner(CookbookRunnerBase):
         uptime_host(spicerack=self.spicerack, host_name=host_name, silence_id=downtime_id)
 
         # Once the node is up, let it rebalance
-        controller.unset_osdmap_flag(CephOSDFlag("norebalance"))
-        controller.wait_for_cluster_healthy(consider_maintenance_healthy=True, timeout_seconds=300)
-        controller.set_osdmap_flag(CephOSDFlag("norebalance"))
+        self.controller.unset_osdmap_flag(CephOSDFlag("norebalance"))
+        self.controller.wait_for_cluster_healthy(consider_maintenance_healthy=True, timeout_seconds=300)
+        self.controller.set_osdmap_flag(CephOSDFlag("norebalance"))
 
         if not self.skip_maintenance:
-            controller.unset_maintenance(force=self.force, silences=silences)
+            self.controller.unset_maintenance(force=self.force, silences=silences)

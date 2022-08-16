@@ -2,7 +2,7 @@
 
 Usage example:
     cookbook wmcs.ceph.upgrade_osds \
-        --controlling-node-fqdn cloudcephosd2001-dev.codfw.wmnet
+        --cluster-name eqiad1
 
 """
 import argparse
@@ -14,6 +14,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from cookbooks.wmcs.ceph.upgrade_ceph_node import UpgradeCephNode
 from cookbooks.wmcs.libs.ceph import CephClusterController
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.inventory import CephClusterName
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,9 +33,11 @@ class UpgradeOsds(CookbookBase):
         )
         add_common_opts(parser)
         parser.add_argument(
-            "--controlling-node-fqdn",
+            "--cluster-name",
             required=True,
-            help="FQDN of one of the nodes to manage the cluster.",
+            choices=list(CephClusterName),
+            type=CephClusterName,
+            help="Ceph cluster to unset the maintenance of.",
         )
         parser.add_argument(
             "--force",
@@ -48,7 +51,7 @@ class UpgradeOsds(CookbookBase):
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, UpgradeOsdsRunner)(
-            controlling_node_fqdn=args.controlling_node_fqdn,
+            cluster_name=args.cluster_name,
             force=args.force,
             spicerack=self.spicerack,
         )
@@ -59,35 +62,34 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
 
     def __init__(
         self,
-        controlling_node_fqdn: str,
+        cluster_name: CephClusterName,
         force: bool,
         common_opts: CommonOpts,
         spicerack: Spicerack,
     ):
         """Init"""
-        self.controlling_node_fqdn = controlling_node_fqdn
         self.force = force
         self.spicerack = spicerack
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
+        self.controller = CephClusterController(
+            remote=self.spicerack.remote(), cluster_name=cluster_name, spicerack=self.spicerack
+        )
 
     def run(self) -> None:
         """Main entry point"""
-        controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn, spicerack=self.spicerack
-        )
-        silences = controller.set_maintenance(reason="Upgrading osds")
+        silences = self.controller.set_maintenance(reason="Upgrading osds")
 
         upgrade_ceph_node_cookbook = UpgradeCephNode(spicerack=self.spicerack)
-        osd_nodes = list(controller.get_nodes()["osd"].keys())
+        osd_nodes = list(self.controller.get_nodes()["osd"].keys())
         self.sallogger.log(f"Upgrading OSDs and rebooting the nodes {osd_nodes}")
 
         for index, osd_node in enumerate(osd_nodes):
             LOGGER.info("Upgrading node %s, %d done, %d to go", osd_node, index, len(osd_nodes) - index)
             args = [
                 "--to-upgrade-fqdn",
-                f"{osd_node}.{controller.get_nodes_domain()}",
+                f"{osd_node}.{self.controller.get_nodes_domain()}",
                 "--skip-maintenance",
             ]
             if self.force:
@@ -102,8 +104,8 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
                 index + 1,
                 len(osd_nodes) - index - 1,
             )
-            controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
+            self.controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
             LOGGER.info("Cluster stable, continuing")
 
-        controller.unset_maintenance(silences=silences)
+        self.controller.unset_maintenance(silences=silences)
         self.sallogger.log(f"OSDs ({osd_nodes}) upgraded successfully B-)")

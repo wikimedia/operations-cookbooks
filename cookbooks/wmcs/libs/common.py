@@ -761,3 +761,114 @@ class CmdChecklist:
 
         LOGGER.info("%s: %s/%s passed tests.", self.name, results.passed, results.total)
         return 0
+
+
+class CommandRunnerMixin:
+    """Mixin to get command running functions."""
+
+    def __init__(self, command_runner_node: RemoteHosts):
+        """Simple mixin to provide command running functions to a class."""
+        self.command_runner_node = command_runner_node
+
+    def _get_full_command(self, *command: str, json_output: bool = True, project_as_arg: bool = False):
+        raise NotImplementedError
+
+    def run_raw(
+        self,
+        *command: str,
+        is_safe: bool = False,
+        capture_errors: bool = False,
+        json_output=True,
+        project_as_arg: bool = False,
+        **kwargs,
+    ) -> str:
+        """Run a command on a runner node.
+
+        Returns the raw output (not loaded from json).
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+        """
+        full_command = self._get_full_command(*command, json_output=json_output, project_as_arg=project_as_arg)
+        return run_one_raw(
+            command=full_command,
+            node=self.command_runner_node,
+            is_safe=is_safe,
+            capture_errors=capture_errors,
+            **kwargs,
+        )
+
+    def run_formatted_as_dict(
+        self, *command: str, is_safe: bool = False, capture_errors: bool = False, project_as_arg: bool = False, **kwargs
+    ) -> Dict[str, Any]:
+        """Run a command on a runner node forcing json output.
+
+        Returns a dict with the formatted output (loaded from json), usually for show commands.
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+
+        Example:
+            >>> self.run_formatted("port", "show")
+            {
+                "admin_state_up": true,
+                "allowed_address_pairs": [],
+                ...
+                "status": "ACTIVE",
+                "tags": [],
+                "trunk_details": null,
+                "updated_at": "2022-04-21T05:18:43Z"
+            }
+
+        """
+        full_command = self._get_full_command(*command, json_output=True, project_as_arg=project_as_arg)
+        return run_one_as_dict(
+            command=full_command,
+            node=self.command_runner_node,
+            is_safe=is_safe,
+            capture_errors=capture_errors,
+            **kwargs,
+        )
+
+    def run_formatted_as_list(
+        self, *command: str, is_safe: bool = False, capture_errors: bool = False, project_as_arg: bool = False, **kwargs
+    ) -> List[Any]:
+        """Run an command on a runner node forcing json output.
+
+        Returns a list with the formatted output (loaded from json), usually for `list` commands.
+        Any extra kwargs will be passed to the RemoteHosts.run_sync function.
+
+        Example:
+            >>> self.run_formatted_as_list("port", "list")
+            [
+                {
+                    "ID": "fb751dd4-05bb-4f23-822f-852f55591a11",
+                    "Name": "",
+                    "MAC Address": "fa:16:3e:25:48:ca",
+                    "Fixed IP Addresses": [
+                        {
+                            "subnet_id": "7adfcebe-b3d0-4315-92fe-e8365cc80668",
+                            "ip_address": "172.16.128.110"
+                        }
+                    ],
+                    "Status": "ACTIVE"
+                },
+                {
+                    "ID": "fb9a2e11-39af-4fa2-80a7-5f895d42b68a",
+                    "Name": "",
+                    "MAC Address": "fa:16:3e:7f:80:e8",
+                    "Fixed IP Addresses": [
+                        {
+                            "subnet_id": "7adfcebe-b3d0-4315-92fe-e8365cc80668",
+                            "ip_address": "172.16.128.115"
+                        }
+                    ],
+                    "Status": "DOWN"
+                },
+            ]
+
+        """
+        full_command = self._get_full_command(*command, json_output=True, project_as_arg=project_as_arg)
+        return run_one_formatted_as_list(
+            command=full_command,
+            node=self.command_runner_node,
+            is_safe=is_safe,
+            capture_errors=capture_errors,
+            **kwargs,
+        )

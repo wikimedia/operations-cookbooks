@@ -2,7 +2,7 @@
 
 Usage example:
     cookbook wmcs.ceph.roll_reboot_mons \
-        --controlling-node-fqdn cloudcephmon2001-dev.codfw.wmnet
+        --cluster-name eqiad1
 
 """
 import argparse
@@ -14,6 +14,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
 from cookbooks.wmcs.libs.ceph import CephClusterController
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.inventory import CephClusterName
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,9 +33,11 @@ class RollRebootMons(CookbookBase):
         )
         add_common_opts(parser)
         parser.add_argument(
-            "--controlling-node-fqdn",
+            "--cluster-name",
             required=True,
-            help="FQDN of one of the nodes to manage the cluster.",
+            choices=list(CephClusterName),
+            type=CephClusterName,
+            help="Ceph cluster to roll reboot.",
         )
         parser.add_argument(
             "--force",
@@ -48,7 +51,7 @@ class RollRebootMons(CookbookBase):
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, RollRebootMonsRunner,)(
-            controlling_node_fqdn=args.controlling_node_fqdn,
+            cluster_name=args.cluster_name,
             force=args.force,
             spicerack=self.spicerack,
         )
@@ -60,42 +63,39 @@ class RollRebootMonsRunner(CookbookRunnerBase):
     def __init__(
         self,
         common_opts: CommonOpts,
-        controlling_node_fqdn: str,
+        cluster_name: CephClusterName,
         force: bool,
         spicerack: Spicerack,
     ):
         """Init"""
         self.common_opts = common_opts
-        self.controlling_node_fqdn = controlling_node_fqdn
         self.force = force
         self.spicerack = spicerack
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
+        self.controller = CephClusterController(
+            remote=self.spicerack.remote(), cluster_name=cluster_name, spicerack=self.spicerack
+        )
 
     def run(self) -> None:
         """Main entry point"""
-        controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn, spicerack=self.spicerack
-        )
-        mon_nodes = list(controller.get_nodes()["mon"].keys())
+        mon_nodes = list(self.controller.get_nodes()["mon"].keys())
 
         self.sallogger.log(message=f"Rebooting the nodes {','.join(mon_nodes)}")
 
-        silences = controller.set_maintenance(task_id=self.common_opts.task_id, reason="Roll rebooting mons")
+        silences = self.controller.set_maintenance(task_id=self.common_opts.task_id, reason="Roll rebooting mons")
 
         reboot_node_cookbook = RebootNode(spicerack=self.spicerack)
         for index, mon_node in enumerate(mon_nodes):
-            if mon_node == self.controlling_node_fqdn:
-                controller.change_controlling_node()
+            if mon_node == self.controller.controlling_node_fqdn.split(".", 1)[0]:
+                self.controller.change_controlling_node()
 
             LOGGER.info("Rebooting node %s, %d done, %d to go", mon_node, index, len(mon_nodes) - index)
             args = [
                 "--skip-maintenance",
-                "--controlling-node-fqdn",
-                self.controlling_node_fqdn,
                 "--fqdn-to-reboot",
-                f"{mon_node}.{controller.get_nodes_domain()}",
+                f"{mon_node}.{self.controller.get_nodes_domain()}",
             ] + self.common_opts.to_cli_args()
 
             if self.force:
@@ -108,9 +108,9 @@ class RollRebootMonsRunner(CookbookRunnerBase):
                 index + 1,
                 len(mon_nodes) - index - 1,
             )
-            controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
+            self.controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
             LOGGER.info("Cluster stable, continuing")
 
-        controller.unset_maintenance(silences=silences)
+        self.controller.unset_maintenance(silences=silences)
 
         self.sallogger.log(message=f"Finished rebooting the nodes {mon_nodes}")

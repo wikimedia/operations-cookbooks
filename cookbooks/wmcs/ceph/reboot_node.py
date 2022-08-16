@@ -2,11 +2,9 @@
 
 Usage example:
     cookbook wmcs.ceph.reboot_node \
-        --controlling-node-fqdn cloudcephmon2001-dev.codfw.wmnet
         --fqdn-to-reboot cloudcephosd2001-dev.codfw.wmnet
 
 """
-# pylint: disable=too-many-arguments
 import argparse
 import datetime
 import logging
@@ -15,7 +13,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.alerts import downtime_host, uptime_host
-from cookbooks.wmcs.libs.ceph import CephClusterController
+from cookbooks.wmcs.libs.ceph import CephClusterController, get_node_cluster_name
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
@@ -40,11 +38,6 @@ class RebootNode(CookbookBase):
             help="FQDN of the node to reboot.",
         )
         parser.add_argument(
-            "--controlling-node-fqdn",
-            required=True,
-            help="FQDN of one of the node to manage the cluster.",
-        )
-        parser.add_argument(
             "--skip-maintenance",
             required=False,
             default=False,
@@ -64,7 +57,6 @@ class RebootNode(CookbookBase):
         """Get runner"""
         return with_common_opts(self.spicerack, args, RebootNodeRunner,)(
             fqdn_to_reboot=args.fqdn_to_reboot,
-            controlling_node_fqdn=args.controlling_node_fqdn,
             skip_maintenance=args.skip_maintenance,
             force=args.force,
             spicerack=self.spicerack,
@@ -78,7 +70,6 @@ class RebootNodeRunner(CookbookRunnerBase):
         self,
         common_opts: CommonOpts,
         fqdn_to_reboot: str,
-        controlling_node_fqdn: str,
         force: bool,
         skip_maintenance: bool,
         spicerack: Spicerack,
@@ -86,26 +77,27 @@ class RebootNodeRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.fqdn_to_reboot = fqdn_to_reboot
-        self.controlling_node_fqdn = controlling_node_fqdn
         self.skip_maintenance = skip_maintenance
         self.force = force
         self.spicerack = spicerack
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
+        self.controller = CephClusterController(
+            remote=self.spicerack.remote(),
+            cluster_name=get_node_cluster_name(node=self.fqdn_to_reboot),
+            spicerack=self.spicerack,
+        )
 
     def run(self) -> None:
         """Main entry point"""
         self.sallogger.log(message=f"Rebooting node {self.fqdn_to_reboot}")
 
-        controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn, spicerack=self.spicerack
-        )
         if not self.force:
-            controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
+            self.controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
 
         if not self.skip_maintenance:
-            silences = controller.set_maintenance(task_id=self.common_opts.task_id, reason="Rebooting node")
+            silences = self.controller.set_maintenance(task_id=self.common_opts.task_id, reason="Rebooting node")
         else:
             silences = []
 
@@ -125,11 +117,11 @@ class RebootNodeRunner(CookbookRunnerBase):
             "Rebooted node %s, waiting for cluster to stabilize...",
             self.fqdn_to_reboot,
         )
-        controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
+        self.controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
         LOGGER.info("Cluster stable, continuing")
 
         if not self.skip_maintenance:
-            controller.unset_maintenance(silences=silences)
+            self.controller.unset_maintenance(silences=silences)
 
         uptime_host(spicerack=self.spicerack, host_name=host_name, silence_id=silence_id)
 

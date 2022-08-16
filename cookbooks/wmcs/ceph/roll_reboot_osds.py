@@ -2,7 +2,7 @@
 
 Usage example:
     cookbook wmcs.ceph.roll_reboot_osds \
-        --controlling-node-fqdn cloudcephmon2001-dev.codfw.wmnet
+        --cluster-name eqiad1
 
 """
 import argparse
@@ -14,6 +14,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
 from cookbooks.wmcs.libs.ceph import CephClusterController
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.inventory import CephClusterName
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,9 +33,11 @@ class RollRebootOsds(CookbookBase):
         )
         add_common_opts(parser)
         parser.add_argument(
-            "--controlling-node-fqdn",
+            "--cluster-name",
             required=True,
-            help="FQDN of one of the nodes to manage the cluster.",
+            choices=list(CephClusterName),
+            type=CephClusterName,
+            help="Ceph cluster to roll reboot.",
         )
         parser.add_argument(
             "--force",
@@ -47,8 +50,8 @@ class RollRebootOsds(CookbookBase):
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(self.spicerack, args, RollRebootOsdsRunner,)(
-            controlling_node_fqdn=args.controlling_node_fqdn,
+        return with_common_opts(self.spicerack, args, RollRebootOsdsRunner)(
+            cluster_name=args.cluster_name,
             force=args.force,
             spicerack=self.spicerack,
         )
@@ -60,39 +63,36 @@ class RollRebootOsdsRunner(CookbookRunnerBase):
     def __init__(
         self,
         common_opts: CommonOpts,
-        controlling_node_fqdn: str,
+        cluster_name: CephClusterName,
         force: bool,
         spicerack: Spicerack,
     ):
         """Init"""
         self.common_opts = common_opts
-        self.controlling_node_fqdn = controlling_node_fqdn
         self.force = force
         self.spicerack = spicerack
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
+        self.controller = CephClusterController(
+            remote=self.spicerack.remote(), cluster_name=cluster_name, spicerack=self.spicerack
+        )
 
     def run(self) -> None:
         """Main entry point"""
-        controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn, spicerack=self.spicerack
-        )
-        osd_nodes = list(controller.get_nodes()["osd"].keys())
+        osd_nodes = list(self.controller.get_nodes()["osd"].keys())
 
         self.sallogger.log(message=f"Rebooting the nodes {','.join(osd_nodes)}")
 
-        silences = controller.set_maintenance(reason="Roll rebooting OSDs")
+        silences = self.controller.set_maintenance(reason="Roll rebooting OSDs")
 
         reboot_node_cookbook = RebootNode(spicerack=self.spicerack)
         for index, osd_node in enumerate(osd_nodes):
             LOGGER.info("Rebooting node %s, %d done, %d to go", osd_node, index, len(osd_nodes) - index)
             args = [
                 "--skip-maintenance",
-                "--controlling-node-fqdn",
-                self.controlling_node_fqdn,
                 "--fqdn-to-reboot",
-                f"{osd_node}.{controller.get_nodes_domain()}",
+                f"{osd_node}.{self.controller.get_nodes_domain()}",
             ] + self.common_opts.to_cli_args()
 
             if self.force:
@@ -105,8 +105,8 @@ class RollRebootOsdsRunner(CookbookRunnerBase):
                 index + 1,
                 len(osd_nodes) - index - 1,
             )
-            controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
+            self.controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
             LOGGER.info("Cluster stable, continuing")
 
-        controller.unset_maintenance(silences=silences)
+        self.controller.unset_maintenance(silences=silences)
         self.sallogger.log(message=f"Finished rebooting the nodes {osd_nodes}")

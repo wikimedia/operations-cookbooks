@@ -2,6 +2,7 @@
 """Ceph related library functions and classes."""
 import json
 import logging
+import re
 import time
 from copy import deepcopy
 from dataclasses import dataclass
@@ -11,11 +12,12 @@ from spicerack import Remote, Spicerack
 from wmflib.interactive import ask_confirmation
 
 from cookbooks.wmcs.libs.alerts import SilenceID, downtime_alert, uptime_alert
-from cookbooks.wmcs.libs.common import ArgparsableEnum, TestUtils, run_one_as_dict, run_one_formatted, run_one_raw
+from cookbooks.wmcs.libs.common import ArgparsableEnum, CommandRunnerMixin, TestUtils, run_one_formatted, run_one_raw
 from cookbooks.wmcs.libs.inventory import (
     CephClusterName,
     CephNodeRoleName,
     generic_get_node_cluster_name,
+    get_node_inventory_info,
     get_nodes_by_role,
 )
 
@@ -222,30 +224,38 @@ class CephOSDNodeController:
             self.initialize_and_start_osd(device_path=device_path)
 
 
-class CephClusterController:
+class CephClusterController(CommandRunnerMixin):
     """Controller for a CEPH cluster."""
 
-    def __init__(self, remote: Remote, controlling_node_fqdn: str, spicerack: Spicerack):
+    def __init__(self, remote: Remote, cluster_name: CephClusterName, spicerack: Spicerack):
         """Init."""
         self._remote = remote
-        self._controlling_node_fqdn = controlling_node_fqdn
-        self._controlling_node = self._remote.query(f"D{{{self._controlling_node_fqdn}}}", use_sudo=True)
+        self.controlling_node_fqdn = get_mon_nodes(cluster_name)[0]
+        self._controlling_node = self._remote.query(f"D{{{self.controlling_node_fqdn}}}", use_sudo=True)
         self._spicerack = spicerack
+        super().__init__(command_runner_node=self._controlling_node)
+
+    def _get_full_command(self, *command: str, json_output: bool = True, project_as_arg: bool = False):
+        if json_output:
+            format_args = ["-f", "json"]
+        else:
+            format_args = []
+
+        return ["ceph", *command, *format_args]
 
     def get_nodes(self) -> Dict[str, Any]:
         """Get the nodes currently in the cluster."""
         # There's usually a couple empty lines before the json data
-        return run_one_as_dict(
-            command=["ceph", "node", "ls", "-f", "json"], node=self._controlling_node, last_line_only=True
-        )
+        return self.run_formatted_as_dict("node", "ls", last_line_only=True)
 
     def get_nodes_domain(self) -> str:
         """Get the network domain for the nodes in the cluster."""
-        return self._controlling_node_fqdn.split(".", 1)[-1]
+        info = get_node_inventory_info(node=self.controlling_node_fqdn)
+        return info.site_name.value
 
     def change_controlling_node(self) -> None:
         """Change the current node being used to interact with the cluster for another one."""
-        current_monitor_name = self._controlling_node_fqdn.split(".", 1)[0]
+        current_monitor_name = self.controlling_node_fqdn.split(".", 1)[0]
         nodes = self.get_nodes()
         try:
             another_monitor = next(node_host for node_host in nodes["mon"].keys() if node_host != current_monitor_name)
@@ -254,27 +264,25 @@ class CephClusterController:
                 f"Unable to find any other mon node to control the cluster, got nodes: {nodes}"
             ) from error
 
-        self._controlling_node_fqdn = f"{another_monitor}.{self.get_nodes_domain()}"
-        self._controlling_node = self._remote.query(f"D{{{self._controlling_node_fqdn}}}", use_sudo=True)
-        LOGGER.info("Changed to node %s to control the CEPH cluster.", self._controlling_node_fqdn)
+        self.controlling_node_fqdn = f"{another_monitor}.{self.get_nodes_domain()}.wmnet"
+        self._controlling_node = self._remote.query(f"D{{{self.controlling_node_fqdn}}}", use_sudo=True)
+        LOGGER.info("Changed to node %s to control the CEPH cluster.", self.controlling_node_fqdn)
 
     def get_cluster_status(self) -> CephClusterStatus:
         """Get the current cluster status."""
-        cluster_status_output = run_one_as_dict(command=["ceph", "status", "-f", "json"], node=self._controlling_node)
+        cluster_status_output = self.run_formatted_as_dict("status")
         return CephClusterStatus(status_dict=cluster_status_output)
 
     def set_osdmap_flag(self, flag: CephOSDFlag) -> None:
         """Set one of the osdmap flags."""
-        set_osdmap_flag_result = run_one_raw(command=["ceph", "osd", "set", flag.value], node=self._controlling_node)
-        if set_osdmap_flag_result != f"{flag.value} is set":
+        set_osdmap_flag_result = self.run_raw("osd", "set", flag.value, json_output=False)
+        if not re.match(f"(^|\n){flag.value} is set", set_osdmap_flag_result):
             raise CephFlagSetError(f"Unable to set `{flag.value}` on the cluster, got output: {set_osdmap_flag_result}")
 
     def unset_osdmap_flag(self, flag: CephOSDFlag) -> None:
         """Unset one of the osdmap flags."""
-        unset_osdmap_flag_result = run_one_raw(
-            command=["ceph", "osd", "unset", flag.value], node=self._controlling_node
-        )
-        if unset_osdmap_flag_result != f"{flag.value} is unset":
+        unset_osdmap_flag_result = self.run_raw("osd", "unset", flag.value, json_output=False)
+        if not re.match(f"(^|\n){flag.value} is unset", unset_osdmap_flag_result, re.MULTILINE):
             raise CephFlagSetError(
                 f"Unable to unset `{flag.value}` on the cluster, got output: {unset_osdmap_flag_result}"
             )

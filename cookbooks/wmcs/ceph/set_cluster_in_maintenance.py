@@ -12,7 +12,7 @@ import logging
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
-from cookbooks.wmcs.libs.ceph import CephClusterController, get_mon_nodes
+from cookbooks.wmcs.libs.ceph import CephClusterController
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.inventory import CephClusterName
 
@@ -82,9 +82,8 @@ class SetClusterInMaintenanceRunner(CookbookRunnerBase):
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
-        mon_nodes = get_mon_nodes(cluster_name=self.cluster_name)
         self.controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=mon_nodes[0], spicerack=self.spicerack
+            remote=self.spicerack.remote(), cluster_name=cluster_name, spicerack=self.spicerack
         )
 
     def run(self) -> None:

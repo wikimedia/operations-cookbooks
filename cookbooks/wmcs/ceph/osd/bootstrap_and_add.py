@@ -16,7 +16,7 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from spicerack.puppet import PuppetHosts
 
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
-from cookbooks.wmcs.libs.ceph import CephClusterController, CephOSDFlag, CephOSDNodeController
+from cookbooks.wmcs.libs.ceph import CephClusterController, CephOSDFlag, CephOSDNodeController, get_node_cluster_name
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
@@ -45,11 +45,6 @@ class BootstrapAndAdd(CookbookBase):
                 "FQDNs of the new OSDs to add. Repeat for each new OSD. If specifying more than one, consider passing "
                 "--yes-i-know-what-im-doing"
             ),
-        )
-        parser.add_argument(
-            "--controlling-node-fqdn",
-            required=True,
-            help="FQDN of one of the existing nodes to manage the cluster.",
         )
         parser.add_argument(
             "--skip-reboot",
@@ -87,7 +82,6 @@ class BootstrapAndAdd(CookbookBase):
             yes_i_know=args.yes_i_know_what_im_doing,
             skip_reboot=args.skip_reboot,
             wait_for_rebalance=args.wait_for_rebalance,
-            controlling_node_fqdn=args.controlling_node_fqdn,
             spicerack=self.spicerack,
         )
 
@@ -102,13 +96,11 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
         yes_i_know: bool,
         skip_reboot: bool,
         wait_for_rebalance: bool,
-        controlling_node_fqdn: str,
         spicerack: Spicerack,
     ):
         """Init"""
         self.common_opts = common_opts
         self.new_osd_fqdns = new_osd_fqdns
-        self.controlling_node_fqdn = controlling_node_fqdn
         self.yes_i_know = yes_i_know
         self.skip_reboot = skip_reboot
         self.spicerack = spicerack
@@ -116,17 +108,18 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
+        cluster_name = get_node_cluster_name(self.new_osd_fqdns[0])
+        self.cluster_controller = CephClusterController(
+            remote=self.spicerack.remote(), cluster_name=cluster_name, spicerack=self.spicerack
+        )
 
     def run(self) -> None:
         """Main entry point"""
         self.sallogger.log(
             message=f"Adding new OSDs {self.new_osd_fqdns} to the cluster",
         )
-        cluster_controller = CephClusterController(
-            remote=self.spicerack.remote(), controlling_node_fqdn=self.controlling_node_fqdn, spicerack=self.spicerack
-        )
         # this avoids rebalancing after each osd is added
-        cluster_controller.set_osdmap_flag(CephOSDFlag("norebalance"))
+        self.cluster_controller.set_osdmap_flag(CephOSDFlag("norebalance"))
 
         for index, new_osd_fqdn in enumerate(self.new_osd_fqdns):
             self.sallogger.log(
@@ -140,8 +133,6 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
                 reboot_node_cookbook = RebootNode(spicerack=self.spicerack)
                 reboot_args = [
                     "--skip-maintenance",
-                    "--controlling-node-fqdn",
-                    self.controlling_node_fqdn,
                     "--fqdn-to-reboot",
                     new_osd_fqdn,
                 ] + self.common_opts.to_cli_args()
@@ -158,7 +149,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
             )
 
         # Now we start rebalancing once all are in
-        cluster_controller.unset_osdmap_flag(CephOSDFlag("norebalance"))
+        self.cluster_controller.unset_osdmap_flag(CephOSDFlag("norebalance"))
         self.sallogger.log(
             message=f"Added {len(self.new_osd_fqdns)} new OSDs {self.new_osd_fqdns}",
         )
@@ -171,7 +162,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
             # the rebalance might take a very very long time, setting timeout to 12h
             wait_hours = 12
             LOGGER.info("Waiting for the cluster to rebalance all the data (timeout of {%d} hours)...", wait_hours)
-            cluster_controller.wait_for_in_progress_events(timeout_seconds=wait_hours * 60 * 60)
+            self.cluster_controller.wait_for_in_progress_events(timeout_seconds=wait_hours * 60 * 60)
             LOGGER.info("Rebalancing done.")
             self.sallogger.log(
                 message=f"The cluster is now rebalanced after adding the new OSDs {self.new_osd_fqdns}",
