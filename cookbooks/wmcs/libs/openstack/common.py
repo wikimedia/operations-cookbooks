@@ -2,7 +2,6 @@
 # pylint: disable=too-many-arguments
 """Openstack generic related code."""
 import logging
-import re
 import time
 from enum import Enum, auto
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Type, Union, cast
@@ -23,6 +22,7 @@ from cookbooks.wmcs.libs.inventory import (
     OpenstackClusterName,
     OpenstackNodeRoleName,
     generic_get_node_cluster_name,
+    get_node_inventory_info,
     get_nodes_by_role,
 )
 
@@ -275,17 +275,10 @@ class OpenstackAPI(CommandRunnerMixin):
     def get_nodes_domain(self) -> str:
         """Return the domain of the cluster handled by this controller.
 
-        This is complicated as the cloudcontrols usually use the wikimedia.org domain.
+        Note: the cloudcontrols usually use the wikimedia.org domain, not taken into account here.
         """
-        eqiad_regex = r"[a-zA-Z]+1[0-9]+.*"
-        codfw_regex = r"[a-zA-Z]+2[0-9]+.*"
-        if re.match(eqiad_regex, self.control_node_fqdn):
-            return "eqiad.wmnet"
-
-        if re.match(codfw_regex, self.control_node_fqdn):
-            return "codfw.wmnet"
-
-        raise Exception(f"Unable to find node domain for {self.control_node_fqdn}")
+        info = get_node_inventory_info(node=self.control_node_fqdn)
+        return f"{info.site_name.value}.wmnet"
 
     def create_service_ip(self, ip_name: OpenstackName, network: OpenstackIdentifier, **kwargs) -> Dict[str, Any]:
         """Create a service IP with a specified name

@@ -251,7 +251,7 @@ class CephClusterController(CommandRunnerMixin):
     def get_nodes_domain(self) -> str:
         """Get the network domain for the nodes in the cluster."""
         info = get_node_inventory_info(node=self.controlling_node_fqdn)
-        return info.site_name.value
+        return f"{info.site_name.value}.wmnet"
 
     def change_controlling_node(self) -> None:
         """Change the current node being used to interact with the cluster for another one."""
@@ -264,7 +264,7 @@ class CephClusterController(CommandRunnerMixin):
                 f"Unable to find any other mon node to control the cluster, got nodes: {nodes}"
             ) from error
 
-        self.controlling_node_fqdn = f"{another_monitor}.{self.get_nodes_domain()}.wmnet"
+        self.controlling_node_fqdn = f"{another_monitor}.{self.get_nodes_domain()}"
         self._controlling_node = self._remote.query(f"D{{{self.controlling_node_fqdn}}}", use_sudo=True)
         LOGGER.info("Changed to node %s to control the CEPH cluster.", self.controlling_node_fqdn)
 
