@@ -76,8 +76,8 @@ class OpenstackNodeRoleName(NodeRoleName):
 class CephClusterName(ClusterName):
     """Names of ceph clusters we have."""
 
-    EQIAD1 = "5917e6d9-06a0-4928-827a-f489384975b1"
-    CODFW1 = "489c4187-17bc-44dc-9aeb-1d044c9bba9e"
+    EQIAD1 = "eqiad1"
+    CODFW1 = "codfw1"
 
     def get_site(self) -> SiteName:
         """Get the site a cluster is deployed in by the name."""
