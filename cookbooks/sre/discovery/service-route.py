@@ -22,15 +22,15 @@ def argument_parser():
     """Parse the command line arguments for all the sre.discovery cookbooks."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
     actions = parser.add_subparsers(dest='action', help='The action to perform')
-    actions.add_parser('check')
-    pool = actions.add_parser('pool')
-    depool = actions.add_parser('depool')
+    action_check = actions.add_parser('check')
+    action_check.add_argument('services', nargs='+', help='The services to operate on')
+    action_pool = actions.add_parser('pool')
+    action_depool = actions.add_parser('depool')
 
-    for a in (pool, depool):
+    for a in (action_pool, action_depool):
         a.add_argument('datacenter', choices=CORE_DATACENTERS, help='Name of the datacenter. One of: %(choices)s.')
+        a.add_argument('services', nargs='+', help='The services to operate on')
         a.add_argument('--wipe-cache', action='store_true', help='Wipe the cache on DNS recursors.')
-
-    parser.add_argument('services', nargs='+', help='The services to operate on')
 
     return parser
 
