@@ -4,9 +4,9 @@ import json
 import logging
 import re
 import time
-from copy import deepcopy
+from copy import copy, deepcopy
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, cast
+from typing import Any, Dict, List, Optional, Set, Union, cast
 
 from spicerack import Remote, Spicerack
 from wmflib.interactive import ask_confirmation
@@ -88,6 +88,60 @@ class CephOSDFlag(ArgparsableEnum):
     NOSNAPTRIM = "nosnaptrim"
     # explicit hard limit the pg log (don't use, deprecated feature)
     PGLOG_HARDLIMIT = "pglog_hardlimit"
+
+
+class OSDClass(ArgparsableEnum):
+    """Supported OSD classes."""
+
+    HDD = "hdd"
+    SSD = "ssd"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def from_str(cls, status_str: str) -> "OSDClass":
+        """Get the osd class object from a string like the one from `ceph osd tree -f json`."""
+        try:
+            return cls(status_str)
+        except ValueError:
+            return cls.UNKNOWN
+
+
+class OSDStatus(ArgparsableEnum):
+    """Known ceph osd statuses."""
+
+    UP = "up"
+    DOWN = "down"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def from_str(cls, status_str: str) -> "OSDStatus":
+        """Get the status object from a string like the one from `ceph osd tree -f json`."""
+        try:
+            return cls(status_str)
+        except ValueError:
+            return cls.UNKNOWN
+
+
+@dataclass(frozen=True)
+class OSDTreeEntry:
+    """Class to bundle OSD data together."""
+
+    osd_id: int
+    name: str
+    device_class: OSDClass
+    status: OSDStatus
+    crush_weight: float
+
+    @classmethod
+    def from_json_data(cls, json_data: Dict[str, Any]) -> "OSDTreeEntry":
+        """Get an osd class from the osd entry in the output of `ceph osd tree -f json`."""
+        return cls(
+            osd_id=json_data["id"],
+            name=json_data["name"],
+            device_class=OSDClass.from_str(json_data["device_class"]),
+            status=OSDStatus.from_str(json_data["status"]),
+            crush_weight=json_data["crush_weight"],
+        )
 
 
 @dataclass(frozen=True)
@@ -289,6 +343,14 @@ class CephClusterController(CommandRunnerMixin):
                 f"Unable to unset `{flag.value}` on the cluster, got output: {unset_osdmap_flag_result}"
             )
 
+    def set_osd_class(self, osd_id: int, osd_class: OSDClass) -> None:
+        """Change an osd class (ex. from hdd to ssd).
+
+        Note that `osd_id` is the number of the osd, for example, for osd.195, that would be the integer 195.
+        """
+        self.run_raw("osd", "crush", "rm-device-class", f"{osd_id}", json_output=False)
+        self.run_raw("osd", "crush", "set-device-class", osd_class.value, f"{osd_id}", json_output=False)
+
     def downtime_cluster_alerts(
         self, reason: str, duration: str = "4h", task_id: Optional[str] = None
     ) -> List[SilenceID]:
@@ -446,6 +508,34 @@ class CephClusterController(CommandRunnerMixin):
             f"Waited {timeout_seconds} for the cluster to become healthy, but it never did, current state:\n"
             f"\n{json.dumps(cluster_status.status_dict['health'], indent=4)}"
         )
+
+    def get_osd_tree(self) -> Dict[str, Any]:
+        """Retrieve the osd tree, already parsed into a tree structure."""
+
+        def _get_expanded_node(
+            plain_node: Dict[str, Any], all_nodes: Dict[int, Dict[str, Any]]
+        ) -> Union[Dict[str, Any], OSDTreeEntry]:
+            # we expect ~3 levels of depth, recursive should be ok
+            if not plain_node.get("children", None):
+                return OSDTreeEntry.from_json_data(plain_node)
+
+            children_ids = plain_node["children"]
+            children = [_get_expanded_node(all_nodes[child_id], all_nodes) for child_id in children_ids]
+            expanded_node = copy(plain_node)
+            expanded_node["children"] = children
+            return expanded_node
+
+        def _get_nested_nodes_tree(nodes_list: List[Dict[str, Any]]) -> Union[Dict[str, Any], OSDTreeEntry]:
+            id_to_nodes: Dict[int, Dict[str, Any]] = {node["id"]: node for node in nodes_list}
+            root_node = next(node for node in nodes_list if node["type"] == "root")
+            return _get_expanded_node(plain_node=root_node, all_nodes=id_to_nodes)
+
+        flat_nodes = self.run_formatted_as_dict("osd", "tree")
+        return {
+            "nodes": _get_nested_nodes_tree(nodes_list=flat_nodes["nodes"]),
+            # TODO: update the following to a useful structure if it's ever needed
+            "stray": flat_nodes["stray"],
+        }
 
 
 # Poor man's namespace to compensate for the restriction to not create modules

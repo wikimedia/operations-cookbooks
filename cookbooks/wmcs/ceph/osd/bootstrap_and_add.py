@@ -9,6 +9,7 @@ Usage example:
 # pylint: disable=too-many-arguments
 import argparse
 import logging
+import time
 from typing import List
 
 from spicerack import Spicerack
@@ -16,10 +17,18 @@ from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBa
 from spicerack.puppet import PuppetHosts
 
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
-from cookbooks.wmcs.libs.ceph import CephClusterController, CephOSDFlag, CephOSDNodeController, get_node_cluster_name
+from cookbooks.wmcs.libs.ceph import (
+    CephClusterController,
+    CephOSDFlag,
+    CephOSDNodeController,
+    OSDClass,
+    OSDTreeEntry,
+    get_node_cluster_name,
+)
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
+EXPECTED_OSDS_PER_HOST = 8
 
 
 class BootstrapAndAdd(CookbookBase):
@@ -91,6 +100,20 @@ class BootstrapAndAdd(CookbookBase):
         )
 
 
+def _wait_for_osds_to_show_up(cluster_controller: CephClusterController, ceph_hostname: str) -> List[OSDTreeEntry]:
+    osd_tree = cluster_controller.get_osd_tree()
+    retries = 0
+    while ceph_hostname not in osd_tree["nodes"] or len(osd_tree["children"][ceph_hostname]) < EXPECTED_OSDS_PER_HOST:
+        time.sleep(5)
+        retries += 1
+        if retries > 10:
+            raise Exception(f"Unable to find the new OSD node ({ceph_hostname}) in the osd tree")
+        osd_tree = cluster_controller.get_osd_tree()
+
+    LOGGER.info("All OSDs are showing up in the cluster, continuing.")
+    return osd_tree["children"][ceph_hostname]["children"]
+
+
 class BootstrapAndAddRunner(CookbookRunnerBase):
     """Runner for BootstrapAndAdd"""
 
@@ -158,6 +181,24 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
             self.sallogger.log(
                 message=f"Added OSD {new_osd_fqdn}... ({index + 1}/{len(self.new_osd_fqdns)})",
             )
+
+            new_osds = _wait_for_osds_to_show_up(
+                cluster_controller=self.cluster_controller, ceph_hostname=new_osd_fqdn.split(".", 1)[0]
+            )
+            wrongly_classified_osds = [osd for osd in new_osds if osd.device_class != OSDClass.SSD]
+            if wrongly_classified_osds:
+                LOGGER.info("Got some OSDs with the wrong classes, fixing:%s", wrongly_classified_osds)
+            for osd in wrongly_classified_osds:
+                self.cluster_controller.set_osd_class(osd_id=osd.osd_id, osd_class=OSDClass.SSD)
+
+            new_osds = _wait_for_osds_to_show_up(
+                cluster_controller=self.cluster_controller, ceph_hostname=new_osd_fqdn.split(".", 1)[0]
+            )
+            wrongly_classified_osds = [osd for osd in new_osds if osd.device_class != OSDClass.SSD]
+            if wrongly_classified_osds:
+                raise Exception(
+                    f"Something went wrong, I was unable to change the device class for osds {wrongly_classified_osds}"
+                )
 
         # Now we start rebalancing once all are in
         self.cluster_controller.unset_osdmap_flag(CephOSDFlag("norebalance"))
