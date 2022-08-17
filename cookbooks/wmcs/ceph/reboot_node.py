@@ -117,8 +117,11 @@ class RebootNodeRunner(CookbookRunnerBase):
             "Rebooted node %s, waiting for cluster to stabilize...",
             self.fqdn_to_reboot,
         )
-        self.controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
-        LOGGER.info("Cluster stable, continuing")
+        if self.force:
+            LOGGER.info("Force passed, ignoring cluster health and continuing")
+        else:
+            self.controller.wait_for_cluster_healthy(consider_maintenance_healthy=True)
+            LOGGER.info("Cluster stable, continuing")
 
         if not self.skip_maintenance:
             self.controller.unset_maintenance(silences=silences)

@@ -73,6 +73,12 @@ class BootstrapAndAdd(CookbookBase):
                 "might take several hours."
             ),
         )
+        parser.add_argument(
+            "--force",
+            required=False,
+            action="store_true",
+            help="If passed, will continue even if the cluster is not in a healthy state.",
+        )
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
@@ -82,6 +88,7 @@ class BootstrapAndAdd(CookbookBase):
             yes_i_know=args.yes_i_know_what_im_doing,
             skip_reboot=args.skip_reboot,
             wait_for_rebalance=args.wait_for_rebalance,
+            force=args.force,
             spicerack=self.spicerack,
         )
 
@@ -93,6 +100,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
         self,
         common_opts: CommonOpts,
         new_osd_fqdns: List[str],
+        force: bool,
         yes_i_know: bool,
         skip_reboot: bool,
         wait_for_rebalance: bool,
@@ -101,6 +109,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.new_osd_fqdns = new_osd_fqdns
+        self.force = force
         self.yes_i_know = yes_i_know
         self.skip_reboot = skip_reboot
         self.spicerack = spicerack
@@ -135,7 +144,11 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
                     "--skip-maintenance",
                     "--fqdn-to-reboot",
                     new_osd_fqdn,
-                ] + self.common_opts.to_cli_args()
+                ]
+                if self.force:
+                    reboot_args += ["--force"]
+
+                reboot_args += self.common_opts.to_cli_args()
 
                 reboot_node_cookbook.get_runner(
                     args=reboot_node_cookbook.argument_parser().parse_args(reboot_args)
