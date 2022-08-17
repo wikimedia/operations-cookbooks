@@ -140,4 +140,4 @@ class QuotaIncreaseRunner(CookbookRunnerBase):
             return
 
         self.openstack_api.quota_increase(*self.increases)
-        self.sallogger.log(f"Increased quotas by {self.increases}")
+        self.sallogger.log(f"Increased quotas by {', '.join(str(increase) for increase in self.increases)}")

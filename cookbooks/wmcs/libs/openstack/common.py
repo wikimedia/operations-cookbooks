@@ -352,6 +352,10 @@ class OpenstackQuotaEntry(NamedTuple):
         """Return the openstack cli equivalent of setting this quota entry."""
         return f"--{self.name.value.lower().replace('_', '-')}={self.value}"
 
+    def __str__(self):
+        """Convert a OpenstackQuotaEntry to a formatted string for display."""
+        return f"{self.value} {self.name.value}"
+
     @classmethod
     def from_human_spec(cls, name: OpenstackQuotaName, human_spec: str) -> "OpenstackQuotaEntry":
         """Given a human spec (ex. 10G) and a quota name gives a quota entry with the right value."""
