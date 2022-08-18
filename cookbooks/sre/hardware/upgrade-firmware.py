@@ -15,7 +15,12 @@ from requests import post
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.netbox import NetboxError, NetboxServer
-from spicerack.redfish import ChassisResetPolicy, RedfishError, Redfish
+from spicerack.redfish import (
+    ChassisResetPolicy,
+    DellSCPPowerStatePolicy,
+    RedfishError,
+    Redfish,
+)
 from wmflib.interactive import ask_confirmation, ask_input
 
 from cookbooks.sre.hardware import DellAPI, DellDriverType, DellDriverCategory
@@ -75,7 +80,7 @@ class FirmwareUpgrade(CookbookBase):
             "-c",
             "--component",
             help="force a specific type of upgrade: %(choices)s",
-            choices=('bios', 'idrac'),
+            choices=("bios", "idrac"),
         )
         parser.add_argument(
             "query",
@@ -93,13 +98,15 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     def __init__(self, args, spicerack):
         """Decommission a host from all inventories."""
-        if args.type == 'all' and args.file is not None:
-            raise argparse.ArgumentTypeError('--file is not valid with --type all')
+        if args.type == "all" and args.file is not None:
+            raise argparse.ArgumentTypeError("--file is not valid with --type all")
 
         self.firmware_file = None
         if args.firmware_file:
             if not args.firmware_file.is_file:
-                raise argparse.ArgumentTypeError("firmware ({args.firmware}) does not exist")
+                raise argparse.ArgumentTypeError(
+                    "firmware ({args.firmware}) does not exist"
+                )
             self.firmware_file = args.firmware_file.resolve()
 
         self.spicerack = spicerack
@@ -115,14 +122,18 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             self.hosts = self.spicerack.remote().query(args.query).hosts
 
         for host in self.hosts:
-            netbox_server = spicerack.netbox_server(host.split('.'))
-            manufacturer = netbox_server.as_dict()['device_type']['manufacturer']['slug']
+            netbox_server = spicerack.netbox_server(host.split("."))
+            manufacturer = netbox_server.as_dict()["device_type"]["manufacturer"][
+                "slug"
+            ]
             if netbox_server.virtual:
                 raise RuntimeError(f"{host}: unable to upgrade virtual host")
-            if manufacturer != 'dell':
-                raise RuntimeError(f"{host}: unable to upgrade, unsupported manufacturer ({manufacturer})")
+            if manufacturer != "dell":
+                raise RuntimeError(
+                    f"{host}: unable to upgrade, unsupported manufacturer ({manufacturer})"
+                )
 
-        session = spicerack.requests_session('cookbook.sre.hardware.firmware-upgrade')
+        session = spicerack.requests_session("cookbook.sre.hardware.firmware-upgrade")
         session.proxies = spicerack.requests_proxies
         self.dell_api = DellAPI(session)
 
@@ -194,7 +205,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         product_slug = netbox_host.as_dict()["device_type"]["slug"]
         # smal hack to get around some slugs having the config in them e.g.
         # poweredge-r440-configc-202107
-        product_slug = '-'.join(product_slug.split('-')[:2])
+        product_slug = "-".join(product_slug.split("-")[:2])
         product = self.dell_api.fetch(product_slug)
         driver = list(product.find_driver(driver_type, driver_category))
         selection = 0
@@ -303,9 +314,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             verify=False,  # nosec
         ).json()
         if "error" in response:
-            error_msg = (
-                f"{redfish_host} {self.extract_message(response['error'])}"
-            )
+            error_msg = f"{redfish_host} {self.extract_message(response['error'])}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -332,7 +341,10 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         """
         message = error["message"]
         extended_message = "\n".join(
-            [m.get("message") or m.get('Message', '') for m in error.get("@Message.ExtendedInfo", [])]
+            [
+                m.get("message") or m.get("Message", "")
+                for m in error.get("@Message.ExtendedInfo", [])
+            ]
         )
         return f"{message}\n{extended_message}"
 
@@ -540,13 +552,33 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_category.name,
             current_version,
         )
-        if current_version != latest_version:
+        # If we pass a firmware file then skip the version check
+        if self.firmware_file is None and current_version != latest_version:
             logger.error(
                 "%s (%s): Something went wrong, the current version (%s) does not match the most recent (%s)",
                 netbox_host.fqdn,
                 DellDriverCategory.IDRAC.name,
                 current_version,
                 latest_version,
+            )
+
+    def _reboot(self, redfish_host: Redfish, netbox_host: NetboxServer) -> None:
+        """Reboot the host
+
+        Arguments:
+            redfish_host: The redfish host to act on.
+            netbox_host: The netbox host to act on.
+
+        """
+        self._ask_confirmation(
+            f"{redfish_host.fqdn}: About to reboot to apply update, please confirm"
+        )
+        if self.new:
+            redfish_host.chassis_reset(ChassisResetPolicy.FORCE_RESTART)
+        else:
+            self.spicerack.run_cookbook(
+                "sre.hosts.reboot-single",
+                [netbox_host.fqdn, "--reason", "bios upgrade"],
             )
 
     def update_bios(self, redfish_host: Redfish, netbox_host: NetboxServer) -> None:
@@ -563,21 +595,17 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         # TODO: we should store this as some pkg_utils version parse string
         current_version = self.get_version(redfish_host, driver_category)
         latest_version, job_id = self._update(
-            redfish_host, netbox_host, driver_type, driver_category, current_version,
+            redfish_host,
+            netbox_host,
+            driver_type,
+            driver_category,
+            current_version,
             firmware_file=self.firmware_file,
         )
         if job_id is None:
             return
-        self._ask_confirmation(
-            f"{netbox_host.fqdn} {driver_category.name}: About to reboot to apply update, please confirm"
-        )
-        if self.new:
-            redfish_host.chassis_reset(ChassisResetPolicy.FORCE_RESTART)
-        else:
-            self.spicerack.run_cookbook(
-                "sre.hosts.reboot-single",
-                [netbox_host.fqdn, '--reason', 'bios upgrade']
-            )
+
+        self._reboot(redfish_host, netbox_host)
         self.poll_id(redfish_host, job_id, True)
         current_version = self.get_version(redfish_host, driver_category)
         logger.info(
@@ -586,9 +614,8 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_category.name,
             current_version,
         )
-        # Will probably need to reboot the host need to check
-        # self.wait_reboot_since(redfish_host, last_reboot)
-        if current_version != latest_version:
+        # skip the =version check if we passed a firmware file
+        if self.firmware_file is None and current_version != latest_version:
             logger.error(
                 "%s (%s): Something went wrong, the current version (%s) does not match the most recent (%s)",
                 netbox_host.fqdn,
@@ -607,7 +634,31 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             except NetboxError as error:
                 logger.warning("Skipping: %s", error)
                 continue
-            if self.component in (None, 'idrac'):
+            # TODO: this is a bit of a hack to populate the generation property
+            # We should do this in the Redfish.__init__
+            logger.info("%s (Gen %d): starting", netbox_host.fqdn, redfish_host.generation)
+            initial_power_state = redfish_host.get_power_state()
+            # Need to power the server on for any firmware updates
+            manage_power = self.component != "idrac"
+            if self.component in (None, "idrac"):
                 self.update_idrac(redfish_host, netbox_host)
-            if self.component in (None, 'bios'):
+
+            if (
+                initial_power_state == DellSCPPowerStatePolicy.OFF.value
+                and manage_power
+            ):
+                logger.info("%s: host powered off, powering on", netbox_host.fqdn)
+                reboot_time = datetime.now()
+                redfish_host.chassis_reset(ChassisResetPolicy.ON)
+                if not self.new:
+                    remote = self.spicerack.remote().query(netbox_host.fqdn)
+                    remote.wait_reboot_since(reboot_time, False)
+
+            if self.component in (None, "bios"):
                 self.update_bios(redfish_host, netbox_host)
+
+            if (
+                initial_power_state == DellSCPPowerStatePolicy.OFF.value
+                and manage_power
+            ):
+                redfish_host.chassis_reset(ChassisResetPolicy.FORCE_OFF)
