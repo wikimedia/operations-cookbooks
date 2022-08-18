@@ -54,9 +54,12 @@ class RollRebootK8sNodes(SREBatchBase):
 
     batch_default = 1
     batch_max = 5
-    # Wait for 30 seconds between batches.
-    # This should allow mandatory pods to become ready on the previously drained nodes.
-    grace_sleep = 30
+    # Wait for 5 seconds between batches.
+    # This happens after uncordoning. Daemonsets should have already been scheduled and
+    # Puppet run plus Icinga checks do take long enough for everything to settle.
+    #
+    # Leave a 2 sec sleep still as it's a good time for ^C
+    grace_sleep = 2
     valid_actions = ("reboot",)
 
     def argument_parser(self) -> ArgumentParser:
@@ -83,7 +86,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
 
     depool_threshold = 5  # Maximum allowed batch size
     # Seconds to sleep after the depool.
-    # This happens after nodes have been cordoned.
+    # This happens after nodes have been drained
     depool_sleep = 35
     # Seconds to sleep before the repool.
     # As this happens prior to uncordoning, we can rely on grace_sleep and don't wait for repool.
