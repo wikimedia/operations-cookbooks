@@ -19,8 +19,8 @@ def argument_parser():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--replica', required=True, help='FQDN of replica node.')
     parser.add_argument('--reason', required=True, help='Admin reason')
-    parser.add_argument('--pgversion', default='9.6',
-                        help='Postgresql version default: %(default)s')
+    parser.add_argument('--pgversion', default='',
+                        help='Postgresql version default: autodetect')
     parser.add_argument('--downtime', type=int, default=6,
                         help='Hours of downtime default: %(default)s')
     parser.add_argument('--task-id', help='task_id for the change')
