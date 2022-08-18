@@ -169,8 +169,6 @@ class CephClusterStatus:
 class CephOSDNodeController:
     """Controller for a CEPH OSD node."""
 
-    SYSTEM_DEVICES = ["sda", "sdb"]
-
     def __init__(self, remote: Remote, node_fqdn: str):
         """Init."""
         self._remote = remote
@@ -179,12 +177,16 @@ class CephOSDNodeController:
 
     @classmethod
     def _is_device_available(cls, device_info: Dict[str, Any]) -> bool:
-        return (
-            device_info["name"] not in cls.SYSTEM_DEVICES
-            and not device_info.get("children")
-            and device_info.get("type") == "disk"
-            and not device_info.get("mountpoint")
-        )
+        def _is_disk() -> bool:
+            return device_info.get("type") == "disk"
+
+        def _does_not_have_partitions() -> bool:
+            return not device_info.get("children")
+
+        def _its_not_mounted() -> bool:
+            return not device_info.get("mountpoint")
+
+        return _is_disk() and _does_not_have_partitions() and _its_not_mounted()
 
     def get_available_devices(self) -> List[str]:
         """Get the current available devices in the node."""
@@ -497,7 +499,7 @@ class CephTestUtils(TestUtils):
 
     @staticmethod
     def get_available_device(
-        name: str = f"{CephOSDNodeController.SYSTEM_DEVICES[0]}_non_matching_part",
+        name: str = "sddummy_non_matching_part",
         device_type: str = "disk",
         children: Optional[List[Any]] = None,
         mountpoint: Optional[str] = None,

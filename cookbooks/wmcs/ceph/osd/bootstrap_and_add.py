@@ -20,8 +20,6 @@ from cookbooks.wmcs.libs.ceph import CephClusterController, CephOSDFlag, CephOSD
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
-# This will not be used for the OSD
-OS_DEVICES = ["sda", "sdb"]
 
 
 class BootstrapAndAdd(CookbookBase):

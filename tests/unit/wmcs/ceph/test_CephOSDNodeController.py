@@ -16,7 +16,6 @@ def parametrize(params: Dict[str, Any]):
 
 AVAILABLE_DEVICE_JSON = json.dumps(CephTestUtils.get_available_device())
 AVAILABLE_DEVICE_PATH = f"/dev/{CephTestUtils.get_available_device()['name']}"
-SYSTEM_DEVICE_JSON = json.dumps(CephTestUtils.get_available_device(name=CephOSDNodeController.SYSTEM_DEVICES[0]))
 NON_DISK_DEVICE_JSON = json.dumps(CephTestUtils.get_available_device(device_type="non-disk"))
 MOUNTED_DEVICE_JSON = json.dumps(CephTestUtils.get_available_device(mountpoint="/some/where"))
 FORMATTED_DEVICE_JSON = json.dumps(CephTestUtils.get_available_device(children=["child1"]))
@@ -31,10 +30,6 @@ FORMATTED_DEVICE_JSON = json.dumps(CephTestUtils.get_available_device(children=[
         "When there's a device , returns it.": {
             "expected_devices": [AVAILABLE_DEVICE_PATH],
             "lsblk_command_output": f'{{"blockdevices": [{AVAILABLE_DEVICE_JSON}]}}',
-        },
-        "Skips system devices.": {
-            "expected_devices": [AVAILABLE_DEVICE_PATH],
-            "lsblk_command_output": f'{{"blockdevices": [{SYSTEM_DEVICE_JSON}, {AVAILABLE_DEVICE_JSON}]}}',
         },
         "Skips non-disk devices.": {
             "expected_devices": [AVAILABLE_DEVICE_PATH],
