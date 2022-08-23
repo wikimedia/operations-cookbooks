@@ -1,5 +1,7 @@
 """WMCS openstack - increase a project's quota by a given amount
 
+If talking about memory, things like 10G/250M are supported.
+
 Usage example: wmcs.openstack.quota_increase \
     --project admin-monitoring \
     --gigabytes 30G \
@@ -9,7 +11,7 @@ Usage example: wmcs.openstack.quota_increase \
 """
 import argparse
 import logging
-from typing import List, Optional
+from typing import List
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
@@ -41,35 +43,26 @@ class QuotaIncrease(CookbookBase):
             type=OpenstackClusterName,
             help="Openstack cluster/deployment to act on.",
         )
-        parser.add_argument(
-            "--gigabytes",
-            required=False,
-            help="Amount to increase the cinder space by (in G, ex. 10G or 10).",
-        )
-        parser.add_argument(
-            "--ram",
-            required=False,
-            help="Amount to increase the ram by (in M or G, ex 10G, 250M, 250).",
-        )
-        parser.add_argument(
-            "--cores",
-            required=False,
-            help="Amount to increase the cores/vcpus by.",
-        )
-        parser.add_argument(
-            "--floating-ips",
-            required=False,
-            help="Amount to increase the floating ips by.",
-        )
+        for quota_name in OpenstackQuotaName:
+            parser.add_argument(
+                f"--{quota_name.value}",
+                required=False,
+                help=f"Amount to increase the {quota_name.value} by",
+            )
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
         """Get runner"""
+        increases = [
+            OpenstackQuotaEntry.from_human_spec(
+                name=quota_name,
+                human_spec=getattr(args, quota_name.value),
+            )
+            for quota_name in OpenstackQuotaName
+            if getattr(args, quota_name.value, None) is not None
+        ]
         return with_common_opts(spicerack=self.spicerack, args=args, runner=QuotaIncreaseRunner)(
-            cores=args.cores,
-            floating_ips=args.floating_ips,
-            ram=args.ram,
-            gigabytes=args.gigabytes,
+            increases=increases,
             spicerack=self.spicerack,
             cluster_name=args.cluster_name,
         )
@@ -81,49 +74,17 @@ class QuotaIncreaseRunner(CookbookRunnerBase):
     def __init__(
         self,
         common_opts: CommonOpts,
-        cores: Optional[str],
-        floating_ips: Optional[str],
-        ram: Optional[str],
-        gigabytes: Optional[str],
+        increases: List[OpenstackQuotaEntry],
         cluster_name: OpenstackClusterName,
         spicerack: Spicerack,
-    ):  # pylint: disable=too-many-arguments
+    ):
         """Init"""
         self.common_opts = common_opts
         self.spicerack = spicerack
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(), cluster_name=cluster_name, project=self.common_opts.project
         )
-        self.increases: List[OpenstackQuotaEntry] = []
-        if cores:
-            self.increases.append(
-                OpenstackQuotaEntry.from_human_spec(
-                    name=OpenstackQuotaName.CORES,
-                    human_spec=cores,
-                )
-            )
-        if gigabytes:
-            self.increases.append(
-                OpenstackQuotaEntry.from_human_spec(
-                    name=OpenstackQuotaName.GIGABYTES,
-                    human_spec=gigabytes,
-                )
-            )
-        if floating_ips:
-            self.increases.append(
-                OpenstackQuotaEntry.from_human_spec(
-                    name=OpenstackQuotaName.FLOATING_IPS,
-                    human_spec=floating_ips,
-                )
-            )
-        if ram:
-            self.increases.append(
-                OpenstackQuotaEntry.from_human_spec(
-                    name=OpenstackQuotaName.RAM,
-                    human_spec=ram,
-                )
-            )
-
+        self.increases = increases
         self.sallogger = SALLogger.from_common_opts(self.common_opts)
 
     def run(self) -> None:
