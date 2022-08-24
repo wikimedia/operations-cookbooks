@@ -253,6 +253,9 @@ class RollingOperationRunner(CookbookRunnerBase):
             delete_template_cmd = 'rm -fv /usr/lib/systemd/system/elasticsearch_6@.service'
             nodes.get_remote_hosts().run_sync(delete_template_cmd)
 
+            # Allow systemd to start the es 7 services
+            nodes.get_remote_hosts().run_sync('touch /root/allow_es7')
+
             # Finally, ensure we run puppet once before proceeding
             logger.info("Forcing puppet run before proceeding with upgrade:")
             puppet = self.spicerack.puppet(nodes.get_remote_hosts())
