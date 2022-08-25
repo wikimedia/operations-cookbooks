@@ -239,13 +239,13 @@ class RollingOperationRunner(CookbookRunnerBase):
             # Stop all elasticsearch units (we're mainly concerned with the old version)
             logger.info("Trying to stop elasticsearch units before proceeding with upgrade")
 
-            stop_es_cmd = 'systemctl list-units elasticsearch_* --plain --no-legend | \
-            awk  " { print $1 } " | xargs systemctl stop'
+            stop_es_cmd = 'systemctl list-units elasticsearch_* --plain --no-legend | ' + \
+                          'awk \' { print $1 } \' | xargs systemctl stop'
             nodes.get_remote_hosts().run_sync(stop_es_cmd)
 
             # Disable the actual (non-templated) units; ASSUMPTION: we're going from 6->7
-            disable_es_cmd = 'systemctl list-units elasticsearch_6* --plain --no-legend | \
-            awk " { print $1 } " | xargs systemctl disable'
+            disable_es_cmd = 'systemctl list-units elasticsearch_6* --plain --no-legend | ' + \
+                             'awk \' { print $1 } \' | xargs systemctl disable'
             nodes.get_remote_hosts().run_sync(disable_es_cmd)
             logger.info("Disabling elasticsearch_6* units before proceeding with upgrade")
 
