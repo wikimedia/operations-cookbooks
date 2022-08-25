@@ -256,11 +256,6 @@ class RollingOperationRunner(CookbookRunnerBase):
             # Allow systemd to start the es 7 services
             nodes.get_remote_hosts().run_sync('touch /root/allow_es7')
 
-            # Finally, ensure we run puppet once before proceeding
-            logger.info("Forcing puppet run before proceeding with upgrade:")
-            puppet = self.spicerack.puppet(nodes.get_remote_hosts())
-            puppet.run()
-
             # END   Below is specific to our es 6->7 upgrade
             upgrade_cmd = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
                           options='-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
