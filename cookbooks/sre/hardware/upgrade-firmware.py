@@ -312,6 +312,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             headers=headers,
             auth=redfish_host._http_session.auth,  # pylint: disable=protected-access
             verify=False,  # nosec
+            timeout=60 * 30,  # 30 minutes
         ).json()
         if "error" in response:
             error_msg = f"{redfish_host} {self.extract_message(response['error'])}"

@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import requests
+from requests.exceptions import RequestException
 
 from cumin.transports import Command
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
@@ -88,7 +88,7 @@ class Reimage(CookbookBase):
 class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
     """As required by Spicerack API."""
 
-    def __init__(self, args, spicerack):
+    def __init__(self, args, spicerack):  # pylint: disable=too-many-statements
         """Initiliaze the reimage runner."""
         ensure_shell_is_durable()
         self.args = args
@@ -122,6 +122,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.confctl = spicerack.confctl('node')
         self.remote = spicerack.remote()
         self.spicerack = spicerack
+        self.requests = spicerack.requests_session(__name__, timeout=(5.0, 30.0))
 
         try:
             self.remote_host = self.remote.query(self.fqdn)
@@ -332,7 +333,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         def poll_puppetdb():
             """Poll PuppetDB until we find the Nagios_host resource for the newly installed host."""
             puppetdb_host = self.dns.resolve_ptr(self.dns.resolve_ipv4('puppetdb-api.discovery.wmnet')[0])[0]
-            response = requests.post(f'https://{puppetdb_host}/pdb/query/v4/resources/Nagios_host/{self.host}')
+            response = self.requests.post(f'https://{puppetdb_host}/pdb/query/v4/resources/Nagios_host/{self.host}')
             json_response = response.json()
             if not json_response:  # PuppetDB returns empty list for non-matching results
                 raise SpicerackError(f'Nagios_host resource with title {self.host} not found yet')
@@ -426,10 +427,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         headers = {'Authorization': f'Token {self.netbox.api.token}'}
         data = {'data': {'device': self.host}, 'commit': 1}
 
-        @retry(tries=10, backoff_mode='constant', exceptions=(ValueError, requests.exceptions.RequestException))
+        @retry(tries=10, backoff_mode='constant', exceptions=(ValueError, RequestException))
         def _poll_netbox_job(url):
             """Poll Netbox to get the result of the script run."""
-            result = requests.get(url, headers=headers)
+            result = self.requests.get(url, headers=headers)
             result.raise_for_status()
             data = result.json()['data']
             if data is None:
@@ -439,17 +440,17 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 logger.info('[%s] %s', line['status'], line['message'])
 
         try:
-            result = requests.post(url, headers=headers, json=data)
+            result = self.requests.post(url, headers=headers, json=data)
             result.raise_for_status()
             self.host_actions.success('Updated Netbox data from PuppetDB')
-        except requests.exceptions.RequestException:
+        except RequestException:
             self.host_actions.failure(f'**Failed to execute Netbox script, try manually**: {url}')
             logger.error(result.text)
         else:
             job_url = result.json()['result']['url']
             try:
                 _poll_netbox_job(job_url)
-            except (ValueError, requests.exceptions.RequestException) as e:
+            except (ValueError, RequestException) as e:
                 logger.error(e)
                 self.host_actions.failure(f'**Failed to get Netbox script results, try manually**: {job_url}')
 
