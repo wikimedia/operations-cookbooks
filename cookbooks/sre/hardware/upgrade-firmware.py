@@ -207,7 +207,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         # poweredge-r440-configc-202107
         product_slug = "-".join(product_slug.split("-")[:2])
         product = self.dell_api.fetch(product_slug)
-        driver = list(product.find_driver(driver_type, driver_category))
+        driver = sorted(product.find_driver(driver_type, driver_category))
         selection = 0
         if len(driver) > 1:
             print("We have found multiple entries please pick from the list below:")
