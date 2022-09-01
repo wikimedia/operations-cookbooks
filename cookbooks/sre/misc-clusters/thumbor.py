@@ -1,11 +1,12 @@
 """thumbor reboot cookbook
 
 Usage example:
-    cookbook sre.misc-clusters.thumbor
+    cookbook sre.misc-clusters.thumbor --alias thumbor-codfw \
+       --reason "Rolling reboot to pick up new kernel" reboot
 
 """
 
-from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
+from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
 
 
 class Reboot(SREBatchBase):
@@ -19,8 +20,8 @@ class Reboot(SREBatchBase):
         return BatchRunner(args, self.spicerack)
 
 
-class BatchRunner(SREBatchRunnerBase):
-    """Thumbor reboot class"""
+class BatchRunner(SRELBBatchRunnerBase):
+    """Roll restart/reboot a Thumbor cluster"""
 
     @property
     def allowed_aliases(self):
@@ -31,13 +32,3 @@ class BatchRunner(SREBatchRunnerBase):
     def restart_daemons(self):
         """Required by RebootRunnerBase"""
         return ['thumbor-instances']
-
-    @property
-    def pre_scripts(self):
-        """Add depool to the list of prescripts"""
-        return ['/usr/local/bin/depool']
-
-    @property
-    def post_scripts(self):
-        """Add pool to the list of prescripts"""
-        return ['/usr/local/bin/pool']
