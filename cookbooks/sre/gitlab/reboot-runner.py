@@ -37,11 +37,7 @@ class RebootRunnerRunner(SREBatchRunnerBase):
         """Required by RebootRunnerBase"""
         return ['gitlab-runner']
 
-    def stop_runner_gracefully(self, hosts):
-        """Stops gitlab-runner process gracefully by sending SIGQUIT"""
-        hosts.run_sync('/usr/bin/systemctl kill -s 3 gitlab-runner.service')
-
     @property
     def pre_scripts(self):
-        """Stop gitlab-runner gracefully before reboot"""
-        return [self.stop_runner_gracefully]
+        """Stops gitlab-runner process gracefully by sending SIGQUIT"""
+        return ['/usr/bin/systemctl kill -s 3 gitlab-runner.service']
