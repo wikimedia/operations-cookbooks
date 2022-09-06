@@ -47,7 +47,7 @@ class DellDriverVersion:
         return hash(self.driver_id)
 
 
-@dataclass
+@dataclass(order=True)
 class DellDriver:
     """Dataclass to hold driver objects"""
 
