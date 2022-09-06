@@ -4,18 +4,18 @@
 - Cleanup storage
 - Download image from apt server
 - Compare checksums
-- Verify image when able
 - Save rescue config
 
 Usage example:
-    cookbook sre.network.prepare-upgrade junos-vmhost-install-mx-x86-64-18.2R3-S3.11.tgz cr3-ulsfo.wikimedia.org
+    cookbook -v sre.network.prepare-upgrade junos-vmhost-install-mx-x86-64-18.2R3-S3.11.tgz cr3-ulsfo.wikimedia.org
 
 """
 import argparse
-import json
 import logging
 
 from wmflib.interactive import ensure_shell_is_durable
+
+from cookbooks.sre.network import parse_results
 
 __title__ = 'Prepare the software upgrade of a network device'
 logger = logging.getLogger(__name__)
@@ -38,20 +38,6 @@ def present_in_output(results, find):
     return False
 
 
-def output_to_json(results):
-    """Parse a json output."""
-    for _, output in results:
-        result = output.message().decode()
-        try:
-            result_json = json.loads(result)
-        except json.decoder.JSONDecodeError as e:
-            logger.error(result)
-            logger.error('Can\'t parse output as json.')
-            logger.error(e)
-            return False
-        return result_json
-
-
 def run(args, spicerack):  # pylint: disable=too-many-return-statements
     """Required by Spicerack API."""
     ensure_shell_is_durable()
@@ -61,8 +47,10 @@ def run(args, spicerack):  # pylint: disable=too-many-return-statements
     image_server = dns.resolve_ptr(dns.resolve_ipv4('apt.wikimedia.org')[0])[0]
     remote = spicerack.remote()
     image_server = remote.query(image_server)
-    cmd = "sha1sum /srv/junos/{} | cut -d' ' -f1".format(args.image)
-    results = image_server.run_sync(cmd)
+    results = image_server.run_sync(f"sha1sum /srv/junos/{args.image} | cut -d' ' -f1",
+                                    is_safe=True,
+                                    print_output=spicerack.verbose,
+                                    print_progress_bars=False)
     for _, output in results:
         src_checksum = output.message().decode()
         break
@@ -75,25 +63,28 @@ def run(args, spicerack):  # pylint: disable=too-many-return-statements
         logger.error('Only 1 target device please.')
         return 1
 
-    logger.info('Cleanup device storage')
-    results = device.run_sync('request system storage cleanup no-confirm | display json')
-    json_output = output_to_json(results)
-    if not json_output:
-        return 1
-    if 'success' not in json_output['system-storage-cleanup-information'][0]:
+    logger.info('Cleanup device storage 🧹')
+    results = device.run_sync('request system storage cleanup no-confirm | display json',
+                              print_output=spicerack.verbose,
+                              print_progress_bars=False)
+    json_output = parse_results(results, json_output=True)
+    if not json_output or 'success' not in json_output['system-storage-cleanup-information'][0]:
         logger.info(json_output)
-        logger.error('Command did not run successfully')
+        logger.error('Command did not run successfully.')
         return 1
 
-    logger.info('Copy image to device')
-    cmd = 'file copy "https://apt.wikimedia.org/junos/{}" /var/tmp/'.format(args.image)
-    device.run_sync(cmd)
+    logger.info('Copy image to device (this takes time ⏳)')
+    device.run_sync(f'file copy "https://apt.wikimedia.org/junos/{args.image}" /var/tmp/',
+                    print_output=spicerack.verbose,
+                    print_progress_bars=False)
 
     logger.info('Compare checksums')
-    cmd = 'file checksum sha1 /var/tmp/{} | display json'.format(args.image)
+    results = device.run_sync(f'file checksum sha1 /var/tmp/{args.image} | display json',
+                              is_safe=True,
+                              print_output=spicerack.verbose,
+                              print_progress_bars=False)
 
-    results = device.run_sync(cmd)
-    json_output = output_to_json(results)
+    json_output = parse_results(results, json_output=True)
     if not json_output:
         return 1
     try:
@@ -108,22 +99,12 @@ def run(args, spicerack):  # pylint: disable=too-many-return-statements
         return 1
 
     logger.info('Save rescue config')
-    results = device.run_sync('request system configuration rescue save | display json')
-    json_output = output_to_json(results)
-    if not json_output:
-        return 1
-    if 'success' not in json_output['rescue-management-results'][0]['routing-engine'][0]:
+    results = device.run_sync('request system configuration rescue save | display json',
+                              print_output=spicerack.verbose,
+                              print_progress_bars=False)
+    json_output = parse_results(results, json_output=True)
+    if not json_output or 'success' not in json_output['rescue-management-results'][0]['routing-engine'][0]:
         logger.info(json_output)
         logger.error('Command did not run successfully.')
         return 1
-
-    logger.info('Validate image')
-    if 'vmhost' in args.image:
-        logger.info('Introduced in Junos OS Release 18.4R1, good luck.')
-    else:
-        cmd = 'request system software validate /var/tmp/{}.tgz'.format(args.image)
-        if not present_in_output(device.run_sync(cmd), 'Validation succeeded'):
-            logger.error('Validation failed, try running it manually.')
-            return 1
-    logger.info('Ready for next cookbook')
     return 0
