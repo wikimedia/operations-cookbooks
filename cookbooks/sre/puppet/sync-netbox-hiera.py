@@ -34,15 +34,19 @@ class NetboxHiera(CookbookBase):
             formatter_class=ArgparseFormatter,
         )
         parser.add_argument(
-            '-c', '--check', help='Check if there are new changes, forces a returncode of 1 if there are'
+            "-c",
+            "--check",
+            help="Check if there are new changes, forces a returncode of 1 if there are",
+            action="store_true",
         )
         parser.add_argument(
-            '-t', '--task-id', help='The Phabricator task ID (e.g. T12345).'
+            "-t", "--task-id", help="The Phabricator task ID (e.g. T12345)."
         )
         parser.add_argument(
-            '--sha', help='If present the cookbook attempts to force a specific sha to the reposync clients.'
+            "--sha",
+            help="If present the cookbook attempts to force a specific sha to the reposync clients.",
         )
-        parser.add_argument('message', help='Commit message')
+        parser.add_argument("message", help="Commit message")
 
         return parser
 
@@ -55,9 +59,9 @@ class NetboxHieraRunner(CookbookRunnerBase):
     """Collect netbox hiera data."""
 
     # TODO: get rid of this hard coded directory
-    client_repo_dir = '/srv/netbox-hiera'
-    hiera_prefix = 'profile::netbox'
-    host_prefix = f'{hiera_prefix}::host'
+    client_repo_dir = "/srv/netbox-hiera"
+    hiera_prefix = "profile::netbox"
+    host_prefix = f"{hiera_prefix}::host"
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Init function.
@@ -72,7 +76,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
             # Force dry-run mode
             raise RuntimeError("check mode must also be run in --dry-run mode!")
         self.args = args
-        self.reposync = spicerack.reposync('netbox-hiera')
+        self.reposync = spicerack.reposync("netbox-hiera")
         self.puppetmasters = spicerack.remote().query("A:puppetmaster")
         self.reason = spicerack.admin_reason(args.message, task_id=args.task_id)
         self.api_url = f"{config['api_url'].rstrip('/')}:8443/hiera_export.HieraExport"
@@ -109,12 +113,12 @@ class NetboxHieraRunner(CookbookRunnerBase):
 
         """
         data = self._get_netbox_data()
-        hosts_dir = out_dir / 'hosts'
+        hosts_dir = out_dir / "hosts"
         hosts_dir.mkdir()
-        for host, data in data['hosts'].items():
+        for host, data in data["hosts"].items():
             host_path = hosts_dir / f"{host}.yaml"
-            data = {f'{self.host_prefix}::{k}': v for k, v in data.items()}
-            with host_path.open('w') as host_fh:
+            data = {f"{self.host_prefix}::{k}": v for k, v in data.items()}
+            with host_path.open("w") as host_fh:
                 yaml.safe_dump(data, host_fh, default_flow_style=False)
 
     def update_puppetmasters(self, hexsha: str) -> None:
@@ -124,8 +128,10 @@ class NetboxHieraRunner(CookbookRunnerBase):
             hexsha (str): The hexsha to checkout
 
         """
-        commands = [f'git -C {self.client_repo_dir} fetch',
-                    f'git -C {self.client_repo_dir} merge --ff-only {hexsha}']
+        commands = [
+            f"git -C {self.client_repo_dir} fetch",
+            f"git -C {self.client_repo_dir} merge --ff-only {hexsha}",
+        ]
         confirm_on_failure(self.puppetmasters.run_sync, *commands)
 
     def run(self) -> None:
@@ -138,10 +144,12 @@ class NetboxHieraRunner(CookbookRunnerBase):
             with self.reposync.update(str(self.reason)) as working_dir:
                 self._write_hiera_files(working_dir)
         except RepoSyncNoChangeError:
-            print('No Changes to apply')
+            print("No Changes to apply")
             return 0
         if self.reposync.hexsha is None:
-            raise RuntimeError("No hexsha value received from reposync.  Something went wrong!")
+            raise RuntimeError(
+                "No hexsha value received from reposync.  Something went wrong!"
+            )
         if self.args.check:
             return 1
         self.update_puppetmasters(self.reposync.hexsha)
