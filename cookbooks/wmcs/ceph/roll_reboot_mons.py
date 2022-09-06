@@ -1,4 +1,4 @@
-"""WMCS Ceph - Rolling reboot of all the mon nodes.
+r"""WMCS Ceph - Rolling reboot of all the mon nodes.
 
 Usage example:
     cookbook wmcs.ceph.roll_reboot_mons \

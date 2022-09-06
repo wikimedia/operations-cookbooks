@@ -1,4 +1,4 @@
-"""WMCS Toolforge - Add a new etcd node to hiera
+r"""WMCS Toolforge - Add a new etcd node to hiera
 
 Usage examples:
     # Add a node using the default node prefix

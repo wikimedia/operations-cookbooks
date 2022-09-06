@@ -1,8 +1,8 @@
 r"""WMCS Toolforge Kubernetes - deploy a kubernetes custom component
 
-Usage example: \
+Usage example:
     cookbook wmcs.toolforge.k8s.component.deploy \
-        --git-url https://gerrit.wikimedia.org/r/cloud/toolforge/jobs-framework-api \
+        --git-url https://gerrit.wikimedia.org/r/cloud/toolforge/jobs-framework-api
 """
 import argparse
 import logging

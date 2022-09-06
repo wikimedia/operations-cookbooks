@@ -1,4 +1,4 @@
-"""WMCS Openstack - Show the current cloudnets and some info.
+r"""WMCS Openstack - Show the current cloudnets and some info.
 
 Usage example:
     cookbook wmcs.openstack.cloudnet.show \

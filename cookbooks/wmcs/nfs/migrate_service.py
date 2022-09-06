@@ -1,4 +1,4 @@
-"""WMCS Toolforge - Migrate a given NFS volume from one host to another
+r"""WMCS Toolforge - Migrate a given NFS volume from one host to another
 
 Usage example:
     cookbook wmcs.nfs.migrate_service \

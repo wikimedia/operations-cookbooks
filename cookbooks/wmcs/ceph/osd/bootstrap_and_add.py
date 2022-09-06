@@ -1,4 +1,4 @@
-"""WMCS Ceph - Bootstrap a new osd
+r"""WMCS Ceph - Bootstrap a new osd
 
 Usage example:
     cookbook wmcs.ceph.osd.bootstrap_and_add \

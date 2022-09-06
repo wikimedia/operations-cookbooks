@@ -1,7 +1,7 @@
 r"""WMCS Toolforge - scale the grid with a new web lighttpd node.
 
 Usage example:
-    cookbook wmcs.toolforge.scale_grid_weblight \\
+    cookbook wmcs.toolforge.scale_grid_weblight \
         --project toolsbeta
 """
 import argparse

@@ -1,4 +1,4 @@
-"""WMCS Ceph - Rolling reboot of all the osd nodes.
+r"""WMCS Ceph - Rolling reboot of all the osd nodes.
 
 Usage example:
     cookbook wmcs.ceph.roll_reboot_osds \

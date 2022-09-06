@@ -1,4 +1,4 @@
-"""WMCS Toolforge - Add a new etcd node to a toolforge installation.
+r"""WMCS Toolforge - Add a new etcd node to a toolforge installation.
 
 Usage example:
     cookbook wmcs.toolforge.add_etcd_node \

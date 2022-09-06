@@ -1,4 +1,4 @@
-"""WMCS Ceph - Rolling restart all the osd daemons (not nodes).
+r"""WMCS Ceph - Rolling restart all the osd daemons (not nodes).
 
 Usage example:
     cookbook wmcs.ceph.roll_restart_osd_daemons \

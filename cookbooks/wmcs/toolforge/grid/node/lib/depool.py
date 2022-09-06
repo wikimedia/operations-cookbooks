@@ -1,8 +1,8 @@
 r"""WMCS Toolforge - grid - depool an existing grid exec/web node from the cluster
 
 Usage example:
-    cookbook wmcs.toolforge.grid.node.lib.depool \\
-        --project toolsbeta \\
+    cookbook wmcs.toolforge.grid.node.lib.depool \
+        --project toolsbeta \
         --node-hostnames toolsbeta-sgewebgen-09-2 toolsbeta-sgeexec-10-1
 """
 import argparse

@@ -1,4 +1,4 @@
-"""WMCS Toolforge - tests - verify proper operations
+r"""WMCS Toolforge - tests - verify proper operations
 
 Usage example:
     cookbook wmcs.toolforge.tests \

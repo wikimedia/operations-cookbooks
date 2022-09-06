@@ -1,4 +1,4 @@
-"""WMCS openstack - Drain a cloudvirt node
+r"""WMCS openstack - Drain a cloudvirt node
 
 Usage example: wmcs.openstack.cloudvirt.drain \
     --fqdn cloudvirt1013.eqiad.wmnet

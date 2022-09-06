@@ -1,4 +1,4 @@
-"""WMCS VPS - Remove and regenerate the puppet certificates of the host.
+r"""WMCS VPS - Remove and regenerate the puppet certificates of the host.
 
 Usage example: wmcs.vps.refresh_puppet_certs \
     --fqdn tools-host.tools.eqiad1.wikimedia.cloud

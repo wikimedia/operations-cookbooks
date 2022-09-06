@@ -1,8 +1,8 @@
 r"""WMCS Toolforge - grid - join existing grid exec/web node to the cluster
 
 Usage example:
-    cookbook wmcs.toolforge.grid.node.lib.join \\
-        --project toolsbeta \\
+    cookbook wmcs.toolforge.grid.node.lib.join \
+        --project toolsbeta \
         --nodes-query toolsbeta-sgewebgen-09-2,toolsbeta-sgeweblight-10-[10-12]
 """
 import argparse

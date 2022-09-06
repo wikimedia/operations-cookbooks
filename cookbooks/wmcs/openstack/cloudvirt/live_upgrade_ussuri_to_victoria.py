@@ -1,4 +1,4 @@
-"""WMCS openstack - upgrade live (without stopping VMs or rebooting) a cloudvirt node in maintenance
+r"""WMCS openstack - upgrade live (without stopping VMs or rebooting) a cloudvirt node in maintenance
 
 Usage example: wmcs.openstack.cloudvirt.live_upgrade_ussuri_to_victoria \
     --fqdn-to-upgrade cloudvirt1013.eqiad.wmnet

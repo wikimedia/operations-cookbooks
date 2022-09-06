@@ -1,4 +1,4 @@
-"""WMCS openstack - connect to the console of a VM
+r"""WMCS openstack - connect to the console of a VM
 
 Usage example: wmcs.openstack.cloudvirt.vm_console \
     --vm-name fullstack-20220613230939 \

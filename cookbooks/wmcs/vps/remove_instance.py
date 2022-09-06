@@ -1,4 +1,4 @@
-"""WMCS Toolforge - Remove an instance from a project.
+r"""WMCS Toolforge - Remove an instance from a project.
 
 Usage example:
     cookbook wmcs.vps.remove_instance \

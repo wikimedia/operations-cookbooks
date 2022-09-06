@@ -1,7 +1,7 @@
-"""WMCS openstack - Log a SAL message
+r"""WMCS openstack - Log a SAL message
 
 Usage example: wmcs.do_log_msg \
-    --msg "I just changed some config in cloudvirt1020"
+    --msg "I just changed some config in cloudvirt1020" \
     --task-id T424242
 
 """

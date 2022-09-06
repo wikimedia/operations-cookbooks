@@ -3,8 +3,8 @@ r"""WMCS Toolforge - grid - depool and remove an existing grid exec/web node fro
 NOTE: also deletes the virtual machine!
 
 Usage example:
-    cookbook wmcs.toolforge.grid.node.lib.depool_remove \\
-        --project toolsbeta \\
+    cookbook wmcs.toolforge.grid.node.lib.depool_remove \
+        --project toolsbeta \
         --node-hostname toolsbeta-sgewebgen-09-2
 """
 import argparse

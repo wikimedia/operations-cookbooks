@@ -1,4 +1,4 @@
-"""WMCS Toolforge - grid - node - get info
+r"""WMCS Toolforge - grid - node - get info
 
 Usage example:
     cookbook wmcs.toolforge.grid.node.get_info \

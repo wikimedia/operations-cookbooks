@@ -1,4 +1,4 @@
-"""WMCS openstack network tests - Run a network testsuite
+r"""WMCS openstack network tests - Run a network testsuite
 
 Usage example:
   cookbook wmcs.openstack.network.tests --cluster_name codfw1dev

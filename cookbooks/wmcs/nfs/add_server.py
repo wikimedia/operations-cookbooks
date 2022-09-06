@@ -1,4 +1,4 @@
-"""WMCS Toolforge - Add a new nfs server on a VM
+r"""WMCS Toolforge - Add a new nfs server on a VM
 
 Usage example:
     cookbook wmcs.nfs.add_server \

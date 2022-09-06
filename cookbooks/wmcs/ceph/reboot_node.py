@@ -1,4 +1,4 @@
-"""WMCS Ceph - Reboot a single ceph node.
+r"""WMCS Ceph - Reboot a single ceph node.
 
 Usage example:
     cookbook wmcs.ceph.reboot_node \

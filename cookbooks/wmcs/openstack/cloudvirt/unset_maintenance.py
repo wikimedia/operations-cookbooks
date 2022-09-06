@@ -1,4 +1,4 @@
-"""WMCS openstack - Unset a cloudvirt node maintenance
+r"""WMCS openstack - Unset a cloudvirt node maintenance
 
 Usage example: wmcs.openstack.cloudvirt.unset_maintenance \
     --fqdn cloudvirt1013.eqiad.wmnet

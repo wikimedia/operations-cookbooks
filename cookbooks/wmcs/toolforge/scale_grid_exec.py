@@ -1,7 +1,7 @@
 r"""WMCS Toolforge - scale the grid with a new grid exec node.
 
 Usage example:
-    cookbook wmcs.toolforge.scale_grid_exec \\
+    cookbook wmcs.toolforge.scale_grid_exec \
         --project toolsbeta
 """
 import argparse

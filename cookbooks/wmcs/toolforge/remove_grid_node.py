@@ -1,4 +1,4 @@
-"""WMCS Toolforge - grid - removes a worker node
+r"""WMCS Toolforge - grid - removes a worker node
 
 Usage example:
     cookbook wmcs.toolforge.remove_grid_node \

@@ -1,4 +1,4 @@
-"""WMCS Toolforge - Drain a k8s worker node
+r"""WMCS Toolforge - Drain a k8s worker node
 
 Usage example:
     cookbook wmcs.toolforge.worker.drain \

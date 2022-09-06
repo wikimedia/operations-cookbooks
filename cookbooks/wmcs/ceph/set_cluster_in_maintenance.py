@@ -1,8 +1,8 @@
-"""WMCS Ceph - Set cluster in maintenance.
+r"""WMCS Ceph - Set cluster in maintenance.
 
 Usage example:
     cookbook wmcs.ceph.set_cluster_in_maintenance \
-        --monitor-node-fqdn cloudcephosd2001-dev.codfw.wmnet \
+        --cluster-name eqiad1 \
         --reason "Doing some tests or similar"
 
 """

@@ -1,4 +1,4 @@
-"""WMCS Ceph - Upgrade all the mon nodes.
+r"""WMCS Ceph - Upgrade all the mon nodes.
 
 Usage example:
     cookbook wmcs.ceph.upgrade_mons \

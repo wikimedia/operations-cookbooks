@@ -1,4 +1,4 @@
-"""WMCS openstack - Safely reboot a cloudvirt node.
+r"""WMCS openstack - Safely reboot a cloudvirt node.
 
 This includes putting in maintenance, draining, and unsetting maintenance.
 

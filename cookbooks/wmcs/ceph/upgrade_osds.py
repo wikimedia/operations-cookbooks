@@ -1,4 +1,4 @@
-"""WMCS Ceph - Upgrade all the osd nodes.
+r"""WMCS Ceph - Upgrade all the osd nodes.
 
 Usage example:
     cookbook wmcs.ceph.upgrade_osds \

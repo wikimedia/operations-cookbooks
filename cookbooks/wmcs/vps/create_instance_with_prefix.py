@@ -1,4 +1,4 @@
-"""WMCS Toolforge - Add a new instance to the given prefix.
+r"""WMCS Toolforge - Add a new instance to the given prefix.
 
 It will make sure to use the same flavor, network, groups and increment the
 index of the existing instance with the same prefix unless you pass a specific

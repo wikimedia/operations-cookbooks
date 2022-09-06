@@ -1,4 +1,4 @@
-"""WMCS Ceph - Show information about the osds in the cluster
+r"""WMCS Ceph - Show information about the osds in the cluster
 
 Usage example:
     cookbook wmcs.ceph.osd.show_info \

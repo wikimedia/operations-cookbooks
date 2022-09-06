@@ -1,7 +1,7 @@
 r"""WMCS Toolforge - scale the grid with a new grid webgen node.
 
 Usage example:
-    cookbook wmcs.toolforge.scale_grid_webgen \\
+    cookbook wmcs.toolforge.scale_grid_webgen \
         --project toolsbeta
 """
 import argparse

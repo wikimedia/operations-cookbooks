@@ -1,4 +1,4 @@
-"""WMCS Toolforge - Remove an exsting etcd node from hiera
+r"""WMCS Toolforge - Remove an exsting etcd node from hiera
 
 Usage examples:
     # Remove a node using the default node prefix

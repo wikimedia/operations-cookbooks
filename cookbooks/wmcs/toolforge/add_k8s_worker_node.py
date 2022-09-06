@@ -1,4 +1,4 @@
-"""WMCS Toolforge - Add a new k8s worker node to a toolforge installation.
+r"""WMCS Toolforge - Add a new k8s worker node to a toolforge installation.
 
 Usage example:
     cookbook wmcs.toolforge.add_k8s_worker_node \

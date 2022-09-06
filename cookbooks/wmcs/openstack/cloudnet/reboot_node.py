@@ -1,4 +1,4 @@
-"""WMCS Openstack - Reboot a cloudnet node .
+r"""WMCS Openstack - Reboot a cloudnet node .
 
 Usage example:
     cookbook wmcs.openstack.cloudnet.reboot_node \

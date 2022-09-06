@@ -1,4 +1,4 @@
-"""WMCS Toolforge - grid - reconfigure
+r"""WMCS Toolforge - grid - reconfigure
 
 Usage example:
     cookbook wmcs.toolforge.grid.reconfigure \

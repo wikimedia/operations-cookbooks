@@ -1,4 +1,4 @@
-"""WMCS Toolforge - grid - get cluster status
+r"""WMCS Toolforge - grid - get cluster status
 
 Usage example:
     cookbook wmcs.toolforge.grid.get_cluster_status \

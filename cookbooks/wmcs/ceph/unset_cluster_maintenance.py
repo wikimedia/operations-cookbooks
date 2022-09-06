@@ -1,8 +1,8 @@
-"""WMCS Ceph - Unset cluster maintenance.
+r"""WMCS Ceph - Unset cluster maintenance.
 
 Usage example:
     cookbook wmcs.ceph.unset_cluster_maintenance \
-        --monitor-node-fqdn cloudcephosd2001-dev.codfw.wmnet
+        --cluster-name eqiad1
 
 """
 import argparse

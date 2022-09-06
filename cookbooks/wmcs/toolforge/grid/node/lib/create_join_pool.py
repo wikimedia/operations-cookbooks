@@ -1,8 +1,8 @@
 r"""WMCS Toolforge - create a new grid node, make it join the grid and pool it
 
 Usage example:
-    cookbook wmcs.toolforge.grid.node.lib.create_join_pool \\
-        --project toolsbeta
+    cookbook wmcs.toolforge.grid.node.lib.create_join_pool \
+        --project toolsbeta \
         --nodetype exec
 """
 # pylint: disable=too-many-arguments

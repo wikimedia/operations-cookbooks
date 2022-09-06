@@ -1,4 +1,4 @@
-"""WMCS Toolforge - grid - reboots all workers of a specific grid execution queue
+r"""WMCS Toolforge - grid - reboots all workers of a specific grid execution queue
 
 Usage example:
     cookbook wmcs.toolforge.grid.reboot_workers \

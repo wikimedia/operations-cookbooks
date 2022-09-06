@@ -1,4 +1,4 @@
-"""WMCS Toolforge - Depool and delete the given k8s worker node from a toolforge installation
+r"""WMCS Toolforge - Depool and delete the given k8s worker node from a toolforge installation
 
 Usage example:
     cookbook wmcs.toolforge.remove_k8s_worker_node \

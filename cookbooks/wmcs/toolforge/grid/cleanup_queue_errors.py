@@ -1,4 +1,4 @@
-"""WMCS Toolforge - grid - cleanup queue errors
+r"""WMCS Toolforge - grid - cleanup queue errors
 
 Usage example:
     cookbook wmcs.toolforge.grid.cleanup_queue_errors \

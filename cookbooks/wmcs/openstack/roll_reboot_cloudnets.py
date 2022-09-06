@@ -1,4 +1,4 @@
-"""WMCS Openstack - Rolling reboot of all the cloudnet.
+r"""WMCS Openstack - Rolling reboot of all the cloudnet.
 
 Usage example:
     cookbook wmcs.openstack.roll_reboot_cloudnets \

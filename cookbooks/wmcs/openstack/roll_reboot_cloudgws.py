@@ -1,4 +1,4 @@
-"""WMCS Openstack - Rolling reboot of all the cloudgw.
+r"""WMCS Openstack - Rolling reboot of all the cloudgw.
 
 Usage example:
     cookbook wmcs.openstack.roll_reboot_cloudgws --cluster_name eqiad1

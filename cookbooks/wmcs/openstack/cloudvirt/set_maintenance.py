@@ -1,4 +1,4 @@
-"""WMCS openstack - set a cloudvirt node in maintenance
+r"""WMCS openstack - set a cloudvirt node in maintenance
 
 Usage example: wmcs.openstack.cloudvirt.set_maintenance \
     --fqdn cloudvirt1013.eqiad.wmnet

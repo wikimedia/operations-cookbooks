@@ -1,4 +1,4 @@
-"""WMCS Openstack - Reboot a cloudgw node .
+r"""WMCS Openstack - Reboot a cloudgw node .
 
 Usage example:
     cookbook wmcs.openstack.cloudgw.reboot_node \

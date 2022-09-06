@@ -1,4 +1,4 @@
-"""WMCS openstack - increase a project's quota by a given amount
+r"""WMCS openstack - increase a project's quota by a given amount
 
 If talking about memory, things like 10G/250M are supported.
 

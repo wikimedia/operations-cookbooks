@@ -1,4 +1,4 @@
-"""WMCS Toolforge - Add an existing etcd node to an existing etcd cluster.
+r"""WMCS Toolforge - Add an existing etcd node to an existing etcd cluster.
 
 Note that if the node is already part of the cluster, this cookbook will still
 work (might refresh puppet certs though, and restart services).

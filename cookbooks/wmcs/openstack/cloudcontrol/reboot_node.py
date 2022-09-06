@@ -1,4 +1,4 @@
-"""WMCS Openstack - Reboot a cloudcontrol node .
+r"""WMCS Openstack - Reboot a cloudcontrol node .
 
 Usage example:
     cookbook wmcs.openstack.cloudcontrol.reboot_node \

@@ -1,4 +1,4 @@
-"""WMCS Ceph - Generic cookbook to upgrade a ceph node.
+r"""WMCS Ceph - Generic cookbook to upgrade a ceph node.
 
 Usage example:
     cookbook wmcs.ceph.upgrade_ceph_node \

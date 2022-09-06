@@ -1,8 +1,8 @@
 r"""WMCS Toolforge - grid - pool an existing grid exec/web node into the cluster
 
 Usage example:
-    cookbook wmcs.toolforge.grid.node.lib.pool \\
-        --project toolsbeta \\
+    cookbook wmcs.toolforge.grid.node.lib.pool \
+        --project toolsbeta \
         --nodes-query toolsbeta-sgewebgen-09-[2-4],toolsbeta-sgeexec-10-[10,20]
 """
 import argparse
