@@ -5,10 +5,11 @@ import logging
 
 from pprint import pformat
 from socket import gethostname
+from time import sleep
 
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 from spicerack.dhcp import DHCPConfMgmt
-from spicerack.redfish import DellSCPPowerStatePolicy, DellSCPRebootPolicy, RedfishError
+from spicerack.redfish import ChassisResetPolicy, DellSCPPowerStatePolicy, DellSCPRebootPolicy, RedfishError
 from spicerack.remote import RemoteError
 from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
 
@@ -27,6 +28,8 @@ class Provision(CookbookBase):
         * Fail if the host is active on Netbox but --no-dhcp and --no-users are not set as a precautionary measure
         * [unless --no-dhcp is set] Setup the temporary DHCP so that the management console can get a connection and
           become reachable
+        * Detect if the host has hardware RAID, if so ask the operator to configure it before proceeding and reboot
+          the host if the RAID was modified.
         * Get the current configuration for BIOS, management console and NICs
         * Modify the common settings
           * [if --enable-virtualization is set] Leave virtualization enabled, by default it gets disabled
@@ -123,8 +126,10 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
         if self.netbox_server.status in ('active', 'staged'):
             self.reboot_policy = DellSCPRebootPolicy.GRACEFUL
+            self.chassis_reset_policy = ChassisResetPolicy.GRACEFUL_RESTART
         else:
             self.reboot_policy = DellSCPRebootPolicy.FORCED
+            self.chassis_reset_policy = ChassisResetPolicy.FORCE_RESTART
 
         self.redfish = spicerack.redfish(self.fqdn, 'root', password)
         self.mgmt_password = spicerack.management_password
@@ -202,8 +207,17 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             has_raid = True
 
         if has_raid:
-            ask_confirmation('Detected Hardware RAID. Please configure the RAID at this point (the password is still '
-                             'DELL default one). Proceed only once the RAID is properly configured.')
+            action = ask_input(
+                'Detected Hardware RAID. Please configure the RAID at this point (the password is still DELL default '
+                'one). Once done select the appropriate answer. If the RAID was modified the host will be rebooted to '
+                'make sure the changes are applied.',
+                ('untouched', 'modified'))
+
+            if action == 'modified':
+                logger.info('Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy)
+                self.redfish.chassis_reset(self.chassis_reset_policy)
+                # TODO: replace the sleep with auto-detection of the completiono of the RAID job.
+                sleep(180)
 
         try:
             self._config()
