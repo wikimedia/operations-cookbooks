@@ -35,6 +35,7 @@ def present_in_output(results, find):
         lines = output.message().decode()
         if find in lines:
             return True
+        logger.error(lines)
     return False
 
 
@@ -107,4 +108,16 @@ def run(args, spicerack):  # pylint: disable=too-many-return-statements
         logger.info(json_output)
         logger.error('Command did not run successfully.')
         return 1
+
+    logger.info('Validate image')
+    os_type = 'vmhost' if 'vmhost' in args.image else 'system'
+    cmd = f'request {os_type} software validate /var/tmp/{args.image}.tgz'
+
+    results = device.run_sync(cmd,
+                              print_output=spicerack.verbose,
+                              print_progress_bars=False)
+    if not present_in_output(results, 'Validation succeeded'):
+        logger.error('Validation failed.')
+        return 1
+    logger.info('All good 👍')
     return 0
