@@ -1,10 +1,9 @@
 """Restart of the AQS nodejs service."""
-import argparse
 import logging
 
 from datetime import timedelta
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 
@@ -23,7 +22,7 @@ class RollRestart(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument(
             'cluster', help='The name of the AQS cluster to work on.', choices=['aqs'])
         return parser

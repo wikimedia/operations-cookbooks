@@ -1,10 +1,9 @@
 """Restart all Druid jvm-base daemons in a cluster"""
-import argparse
 import logging
 
 from datetime import timedelta
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ensure_shell_is_durable
 
 from cookbooks.sre.druid import DRUID_DAEMONS
@@ -38,8 +37,7 @@ class RestartDruidWorkers(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(
-            description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('cluster', help='The name of the Druid cluster to work on.',
                             choices=['public', 'analytics', 'test'])
         parser.add_argument('--daemons', help='The daemons to restart.', nargs='+',

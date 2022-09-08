@@ -1,5 +1,4 @@
 """Deploy a simple Python code software."""
-import argparse
 import logging
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -27,8 +26,7 @@ class Deploy(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__,
-                                         formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser = super().argument_parser()
         parser.add_argument('project', help='The name of the project on the deployment server.')
         parser.add_argument('query', help='Cumin query to match the host(s) to act upon.')
         parser.add_argument('-r', '--reason', required=True,

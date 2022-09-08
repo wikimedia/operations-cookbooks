@@ -1,10 +1,8 @@
 """Add a new node to a Ganeti cluster"""
-
-import argparse
 import logging
 
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
 
 from cookbooks.sre.ganeti import add_location_args, set_default_group
@@ -25,9 +23,7 @@ class GanetiAddNode(CookbookBase):
 
     def argument_parser(self):
         """Parse command-line arguments for this module per spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__,
-                                         formatter_class=ArgparseFormatter)
-
+        parser = super().argument_parser()
         add_location_args(parser)
         parser.add_argument('fqdn', help='The FQDN of the new Ganeti node.')
 

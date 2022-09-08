@@ -1,8 +1,7 @@
 """Class based cookbook manage a useres u2f token"""
-from argparse import ArgumentParser
 from logging import getLogger
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
 
 
@@ -21,9 +20,7 @@ class U2f(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = ArgumentParser(
-            description=self.__doc__, formatter_class=ArgparseFormatter
-        )
+        parser = super().argument_parser()
         parser.add_argument(
             '--reset-token',
             action='store_true',

@@ -11,7 +11,7 @@ from typing import List, Union
 from cumin import nodeset, NodeSet, nodeset_fromlist
 from spicerack import Spicerack
 from spicerack.administrative import Reason
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.icinga import IcingaError
 from spicerack.remote import RemoteHosts
 from wmflib.interactive import (
@@ -93,9 +93,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
 
     def argument_parser(self) -> ArgumentParser:
         """Parse arguments"""
-        parser = ArgumentParser(
-            description=self.__doc__, formatter_class=ArgparseFormatter
-        )
+        parser = super().argument_parser()
 
         # Later, specific cookbooks the default alias will be part of the cookbook
         # and the Cumin syntax an optional override

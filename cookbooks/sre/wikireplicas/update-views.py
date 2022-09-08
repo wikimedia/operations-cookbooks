@@ -1,9 +1,7 @@
 """Cookbook for updating wikireplica views."""
-
-import argparse
 import logging
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError, RemoteHosts
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
@@ -26,9 +24,7 @@ class UpdateWikireplicaViews(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(
-            description=self.__doc__, formatter_class=ArgparseFormatter
-        )
+        parser = super().argument_parser()
         parser.add_argument(
             "-t", "--task-id", help="Phabricator task ID (e.g. T123456) to log to"
         )

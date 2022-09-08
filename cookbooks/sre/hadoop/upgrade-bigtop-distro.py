@@ -1,6 +1,4 @@
 """Upgrade/Rollback Hadoop to a newer/previous Apache Bigtop distribution."""
-
-import argparse
 import logging
 import time
 
@@ -8,7 +6,7 @@ from datetime import timedelta
 
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.sre.hadoop import (HADOOP_CLUSTER_NAMES, CLUSTER_CUMIN_ALIAS,
                                   MASTER_CUMIN_ALIAS, STANDBY_CUMIN_ALIAS,
@@ -37,7 +35,7 @@ class UpgradeBigtop(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('cluster', help='The name of the Hadoop cluster to work on.',
                             choices=HADOOP_CLUSTER_NAMES)
         parser.add_argument('--workers-cumin-query', required=False, help='A cumin query string to select '

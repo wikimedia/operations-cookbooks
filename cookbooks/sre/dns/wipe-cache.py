@@ -1,7 +1,5 @@
 """Class based cookbook to wipe dns cache entries"""
-from argparse import ArgumentParser
-
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.constants import ALL_DATACENTERS
 
 
@@ -19,9 +17,7 @@ class WipeCache(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = ArgumentParser(
-            description=self.__doc__, formatter_class=ArgparseFormatter
-        )
+        parser = super().argument_parser()
         parser.add_argument(
             '-s',
             '--site',

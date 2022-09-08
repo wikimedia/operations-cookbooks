@@ -1,5 +1,4 @@
 """Image or re-image a physical host."""
-import argparse
 import ipaddress
 import logging
 import os
@@ -11,7 +10,7 @@ from pathlib import Path
 from requests.exceptions import RequestException
 
 from cumin.transports import Command
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.dhcp import DHCPConfOpt82
 from spicerack.exceptions import SpicerackError
@@ -37,7 +36,7 @@ class Reimage(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument(
             '--no-downtime', action='store_true',
             help=('do not set the host in downtime on Icinga/Alertmanager before the reimage. Included if --new is '

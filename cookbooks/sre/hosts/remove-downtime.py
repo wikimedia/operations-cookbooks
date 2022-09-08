@@ -1,5 +1,4 @@
 """Remove hosts and all their services downtimes in Icinga."""
-import argparse
 import logging
 
 from cumin import NodeSet
@@ -26,8 +25,7 @@ class RemoveDowntime(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__,
-                                         formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser = super().argument_parser()
         parser.add_argument('query', help=('Cumin query to match the host(s) to act upon. If --force is set they will '
                                            'be used verbatim even if not mathing any host from a Cumin query.'))
         parser.add_argument('--force', action='store_true',

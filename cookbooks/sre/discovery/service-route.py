@@ -1,11 +1,9 @@
 """DNS Discovery Operations"""
-import argparse
 import logging
 import time
 
 from spicerack.confctl import ConfctlError
 from spicerack.constants import CORE_DATACENTERS
-from spicerack.cookbook import ArgparseFormatter
 
 from cookbooks.sre.discovery import check_record_for_dc, update_ttl
 
@@ -20,7 +18,7 @@ DNS_TTL_SHORT = 10
 
 def argument_parser():
     """Parse the command line arguments for all the sre.discovery cookbooks."""
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
+    parser = super().argument_parser()
     actions = parser.add_subparsers(dest='action', help='The action to perform')
     action_check = actions.add_parser('check')
     action_check.add_argument('services', nargs='+', help='The services to operate on')

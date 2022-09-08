@@ -1,6 +1,4 @@
 """Renew the puppet certificate of a single host"""
-
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from datetime import timedelta
 from logging import getLogger
 
@@ -28,7 +26,7 @@ class RenewCert(CookbookBase):
 
     def argument_parser(self):
         """Parse arguments"""
-        parser = ArgumentParser(description=self.__doc__, formatter_class=RawDescriptionHelpFormatter)
+        parser = super().argument_parser()
         parser.add_argument('query', help='A single host whose puppet certificate should be renewed')
         parser.add_argument('--allow-alt-names', action='store_true', help='To allow SAN in the Puppet certificate')
         parser.add_argument('--installer', action='store_true',

@@ -1,10 +1,9 @@
 """Perform a rolling restart of some or all instances within a Cassandra cluster"""
-import argparse
 import logging
 
 from datetime import timedelta
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ensure_shell_is_durable
 
 
@@ -30,7 +29,7 @@ class RollRestartCassandra(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         group = parser.add_mutually_exclusive_group(required=True)
         group.add_argument('cluster', nargs='?',
                            choices=['aqs', 'restbase-eqiad', 'restbase-dev', 'sessionstore',

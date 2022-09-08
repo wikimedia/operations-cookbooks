@@ -1,8 +1,7 @@
 """Set the DHCP temporary config for the given host."""
-import argparse
 import ipaddress
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.dhcp import DHCPConfOpt82
 from spicerack.remote import RemoteError
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
@@ -19,7 +18,7 @@ class Dhcp(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('--os', choices=OS_VERSIONS, required=True,
                             help='the Debian version to install. One of %(choices)s')
         parser.add_argument('host', help='Short hostname of the host for which to set the DHCP config, not FQDN')

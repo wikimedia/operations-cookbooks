@@ -28,7 +28,6 @@ import attr
 
 from cumin import NodeSet
 from spicerack.constants import CORE_DATACENTERS
-from spicerack.cookbook import ArgparseFormatter
 from spicerack.icinga import IcingaError
 from spicerack.puppet import PuppetHostsCheckError
 from spicerack.remote import RemoteCheckError, RemoteExecutionError
@@ -51,7 +50,7 @@ def check_percentage(arg):
 
 def argument_parser():
     """Parse arguments"""
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=ArgparseFormatter)
+    parser = super().argument_parser()
     parser.add_argument('--datacenter', '-D', help='Datacenter where to restart the service', choices=CORE_DATACENTERS)
     parser.add_argument('--cluster', '-c', help='Cluster to restart')
     parser.add_argument('--percentage', '-p',

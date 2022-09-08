@@ -1,9 +1,8 @@
 """Configure the switch interfaces of a given host"""
-
 import argparse
 import logging
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.network import get_junos_interface, get_junos_logs, get_junos_optics
@@ -31,7 +30,7 @@ class Debug(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         parser.add_argument('entity', choices=['circuit', 'interface'])
         parser.add_argument('object_id',

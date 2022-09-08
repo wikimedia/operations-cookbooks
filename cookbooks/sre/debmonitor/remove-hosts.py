@@ -1,5 +1,4 @@
 """Remove host(s) from DebMonitor"""
-import argparse
 import logging
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -21,7 +20,7 @@ class RemoveHosts(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser = super().argument_parser()
         parser.add_argument('query', help=('Cumin query to match the host(s) to remove from DebMonitor'))
         parser.add_argument('-t', '--task-id', help='Optional Phabricator task ID (e.g. T123456) to log to')
 

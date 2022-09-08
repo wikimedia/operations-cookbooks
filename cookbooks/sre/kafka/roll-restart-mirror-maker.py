@@ -1,10 +1,9 @@
 """Restart all Kafka Mirror Maker daemons in a cluster"""
-import argparse
 import logging
 
 from datetime import timedelta
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 
 logger = logging.getLogger(__name__)
@@ -40,7 +39,7 @@ class RollRestartMirrorMaker(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('cluster', help='The name of the Kafka Mirror Maker cluster to work on.',
                             choices=['main-eqiad', 'jumbo-eqiad', 'main-codfw', 'test-eqiad'])
         parser.add_argument('--batch-sleep-seconds', type=float, default=120.0,

@@ -1,6 +1,4 @@
 """Downtime a single host and reboot it"""
-
-import argparse
 import logging
 import time
 
@@ -36,8 +34,7 @@ class RebootSingleHost(CookbookBase):
 
     def argument_parser(self):
         """Parse arguments"""
-        parser = argparse.ArgumentParser(description=self.__doc__,
-                                         formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser = super().argument_parser()
         parser.add_argument('host', help='A single host to be rebooted (specified in Cumin query syntax)')
         parser.add_argument('-r', '--reason', required=False,
                             help=('The reason for the reboot. The current username and originating host are '

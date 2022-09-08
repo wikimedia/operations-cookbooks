@@ -1,6 +1,4 @@
 """Stop an Hadoop cluster."""
-
-import argparse
 import logging
 import time
 
@@ -8,7 +6,7 @@ from datetime import timedelta
 
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from . import (HADOOP_CLUSTER_NAMES, CLUSTER_CUMIN_ALIAS,
                MASTER_CUMIN_ALIAS, STANDBY_CUMIN_ALIAS,
@@ -27,8 +25,7 @@ class StopHadoop(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(
-            description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('cluster', help='The name of the Hadoop cluster to work on.',
                             choices=HADOOP_CLUSTER_NAMES)
         return parser

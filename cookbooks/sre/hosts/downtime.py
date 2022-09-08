@@ -1,5 +1,4 @@
 """Downtime hosts and all their services in Icinga and Alertmanager."""
-import argparse
 import logging
 
 from datetime import timedelta
@@ -36,8 +35,7 @@ class Downtime(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__,
-                                         formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser = super().argument_parser()
         parser.add_argument('query', help='Cumin query to match the host(s) to act upon.')
         parser.add_argument('-r', '--reason', required=True,
                             help=('The reason for the downtime. The current username and originating host are '

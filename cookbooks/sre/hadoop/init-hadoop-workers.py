@@ -1,12 +1,10 @@
 """Initialize an Hadoop worker"""
-
-import argparse
 import logging
 import string
 
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
 
 
@@ -23,7 +21,7 @@ class InitHadoopWorkers(CookbookBase):
 
     def argument_parser(self):
         """Argument parser helper function"""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('hostname_pattern', help='The cumin hostname pattern of the Hadoop worker(s) '
                             'to initialize.', type=str)
         parser.add_argument('--disks-number', type=int, default=12,

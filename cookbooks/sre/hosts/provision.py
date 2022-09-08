@@ -1,5 +1,4 @@
 """Provision a new physical host setting up it's BIOS and management console."""
-import argparse
 import ipaddress
 import logging
 
@@ -7,7 +6,7 @@ from pprint import pformat
 from socket import gethostname
 from time import sleep
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.dhcp import DHCPConfMgmt
 from spicerack.redfish import ChassisResetPolicy, DellSCPPowerStatePolicy, DellSCPRebootPolicy, RedfishError
 from spicerack.remote import RemoteError
@@ -51,7 +50,7 @@ class Provision(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument(
             '--no-dhcp',
             action='store_true',

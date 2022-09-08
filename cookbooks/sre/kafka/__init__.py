@@ -49,8 +49,7 @@ __title__ = __doc__
 def parse_kafka_arguments(description, cluster_choices):
     """Helper for arguments that are shared between Kafka cookbooks."""
     combined_description = '\n\n'.join([__doc__, 'Cookbook-specific documentation:', description])
-    parser = argparse.ArgumentParser(description=combined_description,
-                                     formatter_class=ArgparseFormatter)
+    parser = argparse.ArgumentParser(description=combined_description, formatter_class=ArgparseFormatter)
     parser.add_argument('cluster', help='The name of the Kafka cluster to work on.',
                         choices=cluster_choices)
     parser.add_argument('--batch-sleep-seconds', type=float, default=300.0,

@@ -1,6 +1,5 @@
 """Update and deploy the hiera data generated from Netbox data."""
-
-from argparse import ArgumentParser, Namespace
+from argparse import Namespace
 from os import PathLike
 from typing import Dict
 
@@ -11,7 +10,7 @@ from requests.exceptions import RequestException
 from wmflib.config import load_yaml_config
 from wmflib.interactive import confirm_on_failure
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.reposync import RepoSyncNoChangeError
 
 
@@ -29,10 +28,7 @@ class NetboxHiera(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = ArgumentParser(
-            description=self.__doc__,
-            formatter_class=ArgparseFormatter,
-        )
+        parser = super().argument_parser()
         parser.add_argument(
             "-c",
             "--check",

@@ -1,11 +1,10 @@
 """Reboot all Presto nodes in a cluster."""
-import argparse
 import logging
 
 from datetime import datetime, timedelta
 from time import sleep
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ensure_shell_is_durable
 
 
@@ -25,7 +24,7 @@ class RebootPrestoWorkers(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('cluster', help='The name of the Presto cluster to work on.',
                             choices=['analytics'])
         return parser

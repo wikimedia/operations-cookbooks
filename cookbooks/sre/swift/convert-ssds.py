@@ -1,11 +1,10 @@
 """Convert the SSDs of the host from single PV to non-RAID disks."""
-import argparse
 import logging
 
 from datetime import datetime, timedelta
 from pprint import pformat
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.redfish import ChassisResetPolicy
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
@@ -33,7 +32,7 @@ class ConvertSSDs(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('host', help='Short hostname of the host to provision, not FQDN')
 
         return parser

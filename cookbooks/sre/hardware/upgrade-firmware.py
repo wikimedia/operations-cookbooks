@@ -12,7 +12,7 @@ from zipfile import ZipFile
 
 from requests import post
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.netbox import NetboxError, NetboxServer
 from spicerack.redfish import (
@@ -38,10 +38,7 @@ class FirmwareUpgrade(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(
-            description=self.__doc__,
-            formatter_class=ArgparseFormatter,
-        )
+        parser = super().argument_parser()
         parser.add_argument(
             "--type",
         )

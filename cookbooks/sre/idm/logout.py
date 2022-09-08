@@ -1,8 +1,7 @@
 """Class based cookbook to Logout a user from some or all services on a set of hosts using the logoutd tools."""
-from argparse import ArgumentParser
 from logging import getLogger
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
 from wmflib.interactive import ask_confirmation
 
@@ -21,9 +20,7 @@ class Logout(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = ArgumentParser(
-            description=self.__doc__, formatter_class=ArgparseFormatter
-        )
+        parser = super().argument_parser()
         parser.add_argument(
             'query', help='Cumin query to match the host(s) to act upon.'
         )

@@ -8,7 +8,7 @@ from wmflib.constants import DATACENTER_NUMBERING_PREFIX
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
 from spicerack.constants import CORE_DATACENTERS
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.ganeti import INSTANCE_LINKS
 
@@ -53,8 +53,7 @@ class GanetiMakeVM(CookbookBase):
                 raise argparse.ArgumentTypeError('This cookbook now takes a hostname, not a fqdn')
             return param
 
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
-
+        parser = super().argument_parser()
         parser.add_argument('--skip-v6', action='store_true', help='To skip the generation of the IPv6 DNS record.')
         parser.add_argument(
             '--vcpus', type=positive_int, default=1, help='The number of virtual CPUs to assign to the VM.')

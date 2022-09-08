@@ -1,6 +1,4 @@
 """Reboot all worker nodes in a given Hadoop cluster."""
-
-import argparse
 import logging
 import math
 import time
@@ -9,7 +7,7 @@ from datetime import datetime, timedelta
 
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.sre.hadoop import HADOOP_CLUSTER_NAMES
 
@@ -45,7 +43,7 @@ class RebootHadoopWorkers(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('cluster', help='The name of the Hadoop cluster to work on.',
                             choices=HADOOP_CLUSTER_NAMES)
         parser.add_argument('--yarn-nm-sleep-seconds', type=float, default=600.0,

@@ -1,5 +1,4 @@
 """Decommission a host from all inventories."""
-import argparse
 import logging
 import re
 import time
@@ -179,7 +178,7 @@ class DecommissionHost(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser = super().argument_parser()
         parser.add_argument('query', help=('Cumin query to match the host(s) to act upon. At most 5 at a time, with '
                                            '--force at most 20 at a time.'))
         parser.add_argument('-t', '--task-id', required=True, help='the Phabricator task ID (e.g. T12345)')

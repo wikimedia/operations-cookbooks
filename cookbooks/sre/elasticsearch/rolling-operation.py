@@ -1,5 +1,4 @@
 """Perform rolling operations on elasticsearch servers"""
-import argparse
 import logging
 from contextlib import ExitStack
 from datetime import datetime, timedelta
@@ -7,7 +6,7 @@ from enum import Enum, auto
 from time import sleep
 
 from spicerack.constants import CORE_DATACENTERS
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.elasticsearch_cluster import ElasticsearchClusterCheckError
 from cookbooks.sre.elasticsearch import CLUSTERGROUPS, valid_datetime_type
 
@@ -71,8 +70,7 @@ class RollingOperation(CookbookBase):
             relforge cluster does not have lvs enabled.
 
         """
-        parser = argparse.ArgumentParser(description=self.__doc__,
-                                         formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('clustergroup', choices=CLUSTERGROUPS,
                             help='Name of clustergroup. One of: %(choices)s.')
         parser.add_argument('admin_reason', help='Administrative Reason')
