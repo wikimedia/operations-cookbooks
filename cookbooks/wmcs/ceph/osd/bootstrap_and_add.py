@@ -63,6 +63,12 @@ class BootstrapAndAdd(CookbookBase):
             ),
         )
         parser.add_argument(
+            "--only-check",
+            required=False,
+            action="store_true",
+            help="If passed, will only run the pre-setup checks on the host and report back, nothing more.",
+        )
+        parser.add_argument(
             "--yes-i-know-what-im-doing",
             required=False,
             action="store_true",
@@ -96,6 +102,7 @@ class BootstrapAndAdd(CookbookBase):
             skip_reboot=args.skip_reboot,
             wait_for_rebalance=args.wait_for_rebalance,
             force=args.force,
+            only_check=args.only_check,
             spicerack=self.spicerack,
         )
 
@@ -125,6 +132,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
         yes_i_know: bool,
         skip_reboot: bool,
         wait_for_rebalance: bool,
+        only_check: bool,
         spicerack: Spicerack,
     ):
         """Init"""
@@ -135,6 +143,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
         self.skip_reboot = skip_reboot
         self.spicerack = spicerack
         self.wait_for_rebalance = wait_for_rebalance
+        self.only_check = only_check
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
@@ -148,18 +157,20 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
         self.sallogger.log(
             message=f"Adding new OSDs {self.new_osd_fqdns} to the cluster",
         )
-        # this avoids rebalancing after each osd is added
-        self.cluster_controller.set_osdmap_flag(CephOSDFlag("norebalance"))
+        if not self.only_check:
+            # this avoids rebalancing after each osd is added
+            self.cluster_controller.set_osdmap_flag(CephOSDFlag("norebalance"))
 
         for index, new_osd_fqdn in enumerate(self.new_osd_fqdns):
             self.sallogger.log(
                 message=f"Adding OSD {new_osd_fqdn}... ({index + 1}/{len(self.new_osd_fqdns)})",
             )
             node = self.spicerack.remote().query(f"D{{{new_osd_fqdn}}}", use_sudo=True)
-            # make sure puppet has run fully
-            PuppetHosts(remote_hosts=node).run()
+            osd_controller = CephOSDNodeController(remote=self.spicerack.remote(), node_fqdn=new_osd_fqdn)
+
             if not self.skip_reboot:
-                # make sure to start from fresh boot
+                LOGGER.info("Running puppet and rebooting to make sure we start from fresh boot.")
+                PuppetHosts(remote_hosts=node).run()
                 reboot_node_cookbook = RebootNode(spicerack=self.spicerack)
                 reboot_args = [
                     "--skip-maintenance",
@@ -174,10 +185,24 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
                 reboot_node_cookbook.get_runner(
                     args=reboot_node_cookbook.argument_parser().parse_args(reboot_args)
                 ).run()
+                # Puppet adds the network routes to the cluster network on run
+                # so we need to run it once after reboot
+                PuppetHosts(remote_hosts=node).run()
 
-            CephOSDNodeController(remote=self.spicerack.remote(), node_fqdn=new_osd_fqdn).add_all_available_devices(
-                interactive=(not self.yes_i_know)
-            )
+            LOGGER.info("Doing some checks...")
+            node_failures = self.cluster_controller.check_if_osd_ready_for_bootstrap(osd_controller=osd_controller)
+            if node_failures:
+                errors_str = "\n    ".join(node_failures)
+                error_msg = f"The node {new_osd_fqdn} is not suitable to be added as an osd:\n    {errors_str}"
+                LOGGER.error(error_msg)
+                raise Exception(error_msg)
+            LOGGER.info("...OK")
+
+            if self.only_check:
+                continue
+
+            osd_controller.add_all_available_devices(interactive=(not self.yes_i_know))
+
             self.sallogger.log(
                 message=f"Added OSD {new_osd_fqdn}... ({index + 1}/{len(self.new_osd_fqdns)})",
             )
@@ -199,6 +224,9 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
                 raise Exception(
                     f"Something went wrong, I was unable to change the device class for osds {wrongly_classified_osds}"
                 )
+
+        if self.only_check:
+            return
 
         # Now we start rebalancing once all are in
         self.cluster_controller.unset_osdmap_flag(CephOSDFlag("norebalance"))

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Union, cast
 
 from spicerack import Remote, Spicerack
+from spicerack.remote import RemoteExecutionError
 from wmflib.interactive import ask_confirmation
 
 from cookbooks.wmcs.libs.alerts import SilenceID, downtime_alert, uptime_alert
@@ -29,6 +30,8 @@ CLUSTER_ALERT_MATCHES = [
     "alertname=Ceph Mon Quorum",
     "service=.*ceph.*",
 ]
+OSD_EXPECTED_OSD_DRIVES_PER_HOST = 8
+OSD_EXPECTED_OS_DRIVES = 2
 
 
 class CephException(Exception):
@@ -226,8 +229,8 @@ class CephOSDNodeController:
     def __init__(self, remote: Remote, node_fqdn: str):
         """Init."""
         self._remote = remote
-        self._node_fqdn = node_fqdn
-        self._node = self._remote.query(f"D{{{self._node_fqdn}}}", use_sudo=True)
+        self.node_fqdn = node_fqdn
+        self._node = self._remote.query(f"D{{{self.node_fqdn}}}", use_sudo=True)
 
     @classmethod
     def _is_device_available(cls, device_info: Dict[str, Any]) -> bool:
@@ -242,9 +245,14 @@ class CephOSDNodeController:
 
         return _is_disk() and _does_not_have_partitions() and _its_not_mounted()
 
-    def get_available_devices(self) -> List[str]:
-        """Get the current available devices in the node."""
-        structured_output = run_one_formatted(command=["lsblk", "--json"], node=self._node)
+    def do_lsblk(self) -> List[Dict[str, Any]]:
+        """Simple lsblk on the host to get the devices."""
+        structured_output = run_one_formatted(
+            command=["lsblk", "--json"],
+            node=self._node,
+            print_output=False,
+            print_progress_bars=False,
+        )
         if not isinstance(structured_output, dict):
             raise TypeError(f"Was expecting a dict, got {structured_output}")
 
@@ -253,9 +261,13 @@ class CephOSDNodeController:
                 f"Missing 'blockdevices' on lsblk output: {json.dumps(structured_output, indent=4)}"
             )
 
+        return structured_output["blockdevices"]
+
+    def get_available_devices(self) -> List[str]:
+        """Get the current available devices in the node."""
         return [
             f"/dev/{device_info['name']}"
-            for device_info in structured_output["blockdevices"]
+            for device_info in self.do_lsblk()
             if self._is_device_available(device_info=device_info)
         ]
 
@@ -274,10 +286,44 @@ class CephOSDNodeController:
         """Discover and add all the available devices of the node as new OSDs."""
         for device_path in self.get_available_devices():
             if interactive:
-                ask_confirmation(f"I'm going to destroy and create a new OSD on {self._node_fqdn}:{device_path}.")
+                ask_confirmation(f"I'm going to destroy and create a new OSD on {self.node_fqdn}:{device_path}.")
 
             self.zap_device(device_path=device_path)
             self.initialize_and_start_osd(device_path=device_path)
+
+    def check_jumbo_frames_to(self, dst_ip: str) -> bool:
+        """Check if this node is ready to be setup as a new osd."""
+        try:
+            run_one_raw(
+                command=[
+                    "ping",
+                    # the following is to avoid fragmenting packages
+                    "-M",
+                    "do",
+                    # force ipv4
+                    "-4",
+                    # count, we use two because sometimes after reboot the
+                    # first ping to the new network is lost by the router
+                    # (while resolving arp addresses)
+                    "-c",
+                    "2",
+                    # timeout
+                    "-W",
+                    "1",
+                    # the following size generates a 9000 jumbo frame packet
+                    "-s",
+                    "8972",
+                    dst_ip,
+                ],
+                node=self._node,
+                print_output=False,
+                print_progress_bars=False,
+            )
+        except RemoteExecutionError as err:
+            LOGGER.warning("Failed to ping %s with a jumbo frame: %s", dst_ip, str(err))
+            return False
+
+        return True
 
 
 class CephClusterController(CommandRunnerMixin):
@@ -541,6 +587,90 @@ class CephClusterController(CommandRunnerMixin):
             # TODO: update the following to a useful structure if it's ever needed
             "stray": flat_nodes["stray"],
         }
+
+    def get_all_osd_ips(self) -> Set[str]:
+        """Returns all the known ips for all the osd, deduplicated.
+
+        This includes the public and cluster ips, useful to run tests.
+        """
+        osd_dump = self.run_formatted_as_dict(
+            "osd",
+            "dump",
+            print_output=False,
+            print_progress_bars=False,
+        )
+        all_osd_ips: Set[str] = set()
+        for osd in osd_dump.get("osds", []):
+            public_addr = osd["public_addr"].split(":", 1)[0]
+            all_osd_ips.add(public_addr)
+            cluster_addr = osd["cluster_addr"].split(":", 1)[0]
+            all_osd_ips.add(cluster_addr)
+
+        return all_osd_ips
+
+    def check_if_osd_ready_for_bootstrap(self, osd_controller: CephOSDNodeController) -> List[str]:
+        """Check if a node is ready to be added as osd to the cluster.
+
+        Returns a list of any failures that happened.
+        """
+        failures: List[str] = []
+
+        LOGGER.info("Checking that jumbo frames are allowed to all other nodes in the cluster...")
+        for other_node_ip in self.get_all_osd_ips():
+            if not osd_controller.check_jumbo_frames_to(other_node_ip):
+                failures.append(f"Unable to send jumbo frames to {other_node_ip} from node {osd_controller.node_fqdn}")
+
+        LOGGER.info("Checking that we have the right amount if drives in the host...")
+        host_devices = osd_controller.do_lsblk()
+        total_expected_devices = OSD_EXPECTED_OS_DRIVES + OSD_EXPECTED_OSD_DRIVES_PER_HOST
+        if len(host_devices) != total_expected_devices:
+            failures.append(
+                f"The host has {len(host_devices)}, when we are expecting {total_expected_devices} "
+                f"({OSD_EXPECTED_OSD_DRIVES_PER_HOST} for osds, and {OSD_EXPECTED_OS_DRIVES} for the os)"
+            )
+
+        LOGGER.info("Checking that we have enough free drives in the host...")
+        available_devices = osd_controller.get_available_devices()
+        if len(available_devices) > OSD_EXPECTED_OSD_DRIVES_PER_HOST:
+            failures.append(
+                f"We expected to have at least {OSD_EXPECTED_OS_DRIVES} drives reserved for OS, but it seems we "
+                f"would use some of them ({available_devices}), maybe the raid is not properly setup?"
+            )
+
+        LOGGER.info("Checking that we have enough OS dedicated drives in the host...")
+        # example of soft-raid device:
+        # {"name":"sda", "maj:min":"8:0", "rm":false, "size":"447.1G", "ro":false, "type":"disk", "mountpoint":null,
+        #    "children": [
+        #       {"name":"sda1", ...},
+        #       {"name":"sda2", ...
+        #          "children": [
+        #             {"name":"md0", ...
+        #                "children": [
+        #                   {"name":"vg0-swap", ...},
+        #                   {"name":"vg0-root", ...},
+        #                   {"name":"vg0-srv", ...}
+        #                ]
+        #             }
+        #          ]
+        #       }
+        #    ]
+        # },
+        devices_with_soft_raid_on_them = [
+            device
+            for device in host_devices
+            if device.get("children", [])
+            and any(
+                child.get("children", []) and child["children"] and child["children"][0].get("name", "") == "md0"
+                for child in device["children"]
+            )
+        ]
+        if len(devices_with_soft_raid_on_them) != OSD_EXPECTED_OS_DRIVES:
+            failures.append(
+                "It seems we don't have the expected raids setup on the OS devices, I was expecting "
+                f"{OSD_EXPECTED_OS_DRIVES} setup in software raid, but got {devices_with_soft_raid_on_them}"
+            )
+
+        return failures
 
 
 # Poor man's namespace to compensate for the restriction to not create modules

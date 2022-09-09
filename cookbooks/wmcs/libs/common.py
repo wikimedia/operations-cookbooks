@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Cloud Services Cookbooks"""
+# pylint: disable=too-many-arguments
 __title__ = __doc__
 import argparse
 import base64
@@ -13,7 +14,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from functools import partial
 from itertools import chain
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Pattern, Union
 from unittest import mock
 
 import yaml
@@ -488,6 +489,7 @@ def run_one_formatted(
     capture_errors: bool = False,
     last_line_only: bool = False,
     skip_first_line: bool = False,
+    ignore_lines: Optional[List[Pattern[str]]] = None,
     try_format: OutputFormat = OutputFormat.JSON,
     **kwargs,
 ) -> Union[List[Any], Dict[str, Any]]:
@@ -505,6 +507,11 @@ def run_one_formatted(
         skip_first_line=skip_first_line,
         **kwargs,
     )
+
+    if ignore_lines:
+        raw_result = "\n".join(
+            line for line in raw_result.splitlines() if not any(pattern.match(line) for pattern in ignore_lines)
+        )
 
     try:
         if try_format == OutputFormat.JSON:
