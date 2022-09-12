@@ -224,6 +224,33 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     'Matched {} hosts, and --force not set aborting. (max 20 with --force, 5 without)'
                     .format(len(self.decom_hosts)))
 
+        self.dns = spicerack.dns()
+        self.netbox_servers = {}
+        self.ipmi_hosts = {}
+        for fqdn in self.decom_hosts:
+            hostname = fqdn.split('.')[0]
+            self.netbox_servers[hostname] = spicerack.netbox_server(hostname)
+            if self.netbox_servers[hostname].virtual:
+                continue
+
+            # Only for physical hosts
+            try:
+                mgmt_fqdn = self.netbox_servers[hostname].mgmt_fqdn
+                self.dns.resolve_ips(mgmt_fqdn)
+            except DnsNotFound:
+                mgmt_fqdn = self.netbox_servers[hostname].asset_tag_fqdn
+                spicerack.actions[fqdn].warning(
+                    f'//No DNS record found for the mgmt interface {self.netbox_servers[hostname].mgmt_fqdn}, '
+                    f'trying the asset tag one: {mgmt_fqdn}//')
+
+            self.ipmi_hosts[hostname] = spicerack.ipmi(mgmt_fqdn)
+            try:
+                self.ipmi_hosts[hostname].check_connection()
+            except IpmiError:
+                ask_confirmation(f'WARNING: remote IPMI connection test failed for host {hostname}. The host will not '
+                                 'be shutdown. You can either continue (go) as is or try to fix the problem first '
+                                 '(abort). See https://wikitech.wikimedia.org/wiki/Ipmi for troubleshooting.')
+
         ask_confirmation(
             'ATTENTION: destructive action for {n} hosts: {hosts}\nAre you sure to proceed?'
             .format(n=len(self.decom_hosts), hosts=self.decom_hosts))
@@ -232,7 +259,6 @@ class DecommissionHostRunner(CookbookRunnerBase):
         self.task_id = args.task_id
         self.puppet_master = self.remote.query(get_puppet_ca_hostname())
         self.kerberos_kadmin = self.remote.query(KERBEROS_KADMIN_CUMIN_ALIAS)
-        self.dns = self.spicerack.dns()
         self.deployment_host = self.remote.query(self.dns.resolve_cname(DEPLOYMENT_HOST))
         self.patterns = get_grep_patterns(self.dns, self.decom_hosts)
         self.reason = self.spicerack.admin_reason('Host decommission', task_id=self.task_id)
@@ -248,7 +274,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
         puppet_master = self.spicerack.puppet_master()
         debmonitor = self.spicerack.debmonitor()
         netbox = self.spicerack.netbox(read_write=True)
-        netbox_server = self.spicerack.netbox_server(hostname)
+        netbox_server = self.netbox_servers[hostname]
         netbox_data = netbox_server.as_dict()
         ganeti = self.spicerack.ganeti()
 
@@ -317,17 +343,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
                         'intervention required to make it unbootable**: {e}'.format(e=e))
 
             try:
-                self.dns.resolve_ips(netbox_server.mgmt_fqdn)
-                ipmi_host = netbox_server.mgmt_fqdn
-            except DnsNotFound:
-                ipmi_host = netbox_server.asset_tag_fqdn
-                self.spicerack.actions[fqdn].warning((
-                    '//No DNS record found for the mgmt interface {mgmt}, trying the asset tag '
-                    'one: {ipmi_host}//').format(mgmt=netbox_server.mgmt_fqdn, ipmi_host=ipmi_host))
-
-            ipmi = self.spicerack.ipmi(ipmi_host)
-            try:
-                ipmi.command(['chassis', 'power', 'off'])
+                self.ipmi_hosts[hostname].command(['chassis', 'power', 'off'])
                 self.spicerack.actions[fqdn].success('Powered off')
             except IpmiError as e:
                 self.spicerack.actions[fqdn].failure(
