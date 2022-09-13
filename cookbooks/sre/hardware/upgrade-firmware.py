@@ -220,7 +220,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             # how to get old versions
             pass
         version = driver.versions.pop()
-        firmware_path = self.firmware_store / product_slug / version.url.split("/")[-1]
+        firmware_path = self.firmware_store / product_slug / driver_type.name / version.url.split("/")[-1]
         if firmware_path.is_file():
             logger.info("%s: Already have: %s", netbox_host.fqdn, firmware_path)
         else:
