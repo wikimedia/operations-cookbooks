@@ -21,6 +21,7 @@ from spicerack.redfish import (
     RedfishError,
     Redfish,
 )
+from wmflib.config import load_yaml_config
 from wmflib.interactive import ask_confirmation, ask_input
 
 from cookbooks.sre.hardware import DellAPI, DellDriverType, DellDriverCategory
@@ -54,7 +55,6 @@ class FirmwareUpgrade(CookbookBase):
             "-S",
             help="The location where firmware is stored",
             type=Path,
-            default=Path("/srv/firmware"),
         )
         parser.add_argument(
             "--firmware-file",
@@ -106,8 +106,10 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                 )
             self.firmware_file = args.firmware_file.resolve()
 
+        config = load_yaml_config(spicerack.config_dir / 'cookbooks' / 'sre.hardware.upgrade-firmware.yaml')
+
         self.spicerack = spicerack
-        self.firmware_store = args.firmware_store
+        self.firmware_store = args.firmware_store if args.firmware_store else config['firmware_store']
         self.force = args.force
         self.yes = args.yes
         self.component = args.component
