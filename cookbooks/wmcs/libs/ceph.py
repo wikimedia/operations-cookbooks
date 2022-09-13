@@ -515,9 +515,14 @@ class CephClusterController(CommandRunnerMixin):
         def _get_expanded_node(
             plain_node: Dict[str, Any], all_nodes: Dict[int, Dict[str, Any]]
         ) -> Union[Dict[str, Any], OSDTreeEntry]:
-            # we expect ~3 levels of depth, recursive should be ok
-            if not plain_node.get("children", None):
+
+            # We expect the "osd" nodes to always be leaf nodes of the tree
+            if plain_node.get("type") == "osd":
                 return OSDTreeEntry.from_json_data(plain_node)
+
+            # We expect other node types to always have a "children" attribute (can be an empty list)
+            if plain_node.get("children", None) is None:
+                raise Exception(f"Unexpected leaf node that is not an OSD: {plain_node}")
 
             children_ids = plain_node["children"]
             children = [_get_expanded_node(all_nodes[child_id], all_nodes) for child_id in children_ids]

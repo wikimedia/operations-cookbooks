@@ -15,6 +15,9 @@ from cookbooks.wmcs.libs.ceph import (
     CephOSDFlag,
     CephTestUtils,
     CephTimeout,
+    OSDClass,
+    OSDStatus,
+    OSDTreeEntry,
 )
 from cookbooks.wmcs.libs.inventory import CephClusterName
 
@@ -533,3 +536,57 @@ def test_wait_for_cluster_health_raises(
         "cookbooks.wmcs.libs.common.time.sleep"
     ), pytest.raises(CephClusterUnhealthy):
         my_controller.wait_for_cluster_healthy(**params)
+
+
+@parametrize(
+    {
+        "Parse the OSD tree returned by 'ceph osd tree' into a tree structure": {
+            "osd_tree_command_output": """
+            {
+                "nodes":[
+                    {"id":-1,"type":"root","name":"root","children":[-2,-3]},
+                    {"id":-2,"type":"host","name":"host01","children":[101]},
+                    {"id":101,"type":"osd","name":"osd.101","device_class":"ssd","status":"up","crush_weight":1.5},
+                    {"id":-3,"type":"host","name":"host02","children":[]}
+                ],
+                "stray":[]
+            }
+            """,
+            "expected_tree": {
+                "nodes": {
+                    "id": -1,
+                    "name": "root",
+                    "type": "root",
+                    "children": [
+                        {
+                            "id": -2,
+                            "name": "host01",
+                            "type": "host",
+                            "children": [
+                                OSDTreeEntry(
+                                    osd_id=101,
+                                    name="osd.101",
+                                    device_class=OSDClass.SSD,
+                                    status=OSDStatus.UP,
+                                    crush_weight=1.5,
+                                )
+                            ],
+                        },
+                        {"id": -3, "name": "host02", "type": "host", "children": []},
+                    ],
+                },
+                "stray": [],
+            },
+        },
+    }
+)
+def test_get_osd_tree(expected_tree: List[str], osd_tree_command_output: str):
+    my_controller = CephClusterController(
+        remote=CephTestUtils.get_fake_remote(responses=[osd_tree_command_output]),
+        cluster_name=CephClusterName.EQIAD1,
+        spicerack=mock.MagicMock(spec=Spicerack),
+    )
+
+    gotten_tree = my_controller.get_osd_tree()
+
+    assert gotten_tree == expected_tree
