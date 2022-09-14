@@ -10,10 +10,10 @@ from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
 
 
 class RestartNginx(SREBatchBase):
-    """A WQS nginx restart class"""
+    """Roll-restart nginx on WQDS/WCQS clusters"""
 
     batch_default = 1
-    valid_actions = ('restart',)
+    valid_actions = ('restart_daemons',)
     grace_sleep = 2
 
     # We must implement this abstract method
