@@ -620,7 +620,7 @@ class CephClusterController(CommandRunnerMixin):
             if not osd_controller.check_jumbo_frames_to(other_node_ip):
                 failures.append(f"Unable to send jumbo frames to {other_node_ip} from node {osd_controller.node_fqdn}")
 
-        LOGGER.info("Checking that we have the right amount if drives in the host...")
+        LOGGER.info("Checking that we have the right amount of drives in the host...")
         host_devices = osd_controller.do_lsblk()
         total_expected_devices = OSD_EXPECTED_OS_DRIVES + OSD_EXPECTED_OSD_DRIVES_PER_HOST
         if len(host_devices) != total_expected_devices:
