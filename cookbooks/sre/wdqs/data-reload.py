@@ -11,6 +11,7 @@ import os
 
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+import dateutil.parser
 
 from spicerack.kafka import ConsumerDefinition
 from spicerack.remote import RemoteExecutionError
@@ -72,9 +73,19 @@ def argument_parser():
     parser.add_argument('--depool', action='store_true', help='Should be depooled.')
     parser.add_argument('--reload-data', required=True, choices=['wikidata', 'categories', 'commons'],
                         help='Type of data to reload')
-    parser.add_argument('--kafka-timestamp', type=int, help='Timestamp to use for kafka consumer topic reset (in ms)')
+    parser.add_argument('--kafka-timestamp', type=to_ms_timestamp,
+                        help='Timestamp to use for kafka consumer topic reset (in ms)')
 
     return parser
+
+
+def to_ms_timestamp(time_str: str) -> int:
+    """Converts string representation of datetime into time since unix epoch in ms"""
+    if time_str.isdigit():
+        # Input is already a ms timestamp
+        return int(time_str)
+    dt = dateutil.parser.parse(time_str)
+    return int(dt.timestamp() * 1000)
 
 
 def get_dumps(dumps, remote_host, proxy_server, reuse_dump):
