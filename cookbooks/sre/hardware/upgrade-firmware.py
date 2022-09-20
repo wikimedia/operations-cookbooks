@@ -109,7 +109,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         config = load_yaml_config(spicerack.config_dir / 'cookbooks' / 'sre.hardware.upgrade-firmware.yaml')
 
         self.spicerack = spicerack
-        self.firmware_store = args.firmware_store if args.firmware_store else config['firmware_store']
+        self.firmware_store = args.firmware_store if args.firmware_store else Path(config['firmware_store'])
         self.force = args.force
         self.yes = args.yes
         self.component = args.component
