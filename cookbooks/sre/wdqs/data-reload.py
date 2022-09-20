@@ -254,7 +254,7 @@ def run(args, spicerack):
             # It's not obvious how we would verify the munge is valid, this has
             # to take a "trust-the-operator" approach. This will still bail if
             # a munge path is missing
-            remote_host.run_sync([
+            remote_host.run_sync(*[
                 f'test -d {dump["munge_path"]}'
                 for dump in dumps
             ])
