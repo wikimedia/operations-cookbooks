@@ -68,13 +68,17 @@ def argument_parser():
     parser.add_argument('--task-id', help='task id for the change')
     parser.add_argument('--proxy-server', help='Specify proxy server to use')
     parser.add_argument('--reason', required=True, help='Administrative Reason')
-    parser.add_argument('--reuse-downloaded-dump', action='store_true', help='Reuse downloaded dump')
     parser.add_argument('--downtime', type=int, default=336, help='Hour(s) of downtime')
     parser.add_argument('--depool', action='store_true', help='Should be depooled.')
     parser.add_argument('--reload-data', required=True, choices=['wikidata', 'categories', 'commons'],
                         help='Type of data to reload')
     parser.add_argument('--kafka-timestamp', type=to_ms_timestamp,
                         help='Timestamp to use for kafka consumer topic reset (in ms)')
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--reuse-downloaded-dump', action='store_true', help='Reuse downloaded dump')
+    group.add_argument('--reuse-download-and-munge', action='store_true',
+                       help='Reuse downloaded dump and resulting munge. WARNING: Does not perform sanity checks.')
 
     return parser
 
@@ -246,6 +250,15 @@ def run(args, spicerack):
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
     def fetch_dumps(dumps, journal):
+        if args.reuse_download_and_munge:
+            # It's not obvious how we would verify the munge is valid, this has
+            # to take a "trust-the-operator" approach. This will still bail if
+            # a munge path is missing
+            remote_host.run_sync([
+                f'test -d {dump["munge_path"]}'
+                for dump in dumps
+            ])
+            return
         get_dumps(dumps, remote_host, args.proxy_server, args.reuse_downloaded_dump)
         fail_for_disk_space(remote_host, dumps, journal)
         munge(dumps, remote_host)
