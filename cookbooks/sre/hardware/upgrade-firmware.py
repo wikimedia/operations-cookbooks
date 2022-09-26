@@ -1,5 +1,4 @@
 """Decommission a host from all inventories."""
-import argparse
 import logging
 
 from contextlib import contextmanager
@@ -57,11 +56,6 @@ class FirmwareUpgrade(CookbookBase):
             type=Path,
         )
         parser.add_argument(
-            "--firmware-file",
-            help="the firmware file to install if not provided we try to fetch the most recent",
-            type=Path,
-        )
-        parser.add_argument(
             "-f",
             "--force",
             help="force the upgrade even if the firmware allready matches",
@@ -95,17 +89,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     def __init__(self, args, spicerack):
         """Decommission a host from all inventories."""
-        if args.type == "all" and args.file is not None:
-            raise argparse.ArgumentTypeError("--file is not valid with --type all")
-
-        self.firmware_file = None
-        if args.firmware_file:
-            if not args.firmware_file.is_file:
-                raise argparse.ArgumentTypeError(
-                    "firmware ({args.firmware}) does not exist"
-                )
-            self.firmware_file = args.firmware_file.resolve()
-
         config = load_yaml_config(spicerack.config_dir / 'cookbooks' / 'sre.hardware.upgrade-firmware.yaml')
 
         self.spicerack = spicerack
@@ -445,8 +428,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         current_version: str,
         *,
         extract_payload: bool = False,
-        firmware_file: Optional[Path] = None,
-    ) -> Optional[str]:
+    ) -> Tuple[Optional[str], Optional[str]]:
         """Update the driver to the latest version.
 
         Arguments:
@@ -454,33 +436,33 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             netbox_host: The netbox host to act on.
             driver_type: The driver type to get
             driver_category: The driver category to get
-            wait_for_reboot: this is used for idrac which automatically rests idrac on install
-                             most calleres are expected to preform there own reset
+            current_version: The version of the currently running driver
+            extract_payload: if true extract the bin file from the archive
 
         Returns:
-            (latest_version, current_version): a tuple of strings of the latests and current versions
+            (latest_version, job_id): A tuple of the latest version and the update job id
 
         """
         latest_version = None
-        if firmware_file is None:
-            latest_version, firmware_file = self.get_latest(
-                netbox_host, driver_type, driver_category
-            )
+        # TODO: present list of currently downloaded files
+        latest_version, firmware_file = self.get_latest(
+            netbox_host, driver_type, driver_category
+        )
+        logger.info(
+            "%s (%s): latest_version: %s, current_version: %s",
+            netbox_host.fqdn,
+            driver_category.name,
+            latest_version,
+            current_version,
+        )
+        if not self.force and latest_version == current_version:
             logger.info(
-                "%s (%s): latest_version: %s, current_version: %s",
+                "%s (%s): Skipping already at latest version %s",
                 netbox_host.fqdn,
                 driver_category.name,
                 latest_version,
-                current_version,
             )
-            if not self.force and latest_version == current_version:
-                logger.info(
-                    "%s (%s): Skipping already at latest version %s",
-                    netbox_host.fqdn,
-                    driver_category.name,
-                    latest_version,
-                )
-                return latest_version, None
+            return latest_version, None
         self._ask_confirmation(
             f"{netbox_host.fqdn} {driver_category.name}: About to upload {firmware_file}, please confirm"
         )
@@ -524,7 +506,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_category,
             current_version,
             extract_payload=True,
-            firmware_file=self.firmware_file,
         )
         if job_id is None:
             return
@@ -552,8 +533,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_category.name,
             current_version,
         )
-        # If we pass a firmware file then skip the version check
-        if self.firmware_file is None and current_version != latest_version:
+        if current_version != latest_version:
             logger.error(
                 "%s (%s): Something went wrong, the current version (%s) does not match the most recent (%s)",
                 netbox_host.fqdn,
@@ -600,7 +580,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_type,
             driver_category,
             current_version,
-            firmware_file=self.firmware_file,
         )
         if job_id is None:
             return
@@ -615,7 +594,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             current_version,
         )
         # skip the =version check if we passed a firmware file
-        if self.firmware_file is None and current_version != latest_version:
+        if current_version != latest_version:
             logger.error(
                 "%s (%s): Something went wrong, the current version (%s) does not match the most recent (%s)",
                 netbox_host.fqdn,
