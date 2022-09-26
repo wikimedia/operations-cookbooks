@@ -3,6 +3,8 @@ import logging
 
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+# TODO: switch lru_cache to cache when support for 3.7 is dropped
+from functools import lru_cache
 from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -47,7 +49,13 @@ class FirmwareUpgrade(CookbookBase):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument(
-            "--type",
+            "--disable-cached-answers",
+            help=(
+                "By default this cookbook caches the answers for firmware selection.  "
+                "Add this to disable the behaviour"
+            ),
+            action="store_true",
+            default=False,
         )
         parser.add_argument(
             "--yes",
@@ -110,6 +118,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         self.yes = args.yes
         self.component = args.component
         self.new = args.new
+        self.cache_answers = not args.disable_cached_answers
 
         if self.new:
             self.hosts = [args.query]
@@ -189,10 +198,9 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             product_slug: a string representing the product slug e.g. poweredge-r440
 
         """
-        product_slug = netbox_host.as_dict()["device_type"]["slug"]
-        # smal hack to get around some slugs having the config in them e.g.
+        # small hack to get around some slugs having the config in them e.g.
         # poweredge-r440-configc-202107
-        return product_slug.split("-config")[0]
+        return netbox_host.as_dict()["device_type"]["slug"].split("-config")[0]
 
     def _firmware_path(
         self, product_slug: str, driver_category: DellDriverCategory
@@ -211,14 +219,14 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     def get_latest(
         self,
-        netbox_host: NetboxServer,
+        product_slug: str,
         driver_type: DellDriverType,
         driver_category: DellDriverCategory,
     ) -> Tuple[str, Path]:
         """Download the latest idrac for the specific netbox model
 
         Arguments:
-            netbox_host: the netbox_host to lookup
+            product_slug: the host product slug
             driver_type: The driver type to get
             driver_category: The driver category to get
 
@@ -227,7 +235,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         firmware_path = None
-        product_slug = self._product_slug(netbox_host)
         product = self.dell_api.fetch(product_slug)
         driver = list_picker(sorted(product.find_driver(driver_type, driver_category)))
         if len(driver.versions) > 1:
@@ -239,13 +246,12 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             self._firmware_path(product_slug, driver_type) / driver_version.url.split("/")[-1]
         )
         if firmware_path.is_file():
-            logger.info("%s: Already have: %s", netbox_host.fqdn, firmware_path)
+            logger.info("%s: Already have: %s", product_slug, firmware_path)
         else:
             firmware_path.parent.mkdir(exist_ok=True, parents=True)
-            logger.info("%s: Downloading %s", netbox_host.fqdn, driver_version.url)
+            logger.info("%s: Downloading %s", product_slug, driver_version.url)
             self.dell_api.download(driver_version.url, firmware_path)
         driver_version = driver_version.version
-        logger.debug("%s: latest version - %s", netbox_host.fqdn, driver_version)
         return driver_version, firmware_path
 
     # TODO: consider moving to spicerack.redfish
@@ -455,14 +461,14 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     def _select_firmwarefile(
         self,
-        netbox_host: NetboxServer,
+        product_slug: str,
         driver_type: DellDriverType,
         driver_category: DellDriverCategory,
     ) -> Tuple[Path, str]:
         """Select a list of files from ones already present on the file system
 
         Arguments:
-            netbox_host: The netbox host to act on.
+            product_slug: The host product_slug.
             driver_type: The driver type to get
             driver_category: The driver category to get
 
@@ -470,20 +476,25 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             (firmware_file, version): A tuple of the selected firmware file and its version
 
         """
-        product_slug = self._product_slug(netbox_host)
+        logger.info("%s: picking %s update file", product_slug, driver_type)
         firmware_dir = self._firmware_path(product_slug, driver_category)
         if not firmware_dir.is_dir():
-            return self.get_latest(netbox_host, driver_type, driver_category)
+            return self.get_latest(product_slug, driver_type, driver_category)
 
         current_files = list(filter(Path.is_file, firmware_dir.iterdir()))
         if not current_files:
-            return self.get_latest(netbox_host, driver_type, driver_category)
+            return self.get_latest(product_slug, driver_type, driver_category)
 
         selection = list_picker(current_files + ["Download new file"])
-        if selection == "Download new file":
-            return self.get_latest(netbox_host, driver_type, driver_category)
 
+        if selection == "Download new file":
+            return self.get_latest(product_slug, driver_type, driver_category)
         return extract_version(selection), selection
+
+    # create a cached version of the above function
+    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
+    def _cached_select_firmwarefile(self, *args, **kargs):
+        return self._select_firmwarefile(*args, **kargs)
 
     def _update(
         self,
@@ -509,8 +520,15 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         """
         logger.info("%s (%s): update", netbox_host.fqdn, driver_category.name)
         current_version = self.get_version(redfish_host, driver_category)
-        target_version, firmware_file = self._select_firmwarefile(
-            netbox_host, driver_type, driver_category
+
+        select_firmwarefile = (
+            self._cached_select_firmwarefile
+            if self.cache_answers
+            else self._select_firmwarefile
+        )
+        product_slug = self._product_slug(netbox_host)
+        target_version, firmware_file = select_firmwarefile(
+            product_slug, driver_type, driver_category
         )
         logger.info(
             "%s (%s): target_version: %s, current_version: %s",
@@ -589,14 +607,13 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             netbox_host: The netbox host to act on.
 
         """
-        driver_category = DellDriverCategory.IDRAC
-        driver_type = DellDriverType.FRMW
         last_reboot = redfish_host.last_reboot()
+        driver_category = DellDriverCategory.IDRAC
         # TODO: we should store this as some pkg_utils version parse string
         target_version, job_id = self._update(
             redfish_host,
             netbox_host,
-            driver_type,
+            DellDriverType.FRMW,
             driver_category,
             extract_payload=True,
         )
@@ -608,6 +625,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         # for older firmware we also need to
         # racadm set idrac.webserver.HostHeaderCheck 0
         # however we have to upgrade to + 2.80 before we can set it
+        # We also hit this issue when upgrading to 5.10.50.00
 
         # When the host reboots its quite noisy as you also get the
         # retries from wmflib...http_session as well as wmflib...retry
@@ -649,11 +667,10 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         driver_category = DellDriverCategory.BIOS
-        driver_type = DellDriverType.BIOS
         target_version, job_id = self._update(
             redfish_host,
             netbox_host,
-            driver_type,
+            DellDriverType.BIOS,
             driver_category,
         )
         if job_id is None:
