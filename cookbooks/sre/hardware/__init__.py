@@ -35,9 +35,12 @@ def extract_version(firmware_file: Path) -> version.Version:
         pattern = {
             'IDRAC': r'(?P<version>(\d{1,2}\.){3}\d{1,2})_\w{3}$',
             'BIOS': r'(?P<version>(\d{1,2}\.){2}\d{1,2})$',
+            'NETWORK': r'(?P<version>(\d{1,2}\.){2}\d{1,2})$',
         }[firmware_file.parent.name]
-    except KeyError as error:
-        raise RuntimeError(f'unable to extract version from: {firmware_file}') from error
+    except KeyError:
+        raise RuntimeError(
+            f'Unsupported firmware type {firmware_file.parent.name} from {firmware_file}'
+        ) from None
     match = re.search(pattern, firmware_file.stem)
     if match is None:
         raise RuntimeError(f'unable to extract version from: {firmware_file}')
@@ -57,6 +60,18 @@ class DellDriverCategory(Enum):
 
     IDRAC = "LC"
     BIOS = "BI"
+    CPLD = "CPLD"
+    CHIPSET = "CS"
+    DEVICE_FIRMWARE = "FW"
+    FIBER_CHANNEL = "FC"
+    NETWORK = "NI"
+    POWER = "PS"
+    SAS_NO_RAID = "SE"
+    SAS_RAID = "SF"
+    SAS_DRIVE = "AS"
+    SSD = "PC"
+    STORAGE = "ST"
+    VIDEO = "VI"
 
 
 @dataclass

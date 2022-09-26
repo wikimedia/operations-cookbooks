@@ -3,6 +3,7 @@ import logging
 
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+
 # TODO: switch lru_cache to cache when support for 3.7 is dropped
 from functools import lru_cache
 from io import BufferedReader
@@ -86,7 +87,7 @@ class FirmwareUpgrade(CookbookBase):
             "-c",
             "--component",
             help="force a specific type of upgrade: %(choices)s",
-            choices=("bios", "idrac"),
+            choices=("bios", "idrac", "nic"),
         )
         parser.add_argument(
             "query",
@@ -243,7 +244,8 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             pass
         driver_version = driver.versions.pop()
         firmware_path = (
-            self._firmware_path(product_slug, driver_type) / driver_version.url.split("/")[-1]
+            self._firmware_path(product_slug, driver_type)
+            / driver_version.url.split("/")[-1]
         )
         if firmware_path.is_file():
             logger.info("%s: Already have: %s", product_slug, firmware_path)
@@ -254,25 +256,65 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         driver_version = driver_version.version
         return driver_version, firmware_path
 
-    # TODO: consider moving to spicerack.redfish
-    def get_version(
-        self, redfish_host: Redfish, driver_category: DellDriverCategory
+    @staticmethod
+    def _get_version_odata(
+        redfish_host: Redfish, driver_category: DellDriverCategory, odata_id: str
     ) -> version.Version:
         """Get the current version
 
         Arguments:
             redfish_host: The host to act on
             driver_category: The driver category to get
+            odata_id: optional odata_id if present get the version from the odata_id
 
         Returns:
-            str: The idrac version string
+            str: The version string matching the specific odata_id
 
         """
-        if driver_category == DellDriverCategory.IDRAC:
-            return self.get_idrac_version(redfish_host)
-        if driver_category == DellDriverCategory.BIOS:
-            return self.get_bios_version(redfish_host)
-        raise ValueError(f"Unsupported driver_category: {driver_category}")
+        try:
+            controler_key = {
+                DellDriverCategory.NETWORK: "Controllers",
+            }[driver_category]
+        except KeyError as error:
+            raise ValueError(f"{redfish_host.hostname}: {driver_category} not supported") from error
+        data = redfish_host.request("get", odata_id).json()
+        # Lets see if this is generic enough to work for more then just nics
+        odata_version = data[controler_key][0]["FirmwarePackageVersion"]
+        logger.debug(
+            "%s: %s current version %s", redfish_host.hostname, odata_id, odata_version
+        )
+        return version.parse(odata_version)
+
+    # TODO: consider moving to spicerack.redfish
+    def get_version(
+        self,
+        redfish_host: Redfish,
+        driver_category: DellDriverCategory,
+        *,
+        odata_id: Optional[str],
+    ) -> version.Version:
+        """Get the current version
+
+        Arguments:
+            redfish_host: The host to act on
+            driver_category: The driver category to get
+            odata_id: optional odata_id if present get the version from the odata_id
+
+        Returns:
+            str: The version string for a specific odata_id or driver_catagory
+
+        """
+        if odata_id is not None:
+            return self._get_version_odata(redfish_host, driver_category, odata_id)
+        try:
+            return {
+                DellDriverCategory.IDRAC: self.get_idrac_version(redfish_host),
+                DellDriverCategory.BIOS: self.get_bios_version(redfish_host),
+            }[driver_category]
+        except KeyError as error:
+            raise ValueError(
+                f"Unsupported driver_category: {driver_category}"
+            ) from error
 
     # TODO: consider moving to spicerack.redfish
     @staticmethod
@@ -464,6 +506,8 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         product_slug: str,
         driver_type: DellDriverType,
         driver_category: DellDriverCategory,
+        *,
+        odata_id: Optional[str] = None,
     ) -> Tuple[Path, str]:
         """Select a list of files from ones already present on the file system
 
@@ -471,12 +515,22 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             product_slug: The host product_slug.
             driver_type: The driver type to get
             driver_category: The driver category to get
+            odata_id: the specific odata_id
 
         Returns:
             (firmware_file, version): A tuple of the selected firmware file and its version
 
         """
-        logger.info("%s: picking %s update file", product_slug, driver_type)
+        if odata_id:
+            logger.info(
+                "%s: picking %s (%s) update file",
+                product_slug,
+                driver_category,
+                odata_id.split("/")[-1],
+            )
+        else:
+            logger.info("%s: picking %s update file", product_slug, driver_category)
+
         firmware_dir = self._firmware_path(product_slug, driver_category)
         if not firmware_dir.is_dir():
             return self.get_latest(product_slug, driver_type, driver_category)
@@ -504,6 +558,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         driver_category: DellDriverCategory,
         *,
         extract_payload: bool = False,
+        odata_id: Optional[str] = None,
     ) -> Tuple[Optional[version.Version], Optional[str]]:
         """Update the driver to the latest version.
 
@@ -513,13 +568,16 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_type: The driver type to get
             driver_category: The driver category to get
             extract_payload: if true extract the bin file from the archive
+            odata_id: optional odata_id if present get the version from the odata_id
 
         Returns:
             (target_version, job_id): A tuple of the latest version and the update job id
 
         """
         logger.info("%s (%s): update", netbox_host.fqdn, driver_category.name)
-        current_version = self.get_version(redfish_host, driver_category)
+        current_version = self.get_version(
+            redfish_host, driver_category, odata_id=odata_id
+        )
 
         select_firmwarefile = (
             self._cached_select_firmwarefile
@@ -581,9 +639,13 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         redfish_host: Redfish,
         target_version: version.Version,
         driver_category: DellDriverCategory,
+        *,
+        odata_id: Optional[str] = None,
     ):
         """Check two versions and emit appropriate logging messages"""
-        current_version = self.get_version(redfish_host, driver_category)
+        current_version = self.get_version(
+            redfish_host, driver_category, odata_id=odata_id
+        )
         logger.info(
             "%s (%s): now at version: %s",
             redfish_host.hostname,
@@ -680,6 +742,78 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         self.poll_id(redfish_host, job_id, True)
         self._check_version(redfish_host, target_version, driver_category)
 
+    def _get_members(self, redfish_host: Redfish, odata_id: str) -> List[str]:
+        """Get a list of hw member odata.id's.
+
+        Arguments:
+            redfish_host: The redfish host to act on.
+            odata_id: the odata_id to fetch members from
+
+        Returns:
+            members: A list of member odata.id's
+
+        """
+        data = redfish_host.request("get", odata_id).json()
+        return [member["@odata.id"] for member in data["Members"]]
+
+    def _get_hw_members(
+        self, redfish_host: Redfish, driver_category: DellDriverCategory
+    ) -> List[str]:
+        """Get a list of hw member odata.id's.
+
+        Arguments:
+            redfish_host: The redfish host to act on.
+            netbox_host: The netbox host to act on.
+            driver_category: The driver category to get
+
+        Returns:
+            members: A list of member odata.id's
+
+        """
+        return {
+            DellDriverCategory.NETWORK: self._get_members(
+                redfish_host, "/redfish/v1/Chassis/System.Embedded.1/NetworkAdapters"
+            )
+        }[driver_category]
+
+    def update_driver(
+        self,
+        redfish_host: Redfish,
+        netbox_host: NetboxServer,
+        driver_category: DellDriverCategory,
+    ) -> None:
+        """Update a driver to the latest version.
+
+        Arguments:
+            redfish_host: The redfish host to act on.
+            netbox_host: The netbox host to act on.
+            driver_category: The driver category to get
+
+        """
+        members = self._get_hw_members(redfish_host, driver_category)
+        if not members:
+            logger.info(
+                "%s: skipping %s as no members", netbox_host.fqdn, driver_category
+            )
+            return
+
+        for member in members:
+            latest_version, job_id = self._update(
+                redfish_host,
+                netbox_host,
+                DellDriverType.FRMW,
+                driver_category,
+                odata_id=member,
+            )
+            if job_id is None:
+                return
+
+            self._reboot(redfish_host, netbox_host)
+            self.poll_id(redfish_host, job_id, True)
+            self._check_version(
+                redfish_host, latest_version, driver_category, odata_id=member
+            )
+
     def run(self):
         """Required by Spicerack API."""
         for host in self.hosts:
@@ -714,6 +848,11 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
             if self.component in (None, "bios"):
                 self.update_bios(redfish_host, netbox_host)
+
+            if self.component == "nic":
+                self.update_driver(
+                    redfish_host, netbox_host, DellDriverCategory.NETWORK
+                )
 
             if (
                 initial_power_state == DellSCPPowerStatePolicy.OFF.value
