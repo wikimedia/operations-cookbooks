@@ -1,16 +1,46 @@
 """Decommission a host from all inventories."""
 import logging
+import re
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Set
+from typing import Any, Dict, List, Set
 
 from requests import Session
 
+from wmflib.interactive import ask_input
 
 logger = logging.getLogger(__name__)
+
+
+def list_picker(options: List) -> Any:
+    """Present a list of objects to the user and return the selection"""
+    selection = 0
+    if len(options) > 1:
+        print("We have found multiple entries please pick from the list below:")
+        for idx, entry in enumerate(options):
+            print(f"{idx}: {entry}")
+        choices = [str(i) for i in range(len(options))]
+        selection = int(ask_input("Please select the entry you want", choices))
+    return options[selection]
+
+
+def extract_version(firmware_file: Path) -> str:
+    """Attempt to extract version number from firmware file"""
+    # The firmware file has has the driver type in the path
+    try:
+        pattern = {
+            'FRMW': r'(?P<version>(\d{1,2}\.){3}\d{1,2})_\w{3}$',
+            'BIOS': r'(?P<version>(\d{1,2}\.){2}\d{1,2})$',
+        }.get(firmware_file.parent.name)
+    except KeyError as error:
+        raise RuntimeError(f'unable to extract version from: {firmware_file}') from error
+    match = re.search(pattern, firmware_file.stem)
+    if match is None:
+        raise RuntimeError(f'unable to extract version from: {firmware_file}')
+    return match['version']
 
 
 class DellDriverType(Enum):
@@ -56,6 +86,10 @@ class DellDriver:
     category_id: str
     category_name: str
     versions: Set[DellDriverVersion]
+
+    def __str__(self) -> str:
+        """Return the name for str."""
+        return self.name
 
     @staticmethod
     def from_json(obj: Dict) -> "DellDriver":

@@ -21,9 +21,15 @@ from spicerack.redfish import (
     Redfish,
 )
 from wmflib.config import load_yaml_config
-from wmflib.interactive import ask_confirmation, ask_input
+from wmflib.interactive import ask_confirmation
 
-from cookbooks.sre.hardware import DellAPI, DellDriverType, DellDriverCategory
+from cookbooks.sre.hardware import (
+    DellAPI,
+    DellDriverType,
+    DellDriverCategory,
+    extract_version,
+    list_picker,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,10 +95,16 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     def __init__(self, args, spicerack):
         """Decommission a host from all inventories."""
-        config = load_yaml_config(spicerack.config_dir / 'cookbooks' / 'sre.hardware.upgrade-firmware.yaml')
+        config = load_yaml_config(
+            spicerack.config_dir / "cookbooks" / "sre.hardware.upgrade-firmware.yaml"
+        )
 
         self.spicerack = spicerack
-        self.firmware_store = args.firmware_store if args.firmware_store else Path(config['firmware_store'])
+        self.firmware_store = (
+            args.firmware_store
+            if args.firmware_store
+            else Path(config["firmware_store"])
+        )
         self.force = args.force
         self.yes = args.yes
         self.component = args.component
@@ -166,6 +178,34 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         else:
             raise RuntimeError(f"Unable to find firmware image in {firmware}")
 
+    def _product_slug(self, netbox_host: NetboxServer) -> str:
+        """Return the product slug for a specific netbox server.
+
+        Arguments
+            netbox_host: the netbox_host to lookup
+
+        Returns:
+            product_slug: a string representing the product slug e.g. poweredge-r440
+
+        """
+        product_slug = netbox_host.as_dict()["device_type"]["slug"]
+        # smal hack to get around some slugs having the config in them e.g.
+        # poweredge-r440-configc-202107
+        return product_slug.split("-config")[0]
+
+    def _firmware_path(self, product_slug: str, driver_type: DellDriverType) -> Path:
+        """Return the folder to store files for the specific product and type.
+
+        Arguments:
+            product_slug: a string representing the product slug e.g. poweredge-r440
+            driver_type: The driver type to get
+
+        Returns:
+            path: the path to store firmware files
+
+        """
+        return self.firmware_store / product_slug / driver_type.name
+
     def get_latest(
         self,
         netbox_host: NetboxServer,
@@ -184,26 +224,17 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         firmware_path = None
-        product_slug = netbox_host.as_dict()["device_type"]["slug"]
-        # smal hack to get around some slugs having the config in them e.g.
-        # poweredge-r440-configc-202107
-        product_slug = "-".join(product_slug.split("-")[:2])
+        product_slug = self._product_slug(netbox_host)
         product = self.dell_api.fetch(product_slug)
-        driver = sorted(product.find_driver(driver_type, driver_category))
-        selection = 0
-        if len(driver) > 1:
-            print("We have found multiple entries please pick from the list below:")
-            for idx, entry in enumerate(driver):
-                print(f"{idx}: {entry.name}")
-            choices = [str(i) for i in range(len(driver))]
-            selection = int(ask_input("Please select the entry you want", choices))
-        driver = driver[selection]
+        driver = list_picker(sorted(product.find_driver(driver_type, driver_category)))
         if len(driver.versions) > 1:
             # TODO: right now we will only have one version as I haven't worked out
             # how to get old versions
             pass
         version = driver.versions.pop()
-        firmware_path = self.firmware_store / product_slug / driver_type.name / version.url.split("/")[-1]
+        firmware_path = (
+            self._firmware_path(product_slug, driver_type) / version.url.split("/")[-1]
+        )
         if firmware_path.is_file():
             logger.info("%s: Already have: %s", netbox_host.fqdn, firmware_path)
         else:
@@ -419,6 +450,31 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         # racadm rollback iDRAC.Embedded.1-1
         # racadm rollback BIOS.Setup.1-1
 
+    def _select_firmwarefile(
+        self,
+        netbox_host: NetboxServer,
+        driver_type: DellDriverType,
+        driver_category: DellDriverCategory,
+    ) -> Tuple[Path, str]:
+        """Select a list of files from ones already present on the file system
+
+        Arguments:
+            netbox_host: The netbox host to act on.
+            driver_type: The driver type to get
+            driver_category: The driver category to get
+
+        Returns:
+            (firmware_file, version): A tuple of the selected firmware file and its version
+
+        """
+        product_slug = self._product_slug(netbox_host)
+        firmware_dir = self._firmware_path(product_slug, driver_type)
+        current_files = list(filter(Path.is_file, firmware_dir.iterdir()))
+        selection = list_picker(current_files + ["Download new file"])
+        if selection == "Download new file":
+            return self.get_latest(netbox_host, driver_type, driver_category)
+        return extract_version(selection), selection
+
     def _update(
         self,
         redfish_host: Redfish,
@@ -443,9 +499,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             (latest_version, job_id): A tuple of the latest version and the update job id
 
         """
-        latest_version = None
-        # TODO: present list of currently downloaded files
-        latest_version, firmware_file = self.get_latest(
+        latest_version, firmware_file = self._select_firmwarefile(
             netbox_host, driver_type, driver_category
         )
         logger.info(
@@ -615,7 +669,9 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                 continue
             # TODO: this is a bit of a hack to populate the generation property
             # We should do this in the Redfish.__init__
-            logger.info("%s (Gen %d): starting", netbox_host.fqdn, redfish_host.generation)
+            logger.info(
+                "%s (Gen %d): starting", netbox_host.fqdn, redfish_host.generation
+            )
             initial_power_state = redfish_host.get_power_state()
             # Need to power the server on for any firmware updates
             manage_power = self.component != "idrac"
