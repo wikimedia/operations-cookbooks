@@ -8,6 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
+from packaging import version
 from requests import Session
 
 from wmflib.interactive import ask_input
@@ -27,7 +28,7 @@ def list_picker(options: List) -> Any:
     return options[selection]
 
 
-def extract_version(firmware_file: Path) -> str:
+def extract_version(firmware_file: Path) -> version.Version:
     """Attempt to extract version number from firmware file"""
     # The firmware file has has the driver type in the path
     try:
@@ -40,7 +41,7 @@ def extract_version(firmware_file: Path) -> str:
     match = re.search(pattern, firmware_file.stem)
     if match is None:
         raise RuntimeError(f'unable to extract version from: {firmware_file}')
-    return match['version']
+    return version.parse(match['version'])
 
 
 class DellDriverType(Enum):
@@ -63,7 +64,7 @@ class DellDriverVersion:
     """Data class to hold driver versions"""
 
     driver_id: str
-    version: str
+    version: version.Version
     url: str
     release: datetime
 
@@ -105,7 +106,7 @@ class DellDriver:
         versions = {
             DellDriverVersion(
                 driver_id=obj["DriverId"],
-                version=obj["DellVer"],
+                version=version.parse(obj["DellVer"].split(',')[0]),
                 url=obj["FileFrmtInfo"]["HttpFileLocation"],
                 release=datetime.fromisoformat(obj["ReleaseDateValue"]),
             )

@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 from typing import Dict, List, Optional, Tuple
 from zipfile import ZipFile
 
+from packaging import version
 from requests import post
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -193,7 +194,9 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         # poweredge-r440-configc-202107
         return product_slug.split("-config")[0]
 
-    def _firmware_path(self, product_slug: str, driver_category: DellDriverCategory) -> Path:
+    def _firmware_path(
+        self, product_slug: str, driver_category: DellDriverCategory
+    ) -> Path:
         """Return the folder to store files for the specific product and type.
 
         Arguments:
@@ -231,24 +234,24 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             # TODO: right now we will only have one version as I haven't worked out
             # how to get old versions
             pass
-        version = driver.versions.pop()
+        driver_version = driver.versions.pop()
         firmware_path = (
-            self._firmware_path(product_slug, driver_type) / version.url.split("/")[-1]
+            self._firmware_path(product_slug, driver_type) / driver_version.url.split("/")[-1]
         )
         if firmware_path.is_file():
             logger.info("%s: Already have: %s", netbox_host.fqdn, firmware_path)
         else:
             firmware_path.parent.mkdir(exist_ok=True, parents=True)
-            logger.info("%s: Downloading %s", netbox_host.fqdn, version.url)
-            self.dell_api.download(version.url, firmware_path)
-        version = version.version.split(",")[0]
-        logger.debug("%s: latest version - %s", netbox_host.fqdn, version)
-        return version, firmware_path
+            logger.info("%s: Downloading %s", netbox_host.fqdn, driver_version.url)
+            self.dell_api.download(driver_version.url, firmware_path)
+        driver_version = driver_version.version
+        logger.debug("%s: latest version - %s", netbox_host.fqdn, driver_version)
+        return driver_version, firmware_path
 
     # TODO: consider moving to spicerack.redfish
     def get_version(
         self, redfish_host: Redfish, driver_category: DellDriverCategory
-    ) -> str:
+    ) -> version.Version:
         """Get the current version
 
         Arguments:
@@ -267,7 +270,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     # TODO: consider moving to spicerack.redfish
     @staticmethod
-    def get_idrac_version(redfish_host: Redfish) -> str:
+    def get_idrac_version(redfish_host: Redfish) -> version.Version:
         """Get the current version
 
         Arguments:
@@ -277,15 +280,15 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             str: The idrac version string
 
         """
-        version = redfish_host.request(
+        idrac_version = redfish_host.request(
             "get", "/redfish/v1/Managers/iDRAC.Embedded.1?$select=FirmwareVersion"
         ).json()["FirmwareVersion"]
-        logger.debug("%s: idrac current version %s", redfish_host.hostname, version)
-        return version
+        logger.debug("%s: idrac current version %s", redfish_host.hostname, idrac_version)
+        return version.parse(idrac_version)
 
     # TODO: consider moving to spicerack.redfish
     @staticmethod
-    def get_bios_version(redfish_host: Redfish) -> str:
+    def get_bios_version(redfish_host: Redfish) -> version.Version:
         """Get the current version
 
         Arguments:
@@ -295,11 +298,11 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             str: The idrac version string
 
         """
-        version = redfish_host.request(
+        bios_version = redfish_host.request(
             "get", "/redfish/v1/Systems/System.Embedded.1?$select=BiosVersion"
         ).json()["BiosVersion"]
-        logger.debug("%s: BIOS current version %s", redfish_host.hostname, version)
-        return version
+        logger.debug("%s: BIOS current version %s", redfish_host.hostname, bios_version)
+        return version.parse(bios_version)
 
     def upload_file(self, redfish_host: Redfish, file_handle: BufferedReader) -> str:
         """Upload a file to idrac via rdfish.
@@ -488,10 +491,9 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         netbox_host: NetboxServer,
         driver_type: DellDriverType,
         driver_category: DellDriverCategory,
-        current_version: str,
         *,
         extract_payload: bool = False,
-    ) -> Tuple[Optional[str], Optional[str]]:
+    ) -> Tuple[Optional[version.Version], Optional[str]]:
         """Update the driver to the latest version.
 
         Arguments:
@@ -499,31 +501,41 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             netbox_host: The netbox host to act on.
             driver_type: The driver type to get
             driver_category: The driver category to get
-            current_version: The version of the currently running driver
             extract_payload: if true extract the bin file from the archive
 
         Returns:
-            (latest_version, job_id): A tuple of the latest version and the update job id
+            (target_version, job_id): A tuple of the latest version and the update job id
 
         """
-        latest_version, firmware_file = self._select_firmwarefile(
+        logger.info("%s (%s): update", netbox_host.fqdn, driver_category.name)
+        current_version = self.get_version(redfish_host, driver_category)
+        target_version, firmware_file = self._select_firmwarefile(
             netbox_host, driver_type, driver_category
         )
         logger.info(
-            "%s (%s): latest_version: %s, current_version: %s",
+            "%s (%s): target_version: %s, current_version: %s",
             netbox_host.fqdn,
             driver_category.name,
-            latest_version,
+            target_version,
             current_version,
         )
-        if not self.force and latest_version == current_version:
+        if not self.force and target_version == current_version:
             logger.info(
-                "%s (%s): Skipping already at latest version %s",
+                "%s (%s): Skipping already at target version %s",
                 netbox_host.fqdn,
                 driver_category.name,
-                latest_version,
+                target_version,
             )
-            return latest_version, None
+            return target_version, None
+        if not self.force and current_version > target_version:
+            logger.info(
+                "%s (%s): current version %s is ahead of target version %s, use force to downgrade",
+                netbox_host.fqdn,
+                driver_category.name,
+                current_version,
+                target_version,
+            )
+            return target_version, None
         self._ask_confirmation(
             f"{netbox_host.fqdn} {driver_category.name}: About to upload {firmware_file}, please confirm"
         )
@@ -544,7 +556,30 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         )
         # TODO: do i need to do something with result?
         # print(json.dumps(result, indent=4, sort_keys=True))
-        return latest_version, job_id
+        return target_version, job_id
+
+    def _check_version(
+        self,
+        redfish_host: Redfish,
+        target_version: version.Version,
+        driver_category: DellDriverCategory,
+    ):
+        """Check two versions and emit appropriate logging messages"""
+        current_version = self.get_version(redfish_host, driver_category)
+        logger.info(
+            "%s (%s): now at version: %s",
+            redfish_host.hostname,
+            driver_category.name,
+            current_version,
+        )
+        if current_version != target_version:
+            logger.error(
+                "%s (%s): Something went wrong, the current version (%s) does not match the most target (%s)",
+                redfish_host.hostname,
+                driver_category.name,
+                current_version,
+                target_version,
+            )
 
     def update_idrac(self, redfish_host: Redfish, netbox_host: NetboxServer) -> None:
         """Update the idrac to the latest version.
@@ -556,16 +591,13 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         """
         driver_category = DellDriverCategory.IDRAC
         driver_type = DellDriverType.FRMW
-        logger.info("%s (%s): update", netbox_host.fqdn, driver_category.name)
         last_reboot = redfish_host.last_reboot()
         # TODO: we should store this as some pkg_utils version parse string
-        current_version = self.get_version(redfish_host, driver_category)
-        latest_version, job_id = self._update(
+        target_version, job_id = self._update(
             redfish_host,
             netbox_host,
             driver_type,
             driver_category,
-            current_version,
             extract_payload=True,
         )
         if job_id is None:
@@ -587,21 +619,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         redfish_host.wait_reboot_since(last_reboot)
         logging.getLogger("urllib3").setLevel(urllib_level)
         logging.getLogger("wmflib").setLevel(wmflib_level)
-        current_version = self.get_version(redfish_host, driver_category)
-        logger.info(
-            "%s (%s): now at version: %s",
-            netbox_host.fqdn,
-            driver_category.name,
-            current_version,
-        )
-        if current_version != latest_version:
-            logger.error(
-                "%s (%s): Something went wrong, the current version (%s) does not match the most recent (%s)",
-                netbox_host.fqdn,
-                DellDriverCategory.IDRAC.name,
-                current_version,
-                latest_version,
-            )
+        self._check_version(redfish_host, target_version, driver_category)
 
     def _reboot(self, redfish_host: Redfish, netbox_host: NetboxServer) -> None:
         """Reboot the host
@@ -632,37 +650,18 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         """
         driver_category = DellDriverCategory.BIOS
         driver_type = DellDriverType.BIOS
-        logger.info("%s (%s): update", netbox_host.fqdn, driver_category.name)
-        # TODO: we should store this as some pkg_utils version parse string
-        current_version = self.get_version(redfish_host, driver_category)
-        latest_version, job_id = self._update(
+        target_version, job_id = self._update(
             redfish_host,
             netbox_host,
             driver_type,
             driver_category,
-            current_version,
         )
         if job_id is None:
             return
 
         self._reboot(redfish_host, netbox_host)
         self.poll_id(redfish_host, job_id, True)
-        current_version = self.get_version(redfish_host, driver_category)
-        logger.info(
-            "%s (%s): now at version: %s",
-            netbox_host.fqdn,
-            driver_category.name,
-            current_version,
-        )
-        # skip the =version check if we passed a firmware file
-        if current_version != latest_version:
-            logger.error(
-                "%s (%s): Something went wrong, the current version (%s) does not match the most recent (%s)",
-                netbox_host.fqdn,
-                DellDriverCategory.IDRAC.name,
-                current_version,
-                latest_version,
-            )
+        self._check_version(redfish_host, target_version, driver_category)
 
     def run(self):
         """Required by Spicerack API."""
