@@ -193,18 +193,18 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         # poweredge-r440-configc-202107
         return product_slug.split("-config")[0]
 
-    def _firmware_path(self, product_slug: str, driver_type: DellDriverType) -> Path:
+    def _firmware_path(self, product_slug: str, driver_category: DellDriverCategory) -> Path:
         """Return the folder to store files for the specific product and type.
 
         Arguments:
             product_slug: a string representing the product slug e.g. poweredge-r440
-            driver_type: The driver type to get
+            driver_category: The driver category to get
 
         Returns:
             path: the path to store firmware files
 
         """
-        return self.firmware_store / product_slug / driver_type.name
+        return self.firmware_store / product_slug / driver_category.name
 
     def get_latest(
         self,
@@ -469,10 +469,17 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         """
         product_slug = self._product_slug(netbox_host)
         firmware_dir = self._firmware_path(product_slug, driver_type)
+        if not firmware_dir.is_dir:
+            return self.get_latest(netbox_host, driver_type, driver_category)
+
         current_files = list(filter(Path.is_file, firmware_dir.iterdir()))
+        if not current_files:
+            return self.get_latest(netbox_host, driver_type, driver_category)
+
         selection = list_picker(current_files + ["Download new file"])
         if selection == "Download new file":
             return self.get_latest(netbox_host, driver_type, driver_category)
+
         return extract_version(selection), selection
 
     def _update(
