@@ -32,9 +32,9 @@ def extract_version(firmware_file: Path) -> str:
     # The firmware file has has the driver type in the path
     try:
         pattern = {
-            'FRMW': r'(?P<version>(\d{1,2}\.){3}\d{1,2})_\w{3}$',
+            'IDRAC': r'(?P<version>(\d{1,2}\.){3}\d{1,2})_\w{3}$',
             'BIOS': r'(?P<version>(\d{1,2}\.){2}\d{1,2})$',
-        }.get(firmware_file.parent.name)
+        }[firmware_file.parent.name]
     except KeyError as error:
         raise RuntimeError(f'unable to extract version from: {firmware_file}') from error
     match = re.search(pattern, firmware_file.stem)

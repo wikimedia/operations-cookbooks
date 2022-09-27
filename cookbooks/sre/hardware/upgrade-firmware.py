@@ -468,8 +468,8 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         product_slug = self._product_slug(netbox_host)
-        firmware_dir = self._firmware_path(product_slug, driver_type)
-        if not firmware_dir.is_dir:
+        firmware_dir = self._firmware_path(product_slug, driver_category)
+        if not firmware_dir.is_dir():
             return self.get_latest(netbox_host, driver_type, driver_category)
 
         current_files = list(filter(Path.is_file, firmware_dir.iterdir()))
