@@ -33,5 +33,5 @@ class ThanosFrontendRestartRebootRunner(SRELBBatchRunnerBase):
     @property
     def restart_daemons(self):
         """Return a list of daemons to restart when using the restart action"""
-        return ['swift-proxy', 'thanos-bucket-web', 'thanos-query-frontend'
+        return ['swift-proxy', 'thanos-bucket-web', 'thanos-query-frontend',
                 'thanos-query', 'thanos-store']
