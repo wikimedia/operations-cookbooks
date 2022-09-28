@@ -115,6 +115,7 @@ class CephCluster(Cluster):
 
     name: CephClusterName
     nodes_by_role: Dict[CephNodeRoleName, List[str]]
+    osd_drives_count: int
 
 
 @dataclass(frozen=True)
@@ -152,6 +153,7 @@ _INVENTORY = {
                             "cloudcephmon1003.eqiad.wmnet",
                         ]
                     },
+                    osd_drives_count=8,
                 )
             },
             ClusterType.OPENSTACK: {
@@ -185,6 +187,7 @@ _INVENTORY = {
                             "cloudcephmon2006-dev.codfw.wmnet",
                         ]
                     },
+                    osd_drives_count=2,
                 )
             },
             ClusterType.OPENSTACK: {
@@ -375,3 +378,12 @@ def get_nodes_by_role(cluster_name: ClusterName, role_name: Enum) -> List[str]:
         raise InventoryError(f"Unable to find any {role_name} nodes on cluster of name {cluster_name}.")
 
     return nodes_by_role[role_name]
+
+
+def get_osd_drives_count(cluster_name: CephClusterName) -> int:
+    """Get the number of OSD drives for each host in a given Ceph cluster."""
+    site = cluster_name.get_site()
+    inventory = get_inventory()
+    cluster = cast(CephCluster, inventory[site].clusters_by_type[ClusterType.CEPH][cluster_name])
+
+    return cluster.osd_drives_count

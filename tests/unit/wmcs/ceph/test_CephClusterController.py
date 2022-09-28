@@ -590,3 +590,154 @@ def test_get_osd_tree(expected_tree: List[str], osd_tree_command_output: str):
     gotten_tree = my_controller.get_osd_tree()
 
     assert gotten_tree == expected_tree
+
+
+@parametrize(
+    {
+        "Host is present in an OSD tree and has expected properties": {
+            "osd_tree": {
+                "nodes": {
+                    "id": -1,
+                    "name": "root",
+                    "type": "root",
+                    "children": [
+                        {
+                            "id": -2,
+                            "name": "host01",
+                            "type": "host",
+                            "children": [
+                                OSDTreeEntry(
+                                    osd_id=101,
+                                    name="osd.101",
+                                    device_class=OSDClass.SSD,
+                                    status=OSDStatus.UP,
+                                    crush_weight=1.5,
+                                ),
+                                OSDTreeEntry(
+                                    osd_id=102,
+                                    name="osd.102",
+                                    device_class=OSDClass.SSD,
+                                    status=OSDStatus.UP,
+                                    crush_weight=1.5,
+                                ),
+                                OSDTreeEntry(
+                                    osd_id=103,
+                                    name="osd.103",
+                                    device_class=OSDClass.SSD,
+                                    status=OSDStatus.UP,
+                                    crush_weight=1.5,
+                                ),
+                                OSDTreeEntry(
+                                    osd_id=104,
+                                    name="osd.104",
+                                    device_class=OSDClass.SSD,
+                                    status=OSDStatus.UP,
+                                    crush_weight=1.5,
+                                ),
+                                OSDTreeEntry(
+                                    osd_id=105,
+                                    name="osd.105",
+                                    device_class=OSDClass.SSD,
+                                    status=OSDStatus.UP,
+                                    crush_weight=1.5,
+                                ),
+                                OSDTreeEntry(
+                                    osd_id=106,
+                                    name="osd.106",
+                                    device_class=OSDClass.SSD,
+                                    status=OSDStatus.UP,
+                                    crush_weight=1.5,
+                                ),
+                                OSDTreeEntry(
+                                    osd_id=107,
+                                    name="osd.107",
+                                    device_class=OSDClass.SSD,
+                                    status=OSDStatus.UP,
+                                    crush_weight=1.5,
+                                ),
+                                OSDTreeEntry(
+                                    osd_id=108,
+                                    name="osd.108",
+                                    device_class=OSDClass.SSD,
+                                    status=OSDStatus.UP,
+                                    crush_weight=1.5,
+                                ),
+                            ],
+                        },
+                        {"id": -3, "name": "host02", "type": "host", "children": []},
+                    ],
+                },
+                "stray": [],
+            },
+        }
+    }
+)
+def test_is_osd_host_valid_success(osd_tree: Dict[str, Any]):
+    my_controller = CephClusterController(
+        remote=CephTestUtils.get_fake_remote(),
+        cluster_name=CephClusterName.EQIAD1,
+        spicerack=mock.MagicMock(spec=Spicerack),
+    )
+
+    assert my_controller.is_osd_host_valid(osd_tree=osd_tree, hostname="host01") is True
+
+
+@parametrize(
+    {
+        "Host is not present in the OSD tree": {
+            "osd_tree": {
+                "nodes": {
+                    "id": -1,
+                    "name": "root",
+                    "type": "root",
+                    "children": [
+                        {"id": -3, "name": "host02", "type": "host", "children": []},
+                    ],
+                },
+                "stray": [],
+            },
+        },
+        "Host is present in the OSD tree and has wrong number of OSDs": {
+            "osd_tree": {
+                "nodes": {
+                    "id": -1,
+                    "name": "root",
+                    "type": "root",
+                    "children": [
+                        {
+                            "id": -2,
+                            "name": "host01",
+                            "type": "host",
+                            "children": [
+                                OSDTreeEntry(
+                                    osd_id=101,
+                                    name="osd.101",
+                                    device_class=OSDClass.SSD,
+                                    status=OSDStatus.UP,
+                                    crush_weight=1.5,
+                                ),
+                                OSDTreeEntry(
+                                    osd_id=102,
+                                    name="osd.102",
+                                    device_class=OSDClass.SSD,
+                                    status=OSDStatus.UP,
+                                    crush_weight=1.5,
+                                ),
+                            ],
+                        },
+                        {"id": -3, "name": "host02", "type": "host", "children": []},
+                    ],
+                },
+                "stray": [],
+            },
+        },
+    }
+)
+def test_is_osd_host_valid_failure(osd_tree: Dict[str, Any]):
+    my_controller = CephClusterController(
+        remote=CephTestUtils.get_fake_remote(),
+        cluster_name=CephClusterName.EQIAD1,
+        spicerack=mock.MagicMock(spec=Spicerack),
+    )
+
+    assert my_controller.is_osd_host_valid(osd_tree=osd_tree, hostname="host01") is False

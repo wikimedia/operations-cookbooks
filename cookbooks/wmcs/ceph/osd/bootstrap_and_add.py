@@ -28,7 +28,6 @@ from cookbooks.wmcs.libs.ceph import (
 from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
-EXPECTED_OSDS_PER_HOST = 8
 
 
 class BootstrapAndAdd(CookbookBase):
@@ -110,11 +109,11 @@ class BootstrapAndAdd(CookbookBase):
 def _wait_for_osds_to_show_up(cluster_controller: CephClusterController, ceph_hostname: str) -> List[OSDTreeEntry]:
     osd_tree = cluster_controller.get_osd_tree()
     retries = 0
-    while ceph_hostname not in osd_tree["nodes"] or len(osd_tree["children"][ceph_hostname]) < EXPECTED_OSDS_PER_HOST:
+    while not cluster_controller.is_osd_host_valid(osd_tree=osd_tree, hostname=ceph_hostname):
         time.sleep(5)
         retries += 1
         if retries > 10:
-            raise Exception(f"Unable to find the new OSD node ({ceph_hostname}) in the osd tree")
+            raise Exception(f"The new OSD node ({ceph_hostname}) is not in the OSD tree, or is not as expected")
         osd_tree = cluster_controller.get_osd_tree()
 
     LOGGER.info("All OSDs are showing up in the cluster, continuing.")
@@ -203,10 +202,6 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
 
             osd_controller.add_all_available_devices(interactive=(not self.yes_i_know))
 
-            self.sallogger.log(
-                message=f"Added OSD {new_osd_fqdn}... ({index + 1}/{len(self.new_osd_fqdns)})",
-            )
-
             new_osds = _wait_for_osds_to_show_up(
                 cluster_controller=self.cluster_controller, ceph_hostname=new_osd_fqdn.split(".", 1)[0]
             )
@@ -224,6 +219,10 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
                 raise Exception(
                     f"Something went wrong, I was unable to change the device class for osds {wrongly_classified_osds}"
                 )
+
+            self.sallogger.log(
+                message=f"Added OSD {new_osd_fqdn}... ({index + 1}/{len(self.new_osd_fqdns)})",
+            )
 
         if self.only_check:
             return

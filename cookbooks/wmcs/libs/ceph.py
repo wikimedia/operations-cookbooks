@@ -20,6 +20,7 @@ from cookbooks.wmcs.libs.inventory import (
     generic_get_node_cluster_name,
     get_node_inventory_info,
     get_nodes_by_role,
+    get_osd_drives_count,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -30,7 +31,6 @@ CLUSTER_ALERT_MATCHES = [
     "alertname=Ceph Mon Quorum",
     "service=.*ceph.*",
 ]
-OSD_EXPECTED_OSD_DRIVES_PER_HOST = 8
 OSD_EXPECTED_OS_DRIVES = 2
 
 
@@ -334,6 +334,7 @@ class CephClusterController(CommandRunnerMixin):
         self._remote = remote
         self.controlling_node_fqdn = get_mon_nodes(cluster_name)[0]
         self._controlling_node = self._remote.query(f"D{{{self.controlling_node_fqdn}}}", use_sudo=True)
+        self.expected_osd_drives_per_host = get_osd_drives_count(cluster_name)
         self._spicerack = spicerack
         super().__init__(command_runner_node=self._controlling_node)
 
@@ -622,16 +623,16 @@ class CephClusterController(CommandRunnerMixin):
 
         LOGGER.info("Checking that we have the right amount of drives in the host...")
         host_devices = osd_controller.do_lsblk()
-        total_expected_devices = OSD_EXPECTED_OS_DRIVES + OSD_EXPECTED_OSD_DRIVES_PER_HOST
+        total_expected_devices = OSD_EXPECTED_OS_DRIVES + self.expected_osd_drives_per_host
         if len(host_devices) != total_expected_devices:
             failures.append(
                 f"The host has {len(host_devices)}, when we are expecting {total_expected_devices} "
-                f"({OSD_EXPECTED_OSD_DRIVES_PER_HOST} for osds, and {OSD_EXPECTED_OS_DRIVES} for the os)"
+                f"({self.expected_osd_drives_per_host} for osds, and {OSD_EXPECTED_OS_DRIVES} for the os)"
             )
 
         LOGGER.info("Checking that we have enough free drives in the host...")
         available_devices = osd_controller.get_available_devices()
-        if len(available_devices) > OSD_EXPECTED_OSD_DRIVES_PER_HOST:
+        if len(available_devices) > self.expected_osd_drives_per_host:
             failures.append(
                 f"We expected to have at least {OSD_EXPECTED_OS_DRIVES} drives reserved for OS, but it seems we "
                 f"would use some of them ({available_devices}), maybe the raid is not properly setup?"
@@ -671,6 +672,28 @@ class CephClusterController(CommandRunnerMixin):
             )
 
         return failures
+
+    def is_osd_host_valid(self, osd_tree: Dict[str, Any], hostname: str) -> bool:
+        """Validates a specific hostname in a given OSD tree.
+
+        It checks that the hostname is present in the tree, and it has the expected attributes.
+        """
+        host_node = [n for n in osd_tree["nodes"]["children"] if n["name"] == hostname]
+
+        if len(host_node) != 1:
+            LOGGER.warning("Expected 1 node in the OSD tree with name='%s' but found %d", hostname, len(host_node))
+            return False
+
+        if len(host_node[0]["children"]) != self.expected_osd_drives_per_host:
+            LOGGER.warning(
+                "Expected %d OSDs in the OSD tree for host '%s' but found %d",
+                self.expected_osd_drives_per_host,
+                hostname,
+                len(host_node[0]["children"]),
+            )
+            return False
+
+        return True
 
 
 # Poor man's namespace to compensate for the restriction to not create modules
