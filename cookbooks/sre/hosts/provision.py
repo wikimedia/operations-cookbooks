@@ -133,9 +133,8 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
         # Testing that the management password is correct connecting to the current cumin host
         localhost = gethostname()
-        netbox_localhost = spicerack.netbox_server(localhost)
         try:
-            spicerack.redfish(netbox_localhost.mgmt_fqdn).check_connection()
+            spicerack.redfish(localhost).check_connection()
         except RedfishError:
             raise RuntimeError(
                 f'The management password provided seems incorrect, it does not work on {localhost}.') from None
