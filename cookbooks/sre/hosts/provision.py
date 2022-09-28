@@ -1,5 +1,4 @@
 """Provision a new physical host setting up it's BIOS and management console."""
-import ipaddress
 import logging
 
 from pprint import pformat
@@ -101,6 +100,13 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             raise RuntimeError(
                 f'Host {self.args.host} has active status in Netbox but --no-dhcp and --no-users were not set.')
 
+        if self.args.no_users:
+            password = ''  # nosec
+        else:
+            password = DELL_DEFAULT
+
+        self.redfish = spicerack.redfish(self.args.host, password=password)
+
         # DHCP automation
         try:
             self.dhcp_hosts = self.remote.query(f'A:installserver-light and A:{self.netbox_data["site"]["slug"]}')
@@ -108,20 +114,13 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             self.dhcp_hosts = self.remote.query('A:installserver-light and A:eqiad')
 
         self.dhcp = spicerack.dhcp(self.dhcp_hosts)
-        address = self.netbox.api.ipam.ip_addresses.get(dns_name=self.fqdn).address
-        self.interface = ipaddress.ip_interface(address)
         self.dhcp_config = DHCPConfMgmt(
             datacenter=self.netbox_data['site']['slug'],
             serial=self.netbox_data['serial'],
             fqdn=self.fqdn,
-            ipv4=self.interface.ip,
+            ipv4=self.redfish.interface.ip,
         )
         self._dhcp_active = False
-
-        if self.args.no_users:
-            password = ''  # nosec
-        else:
-            password = DELL_DEFAULT
 
         if self.netbox_server.status in ('active', 'staged'):
             self.reboot_policy = DellSCPRebootPolicy.GRACEFUL
@@ -130,14 +129,13 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             self.reboot_policy = DellSCPRebootPolicy.FORCED
             self.chassis_reset_policy = ChassisResetPolicy.FORCE_RESTART
 
-        self.redfish = spicerack.redfish(self.fqdn, 'root', password)
         self.mgmt_password = spicerack.management_password
 
         # Testing that the management password is correct connecting to the current cumin host
         localhost = gethostname()
         netbox_localhost = spicerack.netbox_server(localhost)
         try:
-            spicerack.redfish(netbox_localhost.mgmt_fqdn, 'root').check_connection()
+            spicerack.redfish(netbox_localhost.mgmt_fqdn).check_connection()
         except RedfishError:
             raise RuntimeError(
                 f'The management password provided seems incorrect, it does not work on {localhost}.') from None
@@ -163,10 +161,10 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             'iDRAC.Embedded.1': {
                 'IPMILan.1#Enable': 'Enabled',
                 'IPv4.1#DHCPEnable': 'Disabled',
-                'IPv4Static.1#Address': str(self.interface.ip),
+                'IPv4Static.1#Address': str(self.redfish.interface.ip),
                 'IPv4Static.1#DNS1': DNS_ADDRESS,
-                'IPv4Static.1#Gateway': str(next(self.interface.network.hosts())),
-                'IPv4Static.1#Netmask': str(self.interface.netmask),
+                'IPv4Static.1#Gateway': str(next(self.redfish.interface.network.hosts())),
+                'IPv4Static.1#Netmask': str(self.redfish.interface.netmask),
                 'NICStatic.1#DNSDomainFromDHCP': 'Disabled',
             },
             'System.Embedded.1': {

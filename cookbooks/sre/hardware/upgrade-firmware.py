@@ -280,7 +280,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         version = redfish_host.request(
             "get", "/redfish/v1/Managers/iDRAC.Embedded.1?$select=FirmwareVersion"
         ).json()["FirmwareVersion"]
-        logger.debug("%s: idrac current version %s", redfish_host.fqdn, version)
+        logger.debug("%s: idrac current version %s", redfish_host.hostname, version)
         return version
 
     # TODO: consider moving to spicerack.redfish
@@ -298,7 +298,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         version = redfish_host.request(
             "get", "/redfish/v1/Systems/System.Embedded.1?$select=BiosVersion"
         ).json()["BiosVersion"]
-        logger.debug("%s: BIOS current version %s", redfish_host.fqdn, version)
+        logger.debug("%s: BIOS current version %s", redfish_host.hostname, version)
         return version
 
     def upload_file(self, redfish_host: Redfish, file_handle: BufferedReader) -> str:
@@ -320,7 +320,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         # BUG: timeout is not hounred by redfish.request
         # response = redfish_host.request('post', push_uri, files=files, headers=headers, timeout=(120,120))
         response = post(
-            f"https://{redfish_host.fqdn}{push_url}",
+            f"https://{redfish_host.interface.ip}{push_url}",
             files=files,
             headers=headers,
             auth=redfish_host._http_session.auth,  # pylint: disable=protected-access
@@ -612,7 +612,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         self._ask_confirmation(
-            f"{redfish_host.fqdn}: About to reboot to apply update, please confirm"
+            f"{redfish_host.hostname}: About to reboot to apply update, please confirm"
         )
         if self.new:
             redfish_host.chassis_reset(ChassisResetPolicy.FORCE_RESTART)
@@ -670,7 +670,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             hostname = host.split(".")[0]
             netbox_host = self.spicerack.netbox().get_server(hostname)
             try:
-                redfish_host = self.spicerack.redfish(netbox_host.mgmt_fqdn, "root")
+                redfish_host = self.spicerack.redfish(hostname)
             except NetboxError as error:
                 logger.warning("Skipping: %s", error)
                 continue

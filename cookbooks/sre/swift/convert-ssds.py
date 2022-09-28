@@ -52,8 +52,6 @@ class ConvertSSDsRunner(CookbookRunnerBase):
 
         netbox_server = spicerack.netbox_server(self.host)
         netbox_data = netbox_server.as_dict()
-        self.fqdn = netbox_server.mgmt_fqdn
-        self.ipmi = spicerack.ipmi(self.fqdn)
         self.remote_host = spicerack.remote().query(netbox_server.fqdn)
         self.puppet_host = spicerack.puppet(self.remote_host)
         self.reason = spicerack.admin_reason('Converting SSDs to non-RAID')
@@ -63,7 +61,7 @@ class ConvertSSDsRunner(CookbookRunnerBase):
             vendor = netbox_data['device_type']['manufacturer']['name']
             raise RuntimeError(f'Host {self.host} manufacturer is {vendor}. Only Dell is supported.')
 
-        self.redfish = spicerack.redfish(netbox_server.mgmt_fqdn, 'root')
+        self.redfish = spicerack.redfish(self.host)
         self.redfish.check_connection()
 
         storage = self.redfish.request('get', '/redfish/v1/Systems/System.Embedded.1/Storage/').json()
