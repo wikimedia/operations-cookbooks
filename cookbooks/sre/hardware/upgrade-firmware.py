@@ -87,7 +87,7 @@ class FirmwareUpgrade(CookbookBase):
             "-c",
             "--component",
             help="force a specific type of upgrade: %(choices)s",
-            choices=("bios", "idrac", "nic"),
+            choices=("bios", "idrac", "nic", "storage"),
         )
         parser.add_argument(
             "query",
@@ -272,14 +272,15 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         try:
-            controler_key = {
-                DellDriverCategory.NETWORK: "Controllers",
+            controler_key, version_key = {
+                DellDriverCategory.NETWORK: ("Controllers", "FirmwarePackageVersion",),
+                DellDriverCategory.STORAGE: ("StorageControllers", "FirmwareVersion",)
             }[driver_category]
         except KeyError as error:
             raise ValueError(f"{redfish_host.hostname}: {driver_category} not supported") from error
         data = redfish_host.request("get", odata_id).json()
         # Lets see if this is generic enough to work for more then just nics
-        odata_version = data[controler_key][0]["FirmwarePackageVersion"]
+        odata_version = data[controler_key][0][version_key]
         logger.debug(
             "%s: %s current version %s", redfish_host.hostname, odata_id, odata_version
         )
@@ -770,11 +771,17 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             members: A list of member odata.id's
 
         """
-        return {
-            DellDriverCategory.NETWORK: self._get_members(
-                redfish_host, "/redfish/v1/Chassis/System.Embedded.1/NetworkAdapters"
-            )
-        }[driver_category]
+        try:
+            return {
+                DellDriverCategory.NETWORK: self._get_members(
+                    redfish_host, "/redfish/v1/Chassis/System.Embedded.1/NetworkAdapters"
+                ),
+                DellDriverCategory.STORAGE: self._get_members(
+                    redfish_host, '/redfish/v1/Systems/System.Embedded.1/Storage'
+                )
+            }[driver_category]
+        except KeyError as error:
+            raise RuntimeError(f"{redfish_host.hostname}: unsupported device catagory {driver_category}") from error
 
     def update_driver(
         self,
@@ -852,6 +859,11 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             if self.component == "nic":
                 self.update_driver(
                     redfish_host, netbox_host, DellDriverCategory.NETWORK
+                )
+
+            if self.component == "storage":
+                self.update_driver(
+                    redfish_host, netbox_host, DellDriverCategory.STORAGE
                 )
 
             if (
