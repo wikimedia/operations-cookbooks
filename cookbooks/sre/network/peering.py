@@ -3,7 +3,6 @@
 import argparse
 import logging
 import smtplib
-import textwrap
 from collections import defaultdict
 from typing import Tuple
 
@@ -23,22 +22,24 @@ WIKIMEDIA_ASN = 14907
 DEFAULT_MAX_PREFIX4 = 10000
 DEFAULT_MAX_PREFIX6 = 4000
 
-FOOTER = """The Wikimedia Foundation operates some of the largest collaboratively
-            edited reference projects in the world, including Wikipedia. We are a
-            501(c)3 nonprofit charitable organization dedicated to encouraging the
-            growth, development and distribution of free, multilingual content, and
-            to providing the full content of these wiki-based projects to the public
-            free of charge.
+FOOTER = """
+The Wikimedia Foundation operates some of the largest collaboratively
+edited reference projects in the world, including Wikipedia. We are a
+501(c)3 nonprofit charitable organization dedicated to encouraging the
+growth, development and distribution of free, multilingual content, and
+to providing the full content of these wiki-based projects to the public
+free of charge.
 
-            You can find out more about us and our mission at
-            https://wikimediafoundation.org/
-            and our peering policy and information at:
-            http://as14907.peeringdb.com/
-            http://wikimediafoundation.org/wiki/Peering
+You can find out more about us and our mission at
+https://wikimediafoundation.org/
+and our peering policy and information at:
+http://as14907.peeringdb.com/
+http://wikimediafoundation.org/wiki/Peering
 
-            Thanks for peering,
-            --
-            The Wikimedia Netops team"""
+Thanks for peering,
+--
+The Wikimedia Netops team
+"""
 
 
 class Peering(CookbookBase):
@@ -314,8 +315,7 @@ As we use data from PeeringDB please make sure your records are up to date.
 If no reply or an extended downtime, we will have to delete the session(s).\n\n"""
 
         subject = f"{' and '.join(subject_actions)} between the Wikimedia Foundation (AS14907) and {them_human}"
-        body += str(peering_matrix) + '\n'
-        body += '\n' + textwrap.dedent(FOOTER)
+        body += str(peering_matrix) + '\n' + FOOTER
 
         return recipients, subject, body
 
