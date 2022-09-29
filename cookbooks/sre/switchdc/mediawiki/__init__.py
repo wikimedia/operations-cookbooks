@@ -9,8 +9,11 @@ PUPPET_REASON = __name__
 DNS_SHORT_TTL = 10  # DNS short TTL in seconds to use during the switchdc
 DEFAULT_READ_ONLY_REASON = ("You can't edit now. This is because of maintenance. Copy and save your text and try again "
                             "in a few minutes.")
-MEDIAWIKI_SERVICES = ('api-ro', 'api-rw', 'appservers-ro', 'appservers-rw', 'jobrunner', 'mwdebug',
-                      'parsoid-php', 'videoscaler')
+MEDIAWIKI_SERVICES = ('api-rw', 'appservers-rw', 'jobrunner', 'mwdebug',
+                      'parsoid-php', 'videoscaler', 'mw-web', 'mw-api-ext')
+# Read-only mediawiki services that are active-active by default and won't be touched by this switchover.
+# Please note: we're still not adding the k8s services as they are not used enough to be significant caching-wise.
+MEDIAWIKI_RO_SERVICES = ("api-ro", "appservers-ro")
 
 
 def argument_parser_base(name, title):

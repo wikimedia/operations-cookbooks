@@ -5,7 +5,7 @@ import logging
 
 from wmflib.interactive import ask_confirmation
 
-from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args
+from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args, MEDIAWIKI_RO_SERVICES
 
 
 MINIMUM_ITERATIONS = 6  # How many loops to do, at minimum
@@ -27,7 +27,13 @@ def run(args, spicerack):
     else:
         datacenter = args.dc_to
 
-    ask_confirmation('Are you sure to warmup caches in {dc}?'.format(dc=datacenter))
+    current_ro_state = spicerack.discovery(*MEDIAWIKI_RO_SERVICES).active_datacenters
+    datacenter_pooled = any(datacenter in current_ro_state.get(svc, {}) for svc in MEDIAWIKI_RO_SERVICES)
+    if datacenter_pooled:
+        ask_confirmation(f'{datacenter} is pooled for read-only traffic, you '
+                         'should NOT need warming up of caches. Do you still want to proceed?')
+    else:
+        ask_confirmation(f'Are you sure to warmup caches in {datacenter}?')
 
     warmup_dir = '/var/lib/mediawiki-cache-warmup'
     # urls-cluster is only running against appservers since is for shared resources behind the
