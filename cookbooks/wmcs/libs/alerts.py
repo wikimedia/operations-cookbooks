@@ -128,7 +128,7 @@ class AlertManager:
             "add",
             f'--duration="{duration or "1h"}"',
             f"--comment='{comment}'",
-            f"instance={host_name}",
+            f"instance=~'{host_name}(:[0-9]+)?'",
         ]
         return run_one_raw(node=self.node, command=command)
 

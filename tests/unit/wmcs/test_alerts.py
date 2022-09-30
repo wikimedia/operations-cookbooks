@@ -212,7 +212,8 @@ def test_AlertManager_uptime_alert_raises(
                     "comment": "Some comment",
                 },
                 "expected_command": (
-                    "amtool --output=json silence add --duration=\"1h\" --comment='Some comment' 'instance=dummy_host'"
+                    'amtool --output=json silence add --duration="1h" '
+                    "--comment='Some comment' instance=~'dummy_host(:[0-9]+)?'"
                 ),
                 "commands_outputs": ["some-silence-id"],
                 "expected_silence_id": "some-silence-id",
@@ -224,7 +225,8 @@ def test_AlertManager_uptime_alert_raises(
                     "duration": "8h",
                 },
                 "expected_command": (
-                    "amtool --output=json silence add --duration=\"8h\" --comment='Some comment' 'instance=dummy_host'"
+                    'amtool --output=json silence add --duration="8h" '
+                    "--comment='Some comment' 'instance=~dummy_host(:[0-9]+)?'"
                 ),
                 "commands_outputs": ["some-silence-id"],
                 "expected_silence_id": "some-silence-id",
