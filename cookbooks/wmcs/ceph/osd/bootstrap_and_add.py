@@ -117,7 +117,8 @@ def _wait_for_osds_to_show_up(cluster_controller: CephClusterController, ceph_ho
         osd_tree = cluster_controller.get_osd_tree()
 
     LOGGER.info("All OSDs are showing up in the cluster, continuing.")
-    return osd_tree["children"][ceph_hostname]["children"]
+    host_node = next(node for node in osd_tree["nodes"]["children"] if node["name"] == ceph_hostname)
+    return host_node["children"]
 
 
 class BootstrapAndAddRunner(CookbookRunnerBase):
