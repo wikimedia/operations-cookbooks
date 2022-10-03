@@ -323,6 +323,22 @@ class OpenstackAPI(CommandRunnerMixin):
             **kwargs,
         )
 
+    def get_nova_services(self, **kwargs) -> List[Dict[str, Any]]:
+        """Return nova's list of registered services"""
+        return self.run_formatted_as_list("compute", "service", "list", **kwargs)
+
+    def get_designate_services(self, **kwargs) -> List[Dict[str, Any]]:
+        """Return designate's list of registered services"""
+        return self.run_formatted_as_list("dns", "service", "list", **kwargs)
+
+    def get_neutron_services(self, **kwargs) -> List[Dict[str, Any]]:
+        """Return neutron's list of registered services"""
+        return self.run_formatted_as_list("network", "agent", "list", **kwargs)
+
+    def get_cinder_services(self, **kwargs) -> List[Dict[str, Any]]:
+        """Return cinder's list of registered services"""
+        return self.run_formatted_as_list("volume", "service", "list", **kwargs)
+
     def port_get(self, ip_address, **kwargs) -> List[Dict[str, Any]]:
         """Get port for specified IP address"""
         ip_filter = f'--fixed-ip="ip-address={ip_address}"'
