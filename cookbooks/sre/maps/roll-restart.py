@@ -26,7 +26,7 @@ class MapsRestartRunner(SRELBBatchRunnerBase):
     @property
     def allowed_aliases(self):
         """Required by SREBatchRunnerBase"""
-        return ['maps', 'maps-codfw', 'maps-eqiad', 'maps-canary']
+        return ['maps-replica', 'maps-replica-codfw', 'maps-replica-eqiad']
 
     @property
     def restart_daemons(self):
