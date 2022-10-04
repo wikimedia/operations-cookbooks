@@ -119,7 +119,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
 
         common_path = out_dir / "common.yaml"
         with common_path.open("w") as common_fh:
-            common_data = {f"{self.hiera_prefix}::{k}": v for k, v in data["common"].items()}
+            common_data = {f"{self.hiera_prefix}::data::{k}": v for k, v in data["common"].items()}
             yaml.safe_dump(common_data, common_fh, default_flow_style=False)
 
     def update_puppetmasters(self, hexsha: str) -> None:
