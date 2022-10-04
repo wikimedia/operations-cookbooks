@@ -111,11 +111,16 @@ class NetboxHieraRunner(CookbookRunnerBase):
         data = self._get_netbox_data()
         hosts_dir = out_dir / "hosts"
         hosts_dir.mkdir()
-        for host, data in data["hosts"].items():
+        for host, host_data in data["hosts"].items():
             host_path = hosts_dir / f"{host}.yaml"
-            data = {f"{self.host_prefix}::{k}": v for k, v in data.items()}
+            hiera_data = {f"{self.host_prefix}::{k}": v for k, v in host_data.items()}
             with host_path.open("w") as host_fh:
-                yaml.safe_dump(data, host_fh, default_flow_style=False)
+                yaml.safe_dump(hiera_data, host_fh, default_flow_style=False)
+
+        common_path = out_dir / "common.yaml"
+        with common_path.open("w") as common_fh:
+            common_data = {f"{self.hiera_prefix}::{k}": v for k, v in data["common"].items()}
+            yaml.safe_dump(common_data, common_fh, default_flow_style=False)
 
     def update_puppetmasters(self, hexsha: str) -> None:
         """Update the puppet masters to a specific hash
