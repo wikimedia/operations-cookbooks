@@ -76,7 +76,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
         self.puppetmasters = spicerack.remote().query("A:puppetmaster")
         self.reason = spicerack.admin_reason(args.message, task_id=args.task_id)
         self.api_url = f"{config['api_url'].rstrip('/')}:8443/hiera_export.HieraExport"
-        self.session = spicerack.requests_session(__name__, timeout=30)
+        self.session = spicerack.requests_session(__name__, timeout=300)
         self.session.headers.update(
             {"Authorization": f"Token {config['api_token_ro']}"}
         )
