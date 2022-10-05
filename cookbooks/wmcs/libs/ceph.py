@@ -542,7 +542,8 @@ class CephClusterController(CommandRunnerMixin):
 
             except CephClusterUnhealthy:
                 LOGGER.info(
-                    "Cluster still not healthy, waiting another %d (timeout=%d)...",
+                    "%ds have passed, but the cluster is still not healthy, waiting another %d (timeout=%d)...",
+                    cur_time - start_time,
                     check_interval_seconds,
                     timeout_seconds,
                 )
