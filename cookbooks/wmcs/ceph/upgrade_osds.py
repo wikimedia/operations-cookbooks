@@ -7,6 +7,7 @@ Usage example:
 """
 import argparse
 import logging
+from typing import List, Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
@@ -45,6 +46,16 @@ class UpgradeOsds(CookbookBase):
             action="store_true",
             help="If passed, will continue even if the cluster is not in a healthy state.",
         )
+        parser.add_argument(
+            "--osd-nodes",
+            required=False,
+            default="",
+            type=lambda csl: csl.split(",") if csl else [],
+            help=(
+                "Comma separated list of osds to upgrade (hostnames, not fqdn), if none passed, will upgrade all "
+                "the ones currently in the cluster. Example: cloudcephosd1021,cloudcephosd1033"
+            ),
+        )
 
         return parser
 
@@ -52,6 +63,7 @@ class UpgradeOsds(CookbookBase):
         """Get runner"""
         return with_common_opts(self.spicerack, args, UpgradeOsdsRunner)(
             cluster_name=args.cluster_name,
+            osd_nodes=args.osd_nodes,
             force=args.force,
             spicerack=self.spicerack,
         )
@@ -66,6 +78,7 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
         force: bool,
         common_opts: CommonOpts,
         spicerack: Spicerack,
+        osd_nodes: Optional[List[str]],
     ):
         """Init"""
         self.force = force
@@ -76,13 +89,18 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
         self.controller = CephClusterController(
             remote=self.spicerack.remote(), cluster_name=cluster_name, spicerack=self.spicerack
         )
+        self.osd_nodes = osd_nodes or []
 
     def run(self) -> None:
         """Main entry point"""
         silences = self.controller.set_maintenance(reason="Upgrading osds")
 
         upgrade_ceph_node_cookbook = UpgradeCephNode(spicerack=self.spicerack)
-        osd_nodes = list(self.controller.get_nodes()["osd"].keys())
+        if not self.osd_nodes:
+            osd_nodes = list(self.controller.get_nodes()["osd"].keys())
+        else:
+            osd_nodes = self.osd_nodes
+
         self.sallogger.log(f"Upgrading OSDs and rebooting the nodes {osd_nodes}")
 
         for index, osd_node in enumerate(osd_nodes):
