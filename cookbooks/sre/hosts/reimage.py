@@ -72,6 +72,10 @@ class Reimage(CookbookBase):
         parser.add_argument(
             '--no-check-icinga', action='store_true',
             help='Do not wait for optimal status in Icinga after the reimage and do not remove the Icinga downtime.')
+        parser.add_argument(
+            '--pxe-media', default='installer',
+            help=('Specify a different media suffix to use in the PXE settings of the DHCP configuration. To be used '
+                  'when a specific installer is needed that is available as tftpboot/$OS-$PXE_MEDIA/.'))
         parser.add_argument('--os', choices=OS_VERSIONS, required=True,
                             help='the Debian version to install. One of %(choices)s')
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
@@ -284,6 +288,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             vlan=switch_iface.untagged_vlan.name,
             ttys=1,
             distro=self.args.os,
+            media_type=self.args.pxe_media,
         )
 
     def _install_os(self):
