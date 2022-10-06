@@ -62,5 +62,5 @@ class WipeCacheRunner(CookbookRunnerBase):
 
     def run(self):
         """Required by Spicerack API."""
-        command = f'rec_control wipe-cache {self.domain}'
+        command = f'sudo rec_control wipe-cache {self.domain}'
         self.remote_hosts.run_sync(command)
