@@ -155,10 +155,17 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
     @property
     def allowed_aliases(self) -> List:
         """Return a list of allowed aliases for this cookbook"""
-        aliases = []
+        # The single dse-k8s-worker alias does not have corresponding aliases in CORE_DATACENTERS
+        aliases = ["dse-k8s-worker"]
         for alias in ["wikikube-worker", "wikikube-staging-worker", "ml-serve-worker"]:
             aliases.extend(f"{alias}-{dc}" for dc in CORE_DATACENTERS)
         return aliases
+
+    @property
+    def allowed_aliases_query(self) -> str:
+        """Override the parent property to optimize the query."""
+        # The following query must include all hosts matching all the allowed_aliases
+        return 'A:wikikube-worker or A:wikikube-staging-worker or A:ml-serve-worker or A:dse-k8s-worker'
 
     def _hosts(self) -> List[RemoteHosts]:
         all_hosts = super()._hosts()[0]
