@@ -21,6 +21,10 @@ class Dhcp(CookbookBase):
         parser = super().argument_parser()
         parser.add_argument('--os', choices=OS_VERSIONS, required=True,
                             help='the Debian version to install. One of %(choices)s')
+        parser.add_argument(
+            '--pxe-media', default='installer',
+            help=('Specify a different media suffix to use in the PXE settings of the DHCP configuration. To be used '
+                  'when a specific installer is needed that is available as tftpboot/$OS-$PXE_MEDIA/.'))
         parser.add_argument('host', help='Short hostname of the host for which to set the DHCP config, not FQDN')
 
         return parser
@@ -90,6 +94,7 @@ class DhcpRunner(CookbookRunnerBase):
             vlan=switch_iface.untagged_vlan.name,
             ttys=1,
             distro=self.args.os,
+            media_type=self.args.pxe_media,
         )
 
     def run(self):
