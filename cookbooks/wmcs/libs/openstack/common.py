@@ -520,7 +520,7 @@ class OpenstackAPI(CommandRunnerMixin):
             "group",
             "rule",
             "create",
-            f"--{direction.name.lower}",
+            f"--{direction.name.lower()}",
             "--remote-group",
             remote_group,
             "--protocol",

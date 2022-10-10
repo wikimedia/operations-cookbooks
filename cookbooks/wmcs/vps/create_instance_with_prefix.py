@@ -119,9 +119,9 @@ def add_instance_creation_options(parser: argparse.ArgumentParser) -> argparse.A
         required=False,
         default=None,
         help=(
-            "Extra security group to put the instance in (will alway add the 'default' security group, and then "
-            "this one, '<project>-k8s-full-connectivity' by default). If it does not exist it will be created "
-            "allowing all traffic between instances of the group (ex. )."
+            "Extra security group to put the instance in, if it does not exist it will be created (will "
+            "always add the 'default' security group too). Will use '<project>-full-connectivity' if "
+            "not specified."
         ),
     )
     parser.add_argument(
@@ -137,7 +137,7 @@ def add_instance_creation_options(parser: argparse.ArgumentParser) -> argparse.A
         required=False,
         help=(
             "Server group policy to start the instance in. If it does not exist, it will create it with "
-            "anti-affinity policy, will use the same as '--prefix' by default (ex. toolsbeta-test-k8s-etcd)."
+            "anti-affinity policy."
         ),
         choices=list(OpenstackServerGroupPolicy),
         type=OpenstackServerGroupPolicy,
@@ -254,7 +254,7 @@ class CreateInstanceWithPrefixRunner(WMCSCookbookRunnerBase):
         self.server_group = server_group if server_group is not None else self.prefix
         self.server_group_policy = server_group_policy
         super().__init__(spicerack=spicerack)
-        self.security_group = security_group
+        self.security_group = security_group or f"{self.common_opts.project}-full-connectivity"
         self.ssh_retries = ssh_retries
 
     def run(self) -> None:
