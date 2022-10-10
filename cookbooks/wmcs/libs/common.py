@@ -175,8 +175,8 @@ class KubernetesClusterInfo:
 
         Example of output:
         ```
-        Kubernetes master is running at https://k8s.toolsbeta.eqiad1.wikimedia.cloud:6443  # noqa: E501
-        KubeDNS is running at https://k8s.toolsbeta.eqiad1.wikimedia.cloud:6443/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy  # noqa: E501
+        Kubernetes control plane is running at https://k8s.toolsbeta.eqiad1.wikimedia.cloud:6443  # noqa: E501
+        CoreDNS is running at https://k8s.toolsbeta.eqiad1.wikimedia.cloud:6443/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy  # noqa: E501
         Metrics-server is running at https://k8s.toolsbeta.eqiad1.wikimedia.cloud:6443/api/v1/namespaces/kube-system/services/https:metrics-server:/proxy  # noqa: E501
 
         To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
@@ -188,11 +188,9 @@ class KubernetesClusterInfo:
         for line in raw_output.splitlines():
             # get rid of the terminal colors
             line = line.replace("\x1b[0;33m", "").replace("\x1b[0;32m", "").replace("\x1b[0m", "")
-            # k8s <1.20 uses "master", >=1.20 uses "control plane":
-            #   https://github.com/kubernetes/kubernetes/commit/ab129349acadb4539cc8c584e4f9a43dd8b45761
-            if line.startswith("Kubernetes master") or line.startswith("Kubernetes control plane"):
+            if line.startswith("Kubernetes control plane"):
                 master_url = line.rsplit(" ", 1)[-1]
-            elif line.startswith("KubeDNS"):
+            elif line.startswith("CoreDNS"):
                 dns_url = line.rsplit(" ", 1)[-1]
             elif line.startswith("Metrics-server"):
                 metrics_url = line.rsplit(" ", 1)[-1]
