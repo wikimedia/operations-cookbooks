@@ -72,11 +72,12 @@ class GanetiChangeDiskRunner(CookbookRunnerBase):
         self.alerting_hosts = spicerack.alerting_hosts(self.remote_vm.hosts)
         self.reason = spicerack.admin_reason('Change VM disk type')
 
+        self.rapi = self.ganeti.rapi(args.cluster)
         self.secondnode = args.secondnode
         self.disktype = args.disktype
         self.fqdn = args.fqdn
 
-        initial_disktype = self.ganeti.rapi.fetch_instance(self.fqdn).get('disk_template')
+        initial_disktype = self.rapi.fetch_instance(self.fqdn).get('disk_template')
         if initial_disktype == self.disktype:
             raise RuntimeError(f'{self.fqdn} is already configured for {initial_disktype}.')
 
@@ -135,5 +136,5 @@ class GanetiChangeDiskRunner(CookbookRunnerBase):
                 f'Could not start {self.fqdn}'
             )
 
-            if self.ganeti.rapi.fetch_instance(self.fqdn).get('disk_template') != self.disktype:
+            if self.rapi.fetch_instance(self.fqdn).get('disk_template') != self.disktype:
                 raise RuntimeError(f'{self.fqdn} did not pick up the new disk type.')
