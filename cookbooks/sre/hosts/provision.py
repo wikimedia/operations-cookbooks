@@ -190,8 +190,18 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             self.dhcp.push_configuration(self.dhcp_config)
             self._dhcp_active = True
 
+        def check_connection():
+            try:
+                self.redfish.check_connection()
+            except RedfishError as e:
+                raise RuntimeError(
+                    f'Unable to connect to the Redfish API of {self.args.host}. Follow '
+                    'https://wikitech.wikimedia.org/wiki/SRE/Dc-operations/Platform-specific_documentation'
+                    '/Dell_Documentation#Troubleshooting_2') from e
+
+        confirm_on_failure(check_connection)
+
         try:
-            self.redfish.check_connection()
             storage = self.redfish.request('get', '/redfish/v1/Systems/System.Embedded.1/Storage/').json()
             has_raid = False
             for storage_member in storage['Members']:
@@ -199,14 +209,14 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                     has_raid = True
                     break
         except Exception:  # pylint: disable=broad-except
-            logger.warning('Unable to detect if there is Hardware RAID on the host, assuming yes.')
+            logger.warning('Unable to detect if there is Hardware RAID on the host, ASSUMING IT HAS RAID.')
             has_raid = True
 
         if has_raid:
             action = ask_input(
                 'Detected Hardware RAID. Please configure the RAID at this point (the password is still DELL default '
-                'one). Once done select the appropriate answer. If the RAID was modified the host will be rebooted to '
-                'make sure the changes are applied.',
+                'one). Once done select "modified" if the RAID was modified or "untouched" if it was not touched. '
+                'If the RAID was modified the host will be rebooted to make sure the changes are applied.',
                 ('untouched', 'modified'))
 
             if action == 'modified':
