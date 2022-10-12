@@ -431,7 +431,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         headers = {'Authorization': f'Token {self.netbox.api.token}'}
         data = {'data': {'device': self.host}, 'commit': 1}
 
-        @retry(tries=10, backoff_mode='constant', exceptions=(ValueError, RequestException))
+        @retry(tries=30, backoff_mode='constant', exceptions=(ValueError, RequestException))
         def _poll_netbox_job(url):
             """Poll Netbox to get the result of the script run."""
             result = self.requests.get(url, headers=headers)
