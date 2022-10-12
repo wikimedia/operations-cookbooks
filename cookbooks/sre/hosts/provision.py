@@ -314,6 +314,11 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 self.config_changes[nic] = {'LegacyBootProto': 'NONE'}
 
         # Set SetBootOrderEn to disk, primary NIC
-        new_order = ','.join(['HardDisk.List.1-1', pxe_nic])
-        self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = new_order
-        self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = new_order
+        new_order = ['HardDisk.List.1-1', pxe_nic]
+        # SetBootOrderEn defaults to comma-separated, but some hosts might differ
+        separator = ', ' if ', ' in config.components['BIOS.Setup.1-1']['SetBootOrderEn'] else ','
+        self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = separator.join(new_order)
+        # BiosBootSeq defaults to comma-space-separated, but some hosts might differ
+        bios_boot_seq = config.components['BIOS.Setup.1-1']['BiosBootSeq']
+        separator = ',' if ',' in bios_boot_seq and ', ' not in bios_boot_seq else ', '
+        self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_order)
