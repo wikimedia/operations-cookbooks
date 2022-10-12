@@ -114,3 +114,10 @@ class ToolforgeGridGetClusterStatusRunner(WMCSCookbookRunnerBase):
                 queue_info for queue_info in self.grid_controller.get_queues_info() if not queue_info.is_ok()
             ]
             print(yaml.dump(queue_infos, Dumper=NoAliasDumper))
+
+            print("###### Failed jobs logs")
+            for queue_info in queue_infos:
+                for job_id in queue_info.get_failed_jobs_from_message():
+                    print(f"--- job:{job_id}")
+                    print(self.grid_controller.get_job_error_logs(job_id=job_id))
+                    print("-----------------")

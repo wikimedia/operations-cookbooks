@@ -1,6 +1,7 @@
 """Grid related classes and functions."""
 __title__ = __doc__
 import logging
+import re
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -173,6 +174,21 @@ class GridQueueInfo:
         # when loading the data from qstat, the states is empty unless in error
         return self.states.is_ok() if self.states is not None else True
 
+    def get_failed_jobs_from_message(self) -> List[int]:
+        """Get the failed job ids for this queue info if any."""
+        job_ids: List[int] = []
+        # TODO: extend this if/when finding new error messages
+        job_regex = re.compile(r"job (?P<job_id>[0-9]+)'s failure")
+        for message in self.messages or []:
+            match = job_regex.search(message)
+            if not match:
+                continue
+
+            # we only expect one match per message
+            job_ids.append(int(match.groupdict()["job_id"]))
+
+        return job_ids
+
 
 @dataclass(frozen=True)
 class GridNodeInfo:
@@ -220,6 +236,8 @@ class GridNodeType(ArgparsableEnum):
 
 class GridController:
     """Grid cluster controller class."""
+
+    JOB_LOGS_GLOB = "/data/project/.system_sge/gridengine/spool/qmaster/messages*"
 
     def __init__(self, remote: Remote, master_node_fqdn: str):
         """Init."""
@@ -363,6 +381,16 @@ class GridController:
             queues_info.append(GridQueueInfo.from_queue_info_xml(xml_obj=queue_list_xml))
 
         return queues_info
+
+    def get_job_error_logs(self, job_id: int) -> str:
+        """Retrieve the logs for the given job_id"""
+        return run_one_raw(
+            node=self._master_node,
+            command=["grep", f"{job_id}", self.JOB_LOGS_GLOB],
+            capture_errors=True,
+            print_output=False,
+            print_progress_bars=False,
+        )
 
     def depool_node(self, host_fqdn: str) -> None:
         """Depools a node from the grid.
