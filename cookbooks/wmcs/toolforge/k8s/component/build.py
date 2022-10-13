@@ -8,7 +8,7 @@ import argparse
 import logging
 import random
 import string
-from typing import List
+from typing import List, Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
@@ -62,8 +62,7 @@ class ToolforgeComponentBuild(CookbookBase):
         parser.add_argument(
             "--docker-image-tag",
             required=False,
-            default="latest",
-            help="docker tag for the new image",
+            help="docker tag for the new image, if not provided the git hash of the latest commit will be used",
         )
         parser.add_argument(
             "--docker-image-name",
@@ -106,7 +105,7 @@ class ToolforgeComponentBuildRunner(CookbookRunnerBase):
         git_name: str,
         git_url: str,
         git_branch: str,
-        docker_image_tag: str,
+        docker_image_tag: Optional[str],
         docker_image_name: str,
         spicerack: Spicerack,
     ):  # pylint: disable=too-many-arguments
@@ -160,6 +159,9 @@ class ToolforgeComponentBuildRunner(CookbookRunnerBase):
         git_hash = run_one_raw(
             node=build_node, command=_sh_wrap(cmd), last_line_only=True, print_output=False, print_progress_bars=False
         )
+
+        if not self.docker_image_tag:
+            self.docker_image_tag = git_hash
 
         # docker build
         image = f"{self.docker_image_name}:{self.docker_image_tag}"
