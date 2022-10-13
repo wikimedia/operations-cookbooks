@@ -29,6 +29,7 @@ CLUSTER_ALERT_MATCHES = [
     "alertname=Ceph Cluster Health",
     "alertname=Ceph OSDs Down",
     "alertname=Ceph Mon Quorum",
+    "alertname=CephClusterInWarning",
     "service=.*ceph.*",
 ]
 OSD_EXPECTED_OS_DRIVES = 2
