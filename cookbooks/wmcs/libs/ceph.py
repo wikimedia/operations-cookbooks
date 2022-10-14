@@ -25,13 +25,6 @@ from cookbooks.wmcs.libs.inventory import (
 
 LOGGER = logging.getLogger(__name__)
 # List of alerts that are triggered by the cluster aside from the specifics for each node
-CLUSTER_ALERT_MATCHES = [
-    "alertname=Ceph Cluster Health",
-    "alertname=Ceph OSDs Down",
-    "alertname=Ceph Mon Quorum",
-    "alertname=CephClusterInWarning",
-    "service=.*ceph.*",
-]
 OSD_EXPECTED_OS_DRIVES = 2
 
 
@@ -330,6 +323,8 @@ class CephOSDNodeController:
 class CephClusterController(CommandRunnerMixin):
     """Controller for a CEPH cluster."""
 
+    CLUSTER_ALERT_MATCH = "service=~.*ceph.*"
+
     def __init__(self, remote: Remote, cluster_name: CephClusterName, spicerack: Spicerack):
         """Init."""
         self._remote = remote
@@ -404,17 +399,16 @@ class CephClusterController(CommandRunnerMixin):
     ) -> List[SilenceID]:
         """Downtime all the known cluster-wide alerts (the ones not related to a specific ceph node)."""
         silences = []
-        # we match each set of alerts individually
-        for alert_match in CLUSTER_ALERT_MATCHES:
-            silences.append(
-                downtime_alert(
-                    spicerack=self._spicerack,
-                    duration=duration,
-                    task_id=task_id,
-                    comment=f"Downtiming alert from cookbook - {reason}",
-                    extra_queries=[alert_match],
-                )
+        # There's only one alert left
+        silences.append(
+            downtime_alert(
+                spicerack=self._spicerack,
+                duration=duration,
+                task_id=task_id,
+                comment=f"Downtiming alert from cookbook - {reason}",
+                extra_queries=[self.CLUSTER_ALERT_MATCH],
             )
+        )
 
         return silences
 
@@ -430,8 +424,7 @@ class CephClusterController(CommandRunnerMixin):
 
         else:
             # we match each individually
-            for alert_match in CLUSTER_ALERT_MATCHES:
-                uptime_alert(spicerack=self._spicerack, extra_queries=[alert_match])
+            uptime_alert(spicerack=self._spicerack, extra_queries=[self.CLUSTER_ALERT_MATCH])
 
     def set_maintenance(self, reason: str, force: bool = False, task_id: Optional[str] = None) -> List[SilenceID]:
         """Set maintenance and mute any cluster-wide alerts.

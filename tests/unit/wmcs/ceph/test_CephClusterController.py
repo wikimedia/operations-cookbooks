@@ -7,7 +7,6 @@ from cumin.transports import Command
 from spicerack import Spicerack
 
 from cookbooks.wmcs.libs.ceph import (
-    CLUSTER_ALERT_MATCHES,
     CephClusterController,
     CephClusterUnhealthy,
     CephFlagSetError,
@@ -314,7 +313,7 @@ def test_set_maintenance_raising(commands_output: List[str], exception: Type[Exc
     {
         "Does nothing if cluster not in maintenance": {
             "commands_output": [json.dumps(CephTestUtils.get_ok_status_dict())]
-            + [json.dumps([])] * len(CLUSTER_ALERT_MATCHES),
+            + [json.dumps([])] * len(CephClusterController.CLUSTER_ALERT_MATCH),
         },
         "Passes if cluster in maintenance": {
             "commands_output": [
@@ -322,18 +321,18 @@ def test_set_maintenance_raising(commands_output: List[str], exception: Type[Exc
                 "noout is unset",
                 "norebalance is unset",
             ]
-            + [json.dumps([])] * len(CLUSTER_ALERT_MATCHES),
+            + [json.dumps([])] * len(CephClusterController.CLUSTER_ALERT_MATCH),
         },
         "Passes if cluster not healthy but force is True": {
             "commands_output": [json.dumps(CephTestUtils.get_warn_status_dict())]
-            + [json.dumps([])] * len(CLUSTER_ALERT_MATCHES),
+            + [json.dumps([])] * len(CephClusterController.CLUSTER_ALERT_MATCH),
             "force": True,
         },
         "Passes but does not unset flags if cluster unhealthy and force is True": {
             "commands_output": [
                 json.dumps(CephTestUtils.get_warn_status_dict()),
             ]
-            + [json.dumps([])] * len(CLUSTER_ALERT_MATCHES),
+            + [json.dumps([])] * len(CephClusterController.CLUSTER_ALERT_MATCH),
             "force": True,
         },
     },
