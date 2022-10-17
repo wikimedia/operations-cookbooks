@@ -12,7 +12,6 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from cookbooks.sre.hadoop import HADOOP_CLUSTER_NAMES
 
 
-__title__ = 'Reboot Hadoop worker nodes'
 logger = logging.getLogger(__name__)
 
 
