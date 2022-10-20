@@ -251,9 +251,6 @@ class RollingOperationRunner(CookbookRunnerBase):
             delete_template_cmd = 'rm -fv /usr/lib/systemd/system/elasticsearch_6@.service'
             nodes.get_remote_hosts().run_sync(delete_template_cmd)
 
-            # Allow systemd to start the es 7 services
-            nodes.get_remote_hosts().run_sync('touch /root/allow_es7')
-
             # END   Below is specific to our es 6->7 upgrade
             upgrade_cmd = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
                           options='-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
