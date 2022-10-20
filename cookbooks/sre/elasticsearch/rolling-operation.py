@@ -270,6 +270,10 @@ class RollingOperationRunner(CookbookRunnerBase):
             nodes.get_remote_hosts().reboot(batch_size=self.nodes_per_run)
             nodes.get_remote_hosts().wait_reboot_since(start_time)
 
+            logger.info("Forcing puppet run after reboot:")
+            puppet = self.spicerack.puppet(nodes.get_remote_hosts())
+            puppet.run()
+
         if self.operation is Operation.RESTART:
             nodes.start_elasticsearch()
 
