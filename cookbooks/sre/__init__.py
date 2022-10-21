@@ -90,6 +90,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
     batch_default = 1
     batch_max = 40
     grace_sleep = 1
+    max_failed = 1
     valid_actions = ('reboot', 'restart_daemons')
 
     def argument_parser(self) -> ArgumentParser:
@@ -115,6 +116,13 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
             help='Batch size to act upon',
             type=int, choices=range(1, self.batch_max + 1), metavar=f'[1-{self.batch_max}]',
             default=self.batch_default,
+        )
+        parser.add_argument(
+            "--max-failed",
+            "-m",
+            help="Max Failed groups of execution",
+            default=self.max_failed,
+            type=int,
         )
         parser.add_argument('--reason', help='Administrative Reason', required=True)
         parser.add_argument('--task-id', help='task id for the change')
@@ -412,6 +420,12 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             number_of_batches = ceil(number_of_hosts / self._batchsize(number_of_hosts))
             self.group_action(host_group_idx, number_of_batches)
             for batch in host_group.split(number_of_batches):
+                if len(self.results.failed) >= self._args.max_failed:
+                    self.logger.error(
+                        'Too many errors. Stopping the rolling %s.  See report for further details',
+                        self._args.action,
+                    )
+                    break
                 try:
                     self.pre_action(batch)
                     self.action(batch)
@@ -419,15 +433,12 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                     self._sleep(self._args.grace_sleep)
                     self.results.success(batch.hosts)
                 except Exception as error:  # pylint: disable=broad-except
-                    # If an exception was raised within the context manager, we have some hosts
-                    # left depooled, so we stop the loop for human inspection.
                     self.results.fail(batch.hosts)
                     self.logger.error(
-                        'Unrecoverable error. Stopping the rolling %s: %s',
+                        'received the following error while performing %s: %s',
                         self._args.action,
                         error,
                     )
-                    break
 
         return self.results.report()
 
