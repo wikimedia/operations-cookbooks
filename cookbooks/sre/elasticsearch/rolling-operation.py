@@ -220,6 +220,10 @@ class RollingOperationRunner(CookbookRunnerBase):
                         logger.info('Cluster not yet green, thawing writes and resume waiting for green')
 
             groups_restarted += 1
+
+            # Run puppet an extra time for good measure
+            puppet.run()
+
             logger.info('Wait for green in %s before fetching next set of nodes', self.clustergroup)
             self.elasticsearch_clusters.wait_for_green()
 
@@ -269,10 +273,6 @@ class RollingOperationRunner(CookbookRunnerBase):
         if self.operation is Operation.REBOOT:
             nodes.get_remote_hosts().reboot(batch_size=self.nodes_per_run)
             nodes.get_remote_hosts().wait_reboot_since(start_time)
-
-            logger.info("Forcing puppet run after reboot:")
-            puppet = self.spicerack.puppet(nodes.get_remote_hosts())
-            puppet.run()
 
         if self.operation is Operation.RESTART:
             nodes.start_elasticsearch()
