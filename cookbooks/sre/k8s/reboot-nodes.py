@@ -122,6 +122,10 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
             return f"staging-{datacenter}"
         if alias.startswith("ml-serve"):
             return f"ml-serve-{datacenter}"
+        if alias.startswith("ml-staging"):
+            return "ml-staging-codfw"
+        if alias.startswith("dse-k8s"):
+            return "dse-k8s-eqiad"
 
     def _k8s_node_action(self, node_name: str, action: str) -> None:
         """Call the function action on a KubernetesNode instance for a given node_name"""
@@ -155,8 +159,8 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
     @property
     def allowed_aliases(self) -> List:
         """Return a list of allowed aliases for this cookbook"""
-        # The single dse-k8s-worker alias does not have corresponding aliases in CORE_DATACENTERS
-        aliases = ["dse-k8s-worker"]
+        # Clusters not having corresponding aliases for both CORE_DATACENTERS
+        aliases = ["dse-k8s-worker", "ml-staging-worker"]
         for alias in ["wikikube-worker", "wikikube-staging-worker", "ml-serve-worker"]:
             aliases.extend(f"{alias}-{dc}" for dc in CORE_DATACENTERS)
         return aliases
@@ -165,7 +169,8 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
     def allowed_aliases_query(self) -> str:
         """Override the parent property to optimize the query."""
         # The following query must include all hosts matching all the allowed_aliases
-        return 'A:wikikube-worker or A:wikikube-staging-worker or A:ml-serve-worker or A:dse-k8s-worker'
+        return ('A:wikikube-worker or A:wikikube-staging-worker '
+                'or A:ml-serve-worker or A:dse-k8s-worker or A:ml-staging-worker')
 
     def _hosts(self) -> List[RemoteHosts]:
         all_hosts = super()._hosts()[0]
