@@ -274,7 +274,11 @@ class CreateInstanceWithPrefixRunner(WMCSCookbookRunnerBase):
         all_project_servers = self.openstack_api.server_list(print_output=False)
         other_prefix_members = list(
             sorted(
-                (server for server in all_project_servers if server.get("Name", "noname").startswith(self.prefix)),
+                (
+                    server
+                    for server in all_project_servers
+                    if server.get("Name", "noname").startswith(f"{self.prefix}-")
+                ),
                 key=lambda server: natural_sort_key(server.get("Name", "noname-0")),
             )
         )
