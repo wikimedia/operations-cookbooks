@@ -1,18 +1,20 @@
 """SRE Cookbooks"""
 from abc import abstractmethod, ABCMeta
 from argparse import ArgumentParser, Namespace, SUPPRESS
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from logging import getLogger
 from math import ceil
 from time import sleep
-from typing import Union
+from typing import Optional, Union
 
 from cumin import nodeset, NodeSet, nodeset_fromlist
 from spicerack import Spicerack
 from spicerack.administrative import Reason
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.icinga import IcingaError
+from spicerack.service import TooManyDiscoveryRecordsError
 from spicerack.remote import RemoteHosts
 from wmflib.interactive import (
     ask_confirmation,
@@ -291,7 +293,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                         confirm_on_failure(hosts.run_sync, *restart_cmds)
                 else:
                     confirm_on_failure(hosts.run_sync, *restart_cmds)
-                icinga_hosts.wait_for_optimal()
+                icinga_hosts.wait_for_optimal(skip_acked=True)
             self.results.success(hosts.hosts)
         except IcingaError as error:
             ask_confirmation(f"Failed to downtime hosts: {error}")
@@ -330,7 +332,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                 if not self._spicerack.dry_run:
                     hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
                     puppet.wait_since(reboot_time)
-                icinga_hosts.wait_for_optimal()
+                icinga_hosts.wait_for_optimal(skip_acked=True)
             self.results.success(hosts.hosts)
         except IcingaError as error:
             ask_confirmation(f"Failed to downtime hosts: {error}")
@@ -514,3 +516,157 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
             )
             self.logger.error("#" * 50)
             raise
+
+
+class SREDiscoveryNoLVSBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
+    """Roll reboot/restart Base class for DNSDISC based services"""
+
+    service_name: Optional[str] = None
+    ip_per_dc_map: dict[str, str] = {
+        'eqiad': '10.64.0.1',
+        'codfw': '10.192.0.1',
+    }
+
+    def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
+        """Initialise the runner."""
+        if self.service_name is None:
+            raise NotImplementedError("Must define service_name in child class")
+        if not isinstance(self.service_name, str):
+            raise ValueError(
+                f"service_name must be a string not {type(self.service_name)}"
+            )
+        self.service = spicerack.service_catalog().get(self.service_name)
+        if self.service.lvs is not None:
+            raise ValueError(
+                f"{self.__class__} does not work with LVS based services use SRELBBatchRunnerBase"
+            )
+
+        if self.service.discovery is None:
+            raise RuntimeError(f"{self.service_name} Unable to find discovery record")
+
+        self.service_discovery = self.service.discovery
+        self._dc_indexes: dict = {}
+        super().__init__(args, spicerack)
+        try:
+            self.service_record = self.service_discovery.get()
+        except TooManyDiscoveryRecordsError as error:
+            raise RuntimeError(
+                f"{__name__} only supports services with one discovery record"
+            ) from error
+        self.discovery_record = str(
+            next(self.service_record.instance.resolve()).canonical_name
+        )
+        self._initial_pooled = self.service_record.state
+        self._check_current()
+
+    def _check_active_active(self) -> None:
+        """Sanity check for active/active services"""
+        if self.service.sites != self.service_record.state:
+            ask_confirmation(
+                "Currently the active and expected datacenteres do no match. Do you want to continue"
+            )
+
+    def _check_active_passive(self) -> None:
+        """Sanity check for active/active services"""
+        if len(self.service.sites) != 2:
+            raise RuntimeError(
+                "This class expects active/passive services to be in exactly two sites"
+            )
+        if len(self._initial_pooled) > 1:
+            ask_confirmation(
+                "This service is currently active in multiple sites. Are you sure you want to continue"
+            )
+
+    def _check_current(self):
+        """Ensure we are starting in a healthy state before continuing"""
+        if self.service_record.active_active:
+            return self._check_active_active()
+            # active/passive
+        return self._check_active_passive()
+
+    def _hosts(self) -> list[RemoteHosts]:
+        """Override parent method.
+
+        We uses this method to also correctly set the self._dc_indexes variable
+        and then return the list of RemoteHosts to act on.
+
+        """
+        hosts = super()._hosts()[0]
+        remote = self._spicerack.remote()
+        hosts_by_dc = defaultdict(list)
+        for host in hosts.hosts:
+            hostname = host.split(".")[0]
+            netbox_server = self._spicerack.netbox_server(hostname)
+            hosts_by_dc[netbox_server.as_dict()["site"]["slug"]].append(host)
+        self._dc_indexes = dict(enumerate(hosts_by_dc.keys()))
+        return [remote.query(",".join(hosts)) for hosts in hosts_by_dc.values()]
+
+    def _pool_initial(self) -> None:
+        """Pool the initial set of DCs."""
+        for datacenter in self.service.sites:
+            if datacenter in self._initial_pooled:
+                self.service_discovery.pool(datacenter)
+            else:
+                self.service_discovery.depool(datacenter)
+
+    def _pool_active_sites(self, exclude: str) -> None:
+        """Pool all sites except the excluded site.
+
+        Arguments:
+            exclude: the site to exclude from the pooling
+
+        """
+        for site in self.service.sites:
+            if exclude == site:
+                continue
+            self.service_discovery.pool(site)
+
+    def _pool_passive_sites(self, exclude: str) -> None:
+        """Handle changing the state of active passive services.
+
+        Arguments:
+            exclude: the site to exclude from the pooling
+
+        """
+        # if the current site is not active we don't care
+        if exclude not in self.service_record.state:
+            return
+        # This should only have one element
+        for site in self.service.sites:
+            if site == exclude:
+                continue
+            self.service_discovery.pool(site)
+
+    def _pool(self, *, exclude: str) -> None:
+        """Pool everything but site.
+
+        Arguments:
+            exclude: the site to exclude from the pooling
+
+        """
+        if self.service_record.active_active:
+            return self._pool_active_sites(exclude)
+        return self._pool_passive_sites(exclude)
+
+    def group_action(self, host_group_idx, number_of_batches: int) -> None:
+        """See `SREBatchRunnerBase.group_action`."""
+        current_site = self._dc_indexes[host_group_idx]
+        self._pool(exclude=current_site)
+        self.service_discovery.depool(current_site)
+        # Sleep to allow confd::file to refresh
+        self._sleep(15)
+        self.service.check_dns_state(self.ip_per_dc_map)
+        self._spicerack.run_cookbook("sre.dns.wipe-cache", [self.discovery_record])
+
+    def rollback(self):
+        """Rollback any errors"""
+        self._pool_initial()
+
+    def run(self) -> int:
+        """Perform rolling reboot servers in batches"""
+        report = super().run()
+        self._pool_initial()
+        # Sleep to allow confd::file to refresh
+        self._sleep(15)
+        self.service.check_dns_state(self.ip_per_dc_map)
+        return report
