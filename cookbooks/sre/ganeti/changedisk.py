@@ -25,8 +25,8 @@ class GanetiChangeDisk(CookbookBase):
 
     Usage example:
         cookbook sre.ganeti.change-disk --cluster codfw --disktype drbd
-                 --secondnode ganeti2023.codfw.wmnet kubetcd2005.codfw.wmnet
-        cookbook sre.ganeti.change-disk --cluster codfw --disktype plain kubetcd2005.codfw.wmnet
+                 --secondnode ganeti2023.codfw.wmnet --fqdn kubetcd2005.codfw.wmnet
+        cookbook sre.ganeti.change-disk --cluster codfw --disktype plain --fqdn kubetcd2005.codfw.wmnet
     """
 
     def argument_parser(self):
