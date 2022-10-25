@@ -1,6 +1,6 @@
 """SRE Cookbooks"""
 from abc import abstractmethod, ABCMeta
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, Namespace, SUPPRESS
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from logging import getLogger
@@ -128,11 +128,16 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
             default=self.grace_sleep,
             help='the amount of time to sleep in seconds between each batch',
         )
-        parser.add_argument(
+        act = parser.add_argument(
             'action',
             choices=self.valid_actions,
             help='Choose to reboot the server or restart the daemons related to this cookbook',
         )
+        # if we only have one action available, we might as well assume it's the default.
+        if len(self.valid_actions) == 1:
+            act.default = self.valid_actions[0]
+            act.help = SUPPRESS
+            act.required = False
 
         return parser
 
