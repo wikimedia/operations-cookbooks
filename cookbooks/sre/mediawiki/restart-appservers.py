@@ -10,7 +10,8 @@ import argparse
 import logging
 import math
 
-from spicerack.constants import CORE_DATACENTERS
+from wmflib.constants import CORE_DATACENTERS
+
 
 # TODO: get this from a config file maybe?
 CLUSTERS = {

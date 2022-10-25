@@ -2,7 +2,8 @@
 import argparse
 import logging
 
-from spicerack.constants import CORE_DATACENTERS
+from wmflib.constants import CORE_DATACENTERS
+
 from cookbooks.sre.elasticsearch import CLUSTERGROUPS
 
 __title__ = __doc__

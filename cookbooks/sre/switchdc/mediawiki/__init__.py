@@ -1,7 +1,7 @@
 """Switch Datacenter for MediaWiki"""
 import argparse
 
-from spicerack.constants import CORE_DATACENTERS
+from wmflib.constants import CORE_DATACENTERS
 
 
 __title__ = __doc__

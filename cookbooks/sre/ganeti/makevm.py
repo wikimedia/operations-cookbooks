@@ -4,10 +4,9 @@ import argparse
 import logging
 import re
 
-from wmflib.constants import DATACENTER_NUMBERING_PREFIX
+from wmflib.constants import CORE_DATACENTERS, DATACENTER_NUMBERING_PREFIX
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
-from spicerack.constants import CORE_DATACENTERS
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.ganeti import INSTANCE_LINKS

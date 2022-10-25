@@ -4,9 +4,9 @@ from argparse import ArgumentParser, Namespace
 from typing import List
 
 from spicerack import Spicerack
-from spicerack.constants import CORE_DATACENTERS
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.service import Service
+from wmflib.constants import CORE_DATACENTERS
 
 logger = logging.getLogger(__name__)
 

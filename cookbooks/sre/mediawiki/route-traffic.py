@@ -3,9 +3,9 @@
 import argparse
 from typing import Optional
 
-from spicerack.constants import CORE_DATACENTERS
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack import Spicerack
+from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import ask_confirmation
 
 

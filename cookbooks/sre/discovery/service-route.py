@@ -4,8 +4,8 @@ import logging
 import time
 
 from spicerack.confctl import ConfctlError
-from spicerack.constants import CORE_DATACENTERS
 from spicerack.cookbook import ArgparseFormatter
+from wmflib.constants import CORE_DATACENTERS
 
 from cookbooks.sre.discovery import check_record_for_dc, update_ttl
 

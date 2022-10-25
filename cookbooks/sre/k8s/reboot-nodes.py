@@ -30,12 +30,13 @@ from collections import defaultdict
 from math import ceil
 from typing import List
 
-from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
 from kubernetes.client.models import V1Taint
 from spicerack import Spicerack
-from spicerack.constants import CORE_DATACENTERS
 from spicerack.k8s import Kubernetes, KubernetesApiError
 from spicerack.remote import RemoteHosts
+from wmflib.constants import CORE_DATACENTERS
+
+from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
 
 
 def flatten_taints(taints: List[V1Taint]) -> str:
