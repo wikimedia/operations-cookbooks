@@ -24,7 +24,7 @@ from wmflib.interactive import (
 
 __title__ = __doc__
 # Shared SRE configuration for phabricator bot
-PHABRICATOR_BOT_CONFIG_FILE = '/etc/phabricator_ops-monitoring-bot.conf'
+PHABRICATOR_BOT_CONFIG_FILE = "/etc/phabricator_ops-monitoring-bot.conf"
 logger = getLogger(__name__)
 
 
@@ -49,35 +49,35 @@ class Results:
         """Add nodes to the failed list."""
         unknown_hosts = nodes - self.hosts
         if unknown_hosts:
-            ValueError(f'unknown hosts: {unknown_hosts}')
+            ValueError(f"unknown hosts: {unknown_hosts}")
         intersection = self.successful.intersection(nodes)
         if intersection:
-            ValueError(f'hosts already recorded successful: {intersection}')
+            ValueError(f"hosts already recorded successful: {intersection}")
         self.failed.update(nodes)
 
     def success(self, nodes: NodeSet) -> None:
         """Add nodes to the success list."""
         unknown_hosts = nodes - self.hosts
         if unknown_hosts:
-            ValueError(f'unknown hosts: {unknown_hosts}')
+            ValueError(f"unknown hosts: {unknown_hosts}")
         intersection = self.failed.intersection(nodes)
         if intersection:
-            ValueError(f'hosts already recorded failed: {intersection}')
+            ValueError(f"hosts already recorded failed: {intersection}")
         self.successful.update(nodes)
 
     def report(self) -> int:
         """Report on results."""
         if not self.failed:
-            logger.info('All %s were successful', self.action)
+            logger.info("All %s were successful", self.action)
             return 0
 
-        logger.info('%s were successful for: %s', self.action, self.successful)
-        logger.info('%s failed for: %s', self.action, self.failed)
-        logger.info('Check the logs for specific failures')
+        logger.info("%s were successful for: %s", self.action, self.successful)
+        logger.info("%s failed for: %s", self.action, self.failed)
+        logger.info("Check the logs for specific failures")
 
         leftovers = self.hosts - self.successful - self.failed
         if leftovers:
-            logger.info('No action was performed for %s', leftovers)
+            logger.info("No action was performed for %s", leftovers)
         return 1
 
 
@@ -102,19 +102,21 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
 
         targets = parser.add_mutually_exclusive_group(required=True)
         targets.add_argument(
-            '--alias', '-a', help='A Cumin alias addressing the set of servers'
+            "--alias", "-a", help="A Cumin alias addressing the set of servers"
         )
         targets.add_argument(
-            '--query',
+            "--query",
             help=(
-                'A Cumin query addressing a more narrow set of servers.'
-                ' This parameter requires queries to be formatted using the global grammar'
+                "A Cumin query addressing a more narrow set of servers."
+                " This parameter requires queries to be formatted using the global grammar"
             ),
         )
         parser.add_argument(
-            '--batchsize',
-            help='Batch size to act upon',
-            type=int, choices=range(1, self.batch_max + 1), metavar=f'[1-{self.batch_max}]',
+            "--batchsize",
+            help="Batch size to act upon",
+            type=int,
+            choices=range(1, self.batch_max + 1),
+            metavar=f"[1-{self.batch_max}]",
             default=self.batch_default,
         )
         parser.add_argument(
@@ -124,23 +126,23 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
             default=self.max_failed,
             type=int,
         )
-        parser.add_argument('--reason', help='Administrative Reason', required=True)
-        parser.add_argument('--task-id', help='task id for the change')
+        parser.add_argument("--reason", help="Administrative Reason", required=True)
+        parser.add_argument("--task-id", help="task id for the change")
         parser.add_argument(
-            '--ignore-restart-errors',
-            action='store_true',
+            "--ignore-restart-errors",
+            action="store_true",
             help="ignore errors when restarting services",
         )
         parser.add_argument(
-            '--grace-sleep',
+            "--grace-sleep",
             type=int,
             default=self.grace_sleep,
-            help='the amount of time to sleep in seconds between each batch',
+            help="the amount of time to sleep in seconds between each batch",
         )
         act = parser.add_argument(
-            'action',
+            "action",
             choices=self.valid_actions,
-            help='Choose to reboot the server or restart the daemons related to this cookbook',
+            help="Choose to reboot the server or restart the daemons related to this cookbook",
         )
         # if we only have one action available, we might as well assume it's the default.
         if len(self.valid_actions) == 1:
@@ -183,38 +185,38 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         if args.alias and args.alias not in self.allowed_aliases:
             raise ValueError(
                 f"Alias ({args.alias}) does not match allowed aliases: "
-                + ', '.join(self.allowed_aliases)
+                + ", ".join(self.allowed_aliases)
             )
         self._args = args
         self._spicerack = spicerack
-        self.logger = getLogger('.'.join((self.__module__, self.__class__.__name__)))
+        self.logger = getLogger(".".join((self.__module__, self.__class__.__name__)))
         self.host_groups = self._hosts()
         self.all_hosts = nodeset_fromlist(group.hosts for group in self.host_groups)
         self.results = Results(action=args.action, hosts=self.all_hosts)
 
     def _reason(self, hosts: NodeSet) -> Reason:
         """Return the reason for administrative actions on given hosts"""
-        reason = f'{self._args.action} {hosts}: {self._args.reason}'
+        reason = f"{self._args.action} {hosts}: {self._args.reason}"
         return self._spicerack.admin_reason(reason, self._args.task_id)
 
     @property
     def runtime_description(self) -> str:
         """Required by spicerack api."""
-        return f'rolling {self._args.action} on {self._query()}'
+        return f"rolling {self._args.action} on {self._query()}"
 
     def _query(self) -> str:
         """Return the formatted query"""
         if self._args.query is not None:
-            return f'{self._args.query} and {self.allowed_aliases_query}'
-        return f'A:{self._args.alias}'
+            return f"{self._args.query} and {self.allowed_aliases_query}"
+        return f"A:{self._args.alias}"
 
     def _hosts(self) -> List[RemoteHosts]:
         """Return a list of RemoteHosts to sequentially operate on"""
         query = self._query()
-        self.logger.debug('Effective remote query is: %s', query)
+        self.logger.debug("Effective remote query is: %s", query)
         hosts = self._spicerack.remote().query(query)
         if not hosts:
-            raise ValueError(f'Cumin query ({query}) matched zero hosts')
+            raise ValueError(f"Cumin query ({query}) matched zero hosts")
         return [hosts]
 
     @property
@@ -230,7 +232,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
     @property
     def allowed_aliases_query(self) -> str:
         """Helper property to return a cumin formatted query of allowed aliases"""
-        return '(' + ' or '.join([f'A:{x}' for x in self.allowed_aliases]) + ')'
+        return "(" + " or ".join([f"A:{x}" for x in self.allowed_aliases]) + ")"
 
     @property
     def pre_scripts(self) -> List:
@@ -257,7 +259,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         if self._spicerack.dry_run:
             self.logger.info('Would have slept for %s seconds', seconds)
         else:
-            self.logger.info('Sleeping for %s seconds', seconds)
+            self.logger.info("Sleeping for %s seconds", seconds)
             sleep(seconds)
 
     def _restart_daemons(self, hosts: RemoteHosts) -> None:
@@ -267,11 +269,11 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             hosts (`RemoteHosts`): A list of hosts to action
 
         """
-        systemd_cmd = '/bin/systemctl'
+        systemd_cmd = "/bin/systemctl"
         if self._args.ignore_restart_errors:
             # Only restart services which are active
             restart_cmds = [
-                f'{systemd_cmd} --quiet is-active {daemon} && {systemd_cmd} restart {daemon} || /bin/true'
+                f"{systemd_cmd} --quiet is-active {daemon} && {systemd_cmd} restart {daemon} || /bin/true"
                 for daemon in self.restart_daemons
             ]
         else:
@@ -292,7 +294,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                 icinga_hosts.wait_for_optimal()
             self.results.success(hosts.hosts)
         except IcingaError as error:
-            ask_confirmation(f'Failed to downtime hosts: {error}')
+            ask_confirmation(f"Failed to downtime hosts: {error}")
             self.logger.warning(error)
 
         except AbortError as error:
@@ -300,7 +302,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             # log an error, exit *without* repooling
             self.logger.error(error)
             self.logger.error(
-                'Error restarting daemons on: Hosts %s, they may still be depooled',
+                "Error restarting daemons on: Hosts %s, they may still be depooled",
                 hosts,
             )
             self.results.fail(hosts.hosts)
@@ -331,7 +333,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                 icinga_hosts.wait_for_optimal()
             self.results.success(hosts.hosts)
         except IcingaError as error:
-            ask_confirmation(f'Failed to downtime hosts: {error}')
+            ask_confirmation(f"Failed to downtime hosts: {error}")
             self.logger.warning(error)
 
         except AbortError as error:
@@ -339,7 +341,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             # log an error, continue *without* repooling
             self.logger.error(error)
             self.logger.error(
-                'Error rebooting: Hosts %s, they may still be depooled', hosts
+                "Error rebooting: Hosts %s, they may still be depooled", hosts
             )
             self.results.fail(hosts.hosts)
             raise
@@ -364,7 +366,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             try:
                 confirm_on_failure(hosts.run_async, script)
             except AbortError:
-                self.logger.error('%s: execution aborted', script)
+                self.logger.error("%s: execution aborted", script)
                 self.results.fail(hosts.hosts)
                 raise
 
@@ -387,9 +389,9 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             hosts (`RemoteHosts`): a list of functions to run
 
         """
-        if self._args.action == 'reboot':
+        if self._args.action == "reboot":
             self._reboot(hosts)
-        elif self._args.action == 'restart_daemons':
+        elif self._args.action == "restart_daemons":
             self._restart_daemons(hosts)
 
     def post_action(self, hosts: RemoteHosts) -> None:
@@ -422,7 +424,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             for batch in host_group.split(number_of_batches):
                 if len(self.results.failed) >= self._args.max_failed:
                     self.logger.error(
-                        'Too many errors. Stopping the rolling %s.  See report for further details',
+                        "Too many errors. Stopping the rolling %s.  See report for further details",
                         self._args.action,
                     )
                     break
@@ -435,7 +437,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                 except Exception as error:  # pylint: disable=broad-except
                     self.results.fail(batch.hosts)
                     self.logger.error(
-                        'received the following error while performing %s: %s',
+                        "received the following error while performing %s: %s",
                         self._args.action,
                         error,
                     )
@@ -461,7 +463,7 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
                 f"batchsize (args.batchsize) can't be greater then the depool_threshold {self.depool_threshold}"
             )
         # TODO: check currently depooled hosts + batchsize is less then depool_threshold
-        self._confctl = spicerack.confctl('node')
+        self._confctl = spicerack.confctl("node")
         super().__init__(args, spicerack)
 
     @property
@@ -499,15 +501,15 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
 
         try:
             with self._confctl.change_and_revert(
-                'pooled', 'yes', 'no', name="|".join(hosts.hosts.striter()), **kwargs
+                "pooled", "yes", "no", name="|".join(hosts.hosts.striter()), **kwargs
             ):
                 self.wait_for_depool()
                 super().action(hosts)
                 self.wait_for_repool()
         except Exception:
-            self.logger.error('#' * 50)
+            self.logger.error("#" * 50)
             self.logger.error(
-                'Unrecoverable error the following hosts are still depooled: %s', hosts
+                "Unrecoverable error the following hosts are still depooled: %s", hosts
             )
-            self.logger.error('#' * 50)
+            self.logger.error("#" * 50)
             raise
