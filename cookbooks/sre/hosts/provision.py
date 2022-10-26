@@ -144,15 +144,12 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 'BootMode': 'Bios',
                 'CpuInterconnectBusLinkPower': 'Enabled',
                 'EnergyPerformanceBias': 'BalancedPerformance',
-                'InternalUsb': 'Off',
                 'PcieAspmL1': 'Enabled',
                 'ProcC1E': 'Enabled',
                 'ProcCStates': 'Enabled',
                 'ProcPwrPerf': 'OsDbpm',
                 'ProcVirtualization': 'Enabled' if self.args.enable_virtualization else 'Disabled',
                 'ProcX2Apic': 'Disabled',
-                'SerialComm': 'OnConRedirCom2',
-                'SerialPortAddress': 'Serial1Com1Serial2Com2',
                 'SysProfile': 'PerfPerWattOptimizedOs',
                 'UncoreFrequency': 'DynamicUFS',
                 'UsbPorts': 'OnlyBackPortsOn',
@@ -260,6 +257,14 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
     def _config(self):
         """Provision the BIOS and iDRAC settings."""
         config = self._get_config()
+        if config.model.lower() == 'poweredge r450':  # R450 Specific keys
+            self.config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedir'
+            self.config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Com2'
+        else:
+            self.config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedirCom2'
+            self.config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Serial1Com1Serial2Com2'
+            self.config_changes['BIOS.Setup.1-1']['InternalUsb'] = 'Off'
+
         self._config_pxe(config)
         was_changed = config.update(self.config_changes)
         if not was_changed:
