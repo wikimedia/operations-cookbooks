@@ -48,7 +48,7 @@ class LBRestart(SREBatchBase):
     # play it safe and say we can only restart load-balancers one at a time.
     batch_default = 1
     batch_max = 1
-    valid_actions = ("restart-daemons",)
+    valid_actions = ("restart_daemons",)
 
     def get_runner(self, args: argparse.Namespace):
         """Get the worker class."""
