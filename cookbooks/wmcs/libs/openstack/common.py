@@ -749,6 +749,20 @@ class OpenstackAPI(CommandRunnerMixin):
 
         return self.run_formatted_as_dict(*command)
 
+    def role_list_assignments(self, user_name: OpenstackName) -> List[Dict[str, Any]]:
+        """List the assignments for a user in the project."""
+        return self.run_formatted_as_list(
+            "role", "assignment", "list", f"--project={self.project}", f"--user={user_name}"
+        )
+
+    def role_add(self, role_name: OpenstackName, user_name: OpenstackName) -> None:
+        """Add a user to a role for a project, it will not fail if the user is already has that role."""
+        self.run_raw("role", "add", f"--project={self.project}", f"--user={user_name}", role_name, json_output=False)
+
+    def role_remove(self, role: OpenstackIdentifier, user_name: OpenstackName) -> None:
+        """Remove a user from a role for a project, it will not fail if the user is not in that that role."""
+        self.run_raw("role", "remove", f"--project={self.project}", f"--user={user_name}", role, json_output=False)
+
 
 def get_node_cluster_name(node: str) -> OpenstackClusterName:
     """Wrapper casting to the specific openstack type."""
