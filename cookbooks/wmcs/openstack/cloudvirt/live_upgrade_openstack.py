@@ -1,6 +1,6 @@
 r"""WMCS openstack - upgrade live (without stopping VMs or rebooting) a cloudvirt node in maintenance
 
-Usage example: wmcs.openstack.cloudvirt.live_upgrade_ussuri_to_victoria \
+Usage example: wmcs.openstack.cloudvirt.live_upgrade_openstack \
     --fqdn-to-upgrade cloudvirt1013.eqiad.wmnet
 
 """
@@ -82,7 +82,6 @@ class LiveUpgradeRunner(CookbookRunnerBase):
                 "python3-taskflow",
                 "python3-tooz",
                 "python3-keystoneauth1",
-                "python3-positional",
                 "python3-requests",
                 "python3-urllib3",
                 "-o",
