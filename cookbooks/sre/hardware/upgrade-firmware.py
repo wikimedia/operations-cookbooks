@@ -238,7 +238,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         if firmware_path.is_file():
             logger.info("%s: Already have: %s", netbox_host.fqdn, firmware_path)
         else:
-            firmware_path.parent.mkdir(exist_ok=True)
+            firmware_path.parent.mkdir(exist_ok=True, parents=True)
             logger.info("%s: Downloading %s", netbox_host.fqdn, version.url)
             self.dell_api.download(version.url, firmware_path)
         version = version.version.split(",")[0]
