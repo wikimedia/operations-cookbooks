@@ -21,6 +21,7 @@ install_requires = [
     # pinning this here to have the right version with local tox.
     'dnspython==1.16.0',
     'defusedxml',
+    'requests[socks]',
 ]
 
 # Extra dependencies

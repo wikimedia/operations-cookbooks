@@ -11,13 +11,14 @@ import logging
 import time
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
 from cookbooks.wmcs.libs.common import (
     K8S_SYSTEM_NAMESPACES,
     CommonOpts,
     KubernetesController,
     SALLogger,
+    WMCSCookbookRunnerBase,
     add_common_opts,
     with_common_opts,
 )
@@ -51,7 +52,7 @@ class Drain(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, DrainRunner,)(
             hostname_to_drain=args.hostname_to_drain,
@@ -60,7 +61,7 @@ class Drain(CookbookBase):
         )
 
 
-class DrainRunner(CookbookRunnerBase):
+class DrainRunner(WMCSCookbookRunnerBase):
     """Runner for Drain"""
 
     def __init__(
@@ -73,7 +74,7 @@ class DrainRunner(CookbookRunnerBase):
         """Init"""
         self.control_node_fqdn = control_node_fqdn
         self.hostname_to_drain = hostname_to_drain
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )

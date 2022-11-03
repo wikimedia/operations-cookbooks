@@ -11,9 +11,9 @@ import logging
 from datetime import datetime
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.openstack.common import get_control_nodes_from_node
 from cookbooks.wmcs.openstack.cloudvirt.drain import Drain
 from cookbooks.wmcs.openstack.cloudvirt.unset_maintenance import UnsetMaintenance
@@ -42,7 +42,7 @@ class SafeReboot(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, SafeRebootRunner,)(
             fqdn=args.fqdn,
@@ -50,7 +50,7 @@ class SafeReboot(CookbookBase):
         )
 
 
-class SafeRebootRunner(CookbookRunnerBase):
+class SafeRebootRunner(WMCSCookbookRunnerBase):
     """Runner for SafeReboot"""
 
     def __init__(
@@ -63,12 +63,12 @@ class SafeRebootRunner(CookbookRunnerBase):
         self.common_opts = common_opts
         self.fqdn = fqdn
         self.control_node_fqdn = get_control_nodes_from_node(node=self.fqdn)[0]
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         self.sallogger.log(message=f"Safe rebooting {self.fqdn}")
         drain_cookbook = Drain(spicerack=self.spicerack)

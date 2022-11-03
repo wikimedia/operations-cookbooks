@@ -1,7 +1,18 @@
 WMCS cookbooks
 --------------
 
-Some naming rules:
+Configuration
+=============
+You can configure the port the socks proxy will use and the path to download the puppet ca by adding a configuration
+file under the spicerack config directory named `wmcs.yaml`, with the entry:
+```
+socks_proxy_port: 12345
+puppet_ca_path: ~/.cache/puppet_ca.crt
+```
+
+
+Some naming rules
+=================
 
 All the common used cookbooks for a service (tooforge, vps, ceph, ...) should be at the top level of that service, even
 if they are just a proxy for a lower level one.  Individual cookbooks that provide just a functionality or a subset of

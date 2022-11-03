@@ -14,7 +14,7 @@ from typing import Optional
 
 from cumin.transports import Command
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 from spicerack.puppet import PuppetHosts
 
 from cookbooks.wmcs.libs.common import (
@@ -22,6 +22,7 @@ from cookbooks.wmcs.libs.common import (
     KubeadmController,
     KubernetesController,
     SALLogger,
+    WMCSCookbookRunnerBase,
     add_common_opts,
     run_one_raw,
     with_common_opts,
@@ -79,7 +80,7 @@ class ToolforgeAddK8sWorkerNode(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, ToolforgeAddK8sWorkerNodeRunner,)(
             k8s_worker_prefix=args.k8s_worker_prefix,
@@ -90,7 +91,7 @@ class ToolforgeAddK8sWorkerNode(CookbookBase):
         )
 
 
-class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
+class ToolforgeAddK8sWorkerNodeRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeAddK8sWorkerNode"""
 
     def __init__(
@@ -106,7 +107,7 @@ class ToolforgeAddK8sWorkerNodeRunner(CookbookRunnerBase):
         self.common_opts = common_opts
         self.k8s_worker_prefix = k8s_worker_prefix
         self.k8s_control_prefix = k8s_control_prefix
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.image = image
         self.flavor = flavor
         self.sallogger = SALLogger(

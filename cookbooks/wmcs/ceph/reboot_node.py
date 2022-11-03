@@ -10,11 +10,11 @@ import datetime
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
 from cookbooks.wmcs.libs.alerts import downtime_host, uptime_host
 from cookbooks.wmcs.libs.ceph import CephClusterController, get_node_cluster_name
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class RebootNode(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, RebootNodeRunner,)(
             fqdn_to_reboot=args.fqdn_to_reboot,
@@ -63,7 +63,7 @@ class RebootNode(CookbookBase):
         )
 
 
-class RebootNodeRunner(CookbookRunnerBase):
+class RebootNodeRunner(WMCSCookbookRunnerBase):
     """Runner for RebootNode"""
 
     def __init__(
@@ -79,7 +79,7 @@ class RebootNodeRunner(CookbookRunnerBase):
         self.fqdn_to_reboot = fqdn_to_reboot
         self.skip_maintenance = skip_maintenance
         self.force = force
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
@@ -89,7 +89,7 @@ class RebootNodeRunner(CookbookRunnerBase):
             spicerack=self.spicerack,
         )
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         self.sallogger.log(message=f"Rebooting node {self.fqdn_to_reboot}")
 

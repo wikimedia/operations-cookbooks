@@ -12,12 +12,13 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
 from cookbooks.wmcs.libs.common import (
     CommonOpts,
     KubernetesController,
     SALLogger,
+    WMCSCookbookRunnerBase,
     add_common_opts,
     natural_sort_key,
     with_common_opts,
@@ -64,7 +65,7 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, ToolforgeDepoolAndRemoveNodeRunner,)(
             k8s_worker_prefix=args.k8s_worker_prefix,
@@ -74,7 +75,7 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
         )
 
 
-class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
+class ToolforgeDepoolAndRemoveNodeRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeDepoolAndRemoveNode"""
 
     def __init__(
@@ -90,7 +91,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         self.k8s_worker_prefix = k8s_worker_prefix
         self.fqdn_to_remove = fqdn_to_remove
         self.control_node_fqdn = control_node_fqdn
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(), cluster_name=OpenstackClusterName.EQIAD1, project=self.common_opts.project
         )

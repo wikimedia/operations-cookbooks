@@ -14,9 +14,9 @@ import json
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase
 
-from cookbooks.wmcs.libs.common import OutputFormat, run_one_as_dict, run_one_raw
+from cookbooks.wmcs.libs.common import OutputFormat, WMCSCookbookRunnerBase, run_one_as_dict, run_one_raw
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
@@ -60,7 +60,7 @@ class NFSAddServer(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_instance_creation_options(args, NFSAddServerRunner)(
             prefix=args.prefix,
@@ -72,7 +72,7 @@ class NFSAddServer(CookbookBase):
         )
 
 
-class NFSAddServerRunner(CookbookRunnerBase):
+class NFSAddServerRunner(WMCSCookbookRunnerBase):
     """Runner for NFSAddServer"""
 
     def __init__(
@@ -89,7 +89,7 @@ class NFSAddServerRunner(CookbookRunnerBase):
         self.create_storage_volume_size = create_storage_volume_size
         self.volume = volume
         self.project = project
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.prefix = prefix
         self.service_ip = service_ip
         self.instance_creation_opts = instance_creation_opts

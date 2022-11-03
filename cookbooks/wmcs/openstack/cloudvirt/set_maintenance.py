@@ -8,10 +8,10 @@ import argparse
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
 from cookbooks.wmcs.libs.alerts import downtime_host
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, OpenstackNotFound, get_node_cluster_name
 
 LOGGER = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class SetMaintenance(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, SetMaintenanceRunner,)(
             fqdn=args.fqdn,
@@ -46,7 +46,7 @@ class SetMaintenance(CookbookBase):
         )
 
 
-class SetMaintenanceRunner(CookbookRunnerBase):
+class SetMaintenanceRunner(WMCSCookbookRunnerBase):
     """Runner for SetMaintenance."""
 
     def __init__(
@@ -61,12 +61,12 @@ class SetMaintenanceRunner(CookbookRunnerBase):
             remote=spicerack.remote(),
             cluster_name=get_node_cluster_name(node=self.fqdn),
         )
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point."""
         hostname = self.fqdn.split(".", 1)[0]
         downtime_id = downtime_host(spicerack=self.spicerack, host_name=hostname, comment="Setting maintenance mode.")

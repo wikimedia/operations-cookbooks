@@ -12,8 +12,9 @@ import sys
 from typing import List
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
+from cookbooks.wmcs.libs.common import WMCSCookbookRunnerBase
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 
@@ -52,7 +53,7 @@ class VMConsole(CookbookBase):
         )
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return VMConsoleRunner(
             project=args.project,
@@ -71,7 +72,7 @@ def _run_ssh(full_hostname: str, args: List[str]) -> int:
         return proc.returncode
 
 
-class VMConsoleRunner(CookbookRunnerBase):
+class VMConsoleRunner(WMCSCookbookRunnerBase):
     """Runner for VMConsole"""
 
     def __init__(
@@ -84,7 +85,7 @@ class VMConsoleRunner(CookbookRunnerBase):
         """Init"""
         self.project = project
         self.vm_name = vm_name
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.openstack_api = OpenstackAPI(remote=spicerack.remote(), cluster_name=cluster_name, project=project)
 
     def run(self) -> None:

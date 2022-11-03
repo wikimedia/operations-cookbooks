@@ -10,10 +10,10 @@ import logging
 from datetime import datetime
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
 from cookbooks.wmcs.libs.alerts import downtime_alert, downtime_host, uptime_alert, uptime_host
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_node_cluster_name
 from cookbooks.wmcs.libs.openstack.neutron import NetworkUnhealthy, NeutronAgentType, NeutronAlerts, NeutronController
 
@@ -47,7 +47,7 @@ class RebootNode(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, RebootNodeRunner,)(
             fqdn_to_reboot=args.fqdn_to_reboot,
@@ -56,7 +56,7 @@ class RebootNode(CookbookBase):
         )
 
 
-class RebootNodeRunner(CookbookRunnerBase):
+class RebootNodeRunner(WMCSCookbookRunnerBase):
     """Runner for RebootNode"""
 
     def __init__(
@@ -70,7 +70,7 @@ class RebootNodeRunner(CookbookRunnerBase):
         self.common_opts = common_opts
         self.fqdn_to_reboot = fqdn_to_reboot
         self.force = force
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
@@ -116,7 +116,7 @@ class RebootNodeRunner(CookbookRunnerBase):
             if len(routers) != 1:
                 raise Exception(f"Got more than one router on agent {agent.host}: {routers}")
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         self.sallogger.log(f"Rebooting cloudnet host {self.fqdn_to_reboot}")
         silence_id = downtime_alert(

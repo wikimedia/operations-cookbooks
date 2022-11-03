@@ -20,9 +20,9 @@ from typing import Any, Dict
 
 import yaml
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
-from cookbooks.wmcs.libs.common import OutputFormat, run_one_as_dict, run_one_raw
+from cookbooks.wmcs.libs.common import OutputFormat, WMCSCookbookRunnerBase, run_one_as_dict, run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class RemoveNodeFromHiera(CookbookBase):
         )
 
 
-class RemoveNodeFromHieraRunner(CookbookRunnerBase):
+class RemoveNodeFromHieraRunner(WMCSCookbookRunnerBase):
     """Runner for RemoveNodeFromHiera"""
 
     def __init__(
@@ -71,7 +71,7 @@ class RemoveNodeFromHieraRunner(CookbookRunnerBase):
         spicerack: Spicerack,
     ):
         """Init"""
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.project = project
         self.prefix = prefix
         self.fqdn_to_remove = fqdn_to_remove

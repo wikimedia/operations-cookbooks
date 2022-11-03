@@ -12,8 +12,9 @@ import logging
 from typing import Optional
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
+from cookbooks.wmcs.libs.common import WMCSCookbookRunnerBase
 from cookbooks.wmcs.toolforge.etcd.add_node_to_cluster import AddNodeToCluster
 from cookbooks.wmcs.vps.create_instance_with_prefix import CreateInstanceWithPrefix
 
@@ -72,7 +73,7 @@ class ToolforgeAddEtcdNode(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return ToolforgeAddEtcdNodeRunner(
             etcd_prefix=args.etcd_prefix,
@@ -84,7 +85,7 @@ class ToolforgeAddEtcdNode(CookbookBase):
         )
 
 
-class ToolforgeAddEtcdNodeRunner(CookbookRunnerBase):
+class ToolforgeAddEtcdNodeRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeAddEtcdNode"""
 
     def __init__(
@@ -100,7 +101,7 @@ class ToolforgeAddEtcdNodeRunner(CookbookRunnerBase):
         self.etcd_prefix = etcd_prefix
         self.skip_puppet_bootstrap = skip_puppet_bootstrap
         self.project = project
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.image = image
         self.flavor = flavor
 

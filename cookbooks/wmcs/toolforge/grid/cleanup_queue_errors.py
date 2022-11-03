@@ -9,11 +9,12 @@ import argparse
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase
 
 from cookbooks.wmcs.libs.common import (
     CommonOpts,
     SALLogger,
+    WMCSCookbookRunnerBase,
     add_common_opts,
     parser_type_str_hostname,
     with_common_opts,
@@ -44,7 +45,7 @@ class ToolforgeGridCleanupQ(CookbookBase):
         )
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, ToolforgeGridCleanupQRunner,)(
             master_hostname=args.master_hostname,
@@ -52,7 +53,7 @@ class ToolforgeGridCleanupQ(CookbookBase):
         )
 
 
-class ToolforgeGridCleanupQRunner(CookbookRunnerBase):
+class ToolforgeGridCleanupQRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeGridCleanupQ"""
 
     def __init__(
@@ -64,7 +65,7 @@ class ToolforgeGridCleanupQRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.master_hostname = master_hostname
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )

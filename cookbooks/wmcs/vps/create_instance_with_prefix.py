@@ -20,11 +20,18 @@ from functools import partial
 from typing import Callable, List, Optional
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 from spicerack.remote import RemoteExecutionError
 from wmflib.decorators import retry
 
-from cookbooks.wmcs.libs.common import CommonOpts, add_common_opts, natural_sort_key, run_one_raw, with_common_opts
+from cookbooks.wmcs.libs.common import (
+    CommonOpts,
+    WMCSCookbookRunnerBase,
+    add_common_opts,
+    natural_sort_key,
+    run_one_raw,
+    with_common_opts,
+)
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, OpenstackIdentifier, OpenstackServerGroupPolicy
 
@@ -153,7 +160,7 @@ def with_instance_creation_options(args: argparse.Namespace, runner: Callable) -
     >>         my_parser.add_argument("--my-option1", default=None)
     >>         return my_parser
     >>
-    >>     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    >>     def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBaseWithProxy:
     >>         return with_instance_creation_options(
     >>             args=args, runner=MyCookbookRunner
     >>         )(my_option1=args.my_option1, spicerack=self.spicerack)
@@ -219,7 +226,7 @@ class CreateInstanceWithPrefix(CookbookBase):
         )
 
 
-class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
+class CreateInstanceWithPrefixRunner(WMCSCookbookRunnerBase):
     """Runner for CreateInstanceWithPrefix"""
 
     def __init__(
@@ -246,7 +253,7 @@ class CreateInstanceWithPrefixRunner(CookbookRunnerBase):
         self.image = instance_creation_opts.image
         self.server_group = server_group if server_group is not None else self.prefix
         self.server_group_policy = server_group_policy
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.security_group = security_group
         self.ssh_retries = ssh_retries
 

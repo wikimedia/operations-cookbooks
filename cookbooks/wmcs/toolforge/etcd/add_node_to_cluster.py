@@ -17,10 +17,17 @@ from typing import List
 
 import yaml
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 from spicerack.remote import Remote, RemoteHosts
 
-from cookbooks.wmcs.libs.common import OutputFormat, natural_sort_key, run_one_as_dict, run_one_raw, simple_create_file
+from cookbooks.wmcs.libs.common import (
+    OutputFormat,
+    WMCSCookbookRunnerBase,
+    natural_sort_key,
+    run_one_as_dict,
+    run_one_raw,
+    simple_create_file,
+)
 from cookbooks.wmcs.toolforge.etcd.add_node_to_hiera import AddNodeToHiera
 from cookbooks.wmcs.vps.refresh_puppet_certs import RefreshPuppetCerts
 
@@ -63,7 +70,7 @@ class AddNodeToCluster(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return AddNodeToClusterRunner(
             etcd_prefix=args.etcd_prefix,
@@ -166,7 +173,7 @@ def _fix_kubeadm(
     )
 
 
-class AddNodeToClusterRunner(CookbookRunnerBase):
+class AddNodeToClusterRunner(WMCSCookbookRunnerBase):
     """Runner for AddNodeToCluster"""
 
     def __init__(
@@ -182,7 +189,7 @@ class AddNodeToClusterRunner(CookbookRunnerBase):
         self.new_member_fqdn = new_member_fqdn
         self.skip_puppet_bootstrap = skip_puppet_bootstrap
         self.project = project
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
 
     def run(self) -> None:
         """Main entry point"""

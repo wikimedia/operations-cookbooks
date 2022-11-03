@@ -15,10 +15,17 @@ from typing import List
 
 import yaml
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 from spicerack.remote import Remote, RemoteHosts
 
-from cookbooks.wmcs.libs.common import OutputFormat, natural_sort_key, run_one_as_dict, run_one_raw, simple_create_file
+from cookbooks.wmcs.libs.common import (
+    OutputFormat,
+    WMCSCookbookRunnerBase,
+    natural_sort_key,
+    run_one_as_dict,
+    run_one_raw,
+    simple_create_file,
+)
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.toolforge.etcd.remove_node_from_hiera import RemoveNodeFromHiera
@@ -64,7 +71,7 @@ class ToolforgeDepoolAndRemoveNode(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return ToolforgeDepoolAndRemoveNodeRunner(
             etcd_prefix=args.etcd_prefix,
@@ -162,7 +169,7 @@ def _fix_kubeadm(
     )
 
 
-class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
+class ToolforgeDepoolAndRemoveNodeRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeDepoolAndRemoveNode"""
 
     def __init__(
@@ -178,7 +185,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
         self.fqdn_to_remove = fqdn_to_remove
         self.skip_etcd_certs_refresh = skip_etcd_certs_refresh
         self.project = project
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(), cluster_name=OpenstackClusterName.EQIAD1, project=self.project
         )

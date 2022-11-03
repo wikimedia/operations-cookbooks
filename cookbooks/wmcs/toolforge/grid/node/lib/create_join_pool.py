@@ -12,10 +12,17 @@ import logging
 from dataclasses import replace
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase
 from spicerack.puppet import PuppetHosts
 
-from cookbooks.wmcs.libs.common import CommonOpts, DebianVersion, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import (
+    CommonOpts,
+    DebianVersion,
+    SALLogger,
+    WMCSCookbookRunnerBase,
+    add_common_opts,
+    with_common_opts,
+)
 from cookbooks.wmcs.libs.grid import GridController, GridNodeType
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
     CreateInstanceWithPrefix,
@@ -70,7 +77,7 @@ class ToolforgeGridNodeCreateJoinPool(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(
             self.spicerack, args, with_instance_creation_options(args, ToolforgeGridNodeCreateJoinPoolRunner)
@@ -83,7 +90,7 @@ class ToolforgeGridNodeCreateJoinPool(CookbookBase):
         )
 
 
-class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
+class ToolforgeGridNodeCreateJoinPoolRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeGridNodeCreateJoinPool"""
 
     def __init__(
@@ -98,7 +105,7 @@ class ToolforgeGridNodeCreateJoinPoolRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.grid_master_fqdn = grid_master_fqdn
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.debian_version = debian_version
         self.instance_creation_opts = instance_creation_opts
         self.nodetype = nodetype

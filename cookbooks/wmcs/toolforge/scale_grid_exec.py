@@ -8,9 +8,15 @@ import argparse
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, DebianVersion, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import (
+    CommonOpts,
+    DebianVersion,
+    WMCSCookbookRunnerBase,
+    add_common_opts,
+    with_common_opts,
+)
 from cookbooks.wmcs.libs.openstack.common import OpenstackServerGroupPolicy
 from cookbooks.wmcs.toolforge.grid.node.lib.create_join_pool import ToolforgeGridNodeCreateJoinPool
 from cookbooks.wmcs.vps.create_instance_with_prefix import (
@@ -57,7 +63,7 @@ class ToolforgeScaleGridExec(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(
             self.spicerack,
@@ -74,7 +80,7 @@ class ToolforgeScaleGridExec(CookbookBase):
         )
 
 
-class ToolforgeScaleGridExecRunner(CookbookRunnerBase):
+class ToolforgeScaleGridExecRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeScaleGridExec"""
 
     def __init__(
@@ -88,7 +94,7 @@ class ToolforgeScaleGridExecRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.grid_master_fqdn = grid_master_fqdn
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.debian_version = debian_version
         self.instance_creation_opts = instance_creation_opts
 

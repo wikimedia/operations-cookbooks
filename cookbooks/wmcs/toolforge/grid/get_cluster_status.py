@@ -10,8 +10,9 @@ import logging
 
 import yaml
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase
 
+from cookbooks.wmcs.libs.common import WMCSCookbookRunnerBase
 from cookbooks.wmcs.libs.grid import (
     GridController,
     GridQueueState,
@@ -62,7 +63,7 @@ class ToolforgeGridGetClusterStatus(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return ToolforgeGridGetClusterStatusRunner(
             master_node_fqdn=args.master_node_fqdn
@@ -73,7 +74,7 @@ class ToolforgeGridGetClusterStatus(CookbookBase):
         )
 
 
-class ToolforgeGridGetClusterStatusRunner(CookbookRunnerBase):
+class ToolforgeGridGetClusterStatusRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeGridGetClusterStatus"""
 
     def __init__(
@@ -86,7 +87,7 @@ class ToolforgeGridGetClusterStatusRunner(CookbookRunnerBase):
         """Init"""
         self.master_node_fqdn = master_node_fqdn
         self.project = project
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.only_failed = only_failed
         self.grid_controller = GridController(remote=self.spicerack.remote(), master_node_fqdn=self.master_node_fqdn)
 

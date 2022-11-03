@@ -11,9 +11,9 @@ import argparse
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 
@@ -92,7 +92,7 @@ class AddFlavor(CookbookBase):
         )
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(spicerack=self.spicerack, args=args, runner=AddFlavorRunner)(
             vcpus=args.vcpus,
@@ -107,7 +107,7 @@ class AddFlavor(CookbookBase):
         )
 
 
-class AddFlavorRunner(CookbookRunnerBase):
+class AddFlavorRunner(WMCSCookbookRunnerBase):
     """Runner for AddFlavor"""
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -125,7 +125,7 @@ class AddFlavorRunner(CookbookRunnerBase):
     ):
         """Init"""
         self.common_opts = common_opts
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(), cluster_name=cluster_name, project=self.common_opts.project
         )

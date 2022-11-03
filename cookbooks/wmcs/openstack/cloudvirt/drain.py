@@ -8,9 +8,9 @@ import argparse
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, get_node_cluster_name
 from cookbooks.wmcs.openstack.cloudvirt.set_maintenance import SetMaintenance
 
@@ -38,7 +38,7 @@ class Drain(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, DrainRunner,)(
             fqdn=args.fqdn,
@@ -46,7 +46,7 @@ class Drain(CookbookBase):
         )
 
 
-class DrainRunner(CookbookRunnerBase):
+class DrainRunner(WMCSCookbookRunnerBase):
     """Runner for Drain"""
 
     def __init__(
@@ -58,13 +58,13 @@ class DrainRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.fqdn = fqdn
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.openstack_api = OpenstackAPI(remote=spicerack.remote(), cluster_name=get_node_cluster_name(node=self.fqdn))
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         self.sallogger.log(message=f"Draining {self.fqdn}")
         set_maintenance_cookbook = SetMaintenance(spicerack=self.spicerack)

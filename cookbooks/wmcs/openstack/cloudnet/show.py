@@ -9,8 +9,9 @@ import argparse
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
+from cookbooks.wmcs.libs.common import WMCSCookbookRunnerBase
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.libs.openstack.neutron import NeutronAgentType, NeutronController
@@ -41,7 +42,7 @@ class Show(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return ShowRunner(
             cluster_name=args.cluster_name,
@@ -49,7 +50,7 @@ class Show(CookbookBase):
         )
 
 
-class ShowRunner(CookbookRunnerBase):
+class ShowRunner(WMCSCookbookRunnerBase):
     """Runner for Show"""
 
     def __init__(
@@ -58,7 +59,7 @@ class ShowRunner(CookbookRunnerBase):
         spicerack: Spicerack,
     ):
         """Init"""
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.openstack_api = OpenstackAPI(
             remote=self.spicerack.remote(),
             cluster_name=cluster_name,
@@ -66,7 +67,7 @@ class ShowRunner(CookbookRunnerBase):
         )
         self.neutron_controller = NeutronController(openstack_api=self.openstack_api)
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         all_agents = self.neutron_controller.agent_list()
         l3_agents = [str(agent) for agent in all_agents if agent.agent_type == NeutronAgentType.L3_AGENT]

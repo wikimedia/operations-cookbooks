@@ -10,10 +10,10 @@ import logging
 from datetime import datetime
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
 from cookbooks.wmcs.libs.alerts import downtime_host, uptime_host
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import get_gateway_nodes, get_node_cluster_name
 from cookbooks.wmcs.openstack.network.tests import NetworkTests
@@ -48,7 +48,7 @@ class RebootNode(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, RebootNodeRunner,)(
             fqdn_to_reboot=args.fqdn_to_reboot,
@@ -65,7 +65,7 @@ def check_network_ok(cluster_name: OpenstackClusterName, spicerack: Spicerack) -
         raise Exception("Network tests failed, see logs or run the cookbook for details.")
 
 
-class RebootNodeRunner(CookbookRunnerBase):
+class RebootNodeRunner(WMCSCookbookRunnerBase):
     """Runner for RebootNode"""
 
     def __init__(
@@ -79,7 +79,7 @@ class RebootNodeRunner(CookbookRunnerBase):
         self.common_opts = common_opts
         self.fqdn_to_reboot = fqdn_to_reboot
         self.skip_checks = skip_checks
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
@@ -106,7 +106,7 @@ class RebootNodeRunner(CookbookRunnerBase):
             check_network_ok(cluster_name=self.cluster_name, spicerack=self.spicerack)
             LOGGER.info("Network up and running!")
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         self.sallogger.log(f"Rebooting cloudgw host {self.fqdn_to_reboot}")
         node = self.spicerack.remote().query(f"D{{{self.fqdn_to_reboot}}}", use_sudo=True)

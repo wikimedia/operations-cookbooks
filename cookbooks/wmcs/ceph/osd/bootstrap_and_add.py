@@ -13,7 +13,7 @@ import time
 from typing import List
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 from spicerack.puppet import PuppetHosts
 
 from cookbooks.wmcs.ceph.reboot_node import RebootNode
@@ -25,7 +25,7 @@ from cookbooks.wmcs.libs.ceph import (
     OSDTreeEntry,
     get_node_cluster_name,
 )
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ class BootstrapAndAdd(CookbookBase):
         )
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, BootstrapAndAddRunner)(
             new_osd_fqdns=args.new_osd_fqdn,
@@ -121,7 +121,7 @@ def _wait_for_osds_to_show_up(cluster_controller: CephClusterController, ceph_ho
     return host_node["children"]
 
 
-class BootstrapAndAddRunner(CookbookRunnerBase):
+class BootstrapAndAddRunner(WMCSCookbookRunnerBase):
     """Runner for BootstrapAndAdd"""
 
     def __init__(
@@ -141,7 +141,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
         self.force = force
         self.yes_i_know = yes_i_know
         self.skip_reboot = skip_reboot
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.wait_for_rebalance = wait_for_rebalance
         self.only_check = only_check
         self.sallogger = SALLogger(
@@ -152,7 +152,7 @@ class BootstrapAndAddRunner(CookbookRunnerBase):
             remote=self.spicerack.remote(), cluster_name=cluster_name, spicerack=self.spicerack
         )
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         self.sallogger.log(
             message=f"Adding new OSDs {self.new_osd_fqdns} to the cluster",

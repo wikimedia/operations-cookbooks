@@ -11,9 +11,16 @@ import logging
 from datetime import datetime
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, DebianVersion, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import (
+    CommonOpts,
+    DebianVersion,
+    SALLogger,
+    WMCSCookbookRunnerBase,
+    add_common_opts,
+    with_common_opts,
+)
 from cookbooks.wmcs.libs.grid import GridController, GridNodeType
 
 LOGGER = logging.getLogger(__name__)
@@ -57,7 +64,7 @@ class ToolforgeGridRebootWorkers(CookbookBase):
         )
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, ToolforgeGridRebootWorkersRunner,)(
             queue=args.queue,
@@ -68,7 +75,7 @@ class ToolforgeGridRebootWorkers(CookbookBase):
         )
 
 
-class ToolforgeGridRebootWorkersRunner(CookbookRunnerBase):
+class ToolforgeGridRebootWorkersRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeGridRebootWorkersRunner"""
 
     def __init__(
@@ -84,7 +91,7 @@ class ToolforgeGridRebootWorkersRunner(CookbookRunnerBase):
         self.queue = queue
         self.debian_version = debian_version
         self.master_node_fqdn = master_node_fqdn
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project,
             task_id=common_opts.task_id,

@@ -9,11 +9,11 @@ import logging
 
 from cumin.transports import Command
 from spicerack import RemoteHosts, Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 from spicerack.puppet import PuppetHosts, PuppetMaster
 from spicerack.remote import RemoteExecutionError
 
-from cookbooks.wmcs.libs.common import run_one_raw
+from cookbooks.wmcs.libs.common import WMCSCookbookRunnerBase, run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ class RefreshPuppetCerts(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return RefreshPuppetCertsRunner(
             fqdn=args.fqdn,
@@ -102,7 +102,7 @@ class RefreshPuppetCerts(CookbookBase):
         )
 
 
-class RefreshPuppetCertsRunner(CookbookRunnerBase):
+class RefreshPuppetCertsRunner(WMCSCookbookRunnerBase):
     """Runner for RefreshPuppetCerts"""
 
     def __init__(
@@ -116,7 +116,7 @@ class RefreshPuppetCertsRunner(CookbookRunnerBase):
         self.fqdn = fqdn
         self.pre_run_puppet = pre_run_puppet
         self.ignore_failures = ignore_failures
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
 
     def run(self) -> None:
         """Main entry point.

@@ -13,9 +13,9 @@ import logging
 from typing import Optional
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
-from cookbooks.wmcs.libs.common import CmdChecklist
+from cookbooks.wmcs.libs.common import CmdChecklist, WMCSCookbookRunnerBase
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import get_control_nodes
 
@@ -45,7 +45,7 @@ class NetworkTests(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return NetworkTestRunner(
             cluster_name=args.cluster_name,
@@ -53,13 +53,13 @@ class NetworkTests(CookbookBase):
         )
 
 
-class NetworkTestRunner(CookbookRunnerBase):
+class NetworkTestRunner(WMCSCookbookRunnerBase):
     """Runner for NetworkTests"""
 
     def __init__(self, cluster_name: OpenstackClusterName, spicerack: Spicerack):
         """Init"""
         self.cluster_name: OpenstackClusterName = cluster_name
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
 
     def run(self) -> Optional[int]:
         """Main entry point"""

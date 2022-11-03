@@ -10,9 +10,9 @@ import argparse
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.grid import GridController
 
 LOGGER = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ class ToolforgeGridReconfigure(CookbookBase):
         )
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, ToolforgeGridReconfigureRunner,)(
             master_node_fqdn=args.master_node_fqdn
@@ -51,7 +51,7 @@ class ToolforgeGridReconfigure(CookbookBase):
         )
 
 
-class ToolforgeGridReconfigureRunner(CookbookRunnerBase):
+class ToolforgeGridReconfigureRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeGridReconfigure"""
 
     def __init__(
@@ -63,7 +63,7 @@ class ToolforgeGridReconfigureRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.master_node_fqdn = master_node_fqdn
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )

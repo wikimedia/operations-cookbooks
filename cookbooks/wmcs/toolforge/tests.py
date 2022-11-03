@@ -10,11 +10,12 @@ import logging
 from typing import Optional
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase
 
 from cookbooks.wmcs.libs.common import (
     CmdChecklist,
     CommonOpts,
+    WMCSCookbookRunnerBase,
     add_common_opts,
     parser_type_str_hostname,
     with_common_opts,
@@ -45,7 +46,7 @@ class ToolforgeTests(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, ToolforgeTestsRunner,)(
             bastion_hostname=args.bastion_hostname,
@@ -53,7 +54,7 @@ class ToolforgeTests(CookbookBase):
         )
 
 
-class ToolforgeTestsRunner(CookbookRunnerBase):
+class ToolforgeTestsRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeTests"""
 
     def __init__(
@@ -65,7 +66,7 @@ class ToolforgeTestsRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.bastion_hostname = bastion_hostname
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
 
     def run(self) -> Optional[int]:
         """Main entry point"""

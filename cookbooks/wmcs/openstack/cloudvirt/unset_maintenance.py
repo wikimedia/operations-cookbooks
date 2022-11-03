@@ -9,10 +9,10 @@ import logging
 from typing import Optional
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
 from cookbooks.wmcs.libs.alerts import uptime_host
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.openstack.common import (
     AGGREGATES_FILE_PATH,
     OpenstackAPI,
@@ -59,7 +59,7 @@ class UnsetMaintenance(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, UnsetMaintenanceRunner,)(
             fqdn=args.fqdn,
@@ -69,7 +69,7 @@ class UnsetMaintenance(CookbookBase):
         )
 
 
-class UnsetMaintenanceRunner(CookbookRunnerBase):
+class UnsetMaintenanceRunner(WMCSCookbookRunnerBase):
     """Runner for UnsetMaintenance."""
 
     def __init__(
@@ -84,13 +84,13 @@ class UnsetMaintenanceRunner(CookbookRunnerBase):
         self.fqdn = fqdn
         self.openstack_api = OpenstackAPI(remote=spicerack.remote(), cluster_name=get_node_cluster_name(node=self.fqdn))
         self.aggregates = aggregates
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
         self.downtime_id = downtime_id
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point."""
         hostname = self.fqdn.split(".", 1)[0]
         try:

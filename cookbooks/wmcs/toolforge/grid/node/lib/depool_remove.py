@@ -12,11 +12,12 @@ import logging
 import time
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase
 
 from cookbooks.wmcs.libs.common import (
     CommonOpts,
     SALLogger,
+    WMCSCookbookRunnerBase,
     add_common_opts,
     parser_type_str_hostname,
     with_common_opts,
@@ -56,7 +57,7 @@ class ToolforgeGridNodeDepoolRemove(CookbookBase):
         )
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, ToolforgeGridNodeDepoolRemoveRunner,)(
             grid_master_fqdn=args.grid_master_fqdn
@@ -66,7 +67,7 @@ class ToolforgeGridNodeDepoolRemove(CookbookBase):
         )
 
 
-class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
+class ToolforgeGridNodeDepoolRemoveRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeGridNodeDepoolRemove."""
 
     def __init__(
@@ -79,7 +80,7 @@ class ToolforgeGridNodeDepoolRemoveRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.grid_master_fqdn = grid_master_fqdn
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.node_hostname = node_hostname
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg

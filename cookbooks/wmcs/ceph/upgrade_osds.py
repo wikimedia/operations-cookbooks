@@ -10,11 +10,11 @@ import logging
 from typing import List, Optional
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
 from cookbooks.wmcs.ceph.upgrade_ceph_node import UpgradeCephNode
 from cookbooks.wmcs.libs.ceph import CephClusterController
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.inventory import CephClusterName
 
 LOGGER = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class UpgradeOsds(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, UpgradeOsdsRunner)(
             cluster_name=args.cluster_name,
@@ -69,7 +69,7 @@ class UpgradeOsds(CookbookBase):
         )
 
 
-class UpgradeOsdsRunner(CookbookRunnerBase):
+class UpgradeOsdsRunner(WMCSCookbookRunnerBase):
     """Runner for UpgradeOsds"""
 
     def __init__(
@@ -82,7 +82,7 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
     ):
         """Init"""
         self.force = force
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
@@ -91,7 +91,7 @@ class UpgradeOsdsRunner(CookbookRunnerBase):
         )
         self.osd_nodes = osd_nodes or []
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         silences = self.controller.set_maintenance(reason="Upgrading osds")
 

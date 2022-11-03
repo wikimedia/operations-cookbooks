@@ -14,9 +14,9 @@ import logging
 from typing import List
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI, OpenstackQuotaEntry, OpenstackQuotaName
 
@@ -51,7 +51,7 @@ class QuotaIncrease(CookbookBase):
             )
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         increases = [
             OpenstackQuotaEntry.from_human_spec(
@@ -68,7 +68,7 @@ class QuotaIncrease(CookbookBase):
         )
 
 
-class QuotaIncreaseRunner(CookbookRunnerBase):
+class QuotaIncreaseRunner(WMCSCookbookRunnerBase):
     """Runner for QuotaIncrease"""
 
     def __init__(
@@ -80,7 +80,7 @@ class QuotaIncreaseRunner(CookbookRunnerBase):
     ):
         """Init"""
         self.common_opts = common_opts
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.openstack_api = OpenstackAPI(
             remote=spicerack.remote(), cluster_name=cluster_name, project=self.common_opts.project
         )

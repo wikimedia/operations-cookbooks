@@ -10,9 +10,10 @@ import logging
 from typing import Any, Dict, List
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
 from cookbooks.wmcs.libs.ceph import CephClusterController
+from cookbooks.wmcs.libs.common import WMCSCookbookRunnerBase
 from cookbooks.wmcs.libs.inventory import CephClusterName
 
 LOGGER = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class ShowInfo(CookbookBase):
         )
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return ShowInfoRunner(
             cluster_name=args.cluster_name,
@@ -61,7 +62,7 @@ def _print_stray(stray_nodes: List[Dict[str, Any]]) -> None:
     print(f"stray: {stray_nodes}")
 
 
-class ShowInfoRunner(CookbookRunnerBase):
+class ShowInfoRunner(WMCSCookbookRunnerBase):
     """Runner for BootstrapAndAdd"""
 
     def __init__(
@@ -73,6 +74,7 @@ class ShowInfoRunner(CookbookRunnerBase):
         self.cluster_controller = CephClusterController(
             remote=spicerack.remote(), cluster_name=cluster_name, spicerack=spicerack
         )
+        super().__init__(spicerack=spicerack)
 
     def run(self) -> None:
         """Main entry point"""

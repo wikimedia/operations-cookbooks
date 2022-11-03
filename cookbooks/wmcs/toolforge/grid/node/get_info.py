@@ -10,8 +10,9 @@ import logging
 from typing import Optional
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase
 
+from cookbooks.wmcs.libs.common import WMCSCookbookRunnerBase
 from cookbooks.wmcs.libs.grid import GridController, GridNodeNotFound
 
 LOGGER = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ class ToolforgeGridNodeGetInfo(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return ToolforgeGridNodeGetInfoRunner(
             master_node_fqdn=args.master_node_fqdn
@@ -54,7 +55,7 @@ class ToolforgeGridNodeGetInfo(CookbookBase):
         )
 
 
-class ToolforgeGridNodeGetInfoRunner(CookbookRunnerBase):
+class ToolforgeGridNodeGetInfoRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeGridNodeGetInfo"""
 
     def __init__(
@@ -67,7 +68,7 @@ class ToolforgeGridNodeGetInfoRunner(CookbookRunnerBase):
         """Init"""
         self.master_node_fqdn = master_node_fqdn
         self.project = project
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.node_hostname = node_hostname
 
     def run(self) -> Optional[int]:

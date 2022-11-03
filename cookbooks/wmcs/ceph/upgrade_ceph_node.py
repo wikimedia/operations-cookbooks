@@ -10,11 +10,11 @@ import datetime
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
 from cookbooks.wmcs.libs.alerts import downtime_host, uptime_host
 from cookbooks.wmcs.libs.ceph import CephClusterController, CephOSDFlag, get_node_cluster_name
-from cookbooks.wmcs.libs.common import run_one_raw
+from cookbooks.wmcs.libs.common import WMCSCookbookRunnerBase, run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class UpgradeCephNode(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return UpgradeCephNodeRunner(
             to_upgrade_fqdn=args.to_upgrade_fqdn,
@@ -61,7 +61,7 @@ class UpgradeCephNode(CookbookBase):
         )
 
 
-class UpgradeCephNodeRunner(CookbookRunnerBase):
+class UpgradeCephNodeRunner(WMCSCookbookRunnerBase):
     """Runner for UpgradeCephNode"""
 
     def __init__(
@@ -75,14 +75,14 @@ class UpgradeCephNodeRunner(CookbookRunnerBase):
         self.to_upgrade_fqdn = to_upgrade_fqdn
         self.force = force
         self.skip_maintenance = skip_maintenance
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.controller = CephClusterController(
             remote=self.spicerack.remote(),
             cluster_name=get_node_cluster_name(to_upgrade_fqdn),
             spicerack=self.spicerack,
         )
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         LOGGER.info("Upgrading ceph node %s", self.to_upgrade_fqdn)
         # make sure we make cluster info commands on another node

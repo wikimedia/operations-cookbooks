@@ -10,10 +10,17 @@ import argparse
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 from spicerack.puppet import PuppetMaster
 
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, run_one_raw, with_common_opts
+from cookbooks.wmcs.libs.common import (
+    CommonOpts,
+    SALLogger,
+    WMCSCookbookRunnerBase,
+    add_common_opts,
+    run_one_raw,
+    with_common_opts,
+)
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 
@@ -46,7 +53,7 @@ class RemoveInstance(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, RemoveInstanceRunner,)(
             name_to_remove=args.server_name,
@@ -55,7 +62,7 @@ class RemoveInstance(CookbookBase):
         )
 
 
-class RemoveInstanceRunner(CookbookRunnerBase):
+class RemoveInstanceRunner(WMCSCookbookRunnerBase):
     """Runner for RemoveInstance."""
 
     def __init__(
@@ -75,7 +82,7 @@ class RemoveInstanceRunner(CookbookRunnerBase):
 
         self.name_to_remove = name_to_remove
         self.revoke_puppet_certs = revoke_puppet_certs
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )

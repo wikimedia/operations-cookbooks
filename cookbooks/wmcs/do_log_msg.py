@@ -9,9 +9,9 @@ import argparse
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class Dologmsg(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, DologmsgRunner,)(
             msg=args.msg,
@@ -45,7 +45,7 @@ class Dologmsg(CookbookBase):
         )
 
 
-class DologmsgRunner(CookbookRunnerBase):
+class DologmsgRunner(WMCSCookbookRunnerBase):
     """Runner for Dologmsg."""
 
     def __init__(
@@ -56,7 +56,7 @@ class DologmsgRunner(CookbookRunnerBase):
     ):
         """Init."""
         self.msg = msg
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )

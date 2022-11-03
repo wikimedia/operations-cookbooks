@@ -11,9 +11,16 @@ import string
 from typing import List
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, run_one_raw, with_common_opts
+from cookbooks.wmcs.libs.common import (
+    CommonOpts,
+    SALLogger,
+    WMCSCookbookRunnerBase,
+    add_common_opts,
+    run_one_raw,
+    with_common_opts,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +68,7 @@ class ToolforgeComponentDeploy(CookbookBase):
         )
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, ToolforgeComponentDeployRunner,)(
             deploy_node_hostname=args.deploy_node_hostname,
@@ -82,7 +89,7 @@ def _sh_wrap(cmd: str) -> List[str]:
     return ["/bin/sh", "-c", "--", f"'{cmd}'"]
 
 
-class ToolforgeComponentDeployRunner(CookbookRunnerBase):
+class ToolforgeComponentDeployRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeComponentDeploy."""
 
     def __init__(
@@ -102,7 +109,7 @@ class ToolforgeComponentDeployRunner(CookbookRunnerBase):
         self.git_name = git_name
         self.git_branch = git_branch
         self.deployment_command = deployment_command
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.random_dir = f"/tmp/cookbook-toolforge-k8s-component-deploy-{_randomword(10)}"  # nosec
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg

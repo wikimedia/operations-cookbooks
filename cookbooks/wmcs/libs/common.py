@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Cloud Services Cookbooks"""
 # pylint: disable=too-many-arguments
+from __future__ import annotations
+
 __title__ = __doc__
 import argparse
 import base64
@@ -21,7 +23,10 @@ import yaml
 from ClusterShell.MsgTree import MsgTreeElem
 from cumin.transports import Command
 from spicerack import ICINGA_DOMAIN, Spicerack
+from spicerack.cookbook import CookbookRunnerBase
 from spicerack.remote import Remote, RemoteHosts
+
+from cookbooks.wmcs.libs.proxy import with_proxy
 
 LOGGER = logging.getLogger(__name__)
 PHABRICATOR_BOT_CONFIG_FILE = "/etc/phabricator_ops-monitoring-bot.conf"
@@ -879,3 +884,24 @@ class CommandRunnerMixin:
             capture_errors=capture_errors,
             **kwargs,
         )
+
+
+class WMCSCookbookRunnerBase(CookbookRunnerBase):
+    """WMCS tweaks to the base cookbook runner.
+
+    Current tweaks:
+    * Start and stop a socks proxy when running the cookbook:
+      Define the `run_with_proxy` method instead of the `run` method when writing your cookbook.
+    """
+
+    def __init__(self, spicerack: Spicerack):
+        """Init"""
+        self.spicerack = spicerack
+
+    def run(self) -> int | None:
+        """Main entry point"""
+        with with_proxy(spicerack=self.spicerack):
+            return self.run_with_proxy()
+
+    def run_with_proxy(self) -> int | None:
+        """Main entry point, use in place of `run` to execute it's code with a socks proxy running."""

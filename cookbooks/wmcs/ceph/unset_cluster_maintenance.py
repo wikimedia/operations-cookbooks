@@ -10,11 +10,11 @@ import logging
 from typing import List, Optional
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
 from cookbooks.wmcs.libs.alerts import SilenceID
 from cookbooks.wmcs.libs.ceph import CephClusterController
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.inventory import CephClusterName
 
 LOGGER = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class UnSetClusterInMaintenance(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(spicerack=self.spicerack, args=args, runner=UnSetClusterInMaintenanceRunner)(
             cluster_name=args.cluster_name,
@@ -69,7 +69,7 @@ class UnSetClusterInMaintenance(CookbookBase):
         )
 
 
-class UnSetClusterInMaintenanceRunner(CookbookRunnerBase):
+class UnSetClusterInMaintenanceRunner(WMCSCookbookRunnerBase):
     """Runner for UnSetClusterInMaintenance"""
 
     def __init__(
@@ -82,7 +82,7 @@ class UnSetClusterInMaintenanceRunner(CookbookRunnerBase):
     ):
         """Init"""
         self.force = force
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.cluster_name = cluster_name
         self.silence_ids = silence_ids
         self.sallogger = SALLogger(
@@ -92,7 +92,7 @@ class UnSetClusterInMaintenanceRunner(CookbookRunnerBase):
             remote=self.spicerack.remote(), cluster_name=self.cluster_name, spicerack=self.spicerack
         )
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         self.controller.unset_maintenance(force=self.force, silences=self.silence_ids)
         self.sallogger.log(f"Ceph cluster at {self.cluster_name} set out of maintenance")

@@ -9,9 +9,9 @@ import argparse
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
 from cookbooks.wmcs.libs.openstack.neutron import NeutronController
@@ -49,7 +49,7 @@ class RollRebootCloudnets(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, RollRebootCloudnetsRunner,)(
             cluster_name=args.cluster_name,
@@ -58,7 +58,7 @@ class RollRebootCloudnets(CookbookBase):
         )
 
 
-class RollRebootCloudnetsRunner(CookbookRunnerBase):
+class RollRebootCloudnetsRunner(WMCSCookbookRunnerBase):
     """Runner for RollRebootCloudnets"""
 
     def __init__(
@@ -71,7 +71,7 @@ class RollRebootCloudnetsRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.force = force
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
@@ -90,7 +90,7 @@ class RollRebootCloudnetsRunner(CookbookRunnerBase):
         self.cloudnet_hosts.pop(self.cloudnet_hosts.index(primary_node))
         self.cloudnet_hosts.append(primary_node)
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         self.sallogger.log(message=f"Rebooting all the cloudnet nodes {','.join(self.cloudnet_hosts)}")
 

@@ -8,9 +8,9 @@ import argparse
 import logging
 
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import get_gateway_nodes
 from cookbooks.wmcs.openstack.cloudgw.reboot_node import RebootNode
@@ -48,7 +48,7 @@ class RollRebootCloudgws(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, RollRebootCloudgwsRunner,)(
             force=args.force,
@@ -65,7 +65,7 @@ def check_network_ok(cluster_name: OpenstackClusterName, spicerack: Spicerack) -
         raise Exception("Network tests failed, see logs or run the cookbook for details.")
 
 
-class RollRebootCloudgwsRunner(CookbookRunnerBase):
+class RollRebootCloudgwsRunner(WMCSCookbookRunnerBase):
     """Runner for RollRebootCloudgws"""
 
     def __init__(
@@ -78,7 +78,7 @@ class RollRebootCloudgwsRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.force = force
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.sallogger = SALLogger(
             project=common_opts.project, task_id=common_opts.task_id, dry_run=common_opts.no_dologmsg
         )
@@ -89,7 +89,7 @@ class RollRebootCloudgwsRunner(CookbookRunnerBase):
             check_network_ok(cluster_name=self.cluster_name, spicerack=self.spicerack)
             LOGGER.info("Network up and running!")
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point"""
         self.sallogger.log(
             message=(

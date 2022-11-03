@@ -12,11 +12,11 @@ from typing import Optional
 from ClusterShell.NodeSet import NodeSetParseError
 from cumin.backends import InvalidQueryError
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase
 from spicerack.puppet import PuppetHosts
 from spicerack.remote import RemoteError
 
-from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, add_common_opts, with_common_opts
+from cookbooks.wmcs.libs.common import CommonOpts, SALLogger, WMCSCookbookRunnerBase, add_common_opts, with_common_opts
 from cookbooks.wmcs.libs.grid import GridController
 from cookbooks.wmcs.libs.inventory import OpenstackClusterName
 from cookbooks.wmcs.libs.openstack.common import OpenstackAPI
@@ -60,7 +60,7 @@ class ToolforgeGridNodeJoin(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(self.spicerack, args, ToolforgeGridNodeJoinRunner,)(
             grid_master_fqdn=args.grid_master_fqdn
@@ -71,7 +71,7 @@ class ToolforgeGridNodeJoin(CookbookBase):
         )
 
 
-class ToolforgeGridNodeJoinRunner(CookbookRunnerBase):
+class ToolforgeGridNodeJoinRunner(WMCSCookbookRunnerBase):
     """Runner for ToolforgeGridNodeJoin."""
 
     def __init__(
@@ -85,7 +85,7 @@ class ToolforgeGridNodeJoinRunner(CookbookRunnerBase):
         """Init"""
         self.common_opts = common_opts
         self.grid_master_fqdn = grid_master_fqdn
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
         self.nodes_query = nodes_query
         self.force = force
         self.sallogger = SALLogger(

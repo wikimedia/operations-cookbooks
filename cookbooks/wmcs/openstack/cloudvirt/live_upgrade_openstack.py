@@ -9,9 +9,9 @@ import logging
 
 from cumin.transports import Command
 from spicerack import Spicerack
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase
 
-from cookbooks.wmcs.libs.common import run_one_raw
+from cookbooks.wmcs.libs.common import WMCSCookbookRunnerBase, run_one_raw
 
 LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class LiveUpgrade(CookbookBase):
 
         return parser
 
-    def get_runner(self, args: argparse.Namespace) -> CookbookRunnerBase:
+    def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return LiveUpgradeRunner(
             fqdn_to_upgrade=args.fqdn_to_upgrade,
@@ -44,7 +44,7 @@ class LiveUpgrade(CookbookBase):
         )
 
 
-class LiveUpgradeRunner(CookbookRunnerBase):
+class LiveUpgradeRunner(WMCSCookbookRunnerBase):
     """Runner for LiveUpgrade."""
 
     def __init__(
@@ -54,9 +54,9 @@ class LiveUpgradeRunner(CookbookRunnerBase):
     ):
         """Init."""
         self.fqdn_to_upgrade = fqdn_to_upgrade
-        self.spicerack = spicerack
+        super().__init__(spicerack=spicerack)
 
-    def run(self) -> None:
+    def run_with_proxy(self) -> None:
         """Main entry point."""
         node_to_upgrade = self.spicerack.remote().query(f"D{{{self.fqdn_to_upgrade}}}", use_sudo=True)
         run_one_raw(node=node_to_upgrade, command=["puppet", "agent", "--enable"])
