@@ -105,9 +105,16 @@ def update_netbox(netbox, netbox_data, dry_run):
         device.save()
 
     for interface in netbox.api.dcim.interfaces.filter(device_id=netbox_data['id']):
-        if interface.mgmt_only:  # Ignore mgmt interfaces
-            logger.debug('Skipping interface %s, mgmt_only=True', interface.name)
+        if interface.mgmt_only:  # Leave it but remove the DNS name
+            if interface.count_ipaddresses > 0:
+                for ip in netbox.api.ipam.ip_addresses.filter(interface_id=interface.id):
+                    logger.info('Unset DNS name for IP %s on %s', ip.address, ip.assigned_object.name)
+                    if not dry_run:
+                        ip.dns_name = ''
+                        ip.save()
+
             continue
+
         # If the interface is connected to another interface (and not a circuit, etc)
         if interface.connected_endpoint and interface.connected_endpoint_type == 'dcim.interface':
             remote_interface = netbox.api.dcim.interfaces.get(interface.connected_endpoint.id)
