@@ -11,6 +11,7 @@ from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.icinga import IcingaError
+from spicerack.netbox import MANAGEMENT_IFACE_NAME, NetboxError
 from spicerack.ipmi import IpmiError
 from spicerack.puppet import get_puppet_ca_hostname
 from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError
@@ -232,6 +233,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     .format(len(self.decom_hosts)))
 
         self.dns = spicerack.dns()
+        netbox = spicerack.netbox()
         self.netbox_servers = {}
         self.ipmi_hosts = {}
         for fqdn in self.decom_hosts:
@@ -242,15 +244,15 @@ class DecommissionHostRunner(CookbookRunnerBase):
 
             # Only for physical hosts
             try:
-                mgmt_fqdn = self.netbox_servers[hostname].mgmt_fqdn
-                self.dns.resolve_ips(mgmt_fqdn)
-            except DnsNotFound:
-                mgmt_fqdn = self.netbox_servers[hostname].asset_tag_fqdn
+                mgmt_target = self.netbox_servers[hostname].mgmt_fqdn
+                self.dns.resolve_ips(mgmt_target)
+            except (DnsNotFound, NetboxError):
+                mgmt_target = netbox.api.ipam.ip_addresses.get(
+                    interface=MANAGEMENT_IFACE_NAME, device=hostname).address.split('/')[0]
                 spicerack.actions[fqdn].warning(
-                    f'//No DNS record found for the mgmt interface {self.netbox_servers[hostname].mgmt_fqdn}, '
-                    f'trying the asset tag one: {mgmt_fqdn}//')
+                    f'//Unable to find/resolve the mgmt DNS record, using the IP instead: {mgmt_target}//')
 
-            self.ipmi_hosts[hostname] = spicerack.ipmi(mgmt_fqdn)
+            self.ipmi_hosts[hostname] = spicerack.ipmi(mgmt_target)
             try:
                 self.ipmi_hosts[hostname].check_connection()
             except IpmiError:
@@ -318,7 +320,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
         else:  # Physical host
             self.spicerack.actions[fqdn].success('Found physical host')
             try:
-                self.spicerack.alerting_hosts([netbox_server.mgmt_fqdn]).downtime(self.reason)
+                self.spicerack.alerting_hosts(f'{hostname}.mgmt', verbatim_hosts=True).downtime(self.reason)
                 self.spicerack.actions[fqdn].success(
                     'Downtimed management interface on Icinga/Alertmanager')
             except IcingaError:
