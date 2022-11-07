@@ -352,8 +352,11 @@ class DecommissionHostRunner(CookbookRunnerBase):
                         'intervention required to make it unbootable**: {e}'.format(e=e))
 
             try:
-                self.ipmi_hosts[hostname].command(['chassis', 'power', 'off'])
-                self.spicerack.actions[fqdn].success('Powered off')
+                if self.ipmi_hosts[hostname].power_status().lower() == 'off':
+                    self.spicerack.actions[fqdn].success('Host is already powered off')
+                else:
+                    self.ipmi_hosts[hostname].command(['chassis', 'power', 'off'])
+                    self.spicerack.actions[fqdn].success('Powered off')
             except IpmiError as e:
                 self.spicerack.actions[fqdn].failure(
                     '**Failed to power off, manual intervention required**: {e}'
@@ -362,7 +365,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
             update_netbox(netbox, netbox_data, self.spicerack.dry_run)
             self.spicerack.actions[fqdn].success(
                 '[Netbox] Set status to Decommissioning, deleted all non-mgmt IPs,  '
-                'updated switch interfaces (disabled, removed vlans, etc')
+                'updated switch interfaces (disabled, removed vlans, etc)')
 
             configure_switch_interfaces(self.remote, netbox, netbox_data, self.spicerack.verbose)
             self.spicerack.actions[fqdn].success('Configured the linked switch interface(s)')
