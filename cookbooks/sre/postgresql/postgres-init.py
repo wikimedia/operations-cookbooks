@@ -45,7 +45,7 @@ def run(args, spicerack):
         with puppet.disabled(reason):
             if args.depool:
                 replica.run_sync('depool', 'sleep 180')
-            replica.run_sync("/usr/local/bin/resync_replica {}".format(args.pgversion))
+            replica.run_sync("/usr/local/bin/pg-resync-replica {}".format(args.pgversion))
         puppet.run()
         if args.depool:
             replica.run_sync('pool')
