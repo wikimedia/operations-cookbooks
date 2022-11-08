@@ -334,6 +334,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         separator = ', ' if ', ' in config.components['BIOS.Setup.1-1']['SetBootOrderEn'] else ','
         self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = separator.join(new_order)
         # BiosBootSeq defaults to comma-space-separated, but some hosts might differ
-        bios_boot_seq = config.components['BIOS.Setup.1-1']['BiosBootSeq']
+        # Use a default if the host is in UEFI mode and dosn't have the setting at all.
+        bios_boot_seq = config.components['BIOS.Setup.1-1'].get('BiosBootSeq', ', ')
         separator = ',' if ',' in bios_boot_seq and ', ' not in bios_boot_seq else ', '
         self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_order)
