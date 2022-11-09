@@ -561,9 +561,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self._check_icinga()
         self._repool()
         self._update_netbox_data()
-        if self.netbox_server.status == 'planned':
-            self.netbox_server.status = 'staged'
-            self.host_actions.success('Updated Netbox status planned -> staged')
+        current_status = self.netbox_server.status
+        if current_status in ('planned', 'failed'):
+            self.netbox_server.status = 'active'
+            self.host_actions.success(f'Updated Netbox status {current_status} -> active')
 
         self._clear_dhcp_cache()
 
