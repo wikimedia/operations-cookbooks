@@ -56,7 +56,7 @@ class SetClusterInMaintenance(CookbookBase):
     def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
         return with_common_opts(spicerack=self.spicerack, args=args, runner=SetClusterInMaintenanceRunner)(
-            monitor_node_fqdn=args.monitor_node_fqdn,
+            cluster_name=args.cluster_name,
             force=args.force,
             spicerack=self.spicerack,
             reason=args.reason,
