@@ -126,6 +126,11 @@ class ToolforgeComponentBuildRunner(CookbookRunnerBase):
 
         if not self.git_name:
             self.git_name = self.git_url.split("/")[-1]
+
+            # remove trailing ".git" in case it was in the URL
+            if self.git_name.endswith(".git"):
+                self.git_name = self.git_name[:-4]
+
             LOGGER.info("INFO: guesses git tree name as %s", self.git_name)
 
         if not self.docker_image_name:
