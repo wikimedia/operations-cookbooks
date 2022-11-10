@@ -131,11 +131,11 @@ class ToolforgeComponentBuildRunner(CookbookRunnerBase):
             if self.git_name.endswith(".git"):
                 self.git_name = self.git_name[:-4]
 
-            LOGGER.info("INFO: guesses git tree name as %s", self.git_name)
+            LOGGER.info("INFO: guessed git tree name as %s", self.git_name)
 
         if not self.docker_image_name:
             self.docker_image_name = f"toolforge-{self.git_name}"
-            LOGGER.info("INFO: guesses docker image name as %s", self.docker_image_name)
+            LOGGER.info("INFO: guessed docker image name as %s", self.docker_image_name)
 
     def run(self) -> None:
         """Main entry point"""
