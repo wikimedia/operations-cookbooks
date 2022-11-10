@@ -697,7 +697,7 @@ class CephTestUtils(TestUtils):
     """Utils to test ceph related code."""
 
     @staticmethod
-    def get_status_dict(overrides: Dict[str, Any] = None) -> Dict[str, Any]:
+    def get_status_dict(overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Generate a stub status dict to use when creating CephStatus"""
         status_dict: Dict[str, Any] = {"health": {"status": {}, "checks": {}}}
 

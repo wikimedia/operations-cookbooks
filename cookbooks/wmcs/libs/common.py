@@ -664,7 +664,9 @@ class TestUtils:
         return {"argnames": ",".join(_param_names), "argvalues": argvalues, "ids": list(test_cases.keys())}
 
     @staticmethod
-    def get_fake_remote(responses: List[str] = None, side_effect: Optional[List[Any]] = None) -> mock.MagicMock:
+    def get_fake_remote(
+        responses: Optional[List[str]] = None, side_effect: Optional[List[Any]] = None
+    ) -> mock.MagicMock:
         """Create a fake remote.
 
         It will return a RemoteHosts that will return the given responses when run_sync is called in them.

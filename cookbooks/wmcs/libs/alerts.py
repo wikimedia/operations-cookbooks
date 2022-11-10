@@ -40,7 +40,7 @@ class AlertManager:
         return run_one_formatted_as_list(node=self.node, command=["amtool", "--output=json", "silence", "query", query])
 
     def downtime_alert(
-        self, alert_name: str, comment: str, duration: str = "1h", extra_queries: List[str] = None
+        self, alert_name: str, comment: str, duration: str = "1h", extra_queries: Optional[List[str]] = None
     ) -> SilenceID:
         """Add a silence for an alert.
 
@@ -74,7 +74,7 @@ class AlertManager:
         ]
         return run_one_raw(node=self.node, command=command)
 
-    def uptime_alert(self, alert_name: Optional[str] = None, extra_queries: List[str] = None) -> None:
+    def uptime_alert(self, alert_name: Optional[str] = None, extra_queries: Optional[List[str]] = None) -> None:
         """Remove a silence for an alert.
 
         extra_queries is a list of label/match pairs, for example:
@@ -218,7 +218,7 @@ def downtime_alert(
     duration: str = "1h",
     comment: Optional[str] = None,
     task_id: Optional[str] = None,
-    extra_queries: List[str] = None,
+    extra_queries: Optional[List[str]] = None,
 ) -> SilenceID:
     """Do whatever it takes to downtime a host.
 
@@ -247,7 +247,7 @@ def uptime_alert(
     spicerack: Spicerack,
     alert_name: Optional[str] = None,
     silence_id: Optional[SilenceID] = None,
-    extra_queries: List[str] = None,
+    extra_queries: Optional[List[str]] = None,
 ) -> None:
     """Do whatever it takes to uptime an alert, if silence_id passed, only that silence will be expired.
 
