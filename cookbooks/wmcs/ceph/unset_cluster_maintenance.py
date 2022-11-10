@@ -95,4 +95,4 @@ class UnSetClusterInMaintenanceRunner(CookbookRunnerBase):
     def run(self) -> None:
         """Main entry point"""
         self.controller.unset_maintenance(force=self.force, silences=self.silence_ids)
-        self.sallogger.log(f"Ceph cluster at {self.cluster_name} set out of maintenance.")
+        self.sallogger.log(f"Ceph cluster at {self.cluster_name} set out of maintenance")

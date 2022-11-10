@@ -149,7 +149,7 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
     def run(self) -> None:
         """Main entry point"""
         self.sallogger.log(
-            message=f"Depooling and removing worker {self.fqdn_to_remove or ', will pick the oldest'}.",
+            message=f"Depooling and removing worker {self.fqdn_to_remove or ', will pick the oldest'}",
         )
         remote = self.spicerack.remote()
         k8s_worker_prefix = (
@@ -193,4 +193,4 @@ class ToolforgeDepoolAndRemoveNodeRunner(CookbookRunnerBase):
             ),
         ).run()
 
-        self.sallogger.log(message=f"Depooled and removed worker {fqdn_to_remove}.")
+        self.sallogger.log(message=f"Depooled and removed worker {fqdn_to_remove}")

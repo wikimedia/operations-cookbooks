@@ -83,6 +83,6 @@ class SetMaintenanceRunner(CookbookRunnerBase):
             logging.info("%s", error)
 
         self.sallogger.log(
-            message=f"Set cloudvirt '{self.fqdn}' maintenance (downtime id: {downtime_id}, use this to unset)."
+            message=f"Set cloudvirt {self.fqdn} maintenance (downtime id: {downtime_id}, use this to unset)"
         )
         LOGGER.info("Host %s now in maintenance mode. No new VMs will be scheduled in it.", self.fqdn)

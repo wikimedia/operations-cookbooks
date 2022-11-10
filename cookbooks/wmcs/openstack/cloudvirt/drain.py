@@ -66,7 +66,7 @@ class DrainRunner(CookbookRunnerBase):
 
     def run(self) -> None:
         """Main entry point"""
-        self.sallogger.log(message=f"Draining '{self.fqdn}'.")
+        self.sallogger.log(message=f"Draining {self.fqdn}")
         set_maintenance_cookbook = SetMaintenance(spicerack=self.spicerack)
         set_maintenance_cookbook.get_runner(
             args=set_maintenance_cookbook.argument_parser().parse_args(
@@ -79,4 +79,4 @@ class DrainRunner(CookbookRunnerBase):
         ).run()
         hypervisor_name = self.fqdn.split(".", 1)[0]
         self.openstack_api.drain_hypervisor(hypervisor_name=hypervisor_name)
-        self.sallogger.log(message=f"Drained '{self.fqdn}'.")
+        self.sallogger.log(message=f"Drained {self.fqdn}")

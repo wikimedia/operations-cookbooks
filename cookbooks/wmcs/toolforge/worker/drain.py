@@ -110,4 +110,4 @@ class DrainRunner(CookbookRunnerBase):
             )
             time.sleep(30)
 
-        self.sallogger.log(message=f"Drained node {self.hostname_to_drain}.")
+        self.sallogger.log(message=f"Drained node {self.hostname_to_drain}")

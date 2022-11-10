@@ -70,7 +70,7 @@ class SafeRebootRunner(CookbookRunnerBase):
 
     def run(self) -> None:
         """Main entry point"""
-        self.sallogger.log(message=f"Safe rebooting '{self.fqdn}'.")
+        self.sallogger.log(message=f"Safe rebooting {self.fqdn}")
         drain_cookbook = Drain(spicerack=self.spicerack)
         drain_cookbook.get_runner(
             args=drain_cookbook.argument_parser().parse_args(
@@ -98,4 +98,4 @@ class SafeRebootRunner(CookbookRunnerBase):
                 + self.common_opts.to_cli_args(),
             )
         ).run()
-        self.sallogger.log(message=f"Safe reboot of '{self.fqdn}' finished successfully.")
+        self.sallogger.log(message=f"Safe reboot of {self.fqdn} finished successfully")
