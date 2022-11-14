@@ -59,7 +59,6 @@ class LiveUpgradeRunner(CookbookRunnerBase):
     def run(self) -> None:
         """Main entry point."""
         node_to_upgrade = self.spicerack.remote().query(f"D{{{self.fqdn_to_upgrade}}}", use_sudo=True)
-        input(f"Start with {self.fqdn_to_upgrade}?")
         run_one_raw(node=node_to_upgrade, command=["puppet", "agent", "--enable"])
         run_one_raw(node=node_to_upgrade, command=Command("run-puppet-agent", ok_codes=[]))
         run_one_raw(node=node_to_upgrade, command=["apt", "update"])
