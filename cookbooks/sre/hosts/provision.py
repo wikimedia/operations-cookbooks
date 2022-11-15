@@ -257,7 +257,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
     def _config(self):
         """Provision the BIOS and iDRAC settings."""
         config = self._get_config()
-        if config.model.lower() == 'poweredge r450':  # R450 Specific keys
+        if config.model.lower() in ('poweredge r450', 'poweredge r650'):
             self.config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedir'
             self.config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Com2'
         else:
