@@ -6,7 +6,7 @@ import re
 import time
 from copy import copy, deepcopy
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Union, cast
+from typing import Any, Dict, Iterable, List, Optional, Set, Union, cast
 
 from spicerack import Remote, Spicerack
 from spicerack.remote import RemoteExecutionError
@@ -180,13 +180,13 @@ class CephClusterStatus:
 
         return new_status
 
-    def is_cluster_status_just_maintenance(self) -> bool:
+    def is_cluster_in_maintenance(self) -> bool:
         """Return if the cluster is in HEALTH_WARN only because it's in maintenance status."""
         # ignore temporary alert for octopus upgrade
         # https://docs.ceph.com/en/latest/security/CVE-2021-20288/#recommendations
         temp_status = self._filter_out_octopus_upgrade_warns(self.status_dict)
 
-        if temp_status["health"]["status"] != "HEALTH_WARN":
+        if temp_status["health"]["status"] == "HEALTH_OK":
             return False
 
         if "OSDMAP_FLAGS" in temp_status["health"]["checks"] and len(temp_status["health"]["checks"]) == 1:
@@ -195,7 +195,9 @@ class CephClusterStatus:
 
         return False
 
-    def check_healthy(self, consider_maintenance_healthy: bool = False) -> None:
+    def check_healthy(
+        self, consider_maintenance_healthy: bool = False, health_issues_to_ignore: Optional[Iterable[str]] = None
+    ) -> None:
         """Check if the cluster is healthy."""
         # ignore temporary alert for octopus upgrade
         # https://docs.ceph.com/en/latest/security/CVE-2021-20288/#recommendations
@@ -204,7 +206,18 @@ class CephClusterStatus:
         if temp_status["health"]["status"] == "HEALTH_OK":
             return
 
-        if consider_maintenance_healthy and self.is_cluster_status_just_maintenance():
+        for health_issue in health_issues_to_ignore or []:
+            if health_issue in temp_status["health"]["checks"]:
+                del temp_status["health"]["checks"][health_issue]
+
+            if not temp_status["health"]["checks"]:
+                return
+
+        if (
+            consider_maintenance_healthy
+            and self.is_cluster_in_maintenance()
+            and len(temp_status["health"]["checks"]) == 1
+        ):
             return
 
         if temp_status["health"]["status"] != "HEALTH_OK":
@@ -215,6 +228,10 @@ class CephClusterStatus:
     def get_in_progress(self) -> Dict[str, Any]:
         """Get the current in-progress events."""
         return self.status_dict.get("progress_events", {})
+
+    def get_health_issues(self) -> Dict[str, Any]:
+        """Get the current health issues."""
+        return self.status_dict.get("health", {}).get("checks", {})
 
 
 class CephOSDNodeController:
@@ -433,7 +450,7 @@ class CephClusterController(CommandRunnerMixin):
         """
         silences = self.downtime_cluster_alerts(task_id=task_id, reason=reason)
         cluster_status = self.get_cluster_status()
-        if cluster_status.is_cluster_status_just_maintenance():
+        if cluster_status.is_cluster_in_maintenance():
             LOGGER.info("Cluster already in maintenance status.")
             return silences
 
@@ -485,13 +502,8 @@ class CephClusterController(CommandRunnerMixin):
                 json.dumps(cluster_status.status_dict["health"], indent=4),
             )
 
-        if cluster_status.is_cluster_status_just_maintenance():
-            self.unset_osdmap_flag(flag=CephOSDFlag("noout"))
-            self.unset_osdmap_flag(flag=CephOSDFlag("norebalance"))
-
-        else:
-            LOGGER.info("Cluster already out of maintenance status.")
-
+        self.unset_osdmap_flag(flag=CephOSDFlag("noout"))
+        self.unset_osdmap_flag(flag=CephOSDFlag("norebalance"))
         self.uptime_cluster_alerts(silences=silences)
 
     def wait_for_in_progress_events(self, timeout_seconds: int = 600) -> None:
@@ -524,14 +536,22 @@ class CephClusterController(CommandRunnerMixin):
             f"\n{json.dumps(cluster_status.get_in_progress(), indent=4)}"
         )
 
-    def wait_for_cluster_healthy(self, consider_maintenance_healthy: bool = False, timeout_seconds: int = 600) -> None:
+    def wait_for_cluster_healthy(
+        self,
+        consider_maintenance_healthy: bool = False,
+        timeout_seconds: int = 600,
+        health_issues_to_ignore: Optional[Iterable[str]] = None,
+    ) -> None:
         """Wait until a cluster becomes healthy."""
         check_interval_seconds = 10
         start_time = time.time()
         cur_time = start_time
         while cur_time - start_time < timeout_seconds:
             try:
-                self.get_cluster_status().check_healthy(consider_maintenance_healthy=consider_maintenance_healthy)
+                self.get_cluster_status().check_healthy(
+                    consider_maintenance_healthy=consider_maintenance_healthy,
+                    health_issues_to_ignore=health_issues_to_ignore or [],
+                )
                 return
 
             except CephClusterUnhealthy:

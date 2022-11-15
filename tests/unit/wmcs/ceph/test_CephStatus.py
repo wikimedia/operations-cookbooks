@@ -254,7 +254,7 @@ def test_in_progress_happy_path(status_dict: Dict[str, Any], expected_in_progres
                 ),
                 "expected_return": False,
             },
-            "returns_false_if_theres_more_checks": {
+            "returns_true_if_theres_more_checks": {
                 "status_dict": CephTestUtils.get_status_dict(
                     {
                         "health": {
@@ -274,7 +274,7 @@ def test_in_progress_happy_path(status_dict: Dict[str, Any], expected_in_progres
                         },
                     }
                 ),
-                "expected_return": False,
+                "expected_return": True,
             },
             "returns_false_if_theres_no_OSDMAP_FLAGS_check": {
                 "status_dict": CephTestUtils.get_status_dict(
@@ -296,9 +296,9 @@ def test_in_progress_happy_path(status_dict: Dict[str, Any], expected_in_progres
         }
     )
 )
-def test_in_is_cluster_status_just_maintenance_happy_path(status_dict: Dict[str, Any], expected_return: bool):
+def test_is_cluster_in_maintenance_happy_path(status_dict: Dict[str, Any], expected_return: bool):
     my_status = CephClusterStatus(status_dict=status_dict)
 
-    gotten_return = my_status.is_cluster_status_just_maintenance()
+    gotten_return = my_status.is_cluster_in_maintenance()
 
     assert gotten_return == expected_return

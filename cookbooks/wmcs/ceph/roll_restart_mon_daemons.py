@@ -1,7 +1,7 @@
-r"""WMCS Ceph - Rolling restart all the osd daemons (not nodes).
+r"""WMCS Ceph - Rolling restart all the mon daemons (not nodes).
 
 Usage example:
-    cookbook wmcs.ceph.roll_restart_osd_daemons \
+    cookbook wmcs.ceph.roll_restart_mon_daemons \
         --cluster-name eqiad1 \
         --interactive
 
@@ -27,8 +27,8 @@ from cookbooks.wmcs.libs.inventory import CephClusterName
 LOGGER = logging.getLogger(__name__)
 
 
-class RollRestartOsdDaemons(CookbookBase):
-    """WMCS Ceph cookbook to rolling restart all osd daemons."""
+class RollRestartMonDaemons(CookbookBase):
+    """WMCS Ceph cookbook to rolling restart all Mon daemons."""
 
     title = __doc__
 
@@ -48,18 +48,6 @@ class RollRestartOsdDaemons(CookbookBase):
             help="Ceph cluster to roll restart.",
         )
         parser.add_argument(
-            "--force",
-            required=False,
-            action="store_true",
-            help="If passed, will continue even if the cluster is not in a healthy state.",
-        )
-        parser.add_argument(
-            "--interactive",
-            required=False,
-            action="store_true",
-            help="If passed, it will ask for confirmation before restarting the OSD daemons for each node.",
-        )
-        parser.add_argument(
             "--ignore-current-health-issues",
             required=False,
             action="store_true",
@@ -69,29 +57,41 @@ class RollRestartOsdDaemons(CookbookBase):
                 "want to break it even more while doing so. Prefer this to --force if you are unsure which one to use."
             ),
         )
+        parser.add_argument(
+            "--force",
+            required=False,
+            action="store_true",
+            help="If passed, will continue even if the cluster is not in a healthy state.",
+        )
+        parser.add_argument(
+            "--interactive",
+            required=False,
+            action="store_true",
+            help="If passed, it will ask for confirmation before restarting the Mon daemons for each node.",
+        )
 
         return parser
 
     def get_runner(self, args: argparse.Namespace) -> WMCSCookbookRunnerBase:
         """Get runner"""
-        return with_common_opts(self.spicerack, args, RollRestartOsdDaemonsRunner,)(
+        return with_common_opts(self.spicerack, args, RollRestartMonDaemonsRunner,)(
             cluster_name=args.cluster_name,
-            force=args.force,
             ignore_current_health_issues=args.ignore_current_health_issues,
+            force=args.force,
             interactive=args.interactive,
             spicerack=self.spicerack,
         )
 
 
-class RollRestartOsdDaemonsRunner(WMCSCookbookRunnerBase):
-    """Runner for RollRestartOsdDaemons"""
+class RollRestartMonDaemonsRunner(WMCSCookbookRunnerBase):
+    """Runner for RollRestartMonDaemons"""
 
     def __init__(
         self,
         common_opts: CommonOpts,
         cluster_name: CephClusterName,
-        force: bool,
         ignore_current_health_issues: bool,
+        force: bool,
         interactive: bool,
         spicerack: Spicerack,
     ):  # pylint: disable=too-many-arguments
@@ -110,39 +110,38 @@ class RollRestartOsdDaemonsRunner(WMCSCookbookRunnerBase):
 
     def run_with_proxy(self) -> None:
         """Main entry point"""
-        osd_nodes = list(self.controller.get_nodes()["osd"].keys())
+        mon_nodes = list(self.controller.get_nodes()["mon"].keys())
 
-        self.sallogger.log(message=f"Restarting the osd daemons from nodes {','.join(osd_nodes)}")
+        self.sallogger.log(message=f"Restarting the mon daemons from nodes {','.join(mon_nodes)}")
 
         silences = self.controller.set_maintenance(
-            reason="Roll restarting OSD daemons", force=self.force or self.ignore_current_health_issues
+            reason="Roll restarting mon daemons", force=self.force or self.ignore_current_health_issues
         )
-
         if self.ignore_current_health_issues:
             current_health_issues = self.controller.get_cluster_status().get_health_issues()
         else:
             current_health_issues = {}
 
-        for index, osd_node in enumerate(osd_nodes):
+        for index, mon_node in enumerate(mon_nodes):
             if self.interactive:
-                ask_confirmation(f"Ready to restart the OSD daemons for node {osd_node}?")
+                ask_confirmation(f"Ready to restart the mon daemons for node {mon_node}?")
 
-            LOGGER.info("Restarting osds from node %s, %d done, %d to go", osd_node, index, len(osd_nodes) - index)
+            LOGGER.info("Restarting mons from node %s, %d done, %d to go", mon_node, index, len(mon_nodes) - index)
             remote_node = self.spicerack.remote().query(
-                f"D{{{osd_node}.{self.controller.get_nodes_domain()}}}", use_sudo=True
+                f"D{{{mon_node}.{self.controller.get_nodes_domain()}}}", use_sudo=True
             )
-            run_one_raw(command=["systemctl", "restart", "ceph-osd@*"], node=remote_node)
+            run_one_raw(command=["systemctl", "restart", "ceph-mon@*"], node=remote_node)
 
             LOGGER.info(
-                "Restarted OSD daemons on node %s, %d done, %d to go, waiting for cluster to stabilize...",
-                osd_node,
+                "Restarted mon daemons on node %s, %d done, %d to go, waiting for cluster to stabilize...",
+                mon_node,
                 index + 1,
-                len(osd_nodes) - index - 1,
+                len(mon_nodes) - index - 1,
             )
             try:
                 self.controller.wait_for_cluster_healthy(
-                    consider_maintenance_healthy=True,
                     health_issues_to_ignore=current_health_issues.keys(),
+                    consider_maintenance_healthy=True,
                 )
                 LOGGER.info("Cluster stable, continuing")
             except CephClusterUnhealthy:
@@ -152,4 +151,4 @@ class RollRestartOsdDaemonsRunner(WMCSCookbookRunnerBase):
                     raise
 
         self.controller.unset_maintenance(silences=silences, force=self.force or self.ignore_current_health_issues)
-        self.sallogger.log(message=f"Finished restarting all the OSD daemons from the nodes {osd_nodes}")
+        self.sallogger.log(message=f"Finished restarting all the mon daemons from the nodes {mon_nodes}")

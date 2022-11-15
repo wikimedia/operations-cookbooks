@@ -311,10 +311,6 @@ def test_set_maintenance_raising(commands_output: List[str], exception: Type[Exc
 
 @parametrize(
     {
-        "Does nothing if cluster not in maintenance": {
-            "commands_output": [json.dumps(CephTestUtils.get_ok_status_dict())]
-            + [json.dumps([])] * len(CephClusterController.CLUSTER_ALERT_MATCH),
-        },
         "Passes if cluster in maintenance": {
             "commands_output": [
                 json.dumps(CephTestUtils.get_maintenance_status_dict()),
@@ -324,13 +320,10 @@ def test_set_maintenance_raising(commands_output: List[str], exception: Type[Exc
             + [json.dumps([])] * len(CephClusterController.CLUSTER_ALERT_MATCH),
         },
         "Passes if cluster not healthy but force is True": {
-            "commands_output": [json.dumps(CephTestUtils.get_warn_status_dict())]
-            + [json.dumps([])] * len(CephClusterController.CLUSTER_ALERT_MATCH),
-            "force": True,
-        },
-        "Passes but does not unset flags if cluster unhealthy and force is True": {
             "commands_output": [
                 json.dumps(CephTestUtils.get_warn_status_dict()),
+                "noout is unset",
+                "norebalance is unset",
             ]
             + [json.dumps([])] * len(CephClusterController.CLUSTER_ALERT_MATCH),
             "force": True,
