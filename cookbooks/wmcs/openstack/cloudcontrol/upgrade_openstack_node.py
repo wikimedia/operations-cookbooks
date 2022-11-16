@@ -7,9 +7,10 @@ Usage example: wmcs.openstack.cloudvirt.upgrade_openstack_node \
 import argparse
 import logging
 from datetime import datetime
+from typing import Optional
 
 from cumin.transports import Command
-from spicerack import Spicerack
+from spicerack import RemoteHosts, Spicerack
 from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
 
 from cookbooks.wmcs.libs.alerts import downtime_host, uptime_host
@@ -56,11 +57,11 @@ class LiveUpgrade(CookbookBase):
             help="FQDN of the cloudcontrol to upgrade.",
         )
         parser.add_argument(
-            "--upgrade-dbs",
+            "--skip-db-upgrades",
             required=False,
             action="store_false",
-            help="If passed, upgrade openstack service databases. "
-            "Only needs to happen once but should be harmless if repeated.",
+            help="If passed, skip upgrades of openstack service databases. "
+            "The upgrades only needs to happen once but are be harmless if repeated.",
         )
 
         return parser
@@ -71,7 +72,7 @@ class LiveUpgrade(CookbookBase):
             self.spicerack,
             args,
             UpgradeRunner,
-        )(fqdn_to_upgrade=args.fqdn_to_upgrade, spicerack=self.spicerack, upgrade_dbs=args.upgrade_dbs)
+        )(fqdn_to_upgrade=args.fqdn_to_upgrade, spicerack=self.spicerack, upgrade_dbs=args.skip_db_upgrades)
 
 
 class UpgradeRunner(CookbookRunnerBase):
@@ -107,6 +108,62 @@ class UpgradeRunner(CookbookRunnerBase):
         )
         LOGGER.info("Silenced node %s with ID %s", self.fqdn_to_upgrade, host_silence_id)
 
+        if self.upgrade_dbs:
+            # Back things up before upgrading. If we're upgrading a cloudcontrol, the
+            #  backups are stored on the host to be upgraded. Otherwise, they're stored
+            #  on a hardcoded but deployment-appropriate cloudcontrol.
+            backupnode: Optional[RemoteHosts]
+            backupnode = node_to_upgrade
+            backuppath = "/root/openstack-db-backups/%s" % datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+            dblist = ["cinder", "designate", "glance", "keystone", "neutron", "placement"]
+            if "100" in self.fqdn_to_upgrade:
+                # eqiad1
+                dblist.extend(
+                    [
+                        "eqiad1_heat",
+                        "eqiad1_magnum",
+                        "nova_api_eqiad1",
+                        "nova_cell0_eqiad1",
+                        "nova_eqiad1",
+                        "trove_eqiad1",
+                    ]
+                )
+                if "control" not in self.fqdn_to_upgrade:
+                    backupnode = self.spicerack.remote().query("D{cloudcontrol1005.wikimedia.org}", use_sudo=True)
+            elif "-dev" in self.fqdn_to_upgrade:
+                # codfw1dev
+                dblist.extend(
+                    [
+                        "barbican",
+                        "codfw1dev_heat",
+                        "codfw1dev_magnum",
+                        "nova_api",
+                        "nova_cell0",
+                        "nova",
+                        "trove_codfw1dev",
+                    ]
+                )
+                if "control" not in self.fqdn_to_upgrade:
+                    backupnode = self.spicerack.remote().query("D{cloudcontrol2001-dev.wikimedia.org}", use_sudo=True)
+            else:
+                LOGGER.info(
+                    "Unable to determine deployment for node %s, skipping some database backups.",
+                    self.fqdn_to_upgrade,
+                )
+                if "control" not in self.fqdn_to_upgrade:
+                    backupnode = None
+
+            if backupnode:
+                run_one_raw(node=backupnode, command=Command("mkdir -p %s" % backuppath))
+                for db in dblist:
+                    # wrap this in another shell because mysqldump requires file redirection
+                    run_one_raw(
+                        node=backupnode,
+                        command=Command('sh -c "/usr/bin/mysqldump -u root %s > %s/%s.sql"' % (db, backuppath, db)),
+                    )
+                LOGGER.info("Backed up OpenStack databases to %s", backuppath)
+
         run_one_raw(node=node_to_upgrade, command=["puppet", "agent", "--enable"])
         puppet.run()
 
@@ -131,49 +188,8 @@ class UpgradeRunner(CookbookRunnerBase):
         puppet.run()
 
         if self.upgrade_dbs:
+            # Now the actual upgrades
             if "control" in self.fqdn_to_upgrade:
-                # Back things up before upgrading.
-
-                backuppath = "/root/openstack-db-backups/%s" % datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                run_one_raw(node=node_to_upgrade, command=Command("mkdir -p %s" % backuppath))
-
-                dblist = ["cinder", "designate", "glance", "keystone", "neutron", "placement"]
-                if "100" in self.fqdn_to_upgrade:
-                    dblist.extend(
-                        [
-                            "eqiad1_heat",
-                            "eqiad1_magnum",
-                            "nova_api_eqiad1",
-                            "nova_cell0_eqiad1",
-                            "nova_eqiad1",
-                            "trove_eqiad1",
-                        ]
-                    )
-                elif "-dev" in self.fqdn_to_upgrade:
-                    dblist.extend(
-                        [
-                            "barbican",
-                            "codfw1dev_heat",
-                            "codfw1dev_magnum",
-                            "nova_api",
-                            "nova_cell0",
-                            "nova",
-                            "trove_codfw1dev",
-                        ]
-                    )
-                else:
-                    LOGGER.info(
-                        "Unable to determine deployment for node %s, skipping some database backups.",
-                        self.fqdn_to_upgrade,
-                    )
-                for db in dblist:
-                    # wrap this in anther shell because mysqldump requires file redirection
-                    run_one_raw(
-                        node=node_to_upgrade,
-                        command=Command('sh -c "/usr/bin/mysqldump -u root %s > %s/%s.sql"' % (db, backuppath, db)),
-                    )
-                LOGGER.info("Backed up OpenStack databases to %s", backuppath)
-
                 run_one_raw(node=node_to_upgrade, command=Command("nova-manage api_db sync"))
                 run_one_raw(node=node_to_upgrade, command=Command("nova-manage db sync"))
                 run_one_raw(node=node_to_upgrade, command=Command("placement-manage db sync"))
@@ -184,9 +200,8 @@ class UpgradeRunner(CookbookRunnerBase):
                 run_one_raw(node=node_to_upgrade, command=Command("heat-manage db_sync"))
                 run_one_raw(node=node_to_upgrade, command=Command("magnum-db-manage upgrade heads"))
                 run_one_raw(node=node_to_upgrade, command=Command("trove-manage db_sync"))
-
-        elif "services" in self.fqdn_to_upgrade:
-            run_one_raw(node=node_to_upgrade, command=Command("designate-manage database sync"))
+            elif "services" in self.fqdn_to_upgrade:
+                run_one_raw(node=node_to_upgrade, command=Command("designate-manage database sync"))
 
         puppet.run()
 
