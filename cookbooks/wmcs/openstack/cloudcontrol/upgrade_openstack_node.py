@@ -58,7 +58,7 @@ class LiveUpgrade(CookbookBase):
         parser.add_argument(
             "--upgrade-dbs",
             required=False,
-            action="store_true",
+            action="store_false",
             help="If passed, upgrade openstack service databases. "
             "Only needs to happen once but should be harmless if repeated.",
         )
@@ -132,6 +132,48 @@ class UpgradeRunner(CookbookRunnerBase):
 
         if self.upgrade_dbs:
             if "control" in self.fqdn_to_upgrade:
+                # Back things up before upgrading.
+
+                backuppath = "/root/openstack-db-backups/%s" % datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                run_one_raw(node=node_to_upgrade, command=Command("mkdir -p %s" % backuppath))
+
+                dblist = ["cinder", "designate", "glance", "keystone", "neutron", "placement"]
+                if "100" in self.fqdn_to_upgrade:
+                    dblist.extend(
+                        [
+                            "eqiad1_heat",
+                            "eqiad1_magnum",
+                            "nova_api_eqiad1",
+                            "nova_cell0_eqiad1",
+                            "nova_eqiad1",
+                            "trove_eqiad1",
+                        ]
+                    )
+                elif "-dev" in self.fqdn_to_upgrade:
+                    dblist.extend(
+                        [
+                            "barbican",
+                            "codfw1dev_heat",
+                            "codfw1dev_magnum",
+                            "nova_api",
+                            "nova_cell0",
+                            "nova",
+                            "trove_codfw1dev",
+                        ]
+                    )
+                else:
+                    LOGGER.info(
+                        "Unable to determine deployment for node %s, skipping some database backups.",
+                        self.fqdn_to_upgrade,
+                    )
+                for db in dblist:
+                    # wrap this in anther shell because mysqldump requires file redirection
+                    run_one_raw(
+                        node=node_to_upgrade,
+                        command=Command('sh -c "/usr/bin/mysqldump -u root %s > %s/%s.sql"' % (db, backuppath, db)),
+                    )
+                LOGGER.info("Backed up OpenStack databases to %s", backuppath)
+
                 run_one_raw(node=node_to_upgrade, command=Command("nova-manage api_db sync"))
                 run_one_raw(node=node_to_upgrade, command=Command("nova-manage db sync"))
                 run_one_raw(node=node_to_upgrade, command=Command("placement-manage db sync"))
@@ -139,9 +181,10 @@ class UpgradeRunner(CookbookRunnerBase):
                 run_one_raw(node=node_to_upgrade, command=Command("keystone-manage db_sync"))
                 run_one_raw(node=node_to_upgrade, command=Command("cinder-manage db online_data_migrations"))
                 run_one_raw(node=node_to_upgrade, command=Command("cinder-manage db sync"))
-                run_one_raw(node=node_to_upgrade, command=Command("heat-manage db sync"))
+                run_one_raw(node=node_to_upgrade, command=Command("heat-manage db_sync"))
                 run_one_raw(node=node_to_upgrade, command=Command("magnum-db-manage upgrade heads"))
                 run_one_raw(node=node_to_upgrade, command=Command("trove-manage db_sync"))
+
         elif "services" in self.fqdn_to_upgrade:
             run_one_raw(node=node_to_upgrade, command=Command("designate-manage database sync"))
 
