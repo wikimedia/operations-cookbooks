@@ -161,8 +161,10 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 'IPv4Static.1#DNS1': DNS_ADDRESS,
                 'IPv4Static.1#Gateway': str(next(self.redfish.interface.network.hosts())),
                 'IPv4Static.1#Netmask': str(self.redfish.interface.netmask),
+                'NIC.1#DNSRacName': self.args.host,
                 'NICStatic.1#DNSDomainFromDHCP': 'Disabled',
-                'WebServer.1#HostHeaderCheck': 'Disabled',
+                'NICStatic.1#DNSDomainName': f'mgmt.{self.netbox_data["site"]["slug"]}.wmnet',
+                'WebServer.1#HostHeaderCheck': 'Enabled',
             },
             'System.Embedded.1': {
                 'ServerPwr.1#PSRapidOn': 'Disabled',
