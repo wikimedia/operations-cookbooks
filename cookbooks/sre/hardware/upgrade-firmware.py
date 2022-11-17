@@ -701,6 +701,12 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         logging.getLogger("urllib3").setLevel(urllib_level)
         logging.getLogger("wmflib").setLevel(wmflib_level)
         self._check_version(redfish_host, target_version, driver_category)
+        payload = {'Attributes': {'WebServer.1.HostHeaderCheck': 'Disabled'}}
+        try:
+            redfish_host.request('patch', '/redfish/v1/Managers/iDRAC.Embedded.1/Attributes', json=payload)
+        except RedfishError as error:
+            logger.error('%s: Failed to update HostHeaderCheck: %s', redfish_host, error)
+            logger.error('%s: You may need to run: `racadm set idrac.webserver.HostHeaderCheck 0`', redfish_host)
 
     def _reboot(self, redfish_host: Redfish, netbox_host: NetboxServer) -> None:
         """Reboot the host
