@@ -102,11 +102,11 @@ def with_proxy(spicerack: Spicerack):
     puppet_ca_path = Path(config.get("puppet_ca_path", spicerack.config_dir / "puppet_ca.crt"))
     proxy_started = False
     if not _is_proxy_working():
-        proxy_started = True
         try:
             LOGGER.info("Starting socks proxy on 127.0.0.1:%d", socks_proxy_port)
             _download_puppet_ca(puppet_ca_path=puppet_ca_path)
             _start_proxy(port=socks_proxy_port, puppet_ca_path=puppet_ca_path)
+            proxy_started = True
         except Exception as error:  # pylint: disable=broad-except
             LOGGER.warning(
                 "Unable to start the socks proxy, trying to run the cookbook without it... exception:%s", str(error)
