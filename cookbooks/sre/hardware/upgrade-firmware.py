@@ -251,6 +251,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             logger.info("%s: Already have: %s", product_slug, firmware_path)
         else:
             firmware_path.parent.mkdir(exist_ok=True, parents=True)
+            firmware_path.parent.chmod(0o775)
             logger.info("%s: Downloading %s", product_slug, driver_version.url)
             self.dell_api.download(driver_version.url, firmware_path)
         driver_version = driver_version.version
