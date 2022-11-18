@@ -244,7 +244,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             pass
         driver_version = driver.versions.pop()
         firmware_path = (
-            self._firmware_path(product_slug, driver_type)
+            self._firmware_path(product_slug, driver_category)
             / driver_version.url.split("/")[-1]
         )
         if firmware_path.is_file():
@@ -536,7 +536,11 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         if not firmware_dir.is_dir():
             return self.get_latest(product_slug, driver_type, driver_category)
 
-        current_files = list(filter(Path.is_file, firmware_dir.iterdir()))
+        current_files = sorted(
+            filter(Path.is_file, firmware_dir.iterdir()),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True
+        )
         if not current_files:
             return self.get_latest(product_slug, driver_type, driver_category)
 
