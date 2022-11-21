@@ -2,6 +2,7 @@
 # pylint: disable=too-many-arguments
 """Openstack generic related code."""
 import logging
+import re
 import time
 from enum import Enum, auto
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Type, Union, cast
@@ -272,6 +273,11 @@ class OpenstackAPI(CommandRunnerMixin):
 
         return ["env", f"OS_PROJECT_ID={self.project}", "wmcs-openstack", *command, *format_args]
 
+    def host_list(self, **kwargs) -> List[str]:
+        """Returns a list of openstack hosts (i.e, hypervisors)."""
+        host_list = self.run_formatted_as_list("host", "list", "--sort-descending", is_safe=True, **kwargs)
+        return [h["Host Name"] for h in host_list if re.match(r"cloudvirt\d", h["Host Name"])]
+
     def get_nodes_domain(self) -> str:
         """Return the domain of the cluster handled by this controller.
 
@@ -380,6 +386,15 @@ class OpenstackAPI(CommandRunnerMixin):
         """
         self.run_raw("server", "delete", name_to_remove, is_safe=False)
 
+    def server_force_reboot(self, name_to_reboot: OpenstackName) -> None:
+        """Force reboot a VM.
+
+        Note that the name_to_reboot is the name of the VM as registered in
+        Openstack, that's probably not the FQDN (and hopefully the hostname,
+        but maybe not).
+        """
+        self.run_raw("server", "reboot", "--hard", name_to_reboot, json_output=False, is_safe=False)
+
     def volume_create(self, name: OpenstackName, size: int) -> str:
         """Create a volume and return the ID of the created volume.
 
@@ -410,20 +425,32 @@ class OpenstackAPI(CommandRunnerMixin):
         flavor: OpenstackIdentifier,
         image: OpenstackIdentifier,
         network: OpenstackIdentifier,
-        server_group_id: OpenstackID,
-        security_group_ids: List[OpenstackID],
+        server_group_id: Optional[OpenstackID] = None,
+        security_group_ids: Optional[List[OpenstackID]] = None,
+        properties: Optional[Dict[str, str]] = None,
+        availability_zone: Optional[str] = None,
     ) -> OpenstackIdentifier:
         """Create a server and return the ID of the created server.
 
         Note: You will probably want to add the server to the 'default' security group at least.
         """
         security_group_options = []
-        for security_group_id in security_group_ids:
-            security_group_options.extend(["--security-group", security_group_id])
+        if security_group_ids:
+            for security_group_id in security_group_ids:
+                security_group_options.extend(["--security-group", security_group_id])
 
         server_group_options = []
         if server_group_id:
             server_group_options.extend(["--hint", f"group={server_group_id}"])
+
+        properties_opt = []
+        if properties:
+            for i in properties:
+                properties_opt.extend(["--property", f"{i}='{properties[i]}'"])
+
+        availability_zone_opt = []
+        if availability_zone:
+            availability_zone_opt.extend(["--availability-zone", availability_zone])
 
         out = self.run_formatted_as_dict(
             "server",
@@ -437,6 +464,8 @@ class OpenstackAPI(CommandRunnerMixin):
             "--wait",
             *server_group_options,
             *security_group_options,
+            *properties_opt,
+            *availability_zone_opt,
             name,
         )
         return out["id"]
