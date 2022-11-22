@@ -9,6 +9,7 @@ Usage example:
 """
 # pylint: disable=too-many-arguments
 import argparse
+import re
 from typing import Optional
 
 from spicerack import Spicerack
@@ -83,10 +84,10 @@ class UploadImagesToRepo(CookbookBase):
         )
 
 
-def _update_image(uploader_node: RemoteHosts, pull_url: str, push_url: str) -> None:
+def _update_image(uploader_node: RemoteHosts, pull_url: str, push_url: str) -> str:
     run_one_raw(command=["docker", "pull", pull_url], node=uploader_node)
     run_one_raw(command=["docker", "tag", pull_url, push_url], node=uploader_node)
-    run_one_raw(command=["docker", "push", push_url], node=uploader_node)
+    return run_one_raw(command=["docker", "push", push_url], node=uploader_node)
 
 
 class UploadImagesToRepoRunner(WMCSCookbookRunnerBase):
@@ -152,8 +153,16 @@ class UploadImagesToRepoRunner(WMCSCookbookRunnerBase):
 
         # this image should not be pulled with a tag, so CRI-O can run it, so we update it always.
         self.sallogger.log(message=f"Updating the distroless/base image on {self.image_repo_url}")
-        _update_image(
+        output = _update_image(
             uploader_node=uploader_node,
             pull_url="gcr.io/distroless/base",
             push_url=f"{self.image_repo_url}/toolforge-distroless-base",
         )
+        image_hash = re.findall(r"([a-fA-F\d]{64})", output)
+        if image_hash:
+            print("Remember to update the file ")
+            print("buildservice/deploy/base-tekton/tekton-pipelines-controller-patch.json ")
+            print("in the buildservice repo with the contents: ")
+            print(f"docker-registry.tools.wmflabs.org/toolforge-distroless-base@sha256:{image_hash[0]}")
+        else:
+            print(f"unable to find image hash in output: {output}")
