@@ -115,9 +115,10 @@ class UnsetMaintenanceRunner(WMCSCookbookRunnerBase):
                 logging.info("%s", error)
 
         uptime_host(spicerack=self.spicerack, host_name=hostname, silence_id=self.downtime_id)
-        self.sallogger.log(message=f"Unset cloudvirt {self.fqdn} maintenance")
+        aggregates_str = ",".join(aggregates_to_add)
+        self.sallogger.log(message=f"unset {self.fqdn} maintenance (aggregates: {aggregates_str})")
         LOGGER.info(
             "Host %s now in out of maintenance mode. New VMs will be scheduled in it (aggregates: %s).",
             self.fqdn,
-            ",".join(aggregates_to_add),
+            aggregates_str,
         )
