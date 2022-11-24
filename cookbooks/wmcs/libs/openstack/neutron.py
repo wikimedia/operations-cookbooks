@@ -277,7 +277,7 @@ class NeutronController(CommandRunnerMixin):
         """Get the list of neutron agents."""
         return [
             NeutronAgent.from_agent_data(agent_data=agent_data)
-            for agent_data in self.run_formatted_as_list("agent-list")
+            for agent_data in self.run_formatted_as_list("agent-list", is_safe=True)
         ]
 
     def agent_set_admin_up(self, agent_id: OpenstackID) -> None:
@@ -339,18 +339,19 @@ class NeutronController(CommandRunnerMixin):
     def router_list(self) -> List[NeutronPartialRouter]:
         """Get the list of neutron routers."""
         return [
-            NeutronPartialRouter.from_data(data=list_data) for list_data in self.run_formatted_as_list("router-list")
+            NeutronPartialRouter.from_data(data=list_data)
+            for list_data in self.run_formatted_as_list("router-list", is_safe=True)
         ]
 
     def router_show(self, router: OpenstackIdentifier) -> NeutronRouter:
         """Show details of the given router."""
-        return NeutronRouter.from_data(data=self.run_formatted_as_dict("router-show", router))
+        return NeutronRouter.from_data(data=self.run_formatted_as_dict("router-show", router, is_safe=True))
 
     def list_agents_hosting_router(self, router: OpenstackIdentifier) -> List[NeutronAgent]:
         """Get the list of nodes hosting a given router routers."""
         return [
             NeutronAgent.from_agent_data(agent_data={**agent_data, "agent_type": NeutronAgentType.L3_AGENT.value})
-            for agent_data in self.run_formatted_as_list("l3-agent-list-hosting-router", router)
+            for agent_data in self.run_formatted_as_list("l3-agent-list-hosting-router", router, is_safe=True)
         ]
 
     def get_cloudnets(self) -> List[str]:
@@ -362,7 +363,7 @@ class NeutronController(CommandRunnerMixin):
 
     def list_routers_on_agent(self, agent_id: OpenstackID) -> List[Dict[str, Any]]:
         """Get the list of routers hosted a given agent."""
-        return self.run_formatted_as_list("router-list-on-l3-agent", agent_id)
+        return self.run_formatted_as_list("router-list-on-l3-agent", agent_id, is_safe=True)
 
     def check_if_network_is_alive(self) -> None:
         """Check if the network is in a working state (all agents up and running, all routers up and running).

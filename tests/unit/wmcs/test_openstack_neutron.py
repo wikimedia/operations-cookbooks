@@ -236,7 +236,7 @@ def test_NeutronController_agent_list_works(neutron_output: str, expected_agents
     assert gotten_agents == expected_agents
     fake_run_sync.assert_called_with(
         cumin.transports.Command("bash -c 'source /root/novaenv.sh && neutron agent-list --format json'", ok_codes=[0]),
-        is_safe=False,
+        is_safe=True,
         print_output=False,
         print_progress_bars=False,
     )
@@ -352,7 +352,7 @@ def test_NeutronController_router_list_works(neutron_output: str, expected_route
             "bash -c 'source /root/novaenv.sh && neutron router-list --format json'",
             ok_codes=[0],
         ),
-        is_safe=False,
+        is_safe=True,
         print_output=False,
         print_progress_bars=False,
     )
@@ -444,7 +444,7 @@ def test_NeutronController_list_agents_hosting_router_works(neutron_output: str,
             "bash -c 'source /root/novaenv.sh && neutron l3-agent-list-hosting-router dummy_router --format json'",
             ok_codes=[0],
         ),
-        is_safe=False,
+        is_safe=True,
         print_output=False,
         print_progress_bars=False,
     )
@@ -572,7 +572,7 @@ def test_NeutronController_list_routers_on_agent_works(neutron_output: str, expe
             "bash -c 'source /root/novaenv.sh && neutron router-list-on-l3-agent some-agent-id --format json'",
             ok_codes=[0],
         ),
-        is_safe=False,
+        is_safe=True,
         print_output=False,
         print_progress_bars=False,
     )
@@ -710,7 +710,7 @@ def test_NeutronController_get_cloudnets_works(neutron_output: str, expected_clo
             "bash -c 'source /root/novaenv.sh && neutron agent-list --format json'",
             ok_codes=[0],
         ),
-        is_safe=False,
+        is_safe=True,
         print_output=False,
         print_progress_bars=False,
     )
