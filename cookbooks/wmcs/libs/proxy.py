@@ -23,27 +23,27 @@ BASE64_PUPPET_CA_URL = (
 LOGGER = logging.getLogger(__name__)
 
 
-def _is_proxy_working() -> bool:
+def _is_proxy_working(port: int) -> bool:
     try:
         requests.get(
             ALERTMANAGER_URLS[0],
             proxies=dict(
-                http="socks5h://127.0.0.1:8888",
-                https="socks5h://127.0.0.1:8888",
+                http=f"socks5h://127.0.0.1:{port}",
+                https=f"socks5h://127.0.0.1:{port}",
             ),
             timeout=5,
         )
     except (requests.ConnectTimeout, requests.ConnectionError):
         return False
 
-    if os.environ.get("http_proxy") == os.environ.get("https_proxy") == "socks5h://127.0.0.1:8888":
+    if os.environ.get("http_proxy") == os.environ.get("https_proxy") == f"socks5h://127.0.0.1:{port}":
         return True
 
     return False
 
 
 def _start_proxy(puppet_ca_path: Path, port: int) -> None:
-    if _is_proxy_working():
+    if _is_proxy_working(port=port):
         _stop_proxy(port=port)
 
     if "http_proxy" in os.environ:
@@ -103,7 +103,7 @@ def with_proxy(spicerack: Spicerack):
         Path(config.get("puppet_ca_path", spicerack.config_dir / "puppet_ca.crt")).expanduser().resolve().absolute()
     )
     proxy_started = False
-    if not _is_proxy_working():
+    if not _is_proxy_working(port=socks_proxy_port):
         try:
             LOGGER.info("Starting socks proxy on 127.0.0.1:%d", socks_proxy_port)
             _download_puppet_ca(puppet_ca_path=puppet_ca_path)
