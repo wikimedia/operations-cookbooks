@@ -99,7 +99,9 @@ def with_proxy(spicerack: Spicerack):
     config = load_yaml_config(config_file=spicerack.config_dir / "wmcs.yaml", raises=False)
     LOGGER.info("Loading socks proxy config from %s", spicerack.config_dir / "wmcs.yaml")
     socks_proxy_port = int(config.get("socks_proxy_port", "54123"))
-    puppet_ca_path = Path(config.get("puppet_ca_path", spicerack.config_dir / "puppet_ca.crt"))
+    puppet_ca_path = (
+        Path(config.get("puppet_ca_path", spicerack.config_dir / "puppet_ca.crt")).expanduser().resolve().absolute()
+    )
     proxy_started = False
     if not _is_proxy_working():
         try:
