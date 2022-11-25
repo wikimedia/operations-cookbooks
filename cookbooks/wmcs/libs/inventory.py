@@ -124,6 +124,7 @@ class OpenstackCluster(Cluster):
 
     name: OpenstackClusterName
     nodes_by_role: Dict[OpenstackNodeRoleName, List[str]]
+    internal_network_name: str
 
 
 @dataclass(frozen=True)
@@ -170,6 +171,7 @@ _INVENTORY = {
                             "cloudgw1002.eqiad.wmnet",
                         ],
                     },
+                    internal_network_name="lan-flat-cloudinstances2b",
                 ),
             },
         },
@@ -205,6 +207,7 @@ _INVENTORY = {
                             "cloudgw2003-dev.codfw.wmnet",
                         ],
                     },
+                    internal_network_name="lan-flat-cloudinstances2b",
                 )
             },
         },
@@ -387,3 +390,12 @@ def get_osd_drives_count(cluster_name: CephClusterName) -> int:
     cluster = cast(CephCluster, inventory[site].clusters_by_type[ClusterType.CEPH][cluster_name])
 
     return cluster.osd_drives_count
+
+
+def get_openstack_internal_network_name(cluster_name: OpenstackClusterName) -> str:
+    """Get the openstack internal network name."""
+    site = cluster_name.get_site()
+    inventory = get_inventory()
+    os_cluster = cast(OpenstackCluster, inventory[site].clusters_by_type[ClusterType.OPENSTACK][cluster_name])
+
+    return os_cluster.internal_network_name

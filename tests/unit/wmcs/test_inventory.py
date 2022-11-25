@@ -27,6 +27,7 @@ def get_dummy_inventory(
     cluster_name: ClusterName = OpenstackClusterName.CODFW1DEV,
     cluster_class: Type[Cluster] = OpenstackCluster,
     role_name: NodeRoleName = OpenstackNodeRoleName.CONTROL,
+    internal_network_name: str = "lan-flat-instances-whatever",
 ) -> Dict[SiteName, Site]:
     return {
         site_name: Site(
@@ -36,6 +37,7 @@ def get_dummy_inventory(
                     cluster_name: cluster_class(
                         name=cluster_name,
                         nodes_by_role={role_name: [node_fqdn]},
+                        internal_network_name=internal_network_name,
                     )
                 }
             },
