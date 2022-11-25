@@ -336,12 +336,13 @@ class OpenstackAPI(CommandRunnerMixin):
         """Get the information for a VM."""
         return self.run_formatted_as_dict("server", "show", vm_name, is_safe=True)
 
-    def server_list(self, **kwargs) -> List[Dict[str, Any]]:
+    def server_list(self, long: bool = False, **kwargs) -> List[Dict[str, Any]]:
         """Retrieve the list of servers for the project.
 
         Any extra kwargs will be passed to the RemoteHosts.run_sync function.
         """
-        return self.run_formatted_as_list("server", "list", is_safe=True, **kwargs)
+        _long = "--long" if long else ""
+        return self.run_formatted_as_list("server", "list", _long, is_safe=True, **kwargs)
 
     def server_list_filter_exists(self, hostnames: List[str], **kwargs) -> List[str]:
         """Verify if all servers in the list exists.
