@@ -209,10 +209,14 @@ def calculate_changelist(
         if hypervisor not in host_to_canary_vms:
             host_to_canary_vms[hypervisor] = []
 
-    changelist = [
-        HostChanges.from_canary_vms(hostname=host, host_canary_vms=host_to_canary_vms[host], recreate=recreate)
-        for host, canary_vms in host_to_canary_vms.items()
-    ]
+    changelist = []
+    for host, canary_vms in host_to_canary_vms.items():
+        hostchanges = HostChanges.from_canary_vms(
+            hostname=host, host_canary_vms=host_to_canary_vms[host], recreate=recreate
+        )
+        if hostchanges.has_changes():
+            changelist.append(hostchanges)
+
     return changelist
 
 
@@ -355,9 +359,7 @@ class EnsureCanaryVMRunner(WMCSCookbookRunnerBase):
             self.disable_sal_log = True
 
         for hostchanges in changelist:
-            if hostchanges.has_changes():
-                LOGGER.info(f"INFO: {hostchanges.hostname} has changes: {hostchanges}")
-
+            LOGGER.info(f"INFO: {hostchanges.hostname} has changes: {hostchanges}")
             self._force_reboot(hostchanges)
             self._create(hostchanges)
             self._delete(hostchanges)

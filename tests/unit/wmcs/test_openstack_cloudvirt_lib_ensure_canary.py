@@ -33,13 +33,7 @@ CORRECT_VM_LIST = [
 
 def test_no_changes():
     changelist = calculate_changelist(HYPERVISORS, CORRECT_VM_LIST, recreate=False)
-    assert len(changelist) == 3
-
-    for hostchanges in changelist:
-        assert not hostchanges.has_changes()
-        assert len(hostchanges.to_delete) == 0
-        assert not hostchanges.needs_create
-        assert not hostchanges.to_force_reboot
+    assert len(changelist) == 0
 
 
 def test_recreate():
