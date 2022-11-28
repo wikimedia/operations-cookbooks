@@ -2,7 +2,6 @@
 # pylint: disable=too-many-arguments
 """Openstack generic related code."""
 import logging
-import re
 import time
 from enum import Enum, auto
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Type, Union, cast
@@ -273,10 +272,9 @@ class OpenstackAPI(CommandRunnerMixin):
 
         return ["env", f"OS_PROJECT_ID={self.project}", "wmcs-openstack", *command, *format_args]
 
-    def host_list(self, **kwargs) -> List[str]:
-        """Returns a list of openstack hosts (i.e, hypervisors)."""
-        host_list = self.run_formatted_as_list("host", "list", "--sort-descending", is_safe=True, **kwargs)
-        return [h["Host Name"] for h in host_list if re.match(r"cloudvirt\d", h["Host Name"])]
+    def hypervisor_list(self, **kwargs) -> List[Dict[str, Any]]:
+        """Returns a list of hypervisors."""
+        return self.run_formatted_as_list("hypervisor", "list", "--long", "--sort-descending", is_safe=True, **kwargs)
 
     def get_nodes_domain(self) -> str:
         """Return the domain of the cluster handled by this controller.

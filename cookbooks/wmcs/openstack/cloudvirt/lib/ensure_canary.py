@@ -248,7 +248,13 @@ class EnsureCanaryVMRunner(WMCSCookbookRunnerBase):
             remote=spicerack.remote(), cluster_name=self.deployment, project=self.common_opts.project
         )
 
-        actual_host_list = self.openstack_api.host_list(print_output=False, print_progress_bars=False)
+        hypervisor_list = self.openstack_api.hypervisor_list(print_output=False, print_progress_bars=False)
+
+        actual_host_list = []
+        for hypervisor in hypervisor_list:
+            # openstack returns this as FQDNs, not as short hostnames as we understand them
+            hypervisor_hostname = hypervisor["Hypervisor Hostname"].split(".")[0]
+            actual_host_list.append(hypervisor_hostname)
 
         if not self.hostname_list:
             self.hostname_list = actual_host_list
