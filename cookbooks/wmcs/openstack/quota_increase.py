@@ -56,10 +56,10 @@ class QuotaIncrease(CookbookBase):
         increases = [
             OpenstackQuotaEntry.from_human_spec(
                 name=quota_name,
-                human_spec=getattr(args, quota_name.value),
+                human_spec=getattr(args, quota_name.value.replace("-", "_")),
             )
             for quota_name in OpenstackQuotaName
-            if getattr(args, quota_name.value, None) is not None
+            if getattr(args, quota_name.value.replace("-", "_"), None) is not None
         ]
         return with_common_opts(spicerack=self.spicerack, args=args, runner=QuotaIncreaseRunner)(
             increases=increases,
