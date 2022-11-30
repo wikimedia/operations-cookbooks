@@ -807,6 +807,10 @@ class OpenstackAPI(CommandRunnerMixin):
         """Remove a user from a role for a project, it will not fail if the user is not in that that role."""
         self.run_raw("role", "remove", f"--project={self.project}", f"--user={user_name}", role, json_output=False)
 
+    def project_create(self, project: OpenstackName, description: str) -> None:
+        """Creates a new project."""
+        self.run_raw("project", "create", "--enable", f"'--description={description}'", project, json_output=False)
+
 
 def get_node_cluster_name(node: str) -> OpenstackClusterName:
     """Wrapper casting to the specific openstack type."""
