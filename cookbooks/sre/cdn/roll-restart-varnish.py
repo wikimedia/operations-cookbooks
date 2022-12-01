@@ -97,4 +97,4 @@ class RollRestartVarnishRunner(SRELBBatchRunnerBase):
     @property
     def depool_services(self):
         """Property to return a list of specific services to depool/repool. If empty means all services."""
-        return ['ats-tls', 'varnish-fe']
+        return ['cdn']
