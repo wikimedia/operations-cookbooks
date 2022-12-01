@@ -24,7 +24,7 @@ extras_require = {
         'pytest>=6.1.0',
     ],
     'prospector': [
-        'prospector[with_everything]>=0.12.4',
+        'prospector[with_everything]>=0.12.4,<=1.7.7',
         'pylint<2.15.7',  # Temporary upper limit for an upstream regression
         'pytest>=6.1.0',
     ],
