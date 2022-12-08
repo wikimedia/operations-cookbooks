@@ -238,7 +238,6 @@ class RollingOperationRunner(CookbookRunnerBase):
         logger.info("Starting rolling_operation %s on %s at time %s", self.operation, nodes, start_time)
 
         if self.operation is Operation.UPGRADE:
-            # BEGIN Below is specific to our es 6->7 upgrade
             # Stop all elasticsearch units (we're mainly concerned with the old version)
             logger.info("Trying to stop elasticsearch units before proceeding with upgrade")
 
@@ -246,17 +245,6 @@ class RollingOperationRunner(CookbookRunnerBase):
                           'awk \' { print $1 } \' | xargs systemctl stop'
             nodes.get_remote_hosts().run_sync(stop_es_cmd)
 
-            # Disable the actual (non-templated) units; ASSUMPTION: we're going from 6->7
-            disable_es_cmd = 'systemctl list-units elasticsearch_6* --plain --no-legend --all | ' + \
-                             'awk \' { print $1 } \' | xargs systemctl disable'
-            nodes.get_remote_hosts().run_sync(disable_es_cmd)
-            logger.info("Disabling elasticsearch_6* units before proceeding with upgrade")
-
-            # Delete the old templated service file
-            delete_template_cmd = 'rm -fv /usr/lib/systemd/system/elasticsearch_6@.service'
-            nodes.get_remote_hosts().run_sync(delete_template_cmd)
-
-            # END   Below is specific to our es 6->7 upgrade
             upgrade_cmd = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
                           options='-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
                           packages=' '.join(['elasticsearch-oss', 'wmf-elasticsearch-search-plugins']))
