@@ -1,8 +1,7 @@
 """WDQS data reload
 
 Usage example:
-    cookbook sre.wdqs.data-reload --reload-data wikidata --reason "bring new hosts into rotation" \
-    --task-id T301167 wdqs1004.eqiad.wmnet
+    cookbook sre.wdqs.data-reload wdqs1010.eqiad.wmnet --reason 'fix issues' --task-id T12345
 
 """
 
