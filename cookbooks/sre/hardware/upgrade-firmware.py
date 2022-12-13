@@ -812,6 +812,10 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         status = True
+        if self.get_idrac_version(redfish_host) < version.Version('4'):
+            logger.error('iDRAC version (%s) is too low to preform driver upgrades.  '
+                         'please upgrade iDRAC first')
+            return False
         members = self._get_hw_members(redfish_host, driver_category)
         if not members:
             logger.info(
@@ -856,6 +860,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             initial_power_state = redfish_host.get_power_state()
             # Need to power the server on for any firmware updates
             manage_power = self.component != "idrac"
+
             if self.component in (None, "idrac"):
                 self.update_idrac(redfish_host, netbox_host)
 
