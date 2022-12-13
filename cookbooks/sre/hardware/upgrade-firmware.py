@@ -647,7 +647,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         driver_category: DellDriverCategory,
         *,
         odata_id: Optional[str] = None,
-    ):
+    ) -> bool:
         """Check two versions and emit appropriate logging messages"""
         current_version = self.get_version(
             redfish_host, driver_category, odata_id=odata_id
@@ -666,8 +666,10 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                 current_version,
                 target_version,
             )
+            return False
+        return True
 
-    def update_idrac(self, redfish_host: Redfish, netbox_host: NetboxServer) -> None:
+    def update_idrac(self, redfish_host: Redfish, netbox_host: NetboxServer) -> bool:
         """Update the idrac to the latest version.
 
         Arguments:
@@ -686,7 +688,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             extract_payload=True,
         )
         if job_id is None:
-            return
+            return False
         self.poll_id(redfish_host, job_id, True)
         # TODO: this comment needs to go elses where, or we shuld perhaps print something
         # when doing an upgrade from to 2.80+
@@ -705,13 +707,14 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         redfish_host.wait_reboot_since(last_reboot)
         logging.getLogger("urllib3").setLevel(urllib_level)
         logging.getLogger("wmflib").setLevel(wmflib_level)
-        self._check_version(redfish_host, target_version, driver_category)
+        status = self._check_version(redfish_host, target_version, driver_category)
         payload = {'Attributes': {'WebServer.1.HostHeaderCheck': 'Disabled'}}
         try:
             redfish_host.request('patch', '/redfish/v1/Managers/iDRAC.Embedded.1/Attributes', json=payload)
         except RedfishError as error:
             logger.error('%s: Failed to update HostHeaderCheck: %s', redfish_host, error)
             logger.error('%s: You may need to run: `racadm set idrac.webserver.HostHeaderCheck 0`', redfish_host)
+        return status
 
     def _reboot(self, redfish_host: Redfish, netbox_host: NetboxServer) -> None:
         """Reboot the host
@@ -732,7 +735,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                 [netbox_host.fqdn, "--reason", "bios upgrade"],
             )
 
-    def update_bios(self, redfish_host: Redfish, netbox_host: NetboxServer) -> None:
+    def update_bios(self, redfish_host: Redfish, netbox_host: NetboxServer) -> bool:
         """Update the bios to the latest version.
 
         Arguments:
@@ -748,11 +751,11 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_category,
         )
         if job_id is None:
-            return
+            return False
 
         self._reboot(redfish_host, netbox_host)
         self.poll_id(redfish_host, job_id, True)
-        self._check_version(redfish_host, target_version, driver_category)
+        return self._check_version(redfish_host, target_version, driver_category)
 
     def _get_members(self, redfish_host: Redfish, odata_id: str) -> List[str]:
         """Get a list of hw member odata.id's.
@@ -799,7 +802,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         redfish_host: Redfish,
         netbox_host: NetboxServer,
         driver_category: DellDriverCategory,
-    ) -> None:
+    ) -> bool:
         """Update a driver to the latest version.
 
         Arguments:
@@ -808,12 +811,13 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_category: The driver category to get
 
         """
+        status = True
         members = self._get_hw_members(redfish_host, driver_category)
         if not members:
             logger.info(
                 "%s: skipping %s as no members", netbox_host.fqdn, driver_category
             )
-            return
+            return True
 
         for member in members:
             latest_version, job_id = self._update(
@@ -824,13 +828,14 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                 odata_id=member,
             )
             if job_id is None:
-                return
+                status = False
+                continue
 
             self._reboot(redfish_host, netbox_host)
             self.poll_id(redfish_host, job_id, True)
-            self._check_version(
-                redfish_host, latest_version, driver_category, odata_id=member
-            )
+            if not self._check_version(redfish_host, latest_version, driver_category, odata_id=member):
+                status = False
+        return status
 
     def run(self):
         """Required by Spicerack API."""
@@ -847,6 +852,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             logger.info(
                 "%s (Gen %d): starting", netbox_host.fqdn, redfish_host.generation
             )
+            status = True
             initial_power_state = redfish_host.get_power_state()
             # Need to power the server on for any firmware updates
             manage_power = self.component != "idrac"
@@ -865,20 +871,20 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                     remote.wait_reboot_since(reboot_time, False)
 
             if self.component in (None, "bios"):
-                self.update_bios(redfish_host, netbox_host)
+                if not self.update_bios(redfish_host, netbox_host):
+                    status = False
 
             if self.component == "nic":
-                self.update_driver(
-                    redfish_host, netbox_host, DellDriverCategory.NETWORK
-                )
+                if not self.update_driver(redfish_host, netbox_host, DellDriverCategory.NETWORK):
+                    status = False
 
             if self.component == "storage":
-                self.update_driver(
-                    redfish_host, netbox_host, DellDriverCategory.STORAGE
-                )
+                if not self.update_driver(redfish_host, netbox_host, DellDriverCategory.STORAGE):
+                    status = False
 
             if (
                 initial_power_state == DellSCPPowerStatePolicy.OFF.value
                 and manage_power
             ):
                 redfish_host.chassis_reset(ChassisResetPolicy.FORCE_OFF)
+            return status
