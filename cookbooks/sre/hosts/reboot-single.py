@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.icinga import IcingaError
+from spicerack.puppet import PuppetHostsCheckError
+from wmflib.interactive import ask_input
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 logger = logging.getLogger(__name__)
@@ -43,6 +45,7 @@ class RebootSingleHost(CookbookBase):
                             help='An optional task ID to refer in the downtime message (i.e. T12345).')
         parser.add_argument('--depool', help='Whether to run depool/pool on the server around reboots.',
                             action='store_true')
+        parser.add_argument('--enable-puppet', help='Enable Puppet with a specific reason.')
         return parser
 
 
@@ -59,6 +62,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
         if len(self.remote_host) != 1:
             raise RuntimeError('Only a single server can be rebooted')
 
+        self.pool = False
         self.alerting_hosts = spicerack.alerting_hosts(self.remote_host.hosts)
         self.icinga_hosts = spicerack.icinga_hosts(self.remote_host.hosts)
         self.puppet = spicerack.puppet(self.remote_host)
@@ -72,7 +76,24 @@ class RebootSingleHostRunner(CookbookRunnerBase):
         else:
             self.phabricator = None
 
-        self.depool = args.depool
+        if args.enable_puppet is not None:
+            # try to enable puppet before we check if its disabled
+            self.puppet.enable(spicerack.admin_reason(args.enable_puppet), verbatim_reason=True)
+
+        try:
+            self.puppet.check_enabled()
+            self.puppet_enabled = True
+            self.depool = args.depool
+        except PuppetHostsCheckError as error:
+            self.puppet_enabled = False
+            logger.warning("Puppet is disabled we will not wait for a puppet run or monitoring: %s", error)
+            if args.pool:
+                answer = ask_input(
+                    "Puppet is disabled are you sure you want to manage the pool state",
+                    ("yes", "no")
+                )
+                if answer == 'yes':
+                    self.depool = True
 
     @property
     def runtime_description(self):
@@ -93,15 +114,16 @@ class RebootSingleHostRunner(CookbookRunnerBase):
             reboot_time = datetime.utcnow()
             self.remote_host.reboot()
             self.remote_host.wait_reboot_since(reboot_time, print_progress_bars=False)
-            self.puppet.wait_since(reboot_time)
 
-            try:
-                self.icinga_hosts.wait_for_optimal(skip_acked=True)
-            except IcingaError:
-                ret = 1
-                logger.error(
-                    "The host's status is not optimal according to Icinga, "
-                    "please check it.")
+            if self.puppet_enabled:
+                self.puppet.wait_since(reboot_time)
+                try:
+                    self.icinga_hosts.wait_for_optimal(skip_acked=True)
+                except IcingaError:
+                    ret = 1
+                    logger.error(
+                        "The host's status is not optimal according to Icinga, "
+                        "please check it.")
 
             if self.depool:
                 if ret == 0:
