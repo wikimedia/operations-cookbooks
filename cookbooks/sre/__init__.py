@@ -22,6 +22,7 @@ from wmflib.interactive import (
 )
 
 
+__title__ = __doc__
 # Shared SRE configuration for phabricator bot
 PHABRICATOR_BOT_CONFIG_FILE = '/etc/phabricator_ops-monitoring-bot.conf'
 logger = getLogger(__name__)
