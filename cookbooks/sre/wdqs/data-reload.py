@@ -1,7 +1,8 @@
 """WDQS data reload
 
 Usage example:
-    cookbook sre.wdqs.data-reload wdqs1010.eqiad.wmnet --reason 'fix issues' --task-id T12345
+    cookbook sre.wdqs.data-reload --reload-data wikidata --reason "bring new hosts into rotation" \
+    --task-id T301167 wdqs1004.eqiad.wmnet
 
 """
 
@@ -20,6 +21,7 @@ from cookbooks.sre.wdqs import check_hosts_are_valid, wait_for_updater, get_site
 
 __title__ = "WDQS data reload cookbook"
 logger = logging.getLogger(__name__)
+
 
 DUMPS = {
     'wikidata': {
@@ -72,8 +74,6 @@ def argument_parser():
     parser.add_argument('--depool', action='store_true', help='Should be depooled.')
     parser.add_argument('--reload-data', required=True, choices=['wikidata', 'categories', 'commons'],
                         help='Type of data to reload')
-    parser.add_argument('--kafka-timestamp', type=to_ms_timestamp,
-                        help='Timestamp to use for kafka consumer topic reset (in ms)')
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--reuse-downloaded-dump', action='store_true', help='Reuse downloaded dump')
@@ -128,6 +128,21 @@ def fail_for_disk_space(remote_host, dumps, journal_path):
         "disk_avail=`df --output=avail {journal_path} | tail -1` && "
         "test $(($dump_size*5/2)) -lt $(($disk_avail+$db_size))".format(
             dump_paths=dump_paths, journal_path=journal_path), is_safe=True)
+
+
+def extract_kafka_timestamp(remote_host, journal_type):
+    """Given a remote_host and journal type, parse and return the correct kafka timestamp."""
+    dump_path = DUMPS[journal_type]['path']
+    result = remote_host.run_sync(
+        "cat {} | bzip2 -d - | head -50 | grep '^wikibase:Dump' -A 5 | grep 'schema:dateModified' | "
+        "sed -e 's/^[[:space:]]\\+schema:dateModified *\"\\([0-9T:ZT.-]\\+\\)\"^^xsd:dateTime *; *$/\\1/'"
+        .format(dump_path)
+    )
+    results = next(result)
+    timestamp = list(results[1].lines())
+    logger.info('[extract_kafka_timestamp] found %s', timestamp)
+    # TODO later we validate the timestamp here (getting patch working first)
+    return timestamp
 
 
 def munge(dumps, remote_host):
@@ -187,7 +202,6 @@ def reload_wikidata(remote_host, puppet, kafka, timestamps, consumer_definition,
             'rm -fv /srv/wdqs/wikidata.jnl',
             'systemctl start wdqs-blazegraph',
         )
-
     logger.info('Loading wikidata dump')
     watch = StopWatch()
     remote_host.run_sync(
@@ -249,9 +263,14 @@ def run(args, spicerack):
     confctl = spicerack.confctl('node')
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
+    # Get and validate kafka timestamp
+    kafka_timestamp = extract_kafka_timestamp(remote_host, args.reload_data)
+    if args.reload_data in ['wikidata', 'commons'] and kafka_timestamp is None:
+        raise ValueError("We don't have a timestamp, automated timestamp extraction must have failed")
+
     def fetch_dumps(dumps, journal):
         if args.reuse_download_and_munge:
-            # It's not obvious how we would verify the munge is valid, this has
+            # It's not obvious how we would verify the munge is valid; this has
             # to take a "trust-the-operator" approach. This will still bail if
             # a munge path is missing
             remote_host.run_sync(*[
@@ -271,9 +290,6 @@ def run(args, spicerack):
         dumps = [DUMPS['commons']]
         fetch_dumps(dumps, '/srv/query_service/wcqs.jnl')
 
-    if args.reload_data in ['wikidata', 'commons'] and args.kafka_timestamp is None:
-        raise ValueError("--kafka-timestamp should be set when reloading commons or wikidata")
-
     @contextmanager
     def noop_change_and_revert():
         yield
@@ -290,7 +306,7 @@ def run(args, spicerack):
         prometheus = spicerack.prometheus()
         hostname = get_hostname(args.host)
         consumer_definition = ConsumerDefinition(get_site(hostname, spicerack), 'main', hostname)
-        reload_fn(remote_host, puppet, spicerack.kafka(), {mutation_topic: args.kafka_timestamp},
+        reload_fn(remote_host, puppet, spicerack.kafka(), {mutation_topic: kafka_timestamp},
                   consumer_definition, reason)
         logger.info('Data reload for blazegraph is complete. Waiting for updater to catch up')
         watch = StopWatch()
