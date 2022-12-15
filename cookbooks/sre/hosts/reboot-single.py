@@ -95,23 +95,16 @@ class RebootSingleHostRunner(CookbookRunnerBase):
             self.remote_host.wait_reboot_since(reboot_time, print_progress_bars=False)
             self.puppet.wait_since(reboot_time)
 
-            # First let's try to check if icinga is already in optimal state.
-            # If not, we require a recheck all service, then
-            # wait a grace period before declaring defeat.
-            icinga_ok = self.icinga_hosts.get_status().optimal
-            if not icinga_ok:
-                self.icinga_hosts.recheck_all_services()
-                try:
-                    self.icinga_hosts.wait_for_optimal()
-                    icinga_ok = True
-                except IcingaError:
-                    ret = 1
-                    logger.error(
-                        "The host's status is not optimal according to Icinga, "
-                        "please check it.")
+            try:
+                self.icinga_hosts.wait_for_optimal(skip_acked=True)
+            except IcingaError:
+                ret = 1
+                logger.error(
+                    "The host's status is not optimal according to Icinga, "
+                    "please check it.")
 
             if self.depool:
-                if icinga_ok:
+                if ret == 0:
                     self.remote_host.run_async('pool')
                 else:
                     logger.warning(
