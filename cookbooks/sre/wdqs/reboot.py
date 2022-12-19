@@ -33,7 +33,7 @@ def argument_parser():
     parser.add_argument('--task-id', help='task_id for the change')
     parser.add_argument('--downtime', type=int, default=1, help="Hours of downtime")
     parser.add_argument('--reason', required=True, help='Administrative Reason')
-    parser.add_argument('--depool', action='store_true', help='Should be depooled')
+    parser.add_argument('--no-depool', dest='depool', action='store_false', help='Don\'t pool/depool hosts')
 
     return parser
 
@@ -53,11 +53,11 @@ def run(args, spicerack):
 
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
-    for host in remote_hosts.hosts:
-        remote_host = remote.query(host)
+    for remote_host in remote_hosts.split(len(remote_hosts)):
 
         with spicerack.alerting_hosts(remote_host.hosts).downtimed(reason, duration=timedelta(hours=args.downtime)):
             if args.depool:
+                logger.info('Depool flag enabled => depooling host before reboot')
                 remote_host.run_sync('depool', 'sleep 120')
 
             # explicit shutdown of Blazegraph instance, to ensure they are not killed by systemd if taking too long
@@ -67,6 +67,10 @@ def run(args, spicerack):
             remote_host.reboot()
             remote_host.wait_reboot_since(reboot_time)
 
+            logger.info("Forcing puppet run after reboot:\n")
+            spicerack.puppet(remote_host).run()
+
             if args.depool:
                 wait_for_blazegraph(remote_host)
                 remote_host.run_sync('pool')
+                logger.info('Depool flag enabled => pooled host following reboot')
