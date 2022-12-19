@@ -26,6 +26,7 @@ class PoolDepoolCluster(CookbookBase):
     def argument_parser(self) -> ArgumentParser:
         """Parse the command line arguments for all the sre.discovery cookbooks."""
         parser = super().argument_parser()
+        parser.add_argument('--reason', required=False, help='Admin reason')
         actions = parser.add_subparsers(dest="action", help="The action to perform")
         action_check = actions.add_parser("check")
         action_pool = actions.add_parser("pool")
@@ -71,7 +72,9 @@ class PoolDepoolClusterRunner(CookbookRunnerBase):
             cluster_str = f"{self.args.datacenter}/{self.args.cluster}"
         else:
             cluster_str = self.args.cluster
-        return f"{self.args.action} {len(self.services)} in {cluster_str}: {self.admin_reason.reason}"
+
+        reason = self.args.reason if self.args.reason else "maintenance"
+        return f"{self.args.action} {len(self.services)} in {cluster_str}: {reason}"
 
     def get_services(self) -> List[Service]:
         """Return a list of all services running in a specific Kubernetes cluster"""
