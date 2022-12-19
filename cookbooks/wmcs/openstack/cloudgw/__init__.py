@@ -1,1 +1,0 @@
-"""Cloudnet related cookbooks"""

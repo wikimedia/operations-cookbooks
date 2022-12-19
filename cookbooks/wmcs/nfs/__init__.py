@@ -1,1 +1,0 @@
-"""WMCS NFS related cookbooks."""

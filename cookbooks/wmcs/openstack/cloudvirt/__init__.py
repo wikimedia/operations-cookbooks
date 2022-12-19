@@ -1,1 +1,0 @@
-"""WMCS cloudvirt related cookbooks."""

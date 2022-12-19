@@ -1,7 +1,3 @@
-# Cookbooks
+THIS BRANCH HAS BEEN MOVED TO https://gerrit.wikimedia.org/g/cloud/wmcs-cookbooks
 
-Collection of cookbooks to automate and orchestrate operations in the WMF infrastructure.
-
-The cookbooks will be executed by the `cookbook` entry point script of the `spicerack` package.
-
-See the related [Spicerack documentation](https://doc.wikimedia.org/spicerack/master/introduction.html#cookbooks-api).
+ANY NEW CHANGES SHOULD GO THERE.

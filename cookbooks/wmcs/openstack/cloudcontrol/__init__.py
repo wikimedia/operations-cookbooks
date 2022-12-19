@@ -1,1 +1,0 @@
-"""Cloudcontrol related cookbooks."""
