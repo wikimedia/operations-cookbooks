@@ -73,8 +73,13 @@ class PoolDepoolClusterRunner(CookbookRunnerBase):
         else:
             cluster_str = self.args.cluster
 
+        if len(self.services) == 1:
+            services_msg = self.services[0]
+        else:
+            services_msg = f'{len(self.services)} services'
+
         reason = self.args.reason if self.args.reason else "maintenance"
-        return f"{self.args.action} {len(self.services)} in {cluster_str}: {reason}"
+        return f"{self.args.action} {services_msg} in {cluster_str}: {reason}"
 
     def get_services(self) -> List[Service]:
         """Return a list of all services running in a specific Kubernetes cluster"""
@@ -94,6 +99,11 @@ class PoolDepoolClusterRunner(CookbookRunnerBase):
             try:
                 if not service.lvs.enabled:
                     continue
+                # The 'kubesvc' conftool settings are shared across
+                # multiple services, and they basically represent
+                # if a k8s node gets traffic from LVS or not.
+                # In this cookbook we are interested in the DNS discovery
+                # settings, so we don't touch the kubesvc config at all.
                 if service.lvs.conftool.service != "kubesvc":
                     continue
             except AttributeError:
