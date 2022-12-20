@@ -7,6 +7,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.service import Service
 from wmflib.constants import CORE_DATACENTERS
+from wmflib.interactive import ask_confirmation
 
 logger = logging.getLogger(__name__)
 
@@ -123,10 +124,63 @@ class PoolDepoolClusterRunner(CookbookRunnerBase):
             return 0
 
         # Get all discovery names (unique)
-        # FIXME: Should we make exceptions for active/passive services?
+        # We make an exception for active/passive services, since it is not
+        # always safe to perform automatic actions on them.
+        # Use cases:
+        # 1)   If a service does not have a discovery record set in Puppet's
+        #      service catalog, we can safely skip it.
+        # 2-1) If the action is 'check', we can safely proceed.
+        # 2-2) If the action is pool/depool and the service is listed as
+        #      active/active, then we have an indication that it should be safe
+        #      to proceed. The depool action in spicerack will check if the DC
+        #      is depoolable or not, so no extra safe check needed.
+        # 4)   If the action is pool/depool and the service is active/passive,
+        #      we shouldn't take any action automatically but just warn the operator.
+        #      We don't want to cause an outage due to operator mistakes.
         discovery_names = set()
         for service in self.services:
-            discovery_names.update([d.dnsdisc for d in service.discovery])
+            if not service.discovery:
+                logger.info("The service %s does not have a discovery "
+                            "configuration in the Puppet service catalog, skipping.",
+                            service.name)
+            elif self.args.action == "check" or service.discovery.active_active:
+                discovery_names.update([d.dnsdisc for d in service.discovery])
+            else:
+                other_site = service.discovery.site if service.discovery.site == "eqiad" else "codfw"
+
+                if self.args.action == "pool":
+                    confctl_commands = (
+                        "confctl --object-type discovery select "
+                        f"'dnsdisc={service.discovery.name},name={service.discovery.site}' set/pooled=true \n"
+                        "confctl --object-type discovery select "
+                        f"'dnsdisc={service.discovery.name},name={other_site}' set/pooled=false \n"
+                    )
+                else:
+                    confctl_commands = (
+                        "confctl --object-type discovery select "
+                        f"'dnsdisc={service.discovery.name},name={other_site}' set/pooled=true \n"
+                        "confctl --object-type discovery select "
+                        f"'dnsdisc={service.discovery.name},name={service.discovery.site}' set/pooled=false \n"
+                    )
+
+                logger.info(
+                    "The service %s is not listed as active/active "
+                    "in the Puppet service catalog. "
+                    "The cookbook requires a manual intervention from the operator "
+                    "to avoid any unwanted side effects. \n"
+                    "Execute the following commands on the puppetmaster. "
+                    "Verify the current status of the discovery record, namely "
+                    "which datacenter is pooled and which one is depooled. "
+                    "confctl --quiet --object-type discovery select 'dnsdisc=%s' get \n"
+                    "Following the cookbook's arguments, these are commands to execute "
+                    "(please make sure that they are consistent with the status outlined above "
+                    "before proceeding!): "
+                    "\n%s\n"
+                    "NOTE: please keep in mind that each DNS record has a TTL value, "
+                    "so any change will be reflected after the cache expires.",
+                    service.name, service.name, confctl_commands
+                )
+                ask_confirmation("Please confirm to have read the above before proceeding.")
 
         run_args = [self.args.action]
         if self.args.action in ("pool", "depool"):
