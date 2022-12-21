@@ -1,8 +1,13 @@
-"""Safely restart one or multiple services on application servers
+"""Safely restart one or multiple systemd services on application servers.
+
+This cookbook will depool and repool appservers from LVS pools nginx and apache2
+to restart services safely.
 
 Examples:
     Restart mcrouter and nutcracker on the appservers in codfw and eqiad:
         restart_appservers -c appserver -d eqiad codfw -- mcrouter nutcracker
+    Restart php7.4-fpm on the api appservers in eqiad (no more than 10% at a time):
+        restart_appservers -p 10% -c api_appserver -d eqiad -- php7.4-fpm
 
 """
 
@@ -16,7 +21,7 @@ from wmflib.constants import CORE_DATACENTERS
 # TODO: get this from a config file maybe?
 CLUSTERS = {
     'appserver': 'mw',
-    'appserver_api': 'mw-api',
+    'api_appserver': 'mw-api',
     'jobrunner': 'jobrunner'}
 
 # LVS pools that are affected by the service we're restarting.
