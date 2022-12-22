@@ -110,13 +110,17 @@ class DiscoveryServiceRouteRunner(CookbookRunnerBase):
             services_msg = f'{len(self.args.services)} services'
 
         reason = self.args.reason if self.args.reason else "maintenance"
-        return f"{self.args.action} {services_msg} in {self.args.datacenter}: {reason}"
+        if self.args.action == "check":
+            log_msg = f"{self.args.action} {services_msg}: {reason}"
+        else:
+            log_msg = f"{self.args.action} {services_msg} in {self.args.datacenter}: {reason}"
+        return log_msg
 
     def check(self):
         """Check the current state of the service in conftool and on authoritative DNS servers."""
         print('Expected routes:')
         for svc in self.args.services:
-            svc_active_dcs = self.active_dcs.get(svc, [])
+            svc_active_dcs = self.dnsdisc.active_datacenters.get(svc, [])
             route = ','.join(sorted(svc_active_dcs))
             print('{service}: {route}'.format(service=svc, route=route))
             for dc in CORE_DATACENTERS:
