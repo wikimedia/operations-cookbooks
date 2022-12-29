@@ -1,8 +1,13 @@
 """WDQS data reload
 
 Usage example:
+    # for lvs-managed hosts
     cookbook sre.wdqs.data-reload --reload-data wikidata --reason "bring new hosts into rotation" \
     --task-id T301167 wdqs1004.eqiad.wmnet
+
+    # hosts not managed by lvs (note the --no-depool flag)
+    cookbook sre.wdqs.data-reload --no-depool --reload-data wikidata \
+    --reason "reloading on test host" --task-id T301167 wdqs1009.eqiad.wmnet
 
 
 """
@@ -69,7 +74,7 @@ def argument_parser():
     parser.add_argument('--proxy-server', help='Specify proxy server to use')
     parser.add_argument('--reason', required=True, help='Administrative Reason')
     parser.add_argument('--downtime', type=int, default=336, help='Hour(s) of downtime')
-    parser.add_argument('--depool', action='store_true', help='Should be depooled.')
+    parser.add_argument('--no-depool', action='store_true', help='Don\'t depool host (use for non-lvs-managed hosts)')
     parser.add_argument('--reload-data', required=True, choices=['wikidata', 'categories', 'commons'],
                         help='Type of data to reload')
     return parser
@@ -253,10 +258,10 @@ def run(args, spicerack):
     def change_and_revert():
         return confctl.change_and_revert('pooled', True, False, name=remote_host.hosts[0])
 
-    if args.depool:
-        depool_host = change_and_revert
-    else:
+    if args.no_depool:
         depool_host = noop_change_and_revert
+    else:
+        depool_host = change_and_revert
 
     def reload_wikibase(reload_fn, mutation_topic):
         prometheus = spicerack.prometheus()

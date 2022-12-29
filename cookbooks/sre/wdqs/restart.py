@@ -41,7 +41,7 @@ def argument_parser():
     parser.add_argument('--task-id', help='task id for the change')
     parser.add_argument('--reason', required=True, help='Administrative Reason')
     parser.add_argument('--downtime', type=int, default=1, help="Hour(s) of downtime")
-    parser.add_argument('--depool', action='store_true', help='This cluster does not use LVS.')
+    parser.add_argument('--no-depool', action='store_true', help='Don\'t depool host (use for non-lvs-managed hosts)')
 
     return parser
 
@@ -59,9 +59,9 @@ def run(args, spicerack):
     with alerting_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
         with puppet.disabled(reason):
             base_commands = RESTART[host_kind]
-            if args.depool:
-                commands = ['depool', 'sleep 180', *base_commands, 'pool']
-            else:
+            if args.no_depool:
                 commands = base_commands
+            else:
+                commands = ['depool', 'sleep 180', *base_commands, 'pool']
 
             remote_hosts.run_async(*commands, batch_size=1)

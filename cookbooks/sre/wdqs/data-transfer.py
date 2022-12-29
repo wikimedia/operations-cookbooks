@@ -6,7 +6,7 @@ Usage example for hosts behind lvs:
 
 Usage example for test hosts:
     cookbook sre.wdqs.data-transfer --source wdqs1009.eqiad.wmnet --dest wdqs1010.eqiad.wmnet
-     --reason "moving away from legacy updater" --without-lvs --blazegraph_instance wikidata --task-id T12345
+     --reason "moving away from legacy updater" --no-depool --blazegraph_instance wikidata --task-id T12345
 
 """
 import argparse
@@ -61,7 +61,7 @@ def argument_parser():
     parser.add_argument('--reason', required=True, help='Administrative Reason')
     parser.add_argument('--downtime', type=int, default=6, help="Hours of downtime")
     parser.add_argument('--task-id', help='task_id for the change')
-    parser.add_argument('--without-lvs', action='store_false', dest='with_lvs', help='This cluster does not use LVS.')
+    parser.add_argument('--no-depool', action='store_false', dest='depool', help='Do not depool host')
 
     return parser
 
@@ -177,7 +177,7 @@ def run(args, spicerack):
 
     with alerting_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
         with puppet.disabled(reason):
-            if args.with_lvs:
+            if args.depool:
                 logger.info('depooling %s', remote_hosts)
                 remote_hosts.run_sync('depool')
                 sleep(180)
