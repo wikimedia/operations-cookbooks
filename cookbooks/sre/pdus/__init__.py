@@ -80,6 +80,7 @@ def check_default(pdu, session):
     Arguments:
         pdu (str): the pdu
         session (requests.Session): A configured request session
+
     Returns:
         bool: indicating if the default password is in use
 
