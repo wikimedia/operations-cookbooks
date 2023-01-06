@@ -1,48 +1,50 @@
 """WDQS data reload
 
 Usage example:
+    (fresh wikidata reload)
     cookbook sre.wdqs.data-reload --reload-data wikidata --reason "bring new hosts into rotation" \
     --task-id T301167 wdqs1004.eqiad.wmnet
 
+    (wikidata reload after previous failure *after* munging)
+    cookbook sre.wdqs.data-reload --reload-data wikidata --reason "bring new hosts into rotation" \
+    --task-id T301167 --reuse-munge wdqs1004.eqiad.wmnet
 """
 
 import argparse
 import logging
-import os
 
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 import dateutil.parser
 
 from spicerack.kafka import ConsumerDefinition
-from spicerack.remote import RemoteExecutionError
 
 from cookbooks.sre.wdqs import check_hosts_are_valid, wait_for_updater, get_site, MUTATION_TOPICS, get_hostname
 
 __title__ = "WDQS data reload cookbook"
 logger = logging.getLogger(__name__)
 
-
-DUMPS = {
+NFS_DUMPS = {
     'wikidata': {
-        'url': 'https://dumps.wikimedia.your.org/wikidatawiki/entities/latest-all.ttl.bz2',
+        'read_path': '/mnt/nfs/dumps-clouddumps1001.wikimedia.org/'
+                     'wikidatawiki/entities/20230102/wikidata-20230102-all-BETA.ttl.bz2',
         'munge_path': '/srv/wdqs/munged',
-        'path': '/srv/wdqs/latest-all.ttl.bz2',
     },
     'lexeme': {
-        'url': 'https://dumps.wikimedia.your.org/wikidatawiki/entities/latest-lexemes.ttl.bz2',
+        'read_path': '/mnt/nfs/dumps-clouddumps1001.wikimedia.org/'
+                     'wikidatawiki/entities/20230106/wikidata-20230106-lexemes-BETA.ttl.bz2',
         'munge_path': '/srv/wdqs/lex-munged',
-        'path': '/srv/wdqs/latest-lexemes.ttl.bz2',
     },
     'commons': {
-        'url': 'https://dumps.wikimedia.your.org/commonswiki/entities/latest-mediainfo.ttl.bz2',
+        'read_path': '/mnt/nfs/dumps-clouddumps1001.wikimedia.org/commonswiki/entities',
         'munge_path': '/srv/query_service/munged',
-        'munge_jar_args': '--wikibaseHost commons.wikimedia.org'
+        'munge_jar_args': ' --wikibaseHost commons.wikimedia.org'
                           ' --conceptUri http://www.wikidata.org'
                           ' --commonsUri https://commons.wikimedia.org',
-        'path': '/srv/query_service/latest-mediainfo.ttl.bz2',
     }
 }
+
+KAFKA_TIMESTAMP_FILEPATH = '/srv/wdqs/last_observed.timestamp'
 
 
 class StopWatch:
@@ -74,11 +76,9 @@ def argument_parser():
     parser.add_argument('--depool', action='store_true', help='Should be depooled.')
     parser.add_argument('--reload-data', required=True, choices=['wikidata', 'categories', 'commons'],
                         help='Type of data to reload')
-
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--reuse-downloaded-dump', action='store_true', help='Reuse downloaded dump')
-    group.add_argument('--reuse-download-and-munge', action='store_true',
-                       help='Reuse downloaded dump and resulting munge. WARNING: Does not perform sanity checks.')
+    parser.add_argument('--reuse-munge', action='store_true',
+                        help='Reuse munge (use if previous reload failed after munging completed).'
+                        'WARNING: Does not perform sanity checks.')
 
     return parser
 
@@ -92,54 +92,13 @@ def to_ms_timestamp(time_str: str) -> int:
     return int(dt.timestamp() * 1000)
 
 
-def get_dumps(dumps, remote_host, proxy_server, reuse_dump):
-    """Use dump file if present else download file."""
-    if proxy_server:
-        curl_command = "curl -x {proxy_server}".format(proxy_server=proxy_server)
-    else:
-        curl_command = "curl"
-
-    for dump in dumps:
-        if reuse_dump:
-            try:
-                remote_host.run_sync("test -f {path}".format(path=dump['path']), is_safe=True)
-                logger.info('Detected dump (%s). Skipping download', dump['path'])
-                continue
-            except RemoteExecutionError:
-                logger.info('Dump (%s) not found', dump['path'])
-
-        file = os.path.basename(dump['path'])
-        logger.info('Downloading (%s)', file)
-        watch = StopWatch()
-        remote_host.run_sync(
-            "{curl_command} {url} -o {path}".format(
-                curl_command=curl_command, url=dump['url'], path=dump['path'])
-        )
-        logger.info('Downloaded %s in %s', file, watch.elapsed())
-
-
-def fail_for_disk_space(remote_host, dumps, journal_path):
-    """Available disk space must be 2.5x greater than dump file."""
-    logger.info("checking available disk space")
-    dump_paths = ' '.join(dump['path'] for dump in dumps)
-    remote_host.run_sync(
-        "dump_size=`du --total {dump_paths} | tail -n 1 | cut -f1` && "
-        "db_size=`du {journal_path} | cut -f1` && "
-        "disk_avail=`df --output=avail {journal_path} | tail -1` && "
-        "test $(($dump_size*5/2)) -lt $(($disk_avail+$db_size))".format(
-            dump_paths=dump_paths, journal_path=journal_path), is_safe=True)
-
-
 def extract_kafka_timestamp(remote_host, journal_type):
     """Given a remote_host and journal type, parse and return the correct kafka timestamp."""
-    dump_path = DUMPS[journal_type]['path']
-    result = remote_host.run_sync(
-        "cat {} | bzip2 -d - | head -50 | grep '^wikibase:Dump' -A 5 | grep 'schema:dateModified' | "
-        "sed -e 's/^[[:space:]]\\+schema:dateModified *\"\\([0-9T:ZT.-]\\+\\)\"^^xsd:dateTime *; *$/\\1/'"
-        .format(dump_path)
-    )
-    results = next(result)
-    timestamp = list(results[1].lines())
+    dump_path = NFS_DUMPS[journal_type]['read_path']
+    cmd = "bzcat {} | head -50 | grep '^wikibase:Dump' -A 5 | grep 'schema:dateModified'".format(dump_path)
+
+    status = next(remote_host.run_sync(cmd))
+    timestamp = str(list(status[1].lines())).split('"')[1]
     logger.info('[extract_kafka_timestamp] found %s', timestamp)
     # TODO later we validate the timestamp here (getting patch working first)
     return timestamp
@@ -155,16 +114,16 @@ def munge(dumps, remote_host):
         remote_host.run_sync(
             "rm -rf {munge_path} && mkdir -p {munge_path} && bzcat {path} | "
             "/srv/deployment/wdqs/wdqs/munge.sh -f - -d {munge_path} -- --skolemize {munge_jar_args}"
-            .format(path=dump['path'],
+            .format(path=dump['read_path'],
                     munge_path=dump['munge_path'],
                     munge_jar_args=dump.get('munge_jar_args', ''))
         )
         logger.info('munging %s completed in %s', dump['munge_path'], stop_watch.elapsed())
 
 
-def reload_commons(remote_host, puppet, kafka, timestamps, consumer_definition, reason):
+def reload_commons(remote_host, puppet, kafka, timestamp, consumer_definition, reason):
     """Execute commands on host to reload commons data."""
-    logger.info('Prepare to load commons data for blazegraph')
+    logger.info('Preparing to load commons data for blazegraph')
     with puppet.disabled(reason):
         remote_host.run_sync(
             'rm -fv /srv/query_service/data_loaded',
@@ -180,20 +139,21 @@ def reload_commons(remote_host, puppet, kafka, timestamps, consumer_definition, 
         'sleep 60',
         'test -f /srv/query_service/wcqs.jnl',
         "bash /srv/deployment/wdqs/wdqs/loadData.sh -n wcq -d {munge_path}".format(
-            munge_path=DUMPS['commons']['munge_path']
+            munge_path=NFS_DUMPS['commons']['munge_path']
         )
     )
     logger.info('Commons dump loaded in %s', watch.elapsed())
-    kafka.set_consumer_position_by_timestamp(consumer_definition, timestamps)
+    kafka.set_consumer_position_by_timestamp(consumer_definition, timestamp)
+    logger.info('Set kafka consumer position to %s', timestamp)
     remote_host.run_sync(
         'touch /srv/query_service/data_loaded',
         'systemctl start wcqs-updater'
     )
 
 
-def reload_wikidata(remote_host, puppet, kafka, timestamps, consumer_definition, reason):
+def reload_wikidata(remote_host, puppet, kafka, timestamp, consumer_definition, reason):
     """Execute commands on host to reload wikidata data."""
-    logger.info('Prepare to load wikidata data for blazegraph')
+    logger.info('Preparing to load wikidata data for blazegraph')
     with puppet.disabled(reason):
         remote_host.run_sync(
             'rm -fv /srv/wdqs/data_loaded',
@@ -208,7 +168,7 @@ def reload_wikidata(remote_host, puppet, kafka, timestamps, consumer_definition,
         'sleep 60',
         'test -f /srv/wdqs/wikidata.jnl',
         "bash /srv/deployment/wdqs/wdqs/loadData.sh -n wdq -d {munge_path}".format(
-            munge_path=DUMPS['wikidata']['munge_path']
+            munge_path=NFS_DUMPS['wikidata']['munge_path']
         )
     )
     logger.info('Wikidata dump loaded in %s', watch.elapsed())
@@ -216,12 +176,13 @@ def reload_wikidata(remote_host, puppet, kafka, timestamps, consumer_definition,
     watch.reset()
     remote_host.run_sync(
         "bash /srv/deployment/wdqs/wdqs/loadData.sh -n wdq -d {munge_path}".format(
-            munge_path=DUMPS['lexeme']['munge_path']
+            munge_path=NFS_DUMPS['lexeme']['munge_path']
         )
     )
     logger.info('Lexeme dump loaded in %s', watch.elapsed())
     logger.info('Performing final steps')
-    kafka.set_consumer_position_by_timestamp(consumer_definition, timestamps)
+    kafka.set_consumer_position_by_timestamp(consumer_definition, timestamp)
+    logger.info('Set kafka consumer position to %s', timestamp)
     remote_host.run_sync(
         'touch /srv/wdqs/data_loaded',
         'systemctl start wdqs-updater'
@@ -263,32 +224,29 @@ def run(args, spicerack):
     confctl = spicerack.confctl('node')
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
-    # Get and validate kafka timestamp
-    kafka_timestamp = extract_kafka_timestamp(remote_host, args.reload_data)
+    # Get and validate kafka timestamp if not reusing munge
+    kafka_timestamp = ''
+    if args.reuse_munge:
+        results = next(remote_host.run_sync(
+                       'cat {}'.format(KAFKA_TIMESTAMP_FILEPATH)))
+        kafka_timestamp = results[1].message()
+        logger.info('Reusing previously written timestamp of %s', kafka_timestamp)
+    else:
+        kafka_timestamp = extract_kafka_timestamp(remote_host, args.reload_data)
+        # Write observed timestamp to file
+        remote_host.run_sync('echo {} > {}'.format(kafka_timestamp, KAFKA_TIMESTAMP_FILEPATH))
+        logger.info('Wrote timestamp of %s to %s', kafka_timestamp, KAFKA_TIMESTAMP_FILEPATH)
+
     if args.reload_data in ['wikidata', 'commons'] and kafka_timestamp is None:
         raise ValueError("We don't have a timestamp, automated timestamp extraction must have failed")
 
-    def fetch_dumps(dumps, journal):
-        if args.reuse_download_and_munge:
-            # It's not obvious how we would verify the munge is valid; this has
-            # to take a "trust-the-operator" approach. This will still bail if
-            # a munge path is missing
-            remote_host.run_sync(*[
-                f'test -d {dump["munge_path"]}'
-                for dump in dumps
-            ])
-            return
-        get_dumps(dumps, remote_host, args.proxy_server, args.reuse_downloaded_dump)
-        fail_for_disk_space(remote_host, dumps, journal)
+    if 'wikidata' == args.reload_data and not args.reuse_munge:
+        dumps = [NFS_DUMPS['wikidata'], NFS_DUMPS['lexeme']]
         munge(dumps, remote_host)
 
-    dumps = []
-    if 'wikidata' == args.reload_data:
-        dumps = [DUMPS['wikidata'], DUMPS['lexeme']]
-        fetch_dumps(dumps, '/srv/wdqs/wikidata.jnl')
-    if 'commons' == args.reload_data:
-        dumps = [DUMPS['commons']]
-        fetch_dumps(dumps, '/srv/query_service/wcqs.jnl')
+    if 'commons' == args.reload_data and not args.reuse_munge:
+        dumps = [NFS_DUMPS['commons']]
+        munge(dumps, remote_host)
 
     @contextmanager
     def noop_change_and_revert():
@@ -322,8 +280,3 @@ def run(args, spicerack):
                 reload_wikibase(reload_wikidata, MUTATION_TOPICS['wikidata'])
             elif 'commons' == args.reload_data:
                 reload_wikibase(reload_commons, MUTATION_TOPICS['commons'])
-
-    if dumps:
-        logger.info('Cleaning up downloads')
-        dump_paths = " ".join(dump['path'] for dump in dumps)
-        remote_host.run_sync("rm {dump_paths}".format(dump_paths=dump_paths))
