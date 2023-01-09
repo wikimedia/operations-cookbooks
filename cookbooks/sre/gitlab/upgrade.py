@@ -61,7 +61,6 @@ class UpgradeRunner(CookbookRunnerBase):
 
     def __init__(self, args, spicerack):
         """Initiliaze the provision runner."""
-        super().__init__(args, spicerack)
         ensure_shell_is_durable()
         self.remote_host = spicerack.remote().query(f'{args.host}.*')
         if len(self.remote_host) != 1:
