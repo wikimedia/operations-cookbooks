@@ -66,7 +66,7 @@ class UpgradeRunner(CookbookRunnerBase):
         if len(self.remote_host) != 1:
             RuntimeError(f"Found the following hosts: {self.remote_host} for query {args.host}."
                          "Query must return 1 host.")
-        self.alerting_hosts = spicerack.alerting_hosts(self.remote_host)
+        self.alerting_hosts = spicerack.alerting_hosts(self.remote_host.hosts)
         self.task_id = args.task_id
         self.reason = args.reason
         self.url = self.get_gitlab_url()
