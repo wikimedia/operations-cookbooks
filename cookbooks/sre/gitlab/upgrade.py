@@ -104,7 +104,7 @@ class UpgradeRunner(CookbookRunnerBase):
         for _, output in results:
             lines = output.message().decode()
             for line in lines.splitlines():
-                return line.split('/')[2]
+                return line.split('"')[1]
 
     def fail_for_disk_space(self):
         """Available disk space must be above DISK_LOW_THRESHOLD."""
