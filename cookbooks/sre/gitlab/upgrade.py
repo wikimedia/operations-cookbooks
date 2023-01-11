@@ -68,7 +68,7 @@ class UpgradeRunner(CookbookRunnerBase):
                          "Query must return 1 host.")
         self.alerting_hosts = spicerack.alerting_hosts(self.remote_host.hosts)
         self.task_id = args.task_id
-        self.reason = args.reason
+        self.admin_reason = spicerack.admin_reason(args.reason)
         self.url = self.get_gitlab_url()
         self.version = args.version
 
@@ -89,7 +89,7 @@ class UpgradeRunner(CookbookRunnerBase):
         self.preload_debian_package()
         self.fail_for_background_migrations()
         paused_runners = self.pause_runners()
-        with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=15)):
+        with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=15)):
             self.install_debian_package()
         self.unpause_runners(paused_runners)
 
