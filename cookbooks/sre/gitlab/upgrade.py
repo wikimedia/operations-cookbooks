@@ -14,7 +14,7 @@ from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 
 BACKUP_PATH = "/srv/gitlab-backup"
-DISK_LOW_THRESHOLD = 30
+DISK_HIGH_THRESHOLD = 70
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ class UpgradeRunner(CookbookRunnerBase):
                 return line.split('"')[1]
 
     def fail_for_disk_space(self):
-        """Available disk space must be above DISK_LOW_THRESHOLD."""
+        """Available disk space must be below DISK_HIGH_THRESHOLD."""
         logger.info('Checking available disk space')
         results = self.remote_host.run_sync(f"df --output=pcent {BACKUP_PATH} | tail -n1", is_safe=True)
         for _, output in results:
@@ -115,7 +115,7 @@ class UpgradeRunner(CookbookRunnerBase):
             for line in lines.splitlines():
                 disk_usage = line.strip(' %')
                 if re.match("[0-9]{1,3}", disk_usage):
-                    if int(disk_usage) > DISK_LOW_THRESHOLD:
+                    if int(disk_usage) < DISK_HIGH_THRESHOLD:
                         break
                     raise RuntimeError(f"Not enough disk space in: {BACKUP_PATH}")
                 raise RuntimeError(f"unable to extract free space from: {BACKUP_PATH}")
