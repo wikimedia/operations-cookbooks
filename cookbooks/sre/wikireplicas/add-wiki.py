@@ -46,7 +46,7 @@ def run(args, spicerack):
     control_host = next(cloudcontrol.split(len(cloudcontrol)))
 
     index_cmd = f"/usr/local/sbin/maintain-replica-indexes --database {args.database}"
-    view_cmd = f"/usr/local/sbin/maintain-views --databases {args.database}"
+    view_cmd = f"/usr/local/sbin/maintain-views --replace-all --databases {args.database}"
     meta_p_cmd = f"/usr/local/sbin/maintain-meta_p --databases {args.database}"
     wiki_dns_cmd = "source /root/novaenv.sh; wmcs-wikireplica-dns --aliases"
     logger.info("Generating views...")
