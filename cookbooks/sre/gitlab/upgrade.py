@@ -165,7 +165,8 @@ class UpgradeRunner(CookbookRunnerBase):
             logger.info('Paused %s runner', runner.id)
         return active_runners
 
-    @retry(tries=20, delay=timedelta(seconds=10), backoff_mode='constant', exceptions=(RemoteExecutionError,))
+    @retry(tries=20, delay=timedelta(seconds=10), backoff_mode='constant',
+           exceptions=(gitlab.exceptions.GitlabUpdateError, gitlab.exceptions.GitlabHttpError,))
     def unpause_runners(self, paused_runners):
         """Unpause a list of runners"""
         for runner in paused_runners:
