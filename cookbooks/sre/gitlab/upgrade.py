@@ -82,6 +82,13 @@ class UpgradeRunner(CookbookRunnerBase):
 
         self.fail_for_disk_space()
 
+        self.message = f'on GitLab host {self.remote_host} with reason: {args.reason}'
+
+    @property
+    def runtime_description(self):
+        """Return a nicely formatted string that represents the cookbook action."""
+        return self.message
+
     def run(self):
         """Run the cookbook."""
         self.create_data_backup()
