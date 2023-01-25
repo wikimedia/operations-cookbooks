@@ -165,7 +165,7 @@ class UpgradeRunner(CookbookRunnerBase):
 
     def pause_runners(self):
         """Pause all active runners"""
-        active_runners = self.gitlab_instance.runners.all(scope='active', get_all=True)
+        active_runners = self.gitlab_instance.runners.all(scope='active', all=True)
         for runner in active_runners:
             runner.paused = True
             runner.save()
