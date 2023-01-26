@@ -584,6 +584,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         current_version = self.get_version(
             redfish_host, driver_category, odata_id=odata_id
         )
+        logger.info("%s (%s): current version: %s", netbox_host.fqdn, driver_category.name, current_version)
 
         select_firmwarefile = (
             self._cached_select_firmwarefile
@@ -751,6 +752,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_category,
         )
         if job_id is None:
+            logger.error('%s: no job_id for BIOS update', netbox_host.fqdn)
             return False
 
         self._reboot(redfish_host, netbox_host)
@@ -812,9 +814,10 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         status = True
-        if self.get_idrac_version(redfish_host) < version.Version('4'):
-            logger.error('iDRAC version (%s) is too low to preform driver upgrades.  '
-                         'please upgrade iDRAC first')
+        idrac_version = self.get_idrac_version(redfish_host)
+        if idrac_version < version.Version('4'):
+            logger.error('%s: iDRAC version (%s) is too low to preform driver upgrades.  '
+                         'please upgrade iDRAC first', netbox_host.fqdn, idrac_version)
             return False
         members = self._get_hw_members(redfish_host, driver_category)
         if not members:
@@ -832,6 +835,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                 odata_id=member,
             )
             if job_id is None:
+                logger.error('%s: no job_id for member (%s)', netbox_host.fqdn, member)
                 status = False
                 continue
 
@@ -892,4 +896,5 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                 and manage_power
             ):
                 redfish_host.chassis_reset(ChassisResetPolicy.FORCE_OFF)
-            return status
+            # cookbooks should exit with an int
+            return int(not status)
