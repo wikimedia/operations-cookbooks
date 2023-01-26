@@ -109,9 +109,9 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
         # DHCP automation
         try:
-            self.dhcp_hosts = self.remote.query(f'A:installserver-light and A:{self.netbox_data["site"]["slug"]}')
+            self.dhcp_hosts = self.remote.query(f'A:installserver and A:{self.netbox_data["site"]["slug"]}')
         except RemoteError:  # Fallback to eqiad's install server if the above fails, i.e. for a new DC
-            self.dhcp_hosts = self.remote.query('A:installserver-light and A:eqiad')
+            self.dhcp_hosts = self.remote.query('A:installserver and A:eqiad')
 
         self.dhcp = spicerack.dhcp(self.dhcp_hosts)
         self.dhcp_config = DHCPConfMgmt(
