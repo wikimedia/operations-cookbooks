@@ -1,6 +1,7 @@
 """Decommission a host from all inventories."""
 import logging
 
+from argparse import ArgumentTypeError
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
@@ -50,6 +51,12 @@ class FirmwareUpgrade(CookbookBase):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument(
+            "--no-reboot",
+            help="don't perform any reboots. Updates will not be installed unless the user preforms a manual reboot",
+            action="store_true",
+            default=False,
+        )
+        parser.add_argument(
             "--disable-cached-answers",
             help=(
                 "By default this cookbook caches the answers for firmware selection.  "
@@ -87,6 +94,7 @@ class FirmwareUpgrade(CookbookBase):
             "-c",
             "--component",
             help="force a specific type of upgrade: %(choices)s",
+            action='append',
             choices=("bios", "idrac", "nic", "storage"),
         )
         parser.add_argument(
@@ -115,9 +123,14 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             if args.firmware_store
             else Path(config["firmware_store"])
         )
+        self.no_reboot = args.no_reboot
         self.force = args.force
         self.yes = args.yes
-        self.component = args.component
+        self.component = {"idrac", "bios"} if args.component is None else set(args.component)
+        if len(self.component - {"idrac"}) > 1 and self.no_reboot:
+            raise ArgumentTypeError(
+                'Argument --no-reboot is only compatible when upgrading one driver at a time'
+            )
         self.new = args.new
         self.cache_answers = not args.disable_cached_answers
 
@@ -274,11 +287,19 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         """
         try:
             controler_key, version_key = {
-                DellDriverCategory.NETWORK: ("Controllers", "FirmwarePackageVersion",),
-                DellDriverCategory.STORAGE: ("StorageControllers", "FirmwareVersion",)
+                DellDriverCategory.NETWORK: (
+                    "Controllers",
+                    "FirmwarePackageVersion",
+                ),
+                DellDriverCategory.STORAGE: (
+                    "StorageControllers",
+                    "FirmwareVersion",
+                ),
             }[driver_category]
         except KeyError as error:
-            raise ValueError(f"{redfish_host.hostname}: {driver_category} not supported") from error
+            raise ValueError(
+                f"{redfish_host.hostname}: {driver_category} not supported"
+            ) from error
         data = redfish_host.request("get", odata_id).json()
         # Lets see if this is generic enough to work for more then just nics
         odata_version = data[controler_key][0][version_key]
@@ -333,7 +354,9 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         idrac_version = redfish_host.request(
             "get", "/redfish/v1/Managers/iDRAC.Embedded.1?$select=FirmwareVersion"
         ).json()["FirmwareVersion"]
-        logger.debug("%s: idrac current version %s", redfish_host.hostname, idrac_version)
+        logger.debug(
+            "%s: idrac current version %s", redfish_host.hostname, idrac_version
+        )
         return version.parse(idrac_version)
 
     # TODO: consider moving to spicerack.redfish
@@ -473,7 +496,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         try:
             return redfish_host.poll_task(job_id)
         except RedfishError:
-            # Some older version oif idrac reboot before returning the result
+            # Some older version of idrac reboot before returning the result
             if not with_reboot:
                 raise
             print("iDrac restarting")
@@ -540,7 +563,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         current_files = sorted(
             filter(Path.is_file, firmware_dir.iterdir()),
             key=lambda f: f.stat().st_mtime,
-            reverse=True
+            reverse=True,
         )
         if not current_files:
             return self.get_latest(product_slug, driver_type, driver_category)
@@ -584,7 +607,12 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         current_version = self.get_version(
             redfish_host, driver_category, odata_id=odata_id
         )
-        logger.info("%s (%s): current version: %s", netbox_host.fqdn, driver_category.name, current_version)
+        logger.info(
+            "%s (%s): current version: %s",
+            netbox_host.fqdn,
+            driver_category.name,
+            current_version,
+        )
 
         select_firmwarefile = (
             self._cached_select_firmwarefile
@@ -711,10 +739,19 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         status = self._check_version(redfish_host, target_version, driver_category)
         payload = {'Attributes': {'WebServer.1.HostHeaderCheck': 'Disabled'}}
         try:
-            redfish_host.request('patch', '/redfish/v1/Managers/iDRAC.Embedded.1/Attributes', json=payload)
+            redfish_host.request(
+                'patch',
+                '/redfish/v1/Managers/iDRAC.Embedded.1/Attributes',
+                json=payload,
+            )
         except RedfishError as error:
-            logger.error('%s: Failed to update HostHeaderCheck: %s', redfish_host, error)
-            logger.error('%s: You may need to run: `racadm set idrac.webserver.HostHeaderCheck 0`', redfish_host)
+            logger.error(
+                '%s: Failed to update HostHeaderCheck: %s', redfish_host, error
+            )
+            logger.error(
+                '%s: You may need to run: `racadm set idrac.webserver.HostHeaderCheck 0`',
+                redfish_host,
+            )
         return status
 
     def _reboot(self, redfish_host: Redfish, netbox_host: NetboxServer) -> None:
@@ -755,6 +792,9 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             logger.error('%s: no job_id for BIOS update', netbox_host.fqdn)
             return False
 
+        if self.no_reboot:
+            return True
+
         self._reboot(redfish_host, netbox_host)
         self.poll_id(redfish_host, job_id, True)
         return self._check_version(redfish_host, target_version, driver_category)
@@ -790,14 +830,17 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         try:
             return {
                 DellDriverCategory.NETWORK: self._get_members(
-                    redfish_host, "/redfish/v1/Chassis/System.Embedded.1/NetworkAdapters"
+                    redfish_host,
+                    "/redfish/v1/Chassis/System.Embedded.1/NetworkAdapters",
                 ),
                 DellDriverCategory.STORAGE: self._get_members(
                     redfish_host, '/redfish/v1/Systems/System.Embedded.1/Storage'
-                )
+                ),
             }[driver_category]
         except KeyError as error:
-            raise RuntimeError(f"{redfish_host.hostname}: unsupported device catagory {driver_category}") from error
+            raise RuntimeError(
+                f"{redfish_host.hostname}: unsupported device catagory {driver_category}"
+            ) from error
 
     def update_driver(
         self,
@@ -816,8 +859,12 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         status = True
         idrac_version = self.get_idrac_version(redfish_host)
         if idrac_version < version.Version('4'):
-            logger.error('%s: iDRAC version (%s) is too low to preform driver upgrades.  '
-                         'please upgrade iDRAC first', netbox_host.fqdn, idrac_version)
+            logger.error(
+                '%s: iDRAC version (%s) is too low to preform driver upgrades.  '
+                'please upgrade iDRAC first',
+                netbox_host.fqdn,
+                idrac_version,
+            )
             return False
         members = self._get_hw_members(redfish_host, driver_category)
         if not members:
@@ -839,9 +886,14 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                 status = False
                 continue
 
+            if self.no_reboot:
+                continue
+
             self._reboot(redfish_host, netbox_host)
             self.poll_id(redfish_host, job_id, True)
-            if not self._check_version(redfish_host, latest_version, driver_category, odata_id=member):
+            if not self._check_version(
+                redfish_host, latest_version, driver_category, odata_id=member
+            ):
                 status = False
         return status
 
@@ -863,9 +915,14 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             status = True
             initial_power_state = redfish_host.get_power_state()
             # Need to power the server on for any firmware updates
-            manage_power = self.component != "idrac"
+            manage_power = len(self.component) > 1 or self.component != {"idrac"}
 
-            if self.component in (None, "idrac"):
+            if "idrac" in self.component:
+                if self.no_reboot:
+                    logger.warning(
+                        "%s: idrac updates will restart the idrac card regardless of the --no-reboot flags",
+                        netbox_host.fqdn,
+                    )
                 self.update_idrac(redfish_host, netbox_host)
 
             if (
@@ -879,17 +936,27 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                     remote = self.spicerack.remote().query(netbox_host.fqdn)
                     remote.wait_reboot_since(reboot_time, False)
 
-            if self.component in (None, "bios"):
+            if "bios" in self.component:
                 if not self.update_bios(redfish_host, netbox_host):
                     status = False
 
-            if self.component == "nic":
-                if not self.update_driver(redfish_host, netbox_host, DellDriverCategory.NETWORK):
+            if "nic" in self.component:
+                if not self.update_driver(
+                    redfish_host, netbox_host, DellDriverCategory.NETWORK
+                ):
                     status = False
 
-            if self.component == "storage":
-                if not self.update_driver(redfish_host, netbox_host, DellDriverCategory.STORAGE):
+            if "storage" in self.component:
+                if not self.update_driver(
+                    redfish_host, netbox_host, DellDriverCategory.STORAGE
+                ):
                     status = False
+
+            if self.no_reboot:
+                logging.warning(
+                    "%s: --no-reboot used, you must reboot the host manually",
+                    redfish_host.hostname,
+                )
 
             if (
                 initial_power_state == DellSCPPowerStatePolicy.OFF.value
