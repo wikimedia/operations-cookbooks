@@ -1,11 +1,13 @@
 """GitLab version upgrade cookbook"""
 
+import json
 import logging
 import re
 from datetime import timedelta
+from packaging import version
 
 import gitlab
-from wmflib.interactive import ensure_shell_is_durable, get_secret
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable, get_secret
 from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError
 
@@ -70,7 +72,7 @@ class UpgradeRunner(CookbookRunnerBase):
         self.task_id = args.task_id
         self.admin_reason = spicerack.admin_reason(args.reason)
         self.url = self.get_gitlab_url()
-        self.version = args.version
+        self.target_version = args.version
 
         self.token = get_secret('GitLab API Token')
         self.gitlab_instance = gitlab.Gitlab(self.url, private_token=self.token)
@@ -80,6 +82,7 @@ class UpgradeRunner(CookbookRunnerBase):
         else:
             self.phabricator = None
 
+        self.check_gitlab_version()
         self.fail_for_disk_space()
 
         self.message = f'on GitLab host {self.remote_host} with reason: {args.reason}'
@@ -102,7 +105,8 @@ class UpgradeRunner(CookbookRunnerBase):
 
         if self.phabricator is not None:
             self.phabricator.task_comment(self.task_id,
-                                          f'GitLab instance {self.remote_host} upgraded to version {self.version}')
+                                          f'GitLab instance {self.remote_host} upgraded '
+                                          f'to version {self.target_version}')
 
     def get_gitlab_url(self):
         """Fetch GitLab external_url from gitlab.rb config"""
@@ -112,6 +116,35 @@ class UpgradeRunner(CookbookRunnerBase):
             lines = output.message().decode()
             for line in lines.splitlines():
                 return line.split('"')[1]
+
+    def get_current_version(self):
+        """Fetch GitLab version from version-manifest.json"""
+        logger.info('Fetch GitLab version from version-manifest.json')
+
+        with open('/opt/gitlab/version-manifest.json', 'r', encoding='utf8') as manifest_file:
+            manifest_json = json.load(manifest_file)
+
+            if manifest_json['build_version']:
+                return manifest_json['build_version']
+            raise RuntimeError("Failed to fetch current GitLab version from /opt/gitlab/version-manifest.json")
+
+    def check_gitlab_version(self):
+        """Compare current GitLab version with target version.
+
+        Also prevent downgrade and ask confirmation for major upgrades.
+
+        """
+        logger.info('Fetch GitLab version from version-manifest.json')
+
+        current = version.parse(self.get_current_version())
+        target = version.parse(self.target_version)
+
+        if current > target:
+            raise RuntimeError(f"Rollback from {current} to {target} not supported!")
+        if current.major < target.major:
+            ask_confirmation(
+                f"Doing **major** upgrade from {current} to {target}. "
+                "Did you check release notes for manual migrations steps or breaking changes?")
 
     def fail_for_disk_space(self):
         """Available disk space must be below DISK_HIGH_THRESHOLD."""
@@ -145,9 +178,9 @@ class UpgradeRunner(CookbookRunnerBase):
         GitLab Debian package is 1GB+ big, so it's downloaded before to minimize downtime
 
         """
-        logger.info('Download new Debian package gitlab-ce=%s', self.version)
+        logger.info('Download new Debian package gitlab-ce=%s', self.target_version)
         self.remote_host.run_sync("apt-get update",
-                                  f"apt-get install gitlab-ce={self.version} --download-only")
+                                  f"apt-get install gitlab-ce={self.target_version} --download-only")
 
     @retry(tries=20, delay=timedelta(seconds=10), backoff_mode='constant', exceptions=(RemoteExecutionError,))
     def fail_for_background_migrations(self):
@@ -183,7 +216,7 @@ class UpgradeRunner(CookbookRunnerBase):
 
     def install_debian_package(self):
         """Install new Debian package (apt-get install)"""
-        logger.info('Install new Debian package gitlab-ce=%s', self.version)
+        logger.info('Install new Debian package gitlab-ce=%s', self.target_version)
         self.remote_host.run_sync("DEBIAN_FRONTEND=noninteractive apt-get install -o "
                                   "Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' "
-                                  f"-y gitlab-ce='{self.version}'")
+                                  f"-y gitlab-ce='{self.target_version}'")
