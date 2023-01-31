@@ -125,7 +125,7 @@ class UpgradeRunner(CookbookRunnerBase):
         logger.info('Fetch GitLab version from version-manifest.json')
 
         current = version.parse(self.gitlab_instance.version()[0])
-        target = version.parse(self.target_version)
+        target = version.parse(self.target_version.split("-")[0])
 
         if current > target:
             raise RuntimeError(f"Rollback from {current} to {target} not supported!")
