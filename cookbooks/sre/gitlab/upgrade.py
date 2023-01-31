@@ -1,6 +1,5 @@
 """GitLab version upgrade cookbook"""
 
-import json
 import logging
 import re
 from datetime import timedelta
@@ -117,17 +116,6 @@ class UpgradeRunner(CookbookRunnerBase):
             for line in lines.splitlines():
                 return line.split('"')[1]
 
-    def get_current_version(self):
-        """Fetch GitLab version from version-manifest.json"""
-        logger.info('Fetch GitLab version from version-manifest.json')
-
-        with open('/opt/gitlab/version-manifest.json', 'r', encoding='utf8') as manifest_file:
-            manifest_json = json.load(manifest_file)
-
-            if manifest_json['build_version']:
-                return manifest_json['build_version']
-            raise RuntimeError("Failed to fetch current GitLab version from /opt/gitlab/version-manifest.json")
-
     def check_gitlab_version(self):
         """Compare current GitLab version with target version.
 
@@ -136,7 +124,7 @@ class UpgradeRunner(CookbookRunnerBase):
         """
         logger.info('Fetch GitLab version from version-manifest.json')
 
-        current = version.parse(self.get_current_version())
+        current = version.parse(self.gitlab_instance.version()[0])
         target = version.parse(self.target_version)
 
         if current > target:
