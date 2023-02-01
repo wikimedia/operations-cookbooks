@@ -857,15 +857,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         status = True
-        idrac_version = self.get_idrac_version(redfish_host)
-        if idrac_version < version.Version('4'):
-            logger.error(
-                '%s: iDRAC version (%s) is too low to preform driver upgrades.  '
-                'please upgrade iDRAC first',
-                netbox_host.fqdn,
-                idrac_version,
-            )
-            return False
         members = self._get_hw_members(redfish_host, driver_category)
         if not members:
             logger.info(
@@ -905,7 +896,13 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             try:
                 redfish_host = self.spicerack.redfish(hostname)
             except NetboxError as error:
-                logger.warning("Skipping: %s", error)
+                logger.error("Skipping: %s", error)
+                continue
+            idrac_version = self.get_idrac_version(redfish_host)
+            if idrac_version < version.Version('3.30.30.30'):
+                logger.error('%s: SKIPPING - iDRAC version (%s) is too low to perform updates.  '
+                             'please upgrade iDRAC to version 3.30.30.30 before proceeding',
+                             netbox_host.fqdn, idrac_version)
                 continue
             # TODO: this is a bit of a hack to populate the generation property
             # We should do this in the Redfish.__init__
