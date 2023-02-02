@@ -1,13 +1,10 @@
 """WDQS data reload
 
 Usage example:
-    (fresh wikidata reload)
     cookbook sre.wdqs.data-reload --reload-data wikidata --reason "bring new hosts into rotation" \
     --task-id T301167 wdqs1004.eqiad.wmnet
 
-    (wikidata reload after previous failure *after* munging)
-    cookbook sre.wdqs.data-reload --reload-data wikidata --reason "bring new hosts into rotation" \
-    --task-id T301167 --reuse-munge wdqs1004.eqiad.wmnet
+
 """
 
 import argparse
@@ -24,15 +21,16 @@ from cookbooks.sre.wdqs import check_hosts_are_valid, wait_for_updater, get_site
 __title__ = "WDQS data reload cookbook"
 logger = logging.getLogger(__name__)
 
+DAYS_IT_TAKES_TO_RELOAD = 17
+DAYS_KAFKA_RETAINED = 30
+
 NFS_DUMPS = {
     'wikidata': {
-        'read_path': '/mnt/nfs/dumps-clouddumps1001.wikimedia.org/'
-                     'wikidatawiki/entities/20230102/wikidata-20230102-all-BETA.ttl.bz2',
+        'read_path': '/mnt/nfs/dumps-clouddumps1001.wikimedia.org/wikidatawiki/entities/latest-all.ttl.bz2',
         'munge_path': '/srv/wdqs/munged',
     },
     'lexeme': {
-        'read_path': '/mnt/nfs/dumps-clouddumps1001.wikimedia.org/'
-                     'wikidatawiki/entities/20230106/wikidata-20230106-lexemes-BETA.ttl.bz2',
+        'read_path': '/mnt/nfs/dumps-clouddumps1001.wikimedia.org/wikidatawiki/entities/latest-lexemes.ttl.bz2',
         'munge_path': '/srv/wdqs/lex-munged',
     },
     'commons': {
@@ -43,8 +41,6 @@ NFS_DUMPS = {
                           ' --commonsUri https://commons.wikimedia.org',
     }
 }
-
-KAFKA_TIMESTAMP_FILEPATH = '/srv/wdqs/last_observed.timestamp'
 
 
 class StopWatch:
@@ -76,10 +72,6 @@ def argument_parser():
     parser.add_argument('--depool', action='store_true', help='Should be depooled.')
     parser.add_argument('--reload-data', required=True, choices=['wikidata', 'categories', 'commons'],
                         help='Type of data to reload')
-    parser.add_argument('--reuse-munge', action='store_true',
-                        help='Reuse munge (use if previous reload failed after munging completed).'
-                        'WARNING: Does not perform sanity checks.')
-
     return parser
 
 
@@ -96,12 +88,28 @@ def extract_kafka_timestamp(remote_host, journal_type):
     """Given a remote_host and journal type, parse and return the correct kafka timestamp."""
     dump_path = NFS_DUMPS[journal_type]['read_path']
     cmd = "bzcat {} | head -50 | grep '^wikibase:Dump' -A 5 | grep 'schema:dateModified'".format(dump_path)
-
     status = next(remote_host.run_sync(cmd))
     timestamp = str(list(status[1].lines())).split('"')[1]
     logger.info('[extract_kafka_timestamp] found %s', timestamp)
-    # TODO later we validate the timestamp here (getting patch working first)
     return timestamp
+
+
+def validate_dump_age(timestamp, check_time="before_reload"):
+    """Given a timestamp, confirm that it fits requirements. Err/exit if not."""
+    dump_date = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+    right_now_date = datetime.now()
+    current_age = (right_now_date - dump_date).days
+    if check_time == "before_reload":
+        max_age = DAYS_KAFKA_RETAINED - DAYS_IT_TAKES_TO_RELOAD
+        if current_age > max_age:
+            raise RuntimeError(f"Dump age must be {max_age} days or less. Detected age: {current_age} days")
+    elif check_time == "after_reload":
+        if current_age > DAYS_KAFKA_RETAINED:
+            raise RuntimeError(f"Current data is {current_age} days old, exceeding Kafka retention time of "
+                               f"{DAYS_KAFKA_RETAINED} days")
+    # if we made it this far, something is wrong.
+    else:
+        raise RuntimeError(f"Unknown error, check values passed to {validate_dump_age}")
 
 
 def munge(dumps, remote_host):
@@ -121,9 +129,9 @@ def munge(dumps, remote_host):
         logger.info('munging %s completed in %s', dump['munge_path'], stop_watch.elapsed())
 
 
-def reload_commons(remote_host, puppet, kafka, timestamp, consumer_definition, reason):
+def reload_commons(remote_host, puppet, kafka, timestamps, consumer_definition, reason):
     """Execute commands on host to reload commons data."""
-    logger.info('Preparing to load commons data for blazegraph')
+    logger.info('Prepare to load commons data for blazegraph')
     with puppet.disabled(reason):
         remote_host.run_sync(
             'rm -fv /srv/query_service/data_loaded',
@@ -143,17 +151,16 @@ def reload_commons(remote_host, puppet, kafka, timestamp, consumer_definition, r
         )
     )
     logger.info('Commons dump loaded in %s', watch.elapsed())
-    kafka.set_consumer_position_by_timestamp(consumer_definition, timestamp)
-    logger.info('Set kafka consumer position to %s', timestamp)
+    kafka.set_consumer_position_by_timestamp(consumer_definition, timestamps)
     remote_host.run_sync(
         'touch /srv/query_service/data_loaded',
         'systemctl start wcqs-updater'
     )
 
 
-def reload_wikidata(remote_host, puppet, kafka, timestamp, consumer_definition, reason):
+def reload_wikidata(remote_host, puppet, kafka, timestamps, consumer_definition, reason):
     """Execute commands on host to reload wikidata data."""
-    logger.info('Preparing to load wikidata data for blazegraph')
+    logger.info('Prepare to load wikidata data for blazegraph')
     with puppet.disabled(reason):
         remote_host.run_sync(
             'rm -fv /srv/wdqs/data_loaded',
@@ -181,8 +188,7 @@ def reload_wikidata(remote_host, puppet, kafka, timestamp, consumer_definition, 
     )
     logger.info('Lexeme dump loaded in %s', watch.elapsed())
     logger.info('Performing final steps')
-    kafka.set_consumer_position_by_timestamp(consumer_definition, timestamp)
-    logger.info('Set kafka consumer position to %s', timestamp)
+    kafka.set_consumer_position_by_timestamp(consumer_definition, timestamps)
     remote_host.run_sync(
         'touch /srv/wdqs/data_loaded',
         'systemctl start wdqs-updater'
@@ -224,22 +230,14 @@ def run(args, spicerack):
     confctl = spicerack.confctl('node')
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
-    # Get and validate kafka timestamp if not reusing munge
-    kafka_timestamp = ''
-    if args.reuse_munge:
-        results = next(remote_host.run_sync(
-                       'cat {}'.format(KAFKA_TIMESTAMP_FILEPATH)))
-        kafka_timestamp = results[1].message()
-        logger.info('Reusing previously written timestamp of %s', kafka_timestamp)
-    else:
-        kafka_timestamp = extract_kafka_timestamp(remote_host, args.reload_data)
-        # Write observed timestamp to file
-        remote_host.run_sync('echo {} > {}'.format(kafka_timestamp, KAFKA_TIMESTAMP_FILEPATH))
-        logger.info('Wrote timestamp of %s to %s', kafka_timestamp, KAFKA_TIMESTAMP_FILEPATH)
-
+    # Get and validate kafka timestamp
+    kafka_timestamp = extract_kafka_timestamp(remote_host, args.reload_data)
     if args.reload_data in ['wikidata', 'commons'] and kafka_timestamp is None:
         raise ValueError("We don't have a timestamp, automated timestamp extraction must have failed")
 
+    validate_dump_age(kafka_timestamp, check_time="before_reload")
+
+    dumps = []
     if 'wikidata' == args.reload_data and not args.reuse_munge:
         dumps = [NFS_DUMPS['wikidata'], NFS_DUMPS['lexeme']]
         munge(dumps, remote_host)
@@ -280,3 +278,4 @@ def run(args, spicerack):
                 reload_wikibase(reload_wikidata, MUTATION_TOPICS['wikidata'])
             elif 'commons' == args.reload_data:
                 reload_wikibase(reload_commons, MUTATION_TOPICS['commons'])
+            validate_dump_age(kafka_timestamp, check_time="after_reload")
