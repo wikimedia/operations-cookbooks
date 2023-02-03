@@ -102,7 +102,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
             dry_run=spicerack.dry_run,
         )
         # Dictionary containing KubernetesNode instances for all hosts
-        self._all_k8s_nodes = dict()
+        self._all_k8s_nodes = {}
         super().__init__(args, spicerack)
         # _first_batch is used to detect the fist batch run in each host_group
         self._first_batch = True
@@ -127,6 +127,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
             return "ml-staging-codfw"
         if alias.startswith("dse-k8s"):
             return "dse-k8s-eqiad"
+        raise RuntimeError("Cannot figure out the Kubernetes cluster name.")
 
     def _k8s_node_action(self, node_name: str, action: str) -> None:
         """Call the function action on a KubernetesNode instance for a given node_name"""
@@ -150,7 +151,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         orig_batchsize = super()._batchsize(number_of_hosts)
         batchsize = ceil(min(20 * number_of_hosts / 100, orig_batchsize))
         if batchsize != orig_batchsize:
-            self.logger.warn(
+            self.logger.warning(
                 "Using reduced batchsize of %s due to small host group (%s hosts)",
                 batchsize,
                 number_of_hosts,
@@ -189,7 +190,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
                 self._all_k8s_nodes[node_name] = k8s_node
                 flat_taints = (
                     ""
-                    if k8s_node.taints is []
+                    if k8s_node.taints == []
                     else flatten_taints(k8s_node.taints)
                 )
             except KubernetesApiError:
@@ -224,32 +225,32 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         self._host_group_idx = host_group_idx
         self._first_batch = True
 
-    def pre_action(self, batch: RemoteHosts) -> None:
+    def pre_action(self, hosts: RemoteHosts) -> None:
         """Cordon all nodes in this batch first, then drain them
 
         Cordoning first is to prevent evicted Pods from being scheduled on nodes
         that are to be rebooted in this batch.
         """
         # The node(s) will be drained prior to being depooled. Not ideal but okay for now.
-        for node_name in batch.hosts:
+        for node_name in hosts.hosts:
             self._cordon(node_name)
-        for node_name in batch.hosts:
+        for node_name in hosts.hosts:
             self._drain(node_name)
 
-    def post_action(self, batch: RemoteHosts) -> None:
+    def post_action(self, hosts: RemoteHosts) -> None:
         """Uncordon all node in this batch and cordon all nodes in this taint group that still need reboots
 
         Cordoning all remaining (to be rebooted) nodes of this taint group prevents evicted Pods to be
         scheduled there (and evicted again).
         """
-        for node_name in batch.hosts:
+        for node_name in hosts.hosts:
             self._uncordon(node_name)
 
         # If this was the first batch in the host group, cordon all nodes that still need rebooting
         # to prevent evicted Pod's from being scheduled there.
         if self._first_batch:
             self._first_batch = False
-            remaining_hosts = self.host_groups[self._host_group_idx].hosts - batch.hosts
+            remaining_hosts = self.host_groups[self._host_group_idx].hosts - hosts.hosts
             self.logger.info(
                 "Cordoning remaining hosts in host group: %s", remaining_hosts
             )
