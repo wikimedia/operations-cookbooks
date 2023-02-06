@@ -93,9 +93,9 @@ class UpgradeRunner(CookbookRunnerBase):
 
     def run(self):
         """Run the cookbook."""
+        self.preload_debian_package()
         self.create_data_backup()
         self.create_config_backup()
-        self.preload_debian_package()
         self.fail_for_background_migrations()
         paused_runners = self.pause_runners()
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=15)):
@@ -122,9 +122,13 @@ class UpgradeRunner(CookbookRunnerBase):
         Also prevent downgrade and ask confirmation for major upgrades.
 
         """
-        logger.info('Fetch GitLab version from version-manifest.json')
+        logger.info('Get GitLab version from API')
 
-        current = version.parse(self.gitlab_instance.version()[0])
+        gitlab_version = self.gitlab_instance.version()[0]
+        if gitlab_version == "unknown":
+            raise RuntimeError("Failed to get GitLab version from API, check API token and URL")
+
+        current = version.parse(gitlab_version)
         target = version.parse(self.target_version.split("-")[0])
 
         if current > target:
