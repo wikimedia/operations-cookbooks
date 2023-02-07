@@ -241,6 +241,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         else:
             self.redfish.change_user_password('root', self.mgmt_password)
 
+        sleep(10)  # Trying to avoid a race condition that seems to make IPMI fail right after changing the password
         self.ipmi.check_connection()
 
         if not self.args.no_switch:
