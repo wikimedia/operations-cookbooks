@@ -91,8 +91,22 @@ class UpgradeRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return self.message
 
+    def rollback(self):
+        """Comment on phabricator in case of a failed run."""
+        if self.phabricator is not None:
+            self.phabricator.task_comment(
+                self.task_id,
+                f"Cookbook {__name__} started by {self.admin_reason.owner} executed with errors:\n"
+                f"{self.runtime_description}\n"
+            )
+
     def run(self):
         """Run the cookbook."""
+        if self.phabricator is not None:
+            self.phabricator.task_comment(
+                self.task_id,
+                f'Cookbook {__name__} was started by {self.admin_reason.owner} {self.runtime_description}')
+
         self.preload_debian_package()
         self.create_data_backup()
         self.create_config_backup()
@@ -103,9 +117,10 @@ class UpgradeRunner(CookbookRunnerBase):
         self.unpause_runners(paused_runners)
 
         if self.phabricator is not None:
-            self.phabricator.task_comment(self.task_id,
-                                          f'GitLab instance {self.remote_host} upgraded '
-                                          f'to version {self.target_version}')
+            self.phabricator.task_comment(
+                self.task_id,
+                f'Cookbook {__name__} started by {self.admin_reason.owner} {self.runtime_description} completed '
+                f'successfully {self.runtime_description}')
 
     def get_gitlab_url(self):
         """Fetch GitLab external_url from gitlab.rb config"""
@@ -174,7 +189,11 @@ class UpgradeRunner(CookbookRunnerBase):
         self.remote_host.run_sync("apt-get update",
                                   f"apt-get install gitlab-ce={self.target_version} --download-only")
 
-    @retry(tries=20, delay=timedelta(seconds=10), backoff_mode='constant', exceptions=(RemoteExecutionError,))
+    @retry(
+        tries=20,
+        delay=timedelta(seconds=10),
+        backoff_mode='constant',
+        exceptions=(RemoteExecutionError,))
     def fail_for_background_migrations(self):
         """Check for remaining background migrations"""
         logger.info('Check for remaining background migrations')
@@ -197,8 +216,12 @@ class UpgradeRunner(CookbookRunnerBase):
             logger.info('Paused %s runner', runner.id)
         return active_runners
 
-    @retry(tries=20, delay=timedelta(seconds=10), backoff_mode='constant',
-           exceptions=(gitlab.exceptions.GitlabUpdateError, gitlab.exceptions.GitlabHttpError,))
+    @retry(
+        tries=20,
+        delay=timedelta(seconds=10),
+        backoff_mode='constant',
+        failure_message='Waiting for GitLab API to become available again',
+        exceptions=(gitlab.exceptions.GitlabUpdateError, gitlab.exceptions.GitlabHttpError,))
     def unpause_runners(self, paused_runners):
         """Unpause a list of runners"""
         for runner in paused_runners:
