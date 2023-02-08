@@ -114,6 +114,13 @@ class DiscoveryRecord:
         """The state of the dnsdisc object"""
         return set(self.record.instance.active_datacenters[self.name])
 
+    def __str__(self) -> str:
+        """String representation"""
+        how = "active/active"
+        if not self.active_active:
+            how = "active/passive"
+        return f"{self.name.capitalize()} ({how})"
+
 
 class DiscoveryDcRoute(CookbookBase):
     """Pool/Depool a datacenter from internal traffic.
@@ -123,13 +130,16 @@ class DiscoveryDcRoute(CookbookBase):
 
     Examples:
     - Depool all a/a discovery records in codfw:
-      cookbook.sre.discovery.datacenter-route depool codfw
+      cookbook.sre.discovery.datacenter depool codfw
 
     - Pool all a/a discovery records in eqiad
-      cookbook.sre.discovery.datacenter-route [--reason REASON] pool eqiad
+      cookbook.sre.discovery.datacenter [--reason REASON] pool eqiad
 
     - Depool ALL discovery records from codfw:
-      cookbook.sre.discovery.datacenter-route depool codfw --all
+      cookbook.sre.discovery.datacenter depool codfw --all
+
+    - Check which services are pooled in a datacenter:
+      cookbook.sre.discovery.datacenter status codfw
 
     When called without the --all switch, this cookbook will change the pooled
     state of all active-active to the desired state. It will prevent you from depooling
@@ -159,11 +169,17 @@ class DiscoveryDcRoute(CookbookBase):
             action.add_argument(
                 "--all", action="store_true", help="Depool also the active/passive services (minus MediaWiki)"
             )
-
+        status = actions.add_parser("status")
+        status.add_argument("datacenter", choices=CORE_DATACENTERS, help="Name of the datacenter. One of: %(choices)s.")
+        status.add_argument("--filter", action="store_true", help="Filter the excluded services.")
         return parser
 
     def get_runner(self, args):
         """As specified by Spicerack API."""
+        if args.action == "status":
+            args.all = True
+        else:
+            args.filter = True
         return DiscoveryDcRouteRunner(args, self.spicerack)
 
 
@@ -178,7 +194,9 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         self.action: str = args.action
         self.admin_reason: str = args.reason
         self.catalog = self.spicerack.service_catalog()
+        self.do_filter = args.filter
         self.discovery_records = self._get_all_services()
+
         # Stores the initial state of all services we've acted upon.
         # Used for rollbacks.
         self.initial_state: Dict[str, Set[str]] = {}
@@ -197,7 +215,14 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         return log_msg
 
     def run(self):
-        """Execute pooling/depooling."""
+        """Execute the desired action."""
+        if self.action == "status":
+            print(f"=== POOLED SERVICES IN {self.datacenter.upper()} ===")
+            for group in self.discovery_records.values():
+                for record in group:
+                    if self.datacenter in record.state:
+                        print(f"* {record}")
+            return
         pool = self.action == "pool"
         # For each A/A discovery record, check if the service is pooled in more than just the datacenter we're depooling
         # from.
@@ -235,6 +260,8 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
 
     def rollback(self):
         """Roll back everything we've done."""
+        if self.action == "status":
+            return
         ask_confirmation("Do you wish to rollback to the state before the cookbook ran?")
 
         for record in self.discovery_records["active_passive"]:
@@ -308,12 +335,12 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             if service.discovery is None:
                 logger.debug("Skipping %s, as it doesn't have a discovery record", service.name)
                 continue
-            if service.name in EXCLUDED_SERVICES:
+            if service.name in EXCLUDED_SERVICES and self.do_filter:
                 logger.info("Skipping excluded service %s: %s", service.name, EXCLUDED_SERVICES[service.name])
                 continue
             for record in service.discovery:
                 complete_record = DiscoveryRecord(record=record, ips=service.ip)
-                if complete_record.name in MEDIAWIKI_SERVICES:
+                if complete_record.name in MEDIAWIKI_SERVICES and self.do_filter:
                     logger.info("Skipping %s, (use the sre.switchdc.mediawiki cookbook instead)", complete_record.name)
                     continue
                 # Do not add active/passive services if do_all is not selected.
