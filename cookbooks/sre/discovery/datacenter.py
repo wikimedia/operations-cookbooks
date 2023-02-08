@@ -227,7 +227,11 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         # For each A/A discovery record, check if the service is pooled in more than just the datacenter we're depooling
         # from.
         # If not, ask the user to choose between skipping it and moving it
+        progress = 0
+        total_records = sum(len(groups) for groups in self.discovery_records.values())
         for record in self.discovery_records["active_active"]:
+            progress += 1
+            logger.info("[%d/%d] Handling A/A service %s", progress, total_records, record.name)
             # Store the current state
             current_state = record.state
             self.initial_state[record.name] = current_state
@@ -243,6 +247,8 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         # For each A/P discovery record, first ensure we're pooling another core datacenter, then depool the current
         # one. We'll ask confirmation for each of them.
         for record in self.discovery_records["active_passive"]:
+            progress += 1
+            logger.info("[%d/%d] Handling A/P service %s", progress, total_records, record.name)
             # store the current state
             current_state = record.state
             self.initial_state[record.name] = current_state
