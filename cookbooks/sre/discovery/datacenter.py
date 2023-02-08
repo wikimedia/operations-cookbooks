@@ -265,10 +265,12 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         ask_confirmation("Do you wish to rollback to the state before the cookbook ran?")
 
         for record in self.discovery_records["active_passive"]:
-            self._handle_active_passive(record, record.state, self.initial_state[record.name])
+            if record.name in self.initial_state:
+                self._handle_active_passive(record, record.state, self.initial_state[record.name])
 
         for record in self.discovery_records["active_active"]:
-            self._handle_active_active(record, record.state, self.initial_state[record.name])
+            if record.name in self.initial_state:
+                self._handle_active_active(record, record.state, self.initial_state[record.name])
 
     def _handle_active_active(self, record: DiscoveryRecord, current_state: Set[str], desired_state: Set[str]):
         if desired_state == current_state:
