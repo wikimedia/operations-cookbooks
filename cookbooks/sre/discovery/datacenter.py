@@ -1,6 +1,7 @@
 """Divert all traffic from a datacenter."""
 import argparse
 import logging
+import time
 
 from dataclasses import dataclass
 from typing import Dict, List, Set
@@ -141,6 +142,9 @@ class DiscoveryDcRoute(CookbookBase):
     - Check which services are pooled in a datacenter:
       cookbook.sre.discovery.datacenter status codfw
 
+    *In case of emergency only*: use the `--fast-insecure` switch for pool/depool,
+    it will be making the cookbook much faster.
+
     When called without the --all switch, this cookbook will change the pooled
     state of all active-active to the desired state. It will prevent you from depooling
     a service that's only active in this datacenter, asking you if you prefer to skip
@@ -169,6 +173,7 @@ class DiscoveryDcRoute(CookbookBase):
             action.add_argument(
                 "--all", action="store_true", help="Depool also the active/passive services (minus MediaWiki)"
             )
+            action.add_argument("--fast-insecure", "-f", help="Run the commands faster but relatively insecurely.")
         status = actions.add_parser("status")
         status.add_argument("datacenter", choices=CORE_DATACENTERS, help="Name of the datacenter. One of: %(choices)s.")
         status.add_argument("--filter", action="store_true", help="Filter the excluded services.")
@@ -181,6 +186,7 @@ class DiscoveryDcRoute(CookbookBase):
             logging.getLogger("conftool").setLevel(logging.WARNING)
         if args.action == "status":
             args.all = True
+            args.fast_insecure = False
             if not self.spicerack.verbose:
                 # Cleaner output when running status in dry-run.
                 logger.setLevel(logging.WARNING)
@@ -204,7 +210,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         self.catalog = self.spicerack.service_catalog()
         self.do_filter = args.filter
         self.discovery_records = self._get_all_services()
-
+        self.insecure = args.fast_insecure
         # Stores the initial state of all services we've acted upon.
         # Used for rollbacks.
         self.initial_state: Dict[str, Set[str]] = {}
@@ -220,6 +226,9 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             services_msg = "all active/active services"
 
         log_msg = f"{self.action} {services_msg} in {self.datacenter}: {self.admin_reason}"
+        # Indicate the cookbook is being run in emergency mode
+        if self.insecure:
+            log_msg = f"🤠EMERGENCY RUN🤠 {log_msg}"
         return log_msg
 
     def run(self):
@@ -267,6 +276,8 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
                 desired_state.remove(self.datacenter)
 
             self._handle_active_passive(record, current_state, desired_state)
+        if self.insecure:
+            self._clean_all()
 
     def status(self):
         """Get service status in datacenter."""
@@ -304,6 +315,9 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             if record.name in self.initial_state:
                 self._handle_active_active(record, record.state, self.initial_state[record.name])
 
+        if self.insecure:
+            self._clean_all()
+
     def _handle_active_active(self, record: DiscoveryRecord, current_state: Set[str], desired_state: Set[str]):
         if desired_state == current_state:
             logger.info("Service %s is already in the desired state", record.name)
@@ -322,8 +336,10 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         # And depool all services that are currently pooled and shouldn't be
         for site in current_state - desired_state:
             record.depool(site)
-        record.check_records()
-        record.clear_cache(self._recursors)
+        # Unless we're running in an emergency, check the records and clear the recursors cache
+        if not self.insecure:
+            record.check_records()
+            record.clear_cache(self._recursors)
 
     def _handle_active_passive(self, record: DiscoveryRecord, current_state: Set[str], desired_state: Set[str]):
         if desired_state == current_state:
@@ -358,6 +374,19 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             dc_to = list(desired_state).pop()
 
         self._skip_or_move(record, dc_from, dc_to)
+
+    def _clean_all(self):
+        """Wipe all caches twice."""
+        # If running in an emergency: don't check the records, rather send two cache
+        # purges for "discovery.wmnet" 30 seconds apart to all recursive DNS servers.
+        # Then handle cleaning up for a/p services templates.
+        self._recursors.run_sync("sudo rec_control wipe-cache discovery.wmnet")
+        logger.info("Sleeping 30 seconds before sending a second wipe-cache command")
+        time.sleep(30)
+        self._recursors.run_sync("sudo rec_control wipe-cache discovery.wmnet")
+        logger.info("==> Traffic should be fully migrated now <==")
+        for record in self.discovery_records["active_passive"]:
+            record.clean_discovery_templates(self._authdns)
 
     def _get_all_services(self) -> Dict[str, List[DiscoveryRecord]]:
         all_services: Dict[str, List[DiscoveryRecord]] = {"active_active": [], "active_passive": []}
@@ -416,6 +445,8 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         # to depool anything.
         if dc_from in CORE_DATACENTERS:
             record.depool(dc_from)
-        record.check_records()
-        record.clean_discovery_templates(self._authdns)
-        record.clear_cache(self._recursors)
+        # If not running in an emergency, do all the checks here.
+        if not self.insecure:
+            record.check_records()
+            record.clean_discovery_templates(self._authdns)
+            record.clear_cache(self._recursors)
