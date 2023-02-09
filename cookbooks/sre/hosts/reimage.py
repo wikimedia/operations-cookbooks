@@ -97,6 +97,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.args = args
         self.host = self.args.host
 
+        if '.' in self.host:
+            raise RuntimeError('You need to pass only the host name, not the FQDN.')
+
         self.netbox = spicerack.netbox()
         self.netbox_server = spicerack.netbox_server(self.host, read_write=True)
         self.netbox_data = self.netbox_server.as_dict()
