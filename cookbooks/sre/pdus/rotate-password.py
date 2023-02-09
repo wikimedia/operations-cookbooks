@@ -30,7 +30,7 @@ class PasswordResetError(Exception):
 
 def argument_parser():
     """As specified by Spicerack API."""
-    return pdus.argument_parser_base()
+    return pdus.argument_parser_base(__doc__)
 
 
 def change_password(pdu, session, new_password):

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 def argument_parser():
     """As specified by Spicerack API."""
-    parser = pdus.argument_parser_base()
+    parser = pdus.argument_parser_base(__doc__)
     parser.add_argument('--since', type=int,
                         help='only reboot if the uptime is more then this value in seconds')
     return parser

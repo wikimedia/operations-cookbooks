@@ -38,10 +38,10 @@ class RemoteCheckError(Exception):
     """Exception raised if we fail to get the uptime"""
 
 
-def argument_parser_base():
+def argument_parser_base(doc: str):
     """As specified by Spicerack API."""
     parser = ArgumentParser(
-        description=__doc__, formatter_class=ArgparseFormatter)
+        description=doc, formatter_class=ArgparseFormatter)
     parser.add_argument('--username', help="Username to login to the PDU's", default='root')
     parser.add_argument('--check_default', help='Check for default user',
                         action='store_true')

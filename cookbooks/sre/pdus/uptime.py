@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 def argument_parser():
     """As specified by Spicerack API."""
-    return pdus.argument_parser_base()
+    return pdus.argument_parser_base(__doc__)
 
 
 def run(args, spicerack):

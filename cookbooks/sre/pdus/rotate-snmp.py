@@ -106,7 +106,7 @@ class ChangeSNMP(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = pdus.argument_parser_base()
+        parser = pdus.argument_parser_base(self.__doc__)
         parser.add_argument('--force', action='store_true',
                             help='Force an update even if the current values seem correct')
         parser.add_argument('--reset-rw', action='store_true',
