@@ -7,91 +7,109 @@ PROMETHEUS_MATCHERS = {
     "staging-codfw": [
         {
             "name": "site",
-            "value": "codfw"
+            "value": "codfw",
+            "isRegex": False
         },
         {
             "name": "prometheus",
-            "value": "k8s-staging"
+            "value": "k8s-staging",
+            "isRegex": False
         }
     ],
     "staging-eqiad": [
         {
             "name": "site",
-            "value": "eqiad"
+            "value": "eqiad",
+            "isRegex": False
         },
         {
             "name": "prometheus",
-            "value": "k8s-staging"
+            "value": "k8s-staging",
+            "isRegex": False
         }
     ],
     "wikikube-codfw": [
         {
             "name": "site",
-            "value": "codfw"
+            "value": "codfw",
+            "isRegex": False
         },
         {
             "name": "prometheus",
-            "value": "k8s"
+            "value": "k8s",
+            "isRegex": False
         }
     ],
     "wikikube-eqiad": [
         {
             "name": "site",
-            "value": "eqiad"
+            "value": "eqiad",
+            "isRegex": False
         },
         {
             "name": "prometheus",
-            "value": "k8s"
+            "value": "k8s",
+            "isRegex": False
         }
     ],
     "ml-serve-eqiad": [
         {
             "name": "site",
-            "value": "eqiad"
+            "value": "eqiad",
+            "isRegex": False
         },
         {
             "name": "prometheus",
-            "value": "k8s-mlserve"
+            "value": "k8s-mlserve",
+            "isRegex": False
         }
     ],
     "ml-serve-codfw": [
         {
             "name": "site",
-            "value": "codfw"
+            "value": "codfw",
+            "isRegex": False
         },
         {
             "name": "prometheus",
-            "value": "k8s-mlserve"
+            "value": "k8s-mlserve",
+            "isRegex": False
         }
     ],
     "ml-staging-codfw": [
         {
             "name": "site",
-            "value": "codfw"
+            "value": "codfw",
+            "isRegex": False
         },
         {
             "name": "prometheus",
-            "value": "k8s-mlstaging"
+            "value": "k8s-mlstaging",
+            "isRegex": False
         }
     ],
     "dse-eqiad": [
         {
             "name": "site",
-            "value": "eqiad"
+            "value": "eqiad",
+            "isRegex": False
         },
         {
             "name": "prometheus",
-            "value": "k8s-dse"
+            "value": "k8s-dse",
+            "isRegex": False
         }
     ],
     "aux-eqiad": [
         {
             "name": "site",
-            "value": "eqiad"
+            "value": "eqiad",
+            "isRegex": False
         },
         {
             "name": "prometheus",
-            "value": "k8s-aux"
+            "value": "k8s-aux",
+            "isRegex": False
         }
     ]
 }
