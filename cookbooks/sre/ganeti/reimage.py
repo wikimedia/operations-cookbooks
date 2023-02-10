@@ -277,7 +277,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             hostname=self.host,
             ipv4=ip,
             mac=mac[0],
-            ttys=1,
+            ttys=0,
             distro=self.args.os
         )
 
