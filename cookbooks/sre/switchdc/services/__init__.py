@@ -16,6 +16,8 @@ EXCLUDED_SERVICES = {
     'swift',  # temporary, undergoing rebalancing (T287539#7339799)
     'swift-ro',  # per above
     'toolhub',  # T288685: needs to match m5 database cluster replication
+    'wdqs',  # T329193: capacity limitations in codfw
+    'wdqs-ssl',  # T329193: capacity limitations in codfw
 }
 
 # These are services that are not effectively active-active /right now/, but will be in the future
