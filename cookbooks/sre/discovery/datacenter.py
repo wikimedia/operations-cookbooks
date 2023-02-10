@@ -28,6 +28,7 @@ EXCLUDED_SERVICES = {
     "docker-registry": "swift replica goes codfw => eqiad and needs manual switching",
     "releases": "not a 'service', strictly speaking, thus excluded",
     "puppetdb-api": "not a 'service', strictly speaking, thus excluded",
+    "helm-charts": "not a 'service', strictly speaking, thus excluded",
     "toolhub": "T288685: needs to match m5 database cluster replication",
     'wdqs': "T329193: capacity limitations in codfw",
     'wdqs-ssl': "T329193: capacity limitations in codfw",

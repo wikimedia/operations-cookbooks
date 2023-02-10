@@ -4,29 +4,11 @@ import argparse
 from wmflib.config import load_yaml_config
 from wmflib.constants import CORE_DATACENTERS
 
+from cookbooks.sre.discovery.datacenter import EXCLUDED_SERVICES
+from cookbooks.sre.switchdc.mediawiki import MEDIAWIKI_SERVICES, MEDIAWIKI_RO_SERVICES
+
 
 __title__ = __doc__
-
-EXCLUDED_SERVICES = {
-    'blubberoid',  # blubberoid needs to follow swift replica for the docker registry
-    'docker-registry',  # swift replica goes codfw => eqiad and needs manual switching
-    'helm-charts',  # Doesn't have a service IP (T285707)
-    'releases',  # not a "service", strictly speaking, thus excluded.
-    'puppetdb-api',  # ditto
-    'swift',  # temporary, undergoing rebalancing (T287539#7339799)
-    'swift-ro',  # per above
-    'toolhub',  # T288685: needs to match m5 database cluster replication
-    'wdqs',  # T329193: capacity limitations in codfw
-    'wdqs-ssl',  # T329193: capacity limitations in codfw
-}
-
-# These are services that are not effectively active-active /right now/, but will be in the future
-# when mediawiki works cross-dc.
-MEDIAWIKI_SERVICES = {
-    'api-ro',
-    'appservers-ro',
-    'mwdebug',
-}
 
 
 def load_services():
@@ -45,7 +27,8 @@ def load_services():
 
 def argument_parser_base(name, title, services):
     """Parse the command line arguments for all the sre.switchdc.services cookbooks."""
-    all_services = set(services.keys()) - EXCLUDED_SERVICES - MEDIAWIKI_SERVICES
+    mw_services = set(MEDIAWIKI_SERVICES) | set(MEDIAWIKI_RO_SERVICES)
+    all_services = set(services.keys()) - set(EXCLUDED_SERVICES.keys()) - mw_services
     parser = argparse.ArgumentParser(prog=name, description=title,
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--services', metavar='SERVICES', choices=all_services, nargs="+",
