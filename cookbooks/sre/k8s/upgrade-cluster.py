@@ -172,7 +172,7 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                 downtime_id = alerts.downtime(
                     self.admin_reason, duration=timedelta(minutes=120))
                 puppet = self.spicerack.puppet(remote)
-                puppet.disable(self.args.reason)
+                puppet.disable(self.admin_reason)
                 self.downtimes.append((alerts, downtime_id))
             else:
                 ask_confirmation(
