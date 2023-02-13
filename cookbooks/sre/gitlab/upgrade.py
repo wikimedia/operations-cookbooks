@@ -107,6 +107,10 @@ class UpgradeRunner(CookbookRunnerBase):
                 self.task_id,
                 f'Cookbook {__name__} was started by {self.admin_reason.owner} {self.runtime_description}')
 
+        broadcastmessage = self.gitlab_instance.broadcastmessages.create({
+            'message': f'Maintenance {self.message} starting soon.',
+            'broadcast_type': 'notification'
+        })
         self.preload_debian_package()
         self.create_data_backup()
         self.create_config_backup()
@@ -115,6 +119,7 @@ class UpgradeRunner(CookbookRunnerBase):
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=15)):
             self.install_debian_package()
         self.unpause_runners(paused_runners)
+        broadcastmessage.delete()
 
         if self.phabricator is not None:
             self.phabricator.task_comment(
