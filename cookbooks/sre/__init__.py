@@ -247,7 +247,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
     def _sleep(self, seconds: Union[int, float]) -> None:
         """A DRY-RUN aware version of time.sleep()."""
         if self._spicerack.dry_run:
-            self.logger.info('Would have sleeped for %s seconds', seconds)
+            self.logger.info('Would have slept for %s seconds', seconds)
         else:
             self.logger.info('Sleeping for %s seconds', seconds)
             sleep(seconds)
