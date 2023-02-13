@@ -2,7 +2,7 @@
 import logging
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from wmflib.interactive import confirm_on_failure
+from wmflib.interactive import ask_confirmation, confirm_on_failure
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.deploy import DEPLOYMENT_CNAME
@@ -34,6 +34,9 @@ class Deploy(CookbookBase):
                                   'automatically added.'))
         parser.add_argument('-t', '--task-id',
                             help='An optional task ID to refer in the downtime message (i.e. T12345).')
+        parser.add_argument('-u', '--user',
+                            help=('By default the deployment will be run with the deploy-$project user. Use this '
+                                  'parameter to override it in case a different one should be used.'))
 
         return parser
 
@@ -56,6 +59,14 @@ class DeployRunner(CookbookRunnerBase):
         self.task_id = args.task_id
         self.deployment_host = remote.query(spicerack.dns().resolve_cname(DEPLOYMENT_CNAME))
         self.reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
+
+        if args.user:
+            if self.project not in args.user:
+                ask_confirmation('The -u/--user provided "{args.user}" does not seem related to the project name '
+                                 '"{self.project}". Are you sure you want to continue using the user "{args.user}"?')
+            self.user = args.user
+        else:
+            self.user = f'deploy-{self.project}'
 
         if args.task_id is not None:
             self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
