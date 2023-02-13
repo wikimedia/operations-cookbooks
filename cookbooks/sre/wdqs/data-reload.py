@@ -238,11 +238,11 @@ def run(args, spicerack):
     validate_dump_age(kafka_timestamp, check_time="before_reload")
 
     dumps = []
-    if 'wikidata' == args.reload_data and not args.reuse_munge:
+    if 'wikidata' == args.reload_data:
         dumps = [NFS_DUMPS['wikidata'], NFS_DUMPS['lexeme']]
         munge(dumps, remote_host)
 
-    if 'commons' == args.reload_data and not args.reuse_munge:
+    if 'commons' == args.reload_data:
         dumps = [NFS_DUMPS['commons']]
         munge(dumps, remote_host)
 
