@@ -4,6 +4,7 @@ import json
 from argparse import Namespace
 from collections import defaultdict
 from ipaddress import ip_network
+from logging import getLogger
 from pathlib import Path
 from typing import DefaultDict, Optional, Union
 
@@ -18,6 +19,34 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.reposync import RepoSyncNoChangeError
 
 
+NETWORK_ROLES = ("cloudsw", "scs", "asw", "cr", "mr", "msw", "pfw", "pdu")
+
+NETWORK_DEVICE_LIST_GQL = """
+query ($role: [String], $status: [String]) {
+    device_list(role: $role, status: $status) {
+        name
+        virtual_chassis {
+            name
+            master { name }
+        }
+        device_role { slug }
+        device_type { slug }
+        site { slug }
+        tenant { name }
+        primary_ip4 {
+            dns_name
+            address
+        }
+        primary_ip6 {
+            dns_name
+            address
+        }
+        interfaces {
+            ip_addresses { address }
+        }
+    }
+}
+"""
 DEVICE_LIST_GQL = """
 query ($role: [String], $status: [String]) {
     device_list(role: $role, status: $status) {
@@ -143,6 +172,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
 
         config = load_yaml_config(spicerack.config_dir / "netbox" / "config.yaml")
 
+        self.logger = getLogger(__name__)
         self.args = args
         self.reposync = spicerack.reposync("netbox-hiera")
         self.puppetmasters = spicerack.remote().query("A:puppetmaster")
@@ -173,15 +203,57 @@ class NetboxHieraRunner(CookbookRunnerBase):
         if variables is not None:
             data["variables"] = variables
         try:
-            response = self._session.post(self._api_url, json=data)
+            response = self._session.post(self._api_url, json=data, timeout=5 * 60)
             response.raise_for_status()
             return response.json()['data']
         except RequestException as error:
-            raise RuntimeError(
-                f"failed to fetch netbox data: {error}\n{response.text}"
-            ) from error
+            raise RuntimeError(f"failed to fetch netbox data: {error}\n") from error
         except KeyError as error:
             raise RuntimeError(f"No data found in GraphQL response: {error}") from error
+
+    def _network_devices(self, status: list[str], roles: tuple[str, ...]) -> dict:
+        """Return the devices data.
+
+        Arguments:
+            roles: the netbox devices roles to filer on
+            status: the netbox status to filter on
+
+        """
+        results = {}
+        variables = {"role": roles, "status": status}
+        devices = self._gql_execute(NETWORK_DEVICE_LIST_GQL, variables)['device_list']
+        for device in devices:
+            if device.get('primary_ip4') is None:
+                self.logger.debug("%s has no primary ipv4 address", device['name'])
+                continue
+            # Only process the virtual chassis master, which has the ip address
+            if (
+                device.get('virtual_chassis') is not None
+                and device['virtual_chassis']['master']['name'] != device['name']
+            ):
+                continue
+            device_name = (
+                device['virtual_chassis']['name'].split('.')[0]
+                if device['virtual_chassis']
+                else device['name']
+            )
+            data = {
+                'primary_fqdn': device['primary_ip4']['dns_name'],
+                'site': device['site']['slug'],
+                'role': device['device_role']['slug'],
+                'ipv4': device['primary_ip4']['address'].split('/')[0],
+            }
+            if (
+                device['device_type']['slug'] == 'mx480'
+                and device['device_role']['slug'] == 'cr'
+            ):
+                data['alarms'] = True
+            if device.get('primary_ip6') is not None:
+                data['ipv6'] = device['primary_ip6']['address'].split('/')[0]
+
+            results[device_name] = data
+
+        return results
 
     def _devices(self, status: list[str], roles: list[str]) -> dict:
         """Return the devices data.
@@ -199,7 +271,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
         hosts = self._gql_execute(DEVICE_LIST_GQL, variables)['device_list']
         for host in hosts:
             # TODO: i think we should be able to filter this stuff out via the
-            # GraphQL query directly,  ut i cant work out how to say is null
+            # GraphQL query directly, but i cant work out how to say is null
             if host['tenant'] is not None:
                 continue
 
@@ -289,13 +361,13 @@ class NetboxHieraRunner(CookbookRunnerBase):
         variables = {"status": status}
         prefix_list = self._gql_execute(PREFIX_LIST, variables)['prefix_list']
         prefixes: DefaultDict[str, dict] = defaultdict(dict)
-        # TODO: this is probably useful for all queries
         for prefix_data in prefix_list:
             prefix = prefixes[prefix_data['prefix']]
+
             prefix['public'] = ip_network(prefix_data['prefix']).is_global
             for key, value in prefix_data.items():
                 # skip empty values
-                if value is None or key == 'prefix':
+                if value is None or key == "prefix":
                     continue
                 if key == 'status':
                     value = value.lower()
@@ -330,10 +402,12 @@ class NetboxHieraRunner(CookbookRunnerBase):
         common_path = out_dir / "common.yaml"
         mgmt_hosts = self._mgmt_hosts()
         prefixes = self._prefixes(['active'])
+        network_devices = self._network_devices(['active'], NETWORK_ROLES)
         # use json to get rid of defaultdicts
         common_data = json.loads(json.dumps({
             f"{self.hiera_prefix}::data::mgmt": mgmt_hosts,
             f"{self.hiera_prefix}::data::prefixes": prefixes,
+            f"{self.hiera_prefix}::data::network_devices": network_devices,
         }))
         with common_path.open("w") as common_fh:
             yaml.safe_dump(common_data, common_fh, default_flow_style=False)
