@@ -172,7 +172,7 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                 downtime_id = alerts.downtime(
                     self.admin_reason, duration=timedelta(minutes=120))
                 puppet = self.spicerack.puppet(remote)
-                puppet.disabled(self.args.reason)
+                puppet.disable(self.args.reason)
                 self.downtimes.append((alerts, downtime_id))
             else:
                 ask_confirmation(
@@ -186,7 +186,7 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return f"Upgrade K8s version: {self.args.reason}"
 
-    def run(self) -> int:  # pylint: disable=too-many-branches
+    def run(self) -> int:  # pylint: disable=too-many-branches,too-many-statements
         """Required by Spicerack API."""
         self._prepare_nodes()
         affected_nodes = nodeset()
@@ -264,17 +264,21 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                             "failed and you'd need to check. Do you want to "
                             "continue anyway?"
                         )
-                logger.info(
-                    "etcd nodes reimaged! "
-                    "Checking on every node to see if the view of the cluster is "
-                    "consistent...")
-                self.etcd_nodes.run_sync(
-                    "ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 member list"
-                )
-                ask_confirmation(
-                    "You should see a consistent response for all nodes in the above "
-                    "output. Please continue if everything looks good, otherwise "
-                    "check manually on the nodes before proceeding.")
+                logger.info("etcd nodes reimaged!")
+            else:
+                logger.info("Re-enabling puppet on etcd nodes...")
+                puppet = self.spicerack.puppet(self.etcd_nodes)
+                puppet.enable(self.args.reason)
+
+            logger.info(
+                "Checking on every node to see if the view of the cluster is consistent...")
+            self.etcd_nodes.run_sync(
+                "ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 member list"
+            )
+            ask_confirmation(
+                "You should see a consistent response for all nodes in the above "
+                "output. Please continue if everything looks good, otherwise "
+                "check manually on the nodes before proceeding.")
 
         if self.control_plane_nodes:
             ask_confirmation(
