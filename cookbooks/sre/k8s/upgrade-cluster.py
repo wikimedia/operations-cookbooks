@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.remote import RemoteExecutionError
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from cumin import nodeset
@@ -183,21 +184,28 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
 
     def _check_etcd_cluster_status(self):
         logger.info(
-            "Checking on every node to see if the view of the cluster is consistent...")
-        self.etcd_nodes.run_sync(
-            "ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 member list"
-        )
-        ask_confirmation(
-            "You should see a consistent response for all nodes in the above "
-            "output. Please continue if everything looks good, otherwise "
-            "check manually on the nodes before proceeding.")
+            "Checking member list on every node to see if the view "
+            "of the cluster is consistent...")
+        try:
+            self.etcd_nodes.run_sync(
+                "ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 member list"
+            )
+            ask_confirmation(
+                "You should see a consistent response for all nodes in the above "
+                "output. Please continue if everything looks good, otherwise "
+                "check manually on the nodes before proceeding.")
+        except RemoteExecutionError as e:
+            ask_confirmation(
+                "The etcdctl command to check the cluster's health failed, please check "
+                f"the error msg and decide if it is ok to continue:\n{e}",
+            )
 
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
         return f"Upgrade K8s version: {self.args.reason}"
 
-    def run(self) -> int:  # pylint: disable=too-many-branches
+    def run(self) -> int:  # pylint: disable=too-many-branches,too-many-statements
         """Required by Spicerack API."""
         self._prepare_nodes()
         affected_nodes = nodeset()
@@ -222,16 +230,28 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
         self.downtimes.append((all_prom_cluster_alerts, all_prom_cluster_alerts_id))
 
         if self.control_plane_nodes:
-            logger.info("Stopping k8s daemons in the control plane...")
-            self.control_plane_nodes.run_sync(
-                "/usr/bin/systemctl stop 'kube*'"
-            )
+            try:
+                logger.info("Stopping k8s daemons in the control plane...")
+                self.control_plane_nodes.run_sync(
+                    "/usr/bin/systemctl stop 'kube*'"
+                )
+            except RemoteExecutionError as e:
+                ask_confirmation(
+                    "The stop action failed, please check "
+                    f"the error msg and decide if it is ok to continue:\n{e}"
+                )
 
         if self.worker_nodes:
-            logger.info("Stopping k8s daemons on the workers...")
-            self.worker_nodes.run_sync(
-                "/usr/bin/systemctl stop 'kube*'"
-            )
+            try:
+                logger.info("Stopping k8s daemons on the workers...")
+                self.worker_nodes.run_sync(
+                    "/usr/bin/systemctl stop 'kube*'"
+                )
+            except RemoteExecutionError as e:
+                ask_confirmation(
+                    "The stop action failed, please check "
+                    f"the error msg and decide if it is ok to continue:\n{e}"
+                )
 
         # The procedure that we follow for etcd is:
         # 1) Wipe the cluster from current data.
@@ -246,13 +266,25 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
             etcd_node = next(self.etcd_nodes.split(len(self.etcd_nodes)))
             ask_confirmation(
                 f"Going to wipe the etcd v2/v3 endpoints on {etcd_node}.")
-            # v2 API
-            etcd_node.run_sync(
-                'etcdctl -C https://$(hostname -f):2379 rm -r /calico')
-            # v3 API
-            etcd_node.run_sync(
-                'ETCDCTL_API=3 etcdctl --endpoints https://$(hostname -f):2379 del "" --from-key=true'
-            )
+            try:
+                # v2 API
+                etcd_node.run_sync(
+                    'etcdctl -C https://$(hostname -f):2379 rm -r /calico')
+            except RemoteExecutionError as e:
+                ask_confirmation(
+                    "The etcd V2 wipe action for /calico failed, please check "
+                    f"the error msg and decide if it is ok to continue:\n{e}"
+                )
+            try:
+                # v3 API
+                etcd_node.run_sync(
+                    'ETCDCTL_API=3 etcdctl --endpoints https://$(hostname -f):2379 del "" --from-key=true'
+                )
+            except RemoteExecutionError as e:
+                ask_confirmation(
+                    "The etcd V3 wipe action failed, please check "
+                    f"the error msg and decide if it is ok to continue:\n{e}"
+                )
 
         logger.info(
             "All cluster components stopped or wiped!")
@@ -307,13 +339,19 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
             logger.info("Control plane nodes reimaged! "
                         "Checking on every node to see if the view of the cluster is "
                         "consistent...")
-            self.control_plane_nodes.run_sync(
-                "/usr/bin/kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info"
-            )
-            ask_confirmation(
-                "You should see a consistent response for all nodes in the above "
-                "output. Please continue if everything looks good, otherwise "
-                "check manually on the nodes before proceeding.")
+            try:
+                self.control_plane_nodes.run_sync(
+                    "/usr/bin/kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info"
+                )
+                ask_confirmation(
+                    "You should see a consistent response for all nodes in the above "
+                    "output. Please continue if everything looks good, otherwise "
+                    "check manually on the nodes before proceeding.")
+            except RemoteExecutionError as e:
+                ask_confirmation(
+                    "The kubectl command to check the cluster's info failed, please check "
+                    f"the error msg and decide if it is ok to continue:\n{e}"
+                )
 
         if self.worker_nodes:
             ask_confirmation(
