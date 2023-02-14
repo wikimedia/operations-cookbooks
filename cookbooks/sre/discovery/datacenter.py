@@ -14,7 +14,7 @@ from spicerack.remote import RemoteHosts
 from spicerack.service import ServiceDiscoveryRecord, ServiceIPs
 from spicerack.confctl import ConfctlError
 from wmflib.constants import CORE_DATACENTERS
-from wmflib.interactive import ask_input, ask_confirmation, InputError
+from wmflib.interactive import ask_input, ask_confirmation, confirm_on_failure, InputError
 
 from cookbooks.sre.discovery import resolve_with_client_ip, DC_IP_MAP
 from cookbooks.sre.switchdc.mediawiki import MEDIAWIKI_SERVICES
@@ -245,37 +245,34 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         for record in self.discovery_records["active_active"]:
             progress += 1
             logger.info("[%d/%d] Handling A/A service %s", progress, total_records, record.name)
-            # Store the current state
-            current_state = record.state
-            self.initial_state[record.name] = current_state
-            is_pooled = self.datacenter in current_state
-            # now determine what is the desired state
-            desired_state = current_state.copy()
-            if pool and not is_pooled:
-                desired_state.add(self.datacenter)
-            if not pool and is_pooled:
-                desired_state.remove(self.datacenter)
-            self._handle_active_active(record, current_state, desired_state)
+            try:
+                # Unpack the state tuple returned by _get_active_active_states
+                (current_state, desired_state) = confirm_on_failure(
+                    self._get_active_active_states, record, pool
+                )
+                self._handle_active_active(record, current_state, desired_state)
+            except TypeError:
+                # confirm_on_failure returns None when the skip option is chosen. Since we try to unpack the tuple
+                # returned by _get_active_active_states directly into variables, it throws a TypeError exception,
+                # which we catch to log and skip this record without breaking out of the loop.
+                logger.warning("Skipping %s", record.name)
 
         # For each A/P discovery record, first ensure we're pooling another core datacenter, then depool the current
         # one. We'll ask confirmation for each of them.
         for record in self.discovery_records["active_passive"]:
             progress += 1
             logger.info("[%d/%d] Handling A/P service %s", progress, total_records, record.name)
-            # store the current state
-            current_state = record.state
-            self.initial_state[record.name] = current_state
-            desired_state: Set[str] = current_state.copy()
-
-            if pool:
-                # If we're pooling the current datacenter, we want it to be the only datacenter pooled in the end.
-                desired_state = set(self.datacenter)
-            else:
-                # If depooling, we just remove the current datacenter from the desired state.
-                # If desired_state ends up empty, _skip_or_move will be called.
-                desired_state.remove(self.datacenter)
-
-            self._handle_active_passive(record, current_state, desired_state)
+            try:
+                # Unpack the state tuple returned by _get_active_passive_states
+                (current_state, desired_state) = confirm_on_failure(
+                    self._get_active_passive_states, record, pool
+                )
+                self._handle_active_passive(record, current_state, desired_state)
+            except TypeError:
+                # confirm_on_failure returns None when the skip option is chosen. Since we try to unpack the tuple
+                # returned by _get_active_active_states directly into variables, it throws a TypeError exception,
+                # which we catch to log and skip this record without breaking out of the loop.
+                logger.warning("Skipping %s", record.name)
         if self.insecure:
             self._clean_all()
 
@@ -314,9 +311,35 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         for record in self.discovery_records["active_active"]:
             if record.name in self.initial_state:
                 self._handle_active_active(record, record.state, self.initial_state[record.name])
-
         if self.insecure:
             self._clean_all()
+
+    def _get_active_active_states(self, record: DiscoveryRecord, pool: bool):
+        # Store the current state
+        current_state = record.state
+        self.initial_state[record.name] = current_state
+        is_pooled = self.datacenter in current_state
+        # now determine what is the desired state
+        desired_state = current_state.copy()
+        if pool and not is_pooled:
+            desired_state.add(self.datacenter)
+        if not pool and is_pooled:
+            desired_state.remove(self.datacenter)
+        return (current_state, desired_state)
+
+    def _get_active_passive_states(self, record: DiscoveryRecord, pool: bool):
+        # store the current state
+        current_state = record.state
+        self.initial_state[record.name] = current_state
+        desired_state: Set[str] = current_state.copy()
+        if pool:
+            # If we're pooling the current datacenter, we want it to be the only datacenter pooled in the end.
+            desired_state = set(self.datacenter)
+        else:
+            # If depooling, we just remove the current datacenter from the desired state.
+            # If desired_state ends up empty, _skip_or_move will be called.
+            desired_state.remove(self.datacenter)
+        return (current_state, desired_state)
 
     def _handle_active_active(self, record: DiscoveryRecord, current_state: Set[str], desired_state: Set[str]):
         if desired_state == current_state:
