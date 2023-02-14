@@ -181,12 +181,23 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                     "please restart the cookbook with a different set of args."
                 )
 
+    def _check_etcd_cluster_status(self):
+        logger.info(
+            "Checking on every node to see if the view of the cluster is consistent...")
+        self.etcd_nodes.run_sync(
+            "ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 member list"
+        )
+        ask_confirmation(
+            "You should see a consistent response for all nodes in the above "
+            "output. Please continue if everything looks good, otherwise "
+            "check manually on the nodes before proceeding.")
+
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
         return f"Upgrade K8s version: {self.args.reason}"
 
-    def run(self) -> int:  # pylint: disable=too-many-branches,too-many-statements
+    def run(self) -> int:  # pylint: disable=too-many-branches
         """Required by Spicerack API."""
         self._prepare_nodes()
         affected_nodes = nodeset()
@@ -222,25 +233,29 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                 "/usr/bin/systemctl stop 'kube*'"
             )
 
+        # The procedure that we follow for etcd is:
+        # 1) Wipe the cluster from current data.
+        # 2) If needed, reimage one node at the time
+        # We tried in the past to stop all etcd daemons and reimage one
+        # node at the time, but it turned out to be more difficult than
+        # expected since we use discovery records and the bootstrap/init
+        # procedure is not straightforward.
         if self.etcd_nodes:
-            if self.args.etcd_wipe_only:
-                # Get one etcd node and run the command only on it.
-                etcd_node = next(self.etcd_nodes.split(len(self.etcd_nodes)))
-                ask_confirmation(
-                    f"Going to wipe the etcd v2/v3 endpoints on {etcd_node}.")
-                # v2 API
-                etcd_node.run_sync(
-                    'etcdctl -C https://$(hostname -f):2379 rm -r /calico')
-                # v3 API
-                etcd_node.run_sync(
-                    'ETCDCTL_API=3 etcdctl --endpoints https://$(hostname -f):2379 del "" --from-key=true'
-                )
-            else:
-                logger.info("Stopping etcd daemons...")
-                self.etcd_nodes.run_sync("/usr/bin/systemctl stop etcd")
+            self._check_etcd_cluster_status()
+            # Get one etcd node and run the command only on it.
+            etcd_node = next(self.etcd_nodes.split(len(self.etcd_nodes)))
+            ask_confirmation(
+                f"Going to wipe the etcd v2/v3 endpoints on {etcd_node}.")
+            # v2 API
+            etcd_node.run_sync(
+                'etcdctl -C https://$(hostname -f):2379 rm -r /calico')
+            # v3 API
+            etcd_node.run_sync(
+                'ETCDCTL_API=3 etcdctl --endpoints https://$(hostname -f):2379 del "" --from-key=true'
+            )
 
         logger.info(
-            "All cluster components stopped!")
+            "All cluster components stopped or wiped!")
 
         ask_confirmation(
             "You may need to merge a puppet change to upgrade the K8s version, "
@@ -270,15 +285,7 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                 puppet = self.spicerack.puppet(self.etcd_nodes)
                 puppet.enable(self.args.reason)
 
-            logger.info(
-                "Checking on every node to see if the view of the cluster is consistent...")
-            self.etcd_nodes.run_sync(
-                "ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 member list"
-            )
-            ask_confirmation(
-                "You should see a consistent response for all nodes in the above "
-                "output. Please continue if everything looks good, otherwise "
-                "check manually on the nodes before proceeding.")
+            self._check_etcd_cluster_status()
 
         if self.control_plane_nodes:
             ask_confirmation(
