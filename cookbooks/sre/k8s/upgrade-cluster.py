@@ -315,7 +315,7 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
             else:
                 logger.info("Re-enabling puppet on etcd nodes...")
                 puppet = self.spicerack.puppet(self.etcd_nodes)
-                puppet.enable(self.args.reason)
+                puppet.enable(self.admin_reason)
 
             self._check_etcd_cluster_status()
 
