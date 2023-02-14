@@ -11,6 +11,7 @@ from spicerack.decorators import retry
 from spicerack.dnsdisc import DiscoveryCheckError, DiscoveryError
 from spicerack.remote import RemoteHosts
 from spicerack.service import ServiceDiscoveryRecord, ServiceIPs
+from spicerack.confctl import ConfctlError
 from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import ask_input, ask_confirmation, InputError
 
@@ -19,9 +20,6 @@ from cookbooks.sre.switchdc.mediawiki import MEDIAWIKI_SERVICES
 
 
 logger = logging.getLogger(__name__)
-# Avoid conftool logs to flood INFO/DEBUG
-logging.getLogger("conftool").setLevel(logging.WARNING)
-
 # This is used in DiscoveryDcRouteRunner._get_all_services, but might be of use for
 # other cookbooks too, so make it a module constant.
 EXCLUDED_SERVICES = {
@@ -176,8 +174,16 @@ class DiscoveryDcRoute(CookbookBase):
 
     def get_runner(self, args):
         """As specified by Spicerack API."""
+        if not self.spicerack.verbose:
+            # Avoid conftool logs to flood INFO/DEBUG
+            logging.getLogger("conftool").setLevel(logging.WARNING)
         if args.action == "status":
             args.all = True
+            if not self.spicerack.verbose:
+                # Cleaner output when running status in dry-run.
+                logger.setLevel(logging.WARNING)
+                logging.getLogger("etcd").setLevel(logging.WARNING)
+                logging.getLogger("spicerack.confctl").setLevel(logging.WARNING)
         else:
             args.filter = True
         return DiscoveryDcRouteRunner(args, self.spicerack)
@@ -217,11 +223,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
     def run(self):
         """Execute the desired action."""
         if self.action == "status":
-            print(f"=== POOLED SERVICES IN {self.datacenter.upper()} ===")
-            for group in self.discovery_records.values():
-                for record in group:
-                    if self.datacenter in record.state:
-                        print(f"* {record}")
+            self.status()
             return
         pool = self.action == "pool"
         # For each A/A discovery record, check if the service is pooled in more than just the datacenter we're depooling
@@ -263,6 +265,28 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
                 desired_state.remove(self.datacenter)
 
             self._handle_active_passive(record, current_state, desired_state)
+
+    def status(self):
+        """Get service status in datacenter."""
+        status = []
+        skipped = []
+        for group in self.discovery_records.values():
+            for record in group:
+                try:
+                    if self.datacenter in record.state:
+                        status.append(f"{record}")
+                except ConfctlError:
+                    logger.error("Can't fetch status for %s, skipping", record.name)
+                    skipped.append(f"{record}")
+        status.sort()
+        skipped.sort()
+        print(f"=== POOLED SERVICES IN {self.datacenter.upper()} ===")
+        for line in status:
+            s = line.split()
+            print(f"{s[0]:<30}{s[1]:<20}")
+        if skipped:
+            print(f"=== SKIPPED SERVICES IN {self.datacenter.upper()} ===")
+            print('\n'.join(skipped))
 
     def rollback(self):
         """Roll back everything we've done."""
