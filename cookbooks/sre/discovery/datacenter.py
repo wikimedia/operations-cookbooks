@@ -106,6 +106,11 @@ class DiscoveryRecord:
         return self.record.active_active
 
     @property
+    def type(self) -> str:
+        """String representation of service type"""
+        return 'Active/Active' if self.active_active else 'Active/Passive'
+
+    @property
     def name(self) -> str:
         """The dnsdisc name"""
         return self.record.dnsdisc
@@ -115,12 +120,13 @@ class DiscoveryRecord:
         """The state of the dnsdisc object"""
         return set(self.record.instance.active_datacenters[self.name])
 
+    def is_pooled_in_dc(self, datacenter) -> bool:
+        """True if dnsdisc object is pooled in datacenter"""
+        return datacenter in self.state
+
     def __str__(self) -> str:
         """String representation"""
-        how = "active/active"
-        if not self.active_active:
-            how = "active/passive"
-        return f"{self.name.capitalize()} ({how})"
+        return f"{self.name} ({self.type})"
 
 
 class DiscoveryDcRoute(CookbookBase):
@@ -175,7 +181,10 @@ class DiscoveryDcRoute(CookbookBase):
             )
             action.add_argument("--fast-insecure", "-f", help="Run the commands faster but relatively insecurely.")
         status = actions.add_parser("status")
-        status.add_argument("datacenter", choices=CORE_DATACENTERS, help="Name of the datacenter. One of: %(choices)s.")
+        status.add_argument(
+            "datacenter", choices=CORE_DATACENTERS + ('all',),
+            help="Name of the datacenter. One of: %(choices)s."
+        )
         status.add_argument("--filter", action="store_true", help="Filter the excluded services.")
         return parser
 
@@ -278,24 +287,41 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
 
     def status(self):
         """Get service status in datacenter."""
-        status = []
         skipped = []
-        for group in self.discovery_records.values():
-            for record in group:
-                try:
-                    if self.datacenter in record.state:
-                        status.append(f"{record}")
-                except ConfctlError:
-                    logger.error("Can't fetch status for %s, skipping", record.name)
-                    skipped.append(f"{record}")
-        status.sort()
+        if self.datacenter == 'all':
+            datacenters = CORE_DATACENTERS
+        else:
+            datacenters = (self.datacenter,)
+        status = {}
+        # Gather status information
+        for datacenter in datacenters:
+            for group in self.discovery_records.values():
+                for record in group:
+                    if record.name not in status:
+                        status[record.name] = {'type': record.type}
+                    try:
+                        if record.is_pooled_in_dc(datacenter):
+                            status[record.name][datacenter] = 'pooled'
+                        else:
+                            status[record.name][datacenter] = ''
+                    except ConfctlError:
+                        logger.error("Can't fetch status for %s", record.name)
+                        skipped.append(f"{record} {datacenter}")
+                        status[record.name][datacenter] = 'error'
+
+        # Header setup for pretty printing
+        dc_header_string = ''.join([f"{dc:<10}" for dc in datacenters])
+        header = f"{'Service':<30}{'Type':<15}{dc_header_string}"
+        print(header)
+        print('=' * len(header))
+
+        for service in sorted(status.keys()):
+            service_status_string = ''.join([f"{status[service][dc]:<10}" for dc in datacenters])
+            print(f"{service:<30}{status[service]['type']:<15}{service_status_string}")
+
         skipped.sort()
-        print(f"=== POOLED SERVICES IN {self.datacenter.upper()} ===")
-        for line in status:
-            s = line.split()
-            print(f"{s[0]:<30}{s[1]:<20}")
         if skipped:
-            print(f"=== SKIPPED SERVICES IN {self.datacenter.upper()} ===")
+            print("=== SKIPPED SERVICES ===")
             print('\n'.join(skipped))
 
     def rollback(self):
@@ -318,7 +344,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         # Store the current state
         current_state = record.state
         self.initial_state[record.name] = current_state
-        is_pooled = self.datacenter in current_state
+        is_pooled = record.is_pooled_in_dc(self.datacenter)
         # now determine what is the desired state
         desired_state = current_state.copy()
         if pool and not is_pooled:
