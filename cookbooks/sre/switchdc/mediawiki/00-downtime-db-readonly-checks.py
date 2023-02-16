@@ -3,7 +3,6 @@ import datetime
 import logging
 
 from cumin import nodeset
-from spicerack.mysql_legacy import ACTIVE_ACTIVE_SECTIONS
 
 from cookbooks.sre.switchdc.mediawiki import READ_ONLY_SERVICE_RE, argument_parser_base, post_process_args
 
@@ -20,7 +19,7 @@ def run(args, spicerack):
     """Required by Spicerack API."""
     post_process_args(args)
     mysql = spicerack.mysql_legacy()
-    hosts = mysql.get_core_dbs(replication_role="master", excludes=ACTIVE_ACTIVE_SECTIONS)
+    hosts = mysql.get_core_dbs(replication_role="master")
     icinga_hosts = spicerack.icinga_hosts(nodeset(str(hosts)))
 
     logger.info("Downtiming read-only checks on MariaDB primaries in both DCs.")
