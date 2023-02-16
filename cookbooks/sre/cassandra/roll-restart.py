@@ -6,6 +6,7 @@ from datetime import timedelta
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ensure_shell_is_durable
 
+from cookbooks.sre.cassandra import CASSANDRA_CLUSTERS
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,7 @@ class RollRestartCassandra(CookbookBase):
         parser = super().argument_parser()
         group = parser.add_mutually_exclusive_group(required=True)
         group.add_argument('cluster', nargs='?',
-                           choices=['aqs', 'restbase-eqiad', 'restbase-dev', 'sessionstore',
-                                    'restbase-codfw'],
+                           choices=CASSANDRA_CLUSTERS,
                            help=('The name of the Cassandra cluster to work on. This refers to '
                                  'a Cumin alias. As an alternative, you can pass a specific Cumin '
                                  'host query using the --query argument'))
