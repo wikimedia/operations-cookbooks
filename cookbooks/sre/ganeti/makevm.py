@@ -135,7 +135,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
             f'systemctl start netbox_ganeti_{self.group.site}{cluster_id}_sync.service')
         self.need_netbox_sync = False
 
-    def run(self):  # pylint: disable=too-many-locals, too-many-statements
+    def run(self):  # pylint: disable=too-many-locals
         """Create a new Ganeti VM as specified."""
         # Pre-allocate IPs
         # TODO: simplify the VLAN detection logic
@@ -184,17 +184,6 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
         self.need_netbox_sync = True
         instance.add(group=self.group.name, vcpus=self.vcpus, memory=self.memory, disk=self.disk, link=self.network)
-
-        if self.spicerack.dry_run:
-            logger.info('Skipping MAC address retrieval in DRY-RUN mode.')
-        else:
-            mac = self.ganeti.rapi(self.cluster).fetch_instance_mac(self.fqdn)
-            logger.info('MAC address for %s is: %s', self.fqdn, mac)
-            logger.info('dhcpd config snippet for puppet:')
-            logger.info('host %s {', self.hostname)
-            logger.info('    hardware ethernet %s;', mac)
-            logger.info('    fixed-address %s;', self.fqdn)
-            logger.info('}')
 
         self._ganeti_netbox_sync()
 
