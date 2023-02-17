@@ -108,6 +108,10 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
             self.etcd_nodes.run_sync,
             "ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 member list"
         )
+        ask_confirmation(
+            "You should see a consistent response for all nodes in the above "
+            "output. Please continue if everything looks good, otherwise "
+            "check manually on the nodes before proceeding.")
 
     @property
     def runtime_description(self):
@@ -118,6 +122,7 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
         """Required by Spicerack API."""
         # Check the etcd cluster first.
         # If it does not look healthy it's probably not safe to continue
+        logger.info("Checking the status of the etcd cluster...")
         self._check_etcd_cluster_status()
         self._prepare_nodes()
         affected_nodes = nodeset()
