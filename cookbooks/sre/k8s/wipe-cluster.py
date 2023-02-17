@@ -78,7 +78,6 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
     def _prepare_nodes(self):
         """Downtime and disable puppet on all components"""
         components = [
-            ("etcd", self.etcd_nodes),
             ("control-plane", self.control_plane_nodes),
             ("workers", self.worker_nodes)
         ]
@@ -93,7 +92,6 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
 
     def _run_puppet(self):
         components = [
-            ("etcd", self.etcd_nodes),
             ("control-plane", self.control_plane_nodes),
             ("workers", self.worker_nodes)
         ]
@@ -118,12 +116,13 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
 
     def run(self) -> int:
         """Required by Spicerack API."""
+        # Check the etcd cluster first.
+        # If it does not look healthy it's probably not safe to continue
+        self._check_etcd_cluster_status()
         self._prepare_nodes()
         affected_nodes = nodeset()
-        affected_nodes.update(
-            self.etcd_nodes.hosts + self.control_plane_nodes.hosts +
-            self.worker_nodes.hosts
-        )
+        affected_nodes.update(self.control_plane_nodes.hosts)
+        affected_nodes.update(self.worker_nodes.hosts)
 
         ask_confirmation(
             f"The cookbook is going to wipe the K8s cluster {self.k8s_cluster}. "
@@ -148,11 +147,8 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
             self.worker_nodes.run_sync, "/usr/bin/systemctl stop 'kube*'"
         )
 
-        self._check_etcd_cluster_status()
         # Get one etcd node and run the command only on it.
         etcd_node = next(self.etcd_nodes.split(len(self.etcd_nodes)))
-        ask_confirmation(
-            f"Going to wipe the etcd v3 endpoints on {etcd_node}.")
         confirm_on_failure(
             etcd_node.run_sync,
             'ETCDCTL_API=3 etcdctl --endpoints https://$(hostname -f):2379 del "" --from-key=true'
@@ -160,6 +156,11 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
         logger.info("Cluster's state wiped!")
 
         self._run_puppet()
+
+        ask_confirmation(
+            "All done. You should re-deploy in-cluster (admin_ng) components now, "
+            "next step will be removing downtimes."
+        )
 
         # Remove all downtimes
         for alert_host, downtime_id in self.downtimes:
