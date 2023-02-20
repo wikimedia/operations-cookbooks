@@ -136,7 +136,7 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
 
         # Add an extra downtime for the whole Prometheus k8s cluster
         # to reduce the noise as much as possible.
-        all_prom_cluster_alerts = self.spicerack.alertmanager_hosts([".*"], verbatim_hosts=True)
+        all_prom_cluster_alerts = self.spicerack.alertmanager()
         all_prom_cluster_alerts_id = all_prom_cluster_alerts.downtime(
             self.admin_reason, matchers=PROMETHEUS_MATCHERS[self.k8s_cluster],
             duration=timedelta(minutes=60 * len(affected_nodes)))
