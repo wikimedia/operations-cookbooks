@@ -15,6 +15,11 @@ from cookbooks.sre.network import configure_switch_interfaces
 
 DNS_ADDRESS = '10.3.0.1'
 DELL_DEFAULT = 'calvin'
+NEW_SERIAL_MODELS = (
+    'poweredge r450',
+    'poweredge r650',
+    'poweredge r650xs',
+)
 logger = logging.getLogger(__name__)
 
 
@@ -261,7 +266,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
     def _config(self):
         """Provision the BIOS and iDRAC settings."""
         config = self._get_config()
-        if config.model.lower() in ('poweredge r450', 'poweredge r650'):
+        if config.model.lower() in NEW_SERIAL_MODELS:
             self.config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedir'
             self.config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Com2'
         else:
