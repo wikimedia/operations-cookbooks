@@ -606,6 +606,10 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             f"{netbox_host.fqdn} {driver_category.name}: About to upload {firmware_file}, please confirm"
         )
 
+        # TODO: make the following the default when everything is on 4.40+
+        if version.parse(redfish_host.firmware_version) >= version.Version('4.40'):
+            return target_version, redfish_host.upload_file(firmware_file)
+
         if extract_payload:
             with self.extract_payload(firmware_file) as file_handle:
                 upload_id = self.upload_file(redfish_host, file_handle)
@@ -613,9 +617,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             with firmware_file.open("rb") as file_handle:
                 upload_id = self.upload_file(redfish_host, file_handle)
 
-        self._ask_confirmation(
-            f"{netbox_host.fqdn} {driver_category.name}: About to install {upload_id}, please confirm"
-        )
         job_id = self.simple_update(redfish_host, upload_id)
         logger.info(
             "%s (%s): has job ID - %s", netbox_host.fqdn, driver_category.name, job_id
