@@ -143,13 +143,16 @@ class DiscoveryDcRoute(CookbookBase):
       cookbook.sre.discovery.datacenter depool codfw
 
     - Pool all a/a discovery records in eqiad
-      cookbook.sre.discovery.datacenter [--reason REASON] pool eqiad
+      cookbook.sre.discovery.datacenter pool eqiad [--reason REASON] [--task-id T12345]
 
     - Depool ALL discovery records from codfw:
       cookbook.sre.discovery.datacenter depool codfw --all
 
     - Check which services are pooled in a datacenter:
       cookbook.sre.discovery.datacenter status codfw
+
+    - Check which services are pooled in all datacenters:
+      cookbook.sre.discovery.datacenter status all
 
     *In case of emergency only*: use the `--fast-insecure` switch for pool/depool,
     it will be making the cookbook much faster.
@@ -182,8 +185,8 @@ class DiscoveryDcRoute(CookbookBase):
                 "--all", action="store_true", help="Depool also the active/passive services (minus MediaWiki)"
             )
             action.add_argument("--fast-insecure", "-f", help="Run the commands faster but relatively insecurely.")
-            action.add_argument("--reason", required=False, help="Admin reason", default="maintenance")
-            action.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
+            action.add_argument("-r", "--reason", required=False, help="Admin reason", default="maintenance")
+            action.add_argument("-t", "--task-id", help="the Phabricator task ID to update and refer (i.e.: T12345)")
         status = actions.add_parser("status")
         status.add_argument(
             "datacenter", choices=CORE_DATACENTERS + ('all',),
