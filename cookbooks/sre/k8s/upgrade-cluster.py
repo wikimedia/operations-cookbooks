@@ -199,7 +199,7 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return f"Upgrade K8s version: {self.args.reason}"
 
-    def run(self) -> int:  # pylint: disable=too-many-branches
+    def run(self) -> int:  # pylint: disable=too-many-branches,too-many-statements
         """Required by Spicerack API."""
         affected_nodes = nodeset()
         if self.etcd_nodes:
@@ -345,6 +345,11 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                     )
 
             logger.info("Worker nodes reimaged!")
+
+        ask_confirmation(
+            "All done. You should re-deploy in-cluster (admin_ng) components now, "
+            "next step will be removing downtimes."
+        )
 
         # Remove all downtimes
         for alert_host, downtime_id in self.downtimes:
