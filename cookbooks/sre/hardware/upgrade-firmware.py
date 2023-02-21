@@ -13,7 +13,6 @@ from typing import Dict, List, Optional, Tuple
 from zipfile import ZipFile
 
 from packaging import version
-from requests import post
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
@@ -354,15 +353,10 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         response = redfish_host.request("head", push_url)
         headers = {"if-match": response.headers["ETag"]}
         files = {"file": file_handle}
-        # BUG: timeout is not hounred by redfish.request
-        # response = redfish_host.request('post', push_uri, files=files, headers=headers, timeout=(120,120))
-        response = post(
+        response = redfish_host._upload_session.post(  # pylint: disable=protected-access
             f"https://{redfish_host.interface.ip}{push_url}",
             files=files,
             headers=headers,
-            auth=redfish_host._http_session.auth,  # pylint: disable=protected-access
-            verify=False,  # nosec
-            timeout=60 * 30,  # 30 minutes
         ).json()
         if "error" in response:
             error_msg = f"{redfish_host} {self.extract_message(response['error'])}"
