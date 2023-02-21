@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Set
 
 from spicerack import Spicerack
+from spicerack.administrative import Reason
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.dnsdisc import DiscoveryCheckError, DiscoveryError
@@ -14,8 +15,9 @@ from spicerack.remote import RemoteHosts
 from spicerack.service import ServiceDiscoveryRecord, ServiceIPs
 from spicerack.confctl import ConfctlError
 from wmflib.constants import CORE_DATACENTERS
-from wmflib.interactive import ask_input, ask_confirmation, confirm_on_failure, InputError
+from wmflib.interactive import ask_input, ask_confirmation, confirm_on_failure, ensure_shell_is_durable, InputError
 
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.discovery import resolve_with_client_ip, DC_IP_MAP
 from cookbooks.sre.switchdc.mediawiki import MEDIAWIKI_SERVICES
 
@@ -169,7 +171,6 @@ class DiscoveryDcRoute(CookbookBase):
     def argument_parser(self):
         """Parse the command line arguments for this cookbook."""
         parser = super().argument_parser()
-        parser.add_argument("--reason", required=False, help="Admin reason", default="maintenance")
         actions = parser.add_subparsers(dest="action", help="The action to perform")
 
         for act in ["pool", "depool"]:
@@ -181,6 +182,8 @@ class DiscoveryDcRoute(CookbookBase):
                 "--all", action="store_true", help="Depool also the active/passive services (minus MediaWiki)"
             )
             action.add_argument("--fast-insecure", "-f", help="Run the commands faster but relatively insecurely.")
+            action.add_argument("--reason", required=False, help="Admin reason", default="maintenance")
+            action.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         status = actions.add_parser("status")
         status.add_argument(
             "datacenter", choices=CORE_DATACENTERS + ('all',),
@@ -204,6 +207,7 @@ class DiscoveryDcRoute(CookbookBase):
                 logging.getLogger("spicerack.confctl").setLevel(logging.WARNING)
         else:
             args.filter = True
+            ensure_shell_is_durable()
         return DiscoveryDcRouteRunner(args, self.spicerack)
 
 
@@ -216,7 +220,8 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         self.datacenter: str = args.datacenter
         self.do_all: bool = args.all
         self.action: str = args.action
-        self.admin_reason: str = args.reason
+        self.task_id: str = args.task_id
+        self.reason: Reason = spicerack.admin_reason(args.reason, task_id=self.task_id)
         self.catalog = self.spicerack.service_catalog()
         self.do_filter = args.filter
         self.discovery_records = self._get_all_services()
@@ -226,6 +231,10 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         self.initial_state: Dict[str, Set[str]] = {}
         self._recursors: RemoteHosts = spicerack.remote().query("A:dns-rec")
         self._authdns: RemoteHosts = spicerack.remote().query("A:dns-auth")
+        if self.task_id is not None:
+            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        else:
+            self.phabricator = None
 
     @property
     def runtime_description(self) -> str:
@@ -235,7 +244,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         else:
             services_msg = "all active/active services"
 
-        log_msg = f"{self.action} {services_msg} in {self.datacenter}: {self.admin_reason}"
+        log_msg = f"{self.action} {services_msg} in {self.datacenter}: {self.reason.reason} - {self.reason.task_id}"
         # Indicate the cookbook is being run in emergency mode
         if self.insecure:
             log_msg = f"🤠EMERGENCY RUN🤠 {log_msg}"
@@ -246,6 +255,11 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         if self.action == "status":
             self.status()
             return
+        if self.phabricator is not None:
+            self.phabricator.task_comment(
+                self.task_id,
+                f'{self.reason.owner} - Cookbook {__name__} {self.runtime_description} started.'
+            )
         pool = self.action == "pool"
         # For each A/A discovery record, check if the service is pooled in more than just the datacenter we're depooling
         # from.
@@ -285,6 +299,11 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
                 logger.warning("Skipping %s", record.name)
         if self.insecure:
             self._clean_all()
+        if self.phabricator is not None:
+            self.phabricator.task_comment(
+                self.task_id,
+                f'{self.reason.owner} - Cookbook {__name__} {self.runtime_description} completed.'
+            )
 
     def status(self):
         """Get service status in datacenter."""
@@ -329,6 +348,11 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         """Roll back everything we've done."""
         if self.action == "status":
             return
+        if self.phabricator is not None:
+            self.phabricator.task_comment(
+                self.task_id,
+                f'{self.reason.owner} - Cookbook {__name__} {self.runtime_description} failed.'
+            )
         ask_confirmation("Do you wish to rollback to the state before the cookbook ran?")
 
         for record in self.discovery_records["active_passive"]:
@@ -340,6 +364,11 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
                 self._handle_active_active(record, record.state, self.initial_state[record.name])
         if self.insecure:
             self._clean_all()
+        if self.phabricator is not None:
+            self.phabricator.task_comment(
+                self.task_id,
+                f'{self.reason.owner} - Cookbook {__name__} {self.runtime_description} rolled back.'
+            )
 
     def _get_active_active_states(self, record: DiscoveryRecord, pool: bool):
         # Store the current state
