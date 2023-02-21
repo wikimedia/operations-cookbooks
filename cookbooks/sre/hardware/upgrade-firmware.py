@@ -5,8 +5,7 @@ from argparse import ArgumentTypeError
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
-# TODO: switch lru_cache to cache when support for 3.7 is dropped
-from functools import lru_cache
+from functools import cache
 from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -537,7 +536,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         return extract_version(selection), selection
 
     # create a cached version of the above function
-    @lru_cache(maxsize=None)  # pylint: disable=method-cache-max-size-none
+    @cache  # pylint: disable=method-cache-max-size-none
     def _cached_select_firmwarefile(self, *args, **kargs):
         return self._select_firmwarefile(*args, **kargs)
 
