@@ -203,6 +203,8 @@ class DiscoveryDcRoute(CookbookBase):
         if args.action == "status":
             args.all = True
             args.fast_insecure = False
+            args.task_id = None
+            args.reason = None
             if not self.spicerack.verbose:
                 # Cleaner output when running status in dry-run.
                 logger.setLevel(logging.WARNING)
