@@ -330,52 +330,14 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         if odata_id is not None:
             return self._get_version_odata(redfish_host, driver_category, odata_id)
         try:
-            return {
-                DellDriverCategory.IDRAC: self.get_idrac_version(redfish_host),
-                DellDriverCategory.BIOS: self.get_bios_version(redfish_host),
-            }[driver_category]
+            return version.parse({
+                DellDriverCategory.IDRAC: redfish_host.firmware_version,
+                DellDriverCategory.BIOS: redfish_host.bios_version,
+            }[driver_category])
         except KeyError as error:
             raise ValueError(
                 f"Unsupported driver_category: {driver_category}"
             ) from error
-
-    # TODO: consider moving to spicerack.redfish
-    @staticmethod
-    def get_idrac_version(redfish_host: Redfish) -> version.Version:
-        """Get the current version
-
-        Arguments:
-            redfish_host: The host to act on
-
-        Returns:
-            str: The idrac version string
-
-        """
-        idrac_version = redfish_host.request(
-            "get", "/redfish/v1/Managers/iDRAC.Embedded.1?$select=FirmwareVersion"
-        ).json()["FirmwareVersion"]
-        logger.debug(
-            "%s: idrac current version %s", redfish_host.hostname, idrac_version
-        )
-        return version.parse(idrac_version)
-
-    # TODO: consider moving to spicerack.redfish
-    @staticmethod
-    def get_bios_version(redfish_host: Redfish) -> version.Version:
-        """Get the current version
-
-        Arguments:
-            redfish_host: The host to act on
-
-        Returns:
-            str: The idrac version string
-
-        """
-        bios_version = redfish_host.request(
-            "get", "/redfish/v1/Systems/System.Embedded.1?$select=BiosVersion"
-        ).json()["BiosVersion"]
-        logger.debug("%s: BIOS current version %s", redfish_host.hostname, bios_version)
-        return version.parse(bios_version)
 
     def upload_file(self, redfish_host: Redfish, file_handle: BufferedReader) -> str:
         """Upload a file to idrac via rdfish.
@@ -857,6 +819,11 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         status = True
+        if version.parse(redfish_host.firmware_version) < version.Version('4'):
+            logger.error('iDRAC version (%s) is too low to preform driver upgrades.  '
+                         'please upgrade iDRAC first')
+            return False
+
         members = self._get_hw_members(redfish_host, driver_category)
         if not members:
             logger.info(
@@ -898,7 +865,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             except NetboxError as error:
                 logger.error("Skipping: %s", error)
                 continue
-            idrac_version = self.get_idrac_version(redfish_host)
+            idrac_version = version.parse(redfish_host.firmware_version)
             if idrac_version < version.Version('3.30.30.30'):
                 logger.error('%s: SKIPPING - iDRAC version (%s) is too low to perform updates.  '
                              'please upgrade iDRAC to version 3.30.30.30 before proceeding',
