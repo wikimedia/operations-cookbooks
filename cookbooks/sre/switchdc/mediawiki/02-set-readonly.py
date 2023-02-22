@@ -21,16 +21,18 @@ def run(args, spicerack):
     post_process_args(args)
     logger.info('Set MediaWiki in read-only in %s and %s', args.dc_from, args.dc_to)
 
-    mediawiki = spicerack.mediawiki()
     if args.live_test:
-        logger.info('Skip setting MediaWiki read-only in %s', args.dc_to)
         prefix = '[DRY-RUN] '
     else:
-        mediawiki.set_readonly(args.dc_to, args.ro_reason)
         prefix = ''
 
+    mediawiki = spicerack.mediawiki()
     spicerack.irc_logger.info('%sMediaWiki read-only period starts at: %s', prefix, datetime.utcnow())
-    mediawiki.set_readonly(args.dc_from, args.ro_reason)
+    for dc in (args.dc_to, args.dc_from):
+        if args.live_test and dc is args.dc_to:
+            logger.info('Skip setting MediaWiki read-only in %s', dc)
+            continue
+        mediawiki.set_readonly(dc, args.ro_reason)
 
     logger.info('Sleeping 10s to allow in-flight requests to complete')
     time.sleep(10)

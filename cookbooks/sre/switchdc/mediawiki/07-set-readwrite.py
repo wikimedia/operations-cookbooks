@@ -18,12 +18,14 @@ def argument_parser():
 def run(args, spicerack):
     """Required by Spicerack API."""
     post_process_args(args)
-    logger.info('Set MediaWiki in read-write in %s', args.dc_to)
 
     mediawiki = spicerack.mediawiki()
     prefix = ''
     if args.live_test:
         prefix = '[DRY-RUN] '
 
-    mediawiki.set_readwrite(args.dc_to)
+    for dc in (args.dc_to, args.dc_from):
+        logger.info('Set MediaWiki in read-write in %s', dc)
+        mediawiki.set_readwrite(dc)
+
     spicerack.irc_logger.info('%sMediaWiki read-only period ends at: %s', prefix, datetime.utcnow())
