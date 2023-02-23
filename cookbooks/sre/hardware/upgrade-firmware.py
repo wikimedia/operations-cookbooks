@@ -328,10 +328,10 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         if odata_id is not None:
             return self._get_version_odata(redfish_host, driver_category, odata_id)
         try:
-            return version.parse({
+            return {
                 DellDriverCategory.IDRAC: redfish_host.firmware_version,
                 DellDriverCategory.BIOS: redfish_host.bios_version,
-            }[driver_category])
+            }[driver_category]
         except KeyError as error:
             raise ValueError(
                 f"Unsupported driver_category: {driver_category}"
@@ -607,7 +607,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         )
 
         # TODO: make the following the default when everything is on 4.40+
-        if version.parse(redfish_host.firmware_version) >= version.Version('4.40'):
+        if redfish_host.firmware_version >= version.Version('4.40'):
             return target_version, redfish_host.upload_file(firmware_file)
 
         if extract_payload:
@@ -664,7 +664,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         """
         last_reboot = redfish_host.last_reboot()
         driver_category = DellDriverCategory.IDRAC
-        # TODO: we should store this as some pkg_utils version parse string
         target_version, job_id = self._update(
             redfish_host,
             netbox_host,
@@ -813,7 +812,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         status = True
-        if version.parse(redfish_host.firmware_version) < version.Version('4'):
+        if redfish_host.firmware_version < version.Version('4'):
             logger.error('iDRAC version (%s) is too low to preform driver upgrades.  '
                          'please upgrade iDRAC first')
             return False
@@ -859,7 +858,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             except NetboxError as error:
                 logger.error("Skipping: %s", error)
                 continue
-            idrac_version = version.parse(redfish_host.firmware_version)
+            idrac_version = redfish_host.firmware_version
             if idrac_version < version.Version('3.30.30.30'):
                 logger.error('%s: SKIPPING - iDRAC version (%s) is too low to perform updates.  '
                              'please upgrade iDRAC to version 3.30.30.30 before proceeding',
