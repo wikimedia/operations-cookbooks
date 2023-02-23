@@ -38,11 +38,11 @@ def run(args, spicerack):
     warmup_dir = '/var/lib/mediawiki-cache-warmup'
     # urls-cluster is only running against appservers since is for shared resources behind the
     # servers themselves
-    warmups = ["nodejs {dir}/warmup.js {dir}/urls-cluster.txt spread appservers.svc.{dc}.wmnet".format(
+    warmups = ["{dir}/warmup.py {dir}/urls-cluster.txt spread appservers.svc.{dc}.wmnet".format(
         dir=warmup_dir, dc=datacenter)]
     for cluster in ["appserver", "api_appserver"]:
         # urls-server runs against both appserver and API clusters since it's for each individual server
-        warmups.append("nodejs {dir}/warmup.js {dir}/urls-server.txt clone {cluster} {dc}".format(
+        warmups.append("{dir}/warmup.py {dir}/urls-server.txt clone {cluster} {dc}".format(
             dir=warmup_dir, dc=datacenter, cluster=cluster))
 
     maintenance_host = spicerack.mediawiki().get_maintenance_host(datacenter)
