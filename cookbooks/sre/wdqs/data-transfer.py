@@ -216,6 +216,6 @@ def run(args, spicerack):
                 wait_for_updater(prometheus, get_site(source_hostname, spicerack), source)
                 wait_for_updater(prometheus, get_site(dest_hostname, spicerack), dest)
 
-            if args.with_lvs:
+            if args.depool:
                 logger.info('pooling %s', remote_hosts)
                 remote_hosts.run_sync('pool')
