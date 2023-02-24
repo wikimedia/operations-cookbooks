@@ -34,7 +34,7 @@ def extract_version(firmware_file: Path) -> version.Version:
     try:
         pattern = {
             'IDRAC': r'(?P<version>(\d{1,2}\.){3}\d{1,2})_\w{3}$',
-            'BIOS': r'(?P<version>(\d{1,2}\.){2}\d{1,2})$',
+            'BIOS': r'(?P<version>(\d{1,2}\.){2}\d{1,2})(?:_\d+)?$',
             'NETWORK': r'(?P<version>(\d{1,2}\.){2,3}\d{1,2})$',
         }[firmware_file.parent.name]
     except KeyError:
