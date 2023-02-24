@@ -495,6 +495,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             with self.dhcp.config(self.dhcp_config):
                 self._install_os()
 
+        self._clear_dhcp_cache()
+
         self._mask_units()
         fingerprint = self.puppet_installer.regenerate_certificate()[self.fqdn]
         self.host_actions.success('Generated Puppet certificate')
@@ -570,8 +572,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.host_actions.success(f'Updated Netbox status {current_status} -> active')
             self.spicerack.run_cookbook(
                 'sre.puppet.sync-netbox-hiera', [f'Triggered by {__name__}: {self.reason.reason}'])
-
-        self._clear_dhcp_cache()
 
         # Comment on the Phabricator task
         logger.info('Reimage completed:\n%s\n', self.actions)
