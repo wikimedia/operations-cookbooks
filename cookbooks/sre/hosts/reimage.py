@@ -415,7 +415,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         switch_fqdn = iface.connected_endpoint.device.primary_ip.dns_name
         switch = self.remote.query(f'D{{{switch_fqdn}}}')
         ip = ipaddress.ip_interface(netbox_host.primary_ip4).ip
-        mac_command = f'/usr/bin/facter --no-custom-facts -p networking.interfaces.{iface.name}.mac'
+        mac_command = f'/usr/bin/facter --no-custom-facts --no-external-facts networking.interfaces.{iface.name}.mac'
         result = self.remote_host.run_sync(mac_command, is_safe=True, print_progress_bars=False, print_output=False)
         for _, output in result:
             mac = output.message().decode().strip()
