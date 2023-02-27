@@ -174,6 +174,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         # Keep track of some specific actions for the eventual rollback
         self.rollback_masks = False
         self.rollback_depool = False
+        self.rollback_clear_dhcp_cache = False
 
         if self.args.task_id is not None:
             self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
@@ -191,6 +192,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self._unmask_units()
         if self.rollback_depool:
             self._repool()
+        if self.rollback_clear_dhcp_cache:
+            self._clear_dhcp_cache()
 
         self.host_actions.failure('**The reimage failed, see the cookbook logs for the details**')
         logger.error('Reimage executed with errors:\n%s\n', self.actions)
@@ -312,6 +315,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                              f'with: sudo install_console {self.fqdn}')
 
         self.host_actions.success('Host up (Debian installer)')
+        self.rollback_clear_dhcp_cache = True
         self.remote_installer.wait_reboot_since(di_reboot_time, print_progress_bars=False)
         try:
             self.remote_installer.run_sync(f'! {env_command}', print_output=False, print_progress_bars=False)
