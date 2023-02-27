@@ -671,8 +671,12 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_category,
             extract_payload=True,
         )
+        if redfish_host.firmware_version == target_version:
+            return True
+
         if job_id is None:
             return False
+
         self.poll_id(redfish_host, job_id, True)
         # TODO: this comment needs to go elses where, or we shuld perhaps print something
         # when doing an upgrade from to 2.80+
@@ -743,6 +747,9 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             DellDriverType.BIOS,
             driver_category,
         )
+        if redfish_host.bios_version == target_version:
+            return True
+
         if job_id is None:
             logger.error('%s: no job_id for BIOS update', netbox_host.fqdn)
             return False
@@ -825,13 +832,15 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             return True
 
         for member in members:
-            latest_version, job_id = self._update(
+            target_version, job_id = self._update(
                 redfish_host,
                 netbox_host,
                 DellDriverType.FRMW,
                 driver_category,
                 odata_id=member,
             )
+            if self._get_version_odata(redfish_host, driver_category, member) == target_version:
+                continue
             if job_id is None:
                 logger.error('%s: no job_id for member (%s)', netbox_host.fqdn, member)
                 status = False
@@ -843,7 +852,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             self._reboot(redfish_host, netbox_host)
             self.poll_id(redfish_host, job_id, True)
             if not self._check_version(
-                redfish_host, latest_version, driver_category, odata_id=member
+                redfish_host, target_version, driver_category, odata_id=member
             ):
                 status = False
         return status
