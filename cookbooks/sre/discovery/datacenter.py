@@ -399,7 +399,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         else:
             # If depooling, we just remove the current datacenter from the desired state.
             # If desired_state ends up empty, _skip_or_move will be called.
-            desired_state.remove(self.datacenter)
+            desired_state.discard(self.datacenter)
         return (current_state, desired_state)
 
     def _handle_active_active(self, record: DiscoveryRecord, current_state: Set[str], desired_state: Set[str]):
