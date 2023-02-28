@@ -32,8 +32,8 @@ EXCLUDED_SERVICES = {
     "puppetdb-api": "not a 'service', strictly speaking, thus excluded",
     "helm-charts": "not a 'service', strictly speaking, thus excluded",
     "toolhub": "T288685: needs to match m5 database cluster replication",
-    'wdqs': "T329193: capacity limitations in codfw",
-    'wdqs-ssl': "T329193: capacity limitations in codfw",
+    "wdqs": "T329193: capacity limitations in codfw",
+    "wdqs-ssl": "T329193: capacity limitations in codfw",
 }
 
 
@@ -111,7 +111,7 @@ class DiscoveryRecord:
     @property
     def type(self) -> str:
         """String representation of service type"""
-        return 'Active/Active' if self.active_active else 'Active/Passive'
+        return "Active/Active" if self.active_active else "Active/Passive"
 
     @property
     def name(self) -> str:
@@ -189,8 +189,7 @@ class DiscoveryDcRoute(CookbookBase):
             action.add_argument("-t", "--task-id", help="the Phabricator task ID to update and refer (i.e.: T12345)")
         status = actions.add_parser("status")
         status.add_argument(
-            "datacenter", choices=CORE_DATACENTERS + ('all',),
-            help="Name of the datacenter. One of: %(choices)s."
+            "datacenter", choices=CORE_DATACENTERS + ("all",), help="Name of the datacenter. One of: %(choices)s."
         )
         status.add_argument("--filter", action="store_true", help="Filter the excluded services.")
         return parser
@@ -262,8 +261,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             return
         if self.phabricator is not None:
             self.phabricator.task_comment(
-                self.task_id,
-                f'{self.reason.owner} - Cookbook {__name__} {self.runtime_description} started.'
+                self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} started."
             )
         pool = self.action == "pool"
         # For each A/A discovery record, check if the service is pooled in more than just the datacenter we're depooling
@@ -276,9 +274,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             logger.info("[%d/%d] Handling A/A service %s", progress, total_records, record.name)
             try:
                 # Unpack the state tuple returned by _get_active_active_states
-                (current_state, desired_state) = confirm_on_failure(
-                    self._get_active_active_states, record, pool
-                )
+                (current_state, desired_state) = confirm_on_failure(self._get_active_active_states, record, pool)
                 self._handle_active_active(record, current_state, desired_state)
             except TypeError:
                 # confirm_on_failure returns None when the skip option is chosen. Since we try to unpack the tuple
@@ -293,9 +289,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             logger.info("[%d/%d] Handling A/P service %s", progress, total_records, record.name)
             try:
                 # Unpack the state tuple returned by _get_active_passive_states
-                (current_state, desired_state) = confirm_on_failure(
-                    self._get_active_passive_states, record, pool
-                )
+                (current_state, desired_state) = confirm_on_failure(self._get_active_passive_states, record, pool)
                 self._handle_active_passive(record, current_state, desired_state)
             except TypeError:
                 # confirm_on_failure returns None when the skip option is chosen. Since we try to unpack the tuple
@@ -306,14 +300,13 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             self._clean_all()
         if self.phabricator is not None:
             self.phabricator.task_comment(
-                self.task_id,
-                f'{self.reason.owner} - Cookbook {__name__} {self.runtime_description} completed.'
+                self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} completed."
             )
 
     def status(self):
         """Get service status in datacenter."""
         skipped = []
-        if self.datacenter == 'all':
+        if self.datacenter == "all":
             datacenters = CORE_DATACENTERS
         else:
             datacenters = (self.datacenter,)
@@ -323,31 +316,31 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             for group in self.discovery_records.values():
                 for record in group:
                     if record.name not in status:
-                        status[record.name] = {'type': record.type}
+                        status[record.name] = {"type": record.type}
                     try:
                         if record.is_pooled_in_dc(datacenter):
-                            status[record.name][datacenter] = 'pooled'
+                            status[record.name][datacenter] = "pooled"
                         else:
-                            status[record.name][datacenter] = ''
+                            status[record.name][datacenter] = ""
                     except ConfctlError:
                         logger.error("Can't fetch status for %s", record.name)
                         skipped.append(f"{record} {datacenter}")
-                        status[record.name][datacenter] = 'error'
+                        status[record.name][datacenter] = "error"
 
         # Header setup for pretty printing
-        dc_header_string = ''.join([f"{dc:<10}" for dc in datacenters])
+        dc_header_string = "".join([f"{dc:<10}" for dc in datacenters])
         header = f"{'Service':<30}{'Type':<15}{dc_header_string}"
         print(header)
-        print('=' * len(header))
+        print("=" * len(header))
 
         for service in sorted(status.keys()):
-            service_status_string = ''.join([f"{status[service][dc]:<10}" for dc in datacenters])
+            service_status_string = "".join([f"{status[service][dc]:<10}" for dc in datacenters])
             print(f"{service:<30}{status[service]['type']:<15}{service_status_string}")
 
         skipped.sort()
         if skipped:
             print("=== SKIPPED SERVICES ===")
-            print('\n'.join(skipped))
+            print("\n".join(skipped))
 
     def rollback(self):
         """Roll back everything we've done."""
@@ -355,8 +348,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             return
         if self.phabricator is not None:
             self.phabricator.task_comment(
-                self.task_id,
-                f'{self.reason.owner} - Cookbook {__name__} {self.runtime_description} failed.'
+                self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} failed."
             )
         ask_confirmation("Do you wish to rollback to the state before the cookbook ran?")
 
@@ -371,8 +363,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             self._clean_all()
         if self.phabricator is not None:
             self.phabricator.task_comment(
-                self.task_id,
-                f'{self.reason.owner} - Cookbook {__name__} {self.runtime_description} rolled back.'
+                self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} rolled back."
             )
 
     def _get_active_active_states(self, record: DiscoveryRecord, pool: bool):
