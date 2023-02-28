@@ -76,9 +76,9 @@ class Reimage(CookbookBase):
             '--pxe-media', default='installer',
             help=('Specify a different media suffix to use in the PXE settings of the DHCP configuration. To be used '
                   'when a specific installer is needed that is available as tftpboot/$OS-$PXE_MEDIA/.'))
-        parser.add_argument('--os', choices=OS_VERSIONS, required=True,
-                            help='the Debian version to install. One of %(choices)s')
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
+        parser.add_argument('--os', choices=OS_VERSIONS, required=True,
+                            help='the Debian version to install. Mandatory parameter. One of %(choices)s.')
         parser.add_argument('host', help='Short hostname of the host to be reimaged, not FQDN')
 
         return parser
