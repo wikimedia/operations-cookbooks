@@ -12,7 +12,6 @@ from spicerack.decorators import retry
 from spicerack.exceptions import SpicerackCheckError
 from spicerack.remote import RemoteHosts
 from wmflib.constants import ALL_DATACENTERS, CORE_DATACENTERS
-from wmflib.requests import http_session
 
 from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
 
@@ -61,7 +60,7 @@ class LBRestartRunner(SREBatchRunnerBase):
     def __init__(self, args: argparse.Namespace, spicerack: Spicerack) -> None:
         """Initializes the parent class, also adds an http session"""
         super().__init__(args, spicerack)
-        self._http = http_session("PybalRestart", timeout=2.0, tries=2, backoff=2.0)
+        self._http = spicerack.requests_session(__name__, timeout=2.0, tries=2, backoff=2.0)
 
     @property
     def allowed_aliases(self) -> List:
