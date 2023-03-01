@@ -16,9 +16,8 @@ import getpass
 import logging
 import os
 
-import requests
-
 from wmflib.config import load_yaml_config
+
 
 __title__ = 'Manage CF BGP advertisement of our prefixes'
 logger = logging.getLogger(__name__)
@@ -56,12 +55,8 @@ def run(args, spicerack):
     api_token = get_secret('api_token', config)
 
     # Configure the session object, reused across requests.
-    session = requests.Session()
-    # Construct the User-Agent per WMF internal policy (a good generic choice). Include the python-requests version.
-    user_agent = ('WMF spicerack/sre.network.cf (https://wikitech.wikimedia.org/wiki/Spicerack; noc@wikimedia.org) '
-                  '{}').format(session.headers['User-Agent'])
-    headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(api_token),
-               'User-Agent': user_agent}
+    session = spicerack.requests_session(__name__)
+    headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(api_token)}
     session.headers.update(headers)
     session.proxies = spicerack.requests_proxies
 

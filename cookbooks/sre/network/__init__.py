@@ -3,17 +3,17 @@ import json
 import logging
 
 from ipaddress import ip_address
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from spicerack.netbox import Netbox
-from spicerack.remote import RemoteHosts
+from spicerack.remote import Remote, RemoteHosts
 from wmflib.interactive import ask_confirmation
 
 __title__ = __doc__
 logger = logging.getLogger(__name__)
 
 
-def configure_switch_interfaces(remote: RemoteHosts, netbox: Netbox, netbox_data: Dict,
+def configure_switch_interfaces(remote: Remote, netbox: Netbox, netbox_data: Dict,
                                 print_output: bool = False) -> None:
     """Configure the switch interfaces relevant to a device.
 
@@ -53,7 +53,7 @@ def configure_switch_interfaces(remote: RemoteHosts, netbox: Netbox, netbox_data
             logger.info("No configuration change needed on the switch for %s", nb_device_interface)
 
 
-def junos_set_interface_config(netbox_data: Dict, live_interface: Dict,  # pylint: disable=too-many-branches
+def junos_set_interface_config(netbox_data: Dict, live_interface: Optional[dict],  # pylint: disable=too-many-branches
                                nb_switch_interface) -> List[str]:
     """Return a list of Junos set commands needed to configure the interface
 
@@ -63,7 +63,7 @@ def junos_set_interface_config(netbox_data: Dict, live_interface: Dict,  # pylin
         nb_switch_interface: Instance of relevant Netbox interface
 
     """
-    commands = []
+    commands: list[str] = []
     device_name = netbox_data['name']
     # We want to disable the interface if it's disabled in Netbox
     if not nb_switch_interface.enabled:
@@ -194,7 +194,7 @@ def parse_results(results_raw, json_output=False):
     return result
 
 
-def junos_interface_to_netbox(config: str, old_junos: bool) -> Dict:
+def junos_interface_to_netbox(config: dict, old_junos: bool) -> Dict:
     """Converts a Junos JSON interface config to a dict similar to Netbox interfaces.
 
     Arguments:
@@ -245,7 +245,8 @@ def junos_interface_to_netbox(config: str, old_junos: bool) -> Dict:
     return interface
 
 
-def get_junos_live_interface_config(remote_host: RemoteHosts, interface: str, print_output: bool = False) -> Dict:
+def get_junos_live_interface_config(remote_host: RemoteHosts, interface: str,
+                                    print_output: bool = False) -> Optional[dict]:
     """Returns the running configuration of a given Junos interface in a Netbox format.
 
     Arguments:
@@ -315,7 +316,7 @@ def get_junos_optics(remote_host: RemoteHosts, interface: str, print_output: boo
     return interface_optic
 
 
-def get_junos_interface(remote_host: RemoteHosts, interface: str, print_output: bool = False) -> Dict:
+def get_junos_interface(remote_host: RemoteHosts, interface: str, print_output: bool = False) -> Optional[dict]:
     """Returns the interface status of a given interface
 
     Arguments:

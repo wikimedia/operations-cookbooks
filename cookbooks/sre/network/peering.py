@@ -4,7 +4,7 @@ import argparse
 import logging
 import smtplib
 from collections import defaultdict
-from typing import Tuple
+from typing import Tuple, Union
 
 from email.message import EmailMessage
 from ipaddress import ip_address
@@ -146,7 +146,7 @@ class PeeringRunner(CookbookRunnerBase):
                     for afi in ['ipaddr4', 'ipaddr6']:
                         if i[afi] is None or k[afi] is None:
                             continue
-                        session = {}
+                        session: dict = {}
                         session['ix_name'] = self.ixname(ixlan)
                         session['name_l'] = data_l['name']
                         session['asn_l'] = asn_l
@@ -175,7 +175,7 @@ class PeeringRunner(CookbookRunnerBase):
             return bgp_summary[peer_address] if peer_address in bgp_summary else {}
         return bgp_summary
 
-    def peering_matrix(self, asn_l: int, asn_r: int) -> str:
+    def peering_matrix(self, asn_l: int, asn_r: int) -> Union[PrettyTable, str]:
         """Nicely display possible and existing BGP sessions between networks"""
         sessions = self.format_sessions(asn_l, asn_r)
         if not sessions:
@@ -257,7 +257,7 @@ class PeeringRunner(CookbookRunnerBase):
         found = False
         if not data['poc_set']:
             logger.error('No point of contacts for AS%i', asn)
-            return {}
+            return set()
         for poc in data['poc_set']:
             all_emails.add(poc['email'])
             if role.lower() in poc['role'].lower() or role.lower() in poc['name'].lower():
@@ -268,14 +268,14 @@ class PeeringRunner(CookbookRunnerBase):
     def prepare_email(self, asn_l: int, asn_r: int) -> Tuple[set, str, str]:
         """Returns everything that will be in the email if any"""
         sessions = self.format_sessions(asn_l, asn_r)
-        grouped_sessions = {}
+        grouped_sessions: dict = {}
         peering_matrix = self.peering_matrix(asn_l, asn_r)
         for session in sessions:
             grouped_sessions.setdefault(session['status'], []).append(session)
 
         if not grouped_sessions or list(grouped_sessions.keys()) == ['Established']:
             logger.info('Nothing to do')
-            return None, None, None
+            return set(), '', ''
 
         them_human = f"{sessions[0]['name_r']} (AS{asn_r})"
         body = f"Hello {them_human},\n\n"
@@ -335,7 +335,7 @@ If no reply or an extended downtime, we will have to delete the session(s).\n\n"
     def email(self, asn_l: int, asn_r: int) -> None:
         """Prepare the email, display it and send it"""
         recipients, subject, body = self.prepare_email(asn_l, asn_r)
-        if subject is None:
+        if not subject:
             return
         print(f'\nSubject: {subject} \n\n {body}')
         if recipients is None:
