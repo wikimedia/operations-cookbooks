@@ -176,12 +176,6 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             }
         }
 
-        netbox_host = self.netbox.api.dcim.devices.get(name=self.args.host)
-        self.multi_gigabit = False
-        if 'gbase-' in netbox_host.primary_ip.assigned_object.type.value:
-            logger.info('Detected multi-gigabit interface, will add specific settings.')
-            self.multi_gigabit = True
-
         ask_confirmation(f'Are you sure to proceed to apply BIOS/iDRAC settings {self.runtime_description}?')
 
     @property
@@ -313,22 +307,43 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             config (spicerack.redfish.RedfishDellSCP): the configuration to modify.
 
         """
-        embedded_nics = sorted(key for key in config.components.keys() if key.startswith('NIC.Embedded.'))
-        other_nics = sorted(
-            key for key in config.components.keys() if key.startswith('NIC.') and key not in embedded_nics)
+        all_nics = sorted(key for key in config.components.keys() if key.startswith('NIC.'))
+        nics_with_link = []
+        nics_failed = []
+        for nic in all_nics:
+            try:
+                nic_json = self.redfish.request(
+                    'GET', f'/redfish/v1/Systems/System.Embedded.1/EthernetInterfaces/{nic}').json()
+                if nic_json.get('LinkStatus', '') == 'LinkUp':
+                    nics_with_link.append(nic)
+            except RedfishError as e:
+                nics_failed.append(nic)
+                logger.error('Unable to detect link status for NIC %s: %s', nic, e)
 
-        all_nics = embedded_nics + other_nics
-        prefixes = {key.split('-')[0] for key in other_nics}
-        if len(prefixes) == 1 and self.multi_gigabit:  # One external card and multi-gigabit set on Netbox
-            pxe_nic = other_nics[0]  # Select the first external NIC
-        elif embedded_nics and not self.multi_gigabit:  # Embedded NICs present and multi-gigabit not set on Netbox
-            pxe_nic = embedded_nics[0]  # Select the first embedded NIC
-        else:  # Unable to auto-detect
-            all_nics_list = '\n'.join(all_nics)
-            speed = 'multi-gigabit' if self.multi_gigabit else '1G'
-            pxe_nic = ask_input(
-                f'Unable to auto-detect NIC, Netbox reports {speed} NIC. Pick the one to set PXE on:\n{all_nics_list}',
-                all_nics)
+        pxe_nic = ''
+        if nics_failed:
+            pick = False
+            if len(nics_with_link) == 1:
+                response = ask_input(f'Detected link on NIC {nics_with_link[0]} but failed to detect link for some '
+                                     f'NICs: {nics_failed}.\nDo you want to "continue" with NIC {nics_with_link[0]} '
+                                     'or "pick" a different one?',
+                                     ['continue', 'pick'])
+                if response == 'continue':
+                    pxe_nic = nics_with_link[0]
+                else:
+                    pick = True
+
+            if len(nics_with_link) != 1 or pick:
+                pxe_nic = ask_input(
+                    f'Unable to auto-detect NIC with link. Pick the one to set PXE on:\n{all_nics}', all_nics)
+
+        if not pxe_nic:
+            if len(nics_with_link) == 1:
+                pxe_nic = nics_with_link[0]
+            else:
+                pxe_nic = ask_input(
+                    f'Detected link on {len(nics_with_link)} interfaces. Pick the one to set PXE on:\n{nics_with_link}',
+                    nics_with_link)
 
         logger.info('Enabling PXE boot on NIC %s', pxe_nic)
         for nic in all_nics:
