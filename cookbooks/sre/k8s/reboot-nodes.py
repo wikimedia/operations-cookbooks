@@ -32,7 +32,7 @@ from typing import List
 
 from kubernetes.client.models import V1Taint
 from spicerack import Spicerack
-from spicerack.k8s import Kubernetes, KubernetesApiError
+from spicerack.k8s import Kubernetes, KubernetesApiError, KubernetesNode
 from spicerack.remote import RemoteHosts
 from wmflib.constants import CORE_DATACENTERS
 
@@ -102,7 +102,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
             dry_run=spicerack.dry_run,
         )
         # Dictionary containing KubernetesNode instances for all hosts
-        self._all_k8s_nodes = {}
+        self._all_k8s_nodes: dict[str, KubernetesNode] = {}
         super().__init__(args, spicerack)
         # _first_batch is used to detect the fist batch run in each host_group
         self._first_batch = True
@@ -132,19 +132,20 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
     def _k8s_node_action(self, node_name: str, action: str) -> None:
         """Call the function action on a KubernetesNode instance for a given node_name"""
         node = self._all_k8s_nodes.get(node_name)
-        return None if node is None else getattr(node, action)()
+        if node is not None:
+            getattr(node, action)()
 
     def _cordon(self, node_name: str) -> None:
         """Cordon a kubernetes node"""
-        return self._k8s_node_action(node_name, "cordon")
+        self._k8s_node_action(node_name, "cordon")
 
     def _uncordon(self, node_name: str) -> None:
         """Uncordon a kubernetes node"""
-        return self._k8s_node_action(node_name, "uncordon")
+        self._k8s_node_action(node_name, "uncordon")
 
     def _drain(self, node_name: str) -> None:
         """Drain a kubernetes node"""
-        return self._k8s_node_action(node_name, "drain")
+        self._k8s_node_action(node_name, "drain")
 
     def _batchsize(self, number_of_hosts: int) -> int:
         """Adjust the batch size to be no more than 20% of the host in each node/taint group"""

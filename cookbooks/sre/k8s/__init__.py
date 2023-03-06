@@ -1,9 +1,10 @@
 """Kubernetes cluster operations"""
+from typing import Union
 
 # Prometheus matchers to properly downtime a k8s cluster.
 # If we downtime only the hosts we may end up in alerts firing when
 # we upgrade, for example due to Calico etc..
-PROMETHEUS_MATCHERS = {
+PROMETHEUS_MATCHERS: dict[str, list[dict[str, Union[str, int, float, bool]]]] = {
     "staging-codfw": [
         {
             "name": "site",

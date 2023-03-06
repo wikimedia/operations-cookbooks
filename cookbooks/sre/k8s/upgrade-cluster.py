@@ -2,9 +2,13 @@
 import logging
 from argparse import ArgumentParser, Namespace
 from datetime import timedelta
+from typing import Optional, Union
 
 from spicerack import Spicerack
+from spicerack.alerting import AlertingHosts
+from spicerack.alertmanager import Alertmanager
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.remote import RemoteHosts
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
 from cumin import nodeset
@@ -117,20 +121,20 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
         self.spicerack_remote = self.spicerack.remote()
 
         if not self.args.skip_etcd:
-            self.etcd_nodes = self.spicerack_remote.query(self.etcd_query)
+            self.etcd_nodes: Optional[RemoteHosts] = self.spicerack_remote.query(self.etcd_query)
         else:
             self.etcd_nodes = None
         if not self.args.skip_control_plane:
-            self.control_plane_nodes = self.spicerack_remote.query(self.control_plane_query)
+            self.control_plane_nodes: Optional[RemoteHosts] = self.spicerack_remote.query(self.control_plane_query)
         else:
             self.control_plane_nodes = None
         if not self.args.skip_workers:
-            self.worker_nodes = self.spicerack_remote.query(self.workers_query)
+            self.worker_nodes: Optional[RemoteHosts] = self.spicerack_remote.query(self.workers_query)
         else:
             self.worker_nodes = None
 
         # List of tuples (alert_host_handle, downtime_id)
-        self.downtimes = []
+        self.downtimes: list[tuple[Union[Alertmanager, AlertingHosts], str]] = []
 
     @property
     def etcd_query(self):
@@ -186,7 +190,7 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
             "Checking member list on every node to see if the view "
             "of the cluster is consistent...")
         confirm_on_failure(
-            self.etcd_nodes.run_sync,
+            self.etcd_nodes.run_sync,  # type: ignore[union-attr]
             "ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 member list"
         )
         ask_confirmation(
@@ -199,7 +203,7 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return f"Upgrade K8s version: {self.args.reason}"
 
-    def run(self) -> int:  # pylint: disable=too-many-branches,too-many-statements
+    def run(self) -> None:  # pylint: disable=too-many-branches,too-many-statements
         """Required by Spicerack API."""
         affected_nodes = nodeset()
         if self.etcd_nodes:

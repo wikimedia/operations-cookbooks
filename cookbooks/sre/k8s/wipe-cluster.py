@@ -2,8 +2,11 @@
 import logging
 from argparse import ArgumentParser, Namespace
 from datetime import timedelta
+from typing import Union
 
 from spicerack import Spicerack
+from spicerack.alerting import AlertingHosts
+from spicerack.alertmanager import Alertmanager
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import confirm_on_failure, ask_confirmation, ensure_shell_is_durable
 
@@ -58,7 +61,7 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
         self.control_plane_nodes = self.spicerack_remote.query(self.control_plane_query)
         self.worker_nodes = self.spicerack_remote.query(self.workers_query)
         # List of tuples (alert_host_handle, downtime_id)
-        self.downtimes = []
+        self.downtimes: list[tuple[Union[Alertmanager, AlertingHosts], str]] = []
 
     @property
     def etcd_query(self):
@@ -118,7 +121,7 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return f"Wipe the K8s cluster {self.k8s_cluster}: {self.args.reason}"
 
-    def run(self) -> int:
+    def run(self) -> None:
         """Required by Spicerack API."""
         # Check the etcd cluster first.
         # If it does not look healthy it's probably not safe to continue
