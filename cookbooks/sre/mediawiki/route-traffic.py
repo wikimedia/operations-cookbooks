@@ -46,7 +46,7 @@ class RouteMediaWikiTrafficRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.primary_dc = spicerack.mediawiki().get_master_datacenter()
         self.discovery_records = spicerack.discovery(*self.MEDIAWIKI_SERVICES)
-        self.initial_state = self.discovery_records.active_datacenters()
+        self.initial_state = self.discovery_records.active_datacenters
 
     @property
     def runtime_description(self) -> str:
