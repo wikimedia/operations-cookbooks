@@ -1,7 +1,6 @@
 """GitLab version upgrade cookbook"""
 
 import logging
-import re
 from datetime import timedelta
 from packaging import version
 
@@ -12,6 +11,7 @@ from spicerack.remote import RemoteExecutionError
 
 from cookbooks.sre import CookbookBase, CookbookRunnerBase
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+from cookbooks.sre.gitlab import get_gitlab_url, get_disk_usage_for_path, pause_runners, unpause_runners
 
 
 BACKUP_PATH = "/srv/gitlab-backup"
@@ -65,12 +65,12 @@ class UpgradeRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
         self.remote_host = spicerack.remote().query(f'{args.host}.*')
         if len(self.remote_host) != 1:
-            RuntimeError(f"Found the following hosts: {self.remote_host} for query {args.host}."
-                         "Query must return 1 host.")
+            raise RuntimeError(f"Found the following hosts: {self.remote_host} for query {args.host}."
+                               "Query must return 1 host.")
         self.alerting_hosts = spicerack.alerting_hosts(self.remote_host.hosts)
         self.task_id = args.task_id
         self.admin_reason = spicerack.admin_reason(args.reason)
-        self.url = self.get_gitlab_url()
+        self.url = get_gitlab_url(self.remote_host)
         self.target_version = args.version
 
         self.token = get_secret('GitLab API Token')
@@ -115,10 +115,10 @@ class UpgradeRunner(CookbookRunnerBase):
         self.create_data_backup()
         self.create_config_backup()
         self.fail_for_background_migrations()
-        paused_runners = self.pause_runners()
+        paused_runners = pause_runners(self.token, self.url)
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=15)):
             self.install_debian_package()
-        self.unpause_runners(paused_runners)
+        unpause_runners(paused_runners)
         broadcastmessage.delete()
 
         if self.phabricator is not None:
@@ -126,15 +126,6 @@ class UpgradeRunner(CookbookRunnerBase):
                 self.task_id,
                 f'Cookbook {__name__} started by {self.admin_reason.owner} {self.runtime_description} completed '
                 f'successfully {self.runtime_description}')
-
-    def get_gitlab_url(self):
-        """Fetch GitLab external_url from gitlab.rb config"""
-        logger.info('Fetch GitLab external_url from gitlab.rb config')
-        results = self.remote_host.run_sync("grep '^external_url ' /etc/gitlab/gitlab.rb", is_safe=True)
-        for _, output in results:
-            lines = output.message().decode()
-            for line in lines.splitlines():
-                return line.split('"')[1]
 
     def check_gitlab_version(self):
         """Compare current GitLab version with target version.
@@ -160,17 +151,8 @@ class UpgradeRunner(CookbookRunnerBase):
 
     def fail_for_disk_space(self):
         """Available disk space must be below DISK_HIGH_THRESHOLD."""
-        logger.info('Checking available disk space')
-        results = self.remote_host.run_sync(f"df --output=pcent {BACKUP_PATH} | tail -n1", is_safe=True)
-        for _, output in results:
-            lines = output.message().decode()
-            for line in lines.splitlines():
-                disk_usage = line.strip(' %')
-                if re.match("[0-9]{1,3}", disk_usage):
-                    if int(disk_usage) < DISK_HIGH_THRESHOLD:
-                        break
-                    raise RuntimeError(f"Not enough disk space in: {BACKUP_PATH}")
-                raise RuntimeError(f"unable to extract free space from: {BACKUP_PATH}")
+        if get_disk_usage_for_path(self.remote_host, BACKUP_PATH) > DISK_HIGH_THRESHOLD:
+            raise RuntimeError(f"Not enough disk space in {BACKUP_PATH}")
 
     def create_data_backup(self):
         """Create data backup"""
@@ -211,28 +193,6 @@ class UpgradeRunner(CookbookRunnerBase):
                 logger.info('No remaining background migrations found')
                 break
             raise RuntimeError("Background migration running currently")
-
-    def pause_runners(self):
-        """Pause all active runners"""
-        active_runners = self.gitlab_instance.runners.all(scope='active', all=True)
-        for runner in active_runners:
-            runner.paused = True
-            runner.save()
-            logger.info('Paused %s runner', runner.id)
-        return active_runners
-
-    @retry(
-        tries=20,
-        delay=timedelta(seconds=10),
-        backoff_mode='constant',
-        failure_message='Waiting for GitLab API to become available again',
-        exceptions=(gitlab.exceptions.GitlabUpdateError, gitlab.exceptions.GitlabHttpError,))
-    def unpause_runners(self, paused_runners):
-        """Unpause a list of runners"""
-        for runner in paused_runners:
-            runner.paused = False
-            runner.save()
-            logger.info('Unpaused %s runner', runner.id)
 
     def install_debian_package(self):
         """Install new Debian package (apt-get install)"""
