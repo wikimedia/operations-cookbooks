@@ -9,7 +9,7 @@ from functools import cache
 from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Optional, Tuple
+from typing import cast, Dict, Iterator, List, Optional, Tuple
 from zipfile import ZipFile
 
 from packaging import version
@@ -162,7 +162,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     @staticmethod
     @contextmanager
-    def extract_payload(firmware: Path, payload_dir: str = "payload") -> BufferedReader:
+    def extract_payload(firmware: Path, payload_dir: str = "payload") -> Iterator[BufferedReader]:
         """Context handler to provide FH to extracted firmware image
 
         Arguments:
@@ -234,7 +234,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         product_slug: str,
         driver_type: DellDriverType,
         driver_category: DellDriverCategory,
-    ) -> Tuple[str, Path]:
+    ) -> Tuple[version.Version, Path]:
         """Download the latest idrac for the specific netbox model
 
         Arguments:
@@ -350,14 +350,14 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         """
         push_url = redfish_host.pushuri
         # TODO: should check if the file is already uploaded, although it doesn't error if you upload twice
-        response = redfish_host.request("head", push_url)
-        headers = {"if-match": response.headers["ETag"]}
+        head_response = redfish_host.request("head", push_url)
+        headers = {"if-match": head_response.headers["ETag"]}
         files = {"file": file_handle}
-        response = redfish_host._upload_session.post(  # pylint: disable=protected-access
+        response = cast(dict, redfish_host._upload_session.post(  # pylint: disable=protected-access
             f"https://{redfish_host.interface.ip}{push_url}",
             files=files,
             headers=headers,
-        ).json()
+        ).json())
         if "error" in response:
             error_msg = f"{redfish_host} {self.extract_message(response['error'])}"
             logger.error(error_msg)
@@ -488,7 +488,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         driver_category: DellDriverCategory,
         *,
         odata_id: Optional[str] = None,
-    ) -> Tuple[Path, str]:
+    ) -> Tuple[version.Version, Path]:
         """Select a list of files from ones already present on the file system
 
         Arguments:
@@ -527,7 +527,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         if selection == "Download new file":
             return self.get_latest(product_slug, driver_type, driver_category)
-        return extract_version(selection), selection
+        return extract_version(selection), cast(Path, selection)
 
     # create a cached version of the above function
     @cache  # pylint: disable=method-cache-max-size-none
@@ -543,7 +543,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         *,
         extract_payload: bool = False,
         odata_id: Optional[str] = None,
-    ) -> Tuple[Optional[version.Version], Optional[str]]:
+    ) -> Tuple[version.Version, Optional[str]]:
         """Update the driver to the latest version.
 
         Arguments:
@@ -569,13 +569,9 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             current_version,
         )
 
-        select_firmwarefile = (
-            self._cached_select_firmwarefile
-            if self.cache_answers
-            else self._select_firmwarefile
-        )
+        select_firmwarefile = '_cached_select_firmwarefile' if self.cache_answers else '_select_firmwarefile'
         product_slug = self._product_slug(netbox_host)
-        target_version, firmware_file = select_firmwarefile(
+        target_version, firmware_file = getattr(self, select_firmwarefile)(
             product_slug, driver_type, driver_category
         )
         logger.info(

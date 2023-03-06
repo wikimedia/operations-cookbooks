@@ -232,14 +232,14 @@ class DellAPI:
         self.session.cookies["lwp"] = "c=uk&l=en&s=bsd&cs=ukbsdt1"
         # populate cookie store
         self.session.get("https://www.dell.com/support/home")
-        self._products = {}
+        self._products: dict[str, DellProduct] = {}
 
     def get(self, product: str, force: bool = False) -> DellProduct:
         """Getter for products, includes caching.
 
         Arguments:
             product (str): The product short code e.g. poweredge-r430.
-            force (bool): If true  force fetching data from the dell api.
+            force (bool): If true force fetching data from the dell api.
 
         Returns:
             DellProduct: The dell product matching the product string.

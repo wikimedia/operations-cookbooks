@@ -6,6 +6,7 @@ import time
 
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from cumin.transports import Command
 from spicerack import Spicerack
@@ -16,6 +17,7 @@ from spicerack.exceptions import SpicerackError
 from spicerack.icinga import IcingaError
 from spicerack.remote import RemoteError, RemoteExecutionError
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
+from wmflib.phabricator import Phabricator
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
@@ -107,7 +109,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.output_filename = self._get_output_filename(spicerack.username)
         self.actions = spicerack.actions
         self.host_actions = self.actions[self.host]
-        self.confctl_services = []
+        self.confctl_services: list = []
 
         if not self.netbox_server.virtual:
             raise RuntimeError(
@@ -178,7 +180,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.rollback_depool = False
 
         if self.args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+            self.phabricator: Optional[Phabricator] = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         else:
             self.phabricator = None
 
@@ -264,7 +266,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.host_actions.success('No changes in confctl are needed to restore the previous state.')
 
     def _get_dhcp_config(self):
-        ip = ipaddress.ip_interface(self.netbox_data['primary_ip4']['address']).ip
+        ip = ipaddress.IPv4Interface(self.netbox_data['primary_ip4']['address']).ip
         mac = self.ganeti_data.get('nic.macs', None)
 
         if not isinstance(ip, ipaddress.IPv4Address):

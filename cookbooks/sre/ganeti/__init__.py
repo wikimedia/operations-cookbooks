@@ -20,7 +20,7 @@ def add_location_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def set_default_group(netbox, args) -> str:
+def set_default_group(netbox, args) -> None:
     """Get the Ganeti group name in the cluster if there is just one group, raise RuntimeError if there are many."""
     if args.group:  # The group is already set
         return

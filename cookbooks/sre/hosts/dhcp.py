@@ -88,7 +88,7 @@ class DhcpRunner(CookbookRunnerBase):
 
         return DHCPConfOpt82(
             hostname=self.host,
-            ipv4=ipaddress.ip_interface(netbox_host.primary_ip4).ip,
+            ipv4=ipaddress.IPv4Interface(netbox_host.primary_ip4).ip,
             switch_hostname=switch_hostname,
             switch_iface=f'{switch_iface}.0',  # In Netbox we have just the main interface
             vlan=switch_iface.untagged_vlan.name,
