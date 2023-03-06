@@ -140,7 +140,7 @@ class ChangeSNMPRunner(CookbookRunnerBase):
 
         self._pdus = pdus.get_pdu_ips(spicerack.netbox(), args.query)
 
-    def change_snmp(self, pdu: str, version: str) -> bool:
+    def change_snmp(self, pdu: str, version: int) -> bool:
         """Change the snmp_string.
 
         Arguments:
@@ -154,14 +154,15 @@ class ChangeSNMPRunner(CookbookRunnerBase):
 
         """
         version = pdus.get_version(pdu, self.session)
-        parser = {
+        parser_func = {
             3: PDUParserV3,
             4: PDUParserV4,
-        }.get(version)()
+        }.get(version)
 
-        if parser is None:
+        if parser_func is None:
             raise SnmpResetError("Unknown Version Sentry 👎")
 
+        parser = parser_func()
         snmp_form = 'https://{}/Forms/snmp_1'.format(pdu)
 
         try:

@@ -91,7 +91,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
     batch_max = 40
     grace_sleep = 1
     max_failed = 1
-    valid_actions = ('reboot', 'restart_daemons')
+    valid_actions: tuple[str, ...] = ('reboot', 'restart_daemons')
 
     def argument_parser(self) -> ArgumentParser:
         """Parse arguments"""
@@ -416,7 +416,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
         """
 
-    def batch_action(self) -> None:
+    def batch_action(self) -> int:
         """Cookbook to perform an action on all hosts per group in batches"""
         for host_group_idx, host_group in enumerate(self.host_groups):
             number_of_hosts = len(host_group.hosts)
@@ -445,7 +445,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
         return self.results.report()
 
-    def run(self) -> None:
+    def run(self) -> int:
         """Perform rolling reboot servers in batches"""
         return self.batch_action()
 

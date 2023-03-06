@@ -1,6 +1,6 @@
 """Update and deploy the hiera data generated from Netbox data."""
 from argparse import Namespace
-from os import PathLike
+from pathlib import Path
 from typing import Dict
 
 import yaml
@@ -101,11 +101,11 @@ class NetboxHieraRunner(CookbookRunnerBase):
 
         return response.json()
 
-    def _write_hiera_files(self, out_dir: PathLike) -> None:
+    def _write_hiera_files(self, out_dir: Path) -> None:
         """Write out all the hiera files.
 
         Arguments:
-            out_dir (PathLike): The directory to write the data
+            out_dir (Path): The directory to write the data
 
         """
         data = self._get_netbox_data()
@@ -135,7 +135,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
         ]
         confirm_on_failure(self.puppetmasters.run_sync, *commands)
 
-    def run(self) -> None:
+    def run(self) -> int:
         """Generate data"""
         if self.args.sha:
             self.reposync.force_sync()

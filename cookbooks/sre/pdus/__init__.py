@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 from datetime import datetime, timedelta
 from logging import getLogger
 from re import match
+from typing import Optional
 
 import urllib3
 
@@ -38,7 +39,7 @@ class RemoteCheckError(Exception):
     """Exception raised if we fail to get the uptime"""
 
 
-def argument_parser_base(doc: str):
+def argument_parser_base(doc: Optional[str]):
     """As specified by Spicerack API."""
     parser = ArgumentParser(
         description=doc, formatter_class=ArgparseFormatter)
@@ -254,10 +255,10 @@ def parse_uptime(uptime):
                r'\s+(?P<hours>\d+)\s+hours?'
                r'\s+(?P<minutes>\d+)\s+minutes?'
                r'\s+(?P<seconds>\d+)\s+seconds?')
-    matches = match(pattern, uptime)
-    if matches is None:
+    uptime_matches = match(pattern, uptime)
+    if uptime_matches is None:
         raise UptimeError('unable to parse uptime: {}'.format(uptime))
     # cast values to int for timedelta
-    matches = {k: int(v) for k, v in matches.groupdict().items()}
+    matches = {k: int(v) for k, v in uptime_matches.groupdict().items()}
     uptime_delta = timedelta(**matches)
     return int(uptime_delta.total_seconds())

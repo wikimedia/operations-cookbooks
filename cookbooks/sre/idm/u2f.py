@@ -50,7 +50,7 @@ class U2fRunner(CookbookRunnerBase):
         master_datacenter = self.mediawiki.get_master_datacenter()
         self.mwmaint = self.mediawiki.get_maintenance_host(master_datacenter)
         self.idp_host = spicerack.remote().query('A:idp and A:' + master_datacenter)
-        self.modify_command = None
+        self.modify_command = ''
         self.reset_command = None
         if args.enable:
             self.modify_command = f'/usr/local/bin/modify-mfa --enable {args.username}'
