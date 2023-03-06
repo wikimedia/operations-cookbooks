@@ -67,7 +67,7 @@ class ChangeHadoopDistroOnClientsRunner(CookbookRunnerBase):
         self.hadoop_client_hosts = spicerack_remote.query(' or '.join(cumin_labels))
         self.alerting_hosts = spicerack.alerting_hosts(self.hadoop_client_hosts.hosts)
         self.admin_reason = spicerack.admin_reason('Change Hadoop distribution')
-        self.rollback = args.rollback
+        self.do_rollback = args.rollback
         self.cluster = args.cluster
 
         ask_confirmation(
@@ -90,7 +90,7 @@ class ChangeHadoopDistroOnClientsRunner(CookbookRunnerBase):
         """Install Hadoop packages on Hadoop client nodes."""
         logger.info("Install packages on worker nodes (long step).")
 
-        if self.rollback:
+        if self.do_rollback:
             confirm_on_failure(
                 self.hadoop_client_hosts.run_sync,
                 'apt-get install -y `cat /root/cdh_package_list`')
@@ -104,7 +104,7 @@ class ChangeHadoopDistroOnClientsRunner(CookbookRunnerBase):
     def run(self):
         """Change the Hadoop distribution."""
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=30)):
-            if not self.rollback:
+            if not self.do_rollback:
                 logger.info(
                     'Saving a snapshot of cdh package names and versions in /root/cdh_package_list '
                     'on all nodes, and removing all packages.')

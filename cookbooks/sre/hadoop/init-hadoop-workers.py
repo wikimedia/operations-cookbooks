@@ -34,7 +34,7 @@ class InitHadoopWorkers(CookbookBase):
                             help="The base directory of the partitions to initialize.")
         parser.add_argument('--wipe-partitions', action='store_true',
                             help="Use wipefs to remove any pre-existing partition table on the disks.")
-        parser.add_argument('--success-percent', type=float, default=100, choices=range(1, 100),
+        parser.add_argument('--success-percent', type=int, default=100, choices=range(1, 100),
                             metavar="[1-100]",
                             help="Expected success percent when executing cumin commands on multiple hosts."
                                  "Useful to init old nodes with potentially broken disks.")

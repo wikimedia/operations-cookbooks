@@ -100,7 +100,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
         self.alerting_hosts = spicerack.alerting_hosts(self.hadoop_hosts.hosts)
         self.admin_reason = spicerack.admin_reason('Change Hadoop distribution')
 
-        self.rollback = args.rollback
+        self.do_rollback = args.rollback
         self.cluster = args.cluster
 
         self.apt_install_options = '-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"'
@@ -131,7 +131,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
 
             self.hadoop_workers.run_sync('rm -rf /tmp/hadoop-yarn/*')
 
-            if self.rollback:
+            if self.do_rollback:
                 # In case of a rollback, the HDFS daemons are masked to prevent any
                 # startup caused by a package install. The daemons will need to start
                 # with specific rollback options. This does not include Journalnodes
@@ -160,7 +160,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
 
             # If the cookbook is running in rollback mode, then there are extra steps to be taken
             # for HDFS Datanodes.
-            if self.rollback:
+            if self.do_rollback:
                 logger.info('Unmask each datanode and start it with the rollback option. Long step.')
                 self.hadoop_workers.run_async(
                     'systemctl unmask hadoop-hdfs-datanode',
@@ -187,7 +187,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
             logger.info('Sleeping one minute to let things to stabilize')
             time.sleep(60)
 
-            if self.rollback:
+            if self.do_rollback:
                 logger.info('Rollback the HDFS Master node state.')
                 self.hadoop_master.run_sync(
                     'systemctl unmask hadoop-hdfs-namenode',
@@ -231,7 +231,7 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
 
             logger.info('Sleeping one minute to let things to stabilize')
             time.sleep(60)
-            if self.rollback:
+            if self.do_rollback:
                 logger.info("Unmasking the HDFS Namenode.")
                 self.hadoop_standby.run_sync('systemctl unmask hadoop-hdfs-namenode')
             logger.info('Formatting the HDFS Standby node and then starting it.')

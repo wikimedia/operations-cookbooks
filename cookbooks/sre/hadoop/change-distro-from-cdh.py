@@ -103,7 +103,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
 
         self.alerting_hosts = spicerack.alerting_hosts(self.hadoop_hosts.hosts)
         self.admin_reason = spicerack.admin_reason('Change Hadoop distribution')
-        self.rollback = args.rollback
+        self.do_rollback = args.rollback
         self.cluster = args.cluster
 
     @property
@@ -123,7 +123,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
         """Install Hadoop packages on Hadoop worker nodes."""
         logger.info("Install packages on worker nodes (long step).")
 
-        if self.rollback:
+        if self.do_rollback:
             confirm_on_failure(
                 self.hadoop_workers.run_sync,
                 'apt-get install -y `cat /root/cdh_package_list`',
@@ -140,7 +140,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
 
         # If the cookbook is running in rollback mode, then there are extra steps to be taken
         # for HDFS Datanodes.
-        if self.rollback:
+        if self.do_rollback:
             logger.info('Stop each datanode and start it with the rollback option. Long step.')
             confirm_on_failure(
                 self.hadoop_workers.run_async,
@@ -161,7 +161,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
         """Installs the Hadoop packages on the Hadoop Master node."""
         logger.info('Install packages on the Hadoop HDFS Master node.')
 
-        if self.rollback:
+        if self.do_rollback:
             confirm_on_failure(
                 self.hadoop_master.run_sync,
                 'apt-get install -y `cat /root/cdh_package_list`')
@@ -212,7 +212,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
             self.hadoop_standby.run_sync, 'rm -rf /var/lib/hadoop/name/previous')
 
         logger.info('Install packages on the Hadoop HDFS Standby node.')
-        if self.rollback:
+        if self.do_rollback:
             confirm_on_failure(
                 self.hadoop_standby.run_sync,
                 'apt-get install -y `cat /root/cdh_package_list`')
@@ -251,7 +251,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
             logger.info("Removing the /tmp/hadoop-yarn leftovers on worker nodes.")
             confirm_on_failure(self.hadoop_workers.run_sync, 'rm -rf /tmp/hadoop-yarn/*')
 
-            if not self.rollback:
+            if not self.do_rollback:
                 logger.info(
                     'Saving a snapshot of cdh package names and versions in /root/cdh_package_list '
                     'on all nodes, and removing all packages.')
@@ -259,7 +259,7 @@ class ChangeHadoopDistroRunner(CookbookRunnerBase):
                     self.hadoop_hosts.run_sync,
                     "dpkg -l | awk '/+cdh/ {print $2}' | tr '\n' ' ' > /root/cdh_package_list")
 
-            if self.rollback:
+            if self.do_rollback:
                 # In case of a rollback, the HDFS daemons are masked to prevent any
                 # startup caused by a package install. The daemons will need to start
                 # with specific rollback options. This does not include Journalnodes
