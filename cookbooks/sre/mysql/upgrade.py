@@ -99,5 +99,4 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
                 confirm_on_failure(host.run_sync, script)
             except AbortError:
                 self.logger.error('%s: execution aborted', script)
-                self.results.fail(host.hosts)
                 raise
