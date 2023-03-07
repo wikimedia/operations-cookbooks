@@ -14,6 +14,7 @@ import logging
 import string
 import threading
 from contextlib import contextmanager
+from typing import cast
 
 from datetime import timedelta
 from random import SystemRandom
@@ -168,7 +169,7 @@ def run(args, spicerack):
         raise ValueError('Instance (valid_on:{}) is not valid for selected hosts ({})'.format(
             instance['valid_on'], host_kind))
 
-    services = instance['services']
+    services = cast(list, instance['services'])
     files = instance['files']
 
     stop_services_cmd = " && ".join(["systemctl stop " + service for service in services])
