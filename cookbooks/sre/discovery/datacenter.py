@@ -307,7 +307,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         """Get service status in datacenter."""
         skipped = []
         if self.datacenter == "all":
-            datacenters = CORE_DATACENTERS
+            datacenters: tuple[str, ...] = CORE_DATACENTERS
         else:
             datacenters = (self.datacenter,)
         status = {}

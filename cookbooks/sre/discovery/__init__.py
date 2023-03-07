@@ -1,6 +1,6 @@
 """Generic DNS Discovery Operations"""
 import logging
-from typing import List, Iterator
+from typing import cast, List, Iterator
 
 import dns
 
@@ -54,7 +54,7 @@ def resolve_with_client_ip(dnsdisc: Discovery, client_ip: str, name: str) -> Ite
                 query_msg.use_edns(options=[ecs_option_client_ip])
 
                 # Make the actual query
-                resp = dns.query.udp(query_msg, dns_resolver.nameservers[0], port=dns_resolver.port)
+                resp = dns.query.udp(query_msg, cast(list, dns_resolver.nameservers)[0], port=dns_resolver.port)
                 # Build an Answer instance as a Stub Resolver would
                 answer = dns.resolver.Answer(record_name, rdtype, dns.rdataclass.IN, resp)
             except Exception as e:
