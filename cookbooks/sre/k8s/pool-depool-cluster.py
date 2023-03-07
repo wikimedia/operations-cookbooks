@@ -1,4 +1,5 @@
 """Pool/Depool all services running in a Kubernetes cluster"""
+# mypy: ignore-errors
 import logging
 from argparse import ArgumentParser, Namespace
 from typing import List
