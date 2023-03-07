@@ -7,13 +7,13 @@ from setuptools import find_namespace_packages, setup
 install_requires = [
     'prettytable',
     'python-dateutil',
+    'python-gitlab==3.11.0',
     'wikimedia-spicerack',
     # [fixme]: The dnspython requirement is not reflected in puppet and should be
     # removed when moving generic functions from sre.discovery.service-route to
     # spicerack. 1.16.0 is currently in buster and 2.0.0 changed a lot, so I'm
     # pinning this here to have the right version with local tox.
     'dnspython==1.16.0',
-    'python-gitlab==3.11.0'
 ]
 
 # Extra dependencies
@@ -22,7 +22,14 @@ extras_require = {
     'tests': [
         'bandit>=1.5.0',
         'flake8>=3.2.1',
+        'mypy>=0.670',
         'pytest>=6.1.0',
+        'types-PyMySQL',
+        'types-python-dateutil',
+        'types-PyYAML',
+        'types-redis',
+        'types-requests',
+        'types-setuptools',
     ],
     'prospector': [
         'prospector[with_everything]>=0.12.4,<=1.7.7',
