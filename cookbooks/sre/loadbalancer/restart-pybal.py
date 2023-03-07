@@ -5,7 +5,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Dict, List
+from typing import List
 
 from spicerack import Spicerack
 from spicerack.decorators import retry
@@ -112,7 +112,7 @@ class LBRestartRunner(SREBatchRunnerBase):
             if not any(s.status for s in statuses):
                 raise BGPSessionError.from_metrics(statuses)
 
-    def _fetch_and_parse_metrics(self, host: str) -> Dict[str, BGPSessionMetric]:
+    def _fetch_and_parse_metrics(self, host: str) -> defaultdict[str, list[BGPSessionMetric]]:
         """Fetch the /metrics endpoint on the host, then check all the pybal_bgp_session_established ones.
 
         We need to perform the test this way as thanos queries would not
