@@ -4,7 +4,7 @@ import argparse
 import logging
 import smtplib
 from collections import defaultdict
-from typing import Tuple, Union
+from typing import Union
 
 from email.message import EmailMessage
 from ipaddress import ip_address
@@ -265,7 +265,7 @@ class PeeringRunner(CookbookRunnerBase):
                 found = True
         return contact_emails if found else all_emails
 
-    def prepare_email(self, asn_l: int, asn_r: int) -> Tuple[set, str, str]:
+    def prepare_email(self, asn_l: int, asn_r: int) -> tuple[set, str, str]:
         """Returns everything that will be in the email if any"""
         sessions = self.format_sessions(asn_l, asn_r)
         grouped_sessions: dict = {}

@@ -3,7 +3,7 @@ import json
 import logging
 
 from ipaddress import ip_address
-from typing import Dict, List, Optional
+from typing import Optional
 
 from spicerack.netbox import Netbox
 from spicerack.remote import Remote, RemoteHosts
@@ -13,7 +13,7 @@ __title__ = __doc__
 logger = logging.getLogger(__name__)
 
 
-def configure_switch_interfaces(remote: Remote, netbox: Netbox, netbox_data: Dict,
+def configure_switch_interfaces(remote: Remote, netbox: Netbox, netbox_data: dict,
                                 print_output: bool = False) -> None:
     """Configure the switch interfaces relevant to a device.
 
@@ -53,8 +53,8 @@ def configure_switch_interfaces(remote: Remote, netbox: Netbox, netbox_data: Dic
             logger.info("No configuration change needed on the switch for %s", nb_device_interface)
 
 
-def junos_set_interface_config(netbox_data: Dict, live_interface: Optional[dict],  # pylint: disable=too-many-branches
-                               nb_switch_interface) -> List[str]:
+def junos_set_interface_config(netbox_data: dict, live_interface: Optional[dict],  # pylint: disable=too-many-branches
+                               nb_switch_interface) -> list[str]:
     """Return a list of Junos set commands needed to configure the interface
 
     Arguments:
@@ -139,7 +139,7 @@ def junos_set_interface_config(netbox_data: Dict, live_interface: Optional[dict]
     return commands
 
 
-def run_junos_commands(remote_host: RemoteHosts, conf_commands: List) -> None:
+def run_junos_commands(remote_host: RemoteHosts, conf_commands: list) -> None:
     """Run commands on Juniper devices, first load the commands show the diff then exit.
 
        Then commit confirm it.
@@ -194,7 +194,7 @@ def parse_results(results_raw, json_output=False):
     return result
 
 
-def junos_interface_to_netbox(config: dict, old_junos: bool) -> Dict:
+def junos_interface_to_netbox(config: dict, old_junos: bool) -> dict:
     """Converts a Junos JSON interface config to a dict similar to Netbox interfaces.
 
     Arguments:
@@ -278,7 +278,7 @@ def get_junos_live_interface_config(remote_host: RemoteHosts, interface: str,
     return junos_interface_to_netbox(interface_json, old_junos)
 
 
-def get_junos_optics(remote_host: RemoteHosts, interface: str, print_output: bool = False) -> Dict:
+def get_junos_optics(remote_host: RemoteHosts, interface: str, print_output: bool = False) -> dict:
     """Returns the oper optical status for a given interface
 
     Arguments:
@@ -391,7 +391,7 @@ def get_junos_logs(remote_host: RemoteHosts, match: str, print_output: bool = Fa
     return result
 
 
-def get_junos_bgp_peer(remote_host: RemoteHosts, peer_ip: str, print_output: bool = False) -> Dict:
+def get_junos_bgp_peer(remote_host: RemoteHosts, peer_ip: str, print_output: bool = False) -> dict:
     """Returns informations about a BGP peer
 
     Arguments:
@@ -423,7 +423,7 @@ def get_junos_bgp_peer(remote_host: RemoteHosts, peer_ip: str, print_output: boo
     return {'status': peer_state}
 
 
-def get_junos_bgp_summary(remote_host: RemoteHosts, print_output: bool = False) -> Dict:
+def get_junos_bgp_summary(remote_host: RemoteHosts, print_output: bool = False) -> dict:
     """Returns summary of all BGP session on device
 
     Arguments:

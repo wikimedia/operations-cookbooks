@@ -28,7 +28,6 @@ cluster, one at a time per taint-group, waiting 35 seconds before rebooting.
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from math import ceil
-from typing import List
 
 from kubernetes.client.models import V1Taint
 from spicerack import Spicerack
@@ -39,7 +38,7 @@ from wmflib.constants import CORE_DATACENTERS
 from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
 
 
-def flatten_taints(taints: List[V1Taint]) -> str:
+def flatten_taints(taints: list[V1Taint]) -> str:
     """Flatten a taints structure (as returned by Kubernetes API) into a string
 
     This is used to group nodes by taints, making sure the order in which they are
@@ -160,7 +159,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         return batchsize
 
     @property
-    def allowed_aliases(self) -> List:
+    def allowed_aliases(self) -> list:
         """Return a list of allowed aliases for this cookbook"""
         # Clusters not having corresponding aliases for both CORE_DATACENTERS
         aliases = ["dse-k8s-worker", "ml-staging-worker"]
@@ -175,7 +174,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         return ('A:wikikube-worker or A:wikikube-staging-worker '
                 'or A:ml-serve-worker or A:dse-k8s-worker or A:ml-staging-worker')
 
-    def _hosts(self) -> List[RemoteHosts]:
+    def _hosts(self) -> list[RemoteHosts]:
         all_hosts = super()._hosts()[0]
 
         # All host names grouped by their taints

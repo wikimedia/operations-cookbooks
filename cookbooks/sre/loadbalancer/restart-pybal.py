@@ -5,7 +5,6 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import List
 
 from spicerack import Spicerack
 from spicerack.decorators import retry
@@ -32,7 +31,7 @@ class BGPSessionError(SpicerackCheckError):
     """BGP session specific exception"""
 
     @classmethod
-    def from_metrics(cls, metrics: List[BGPSessionMetric]) -> "BGPSessionError":
+    def from_metrics(cls, metrics: list[BGPSessionMetric]) -> "BGPSessionError":
         """Factory method to create the exception from a metric."""
         # All metrics share the host and asn properties, so just pick the first.
         metric = metrics[0]
@@ -63,7 +62,7 @@ class LBRestartRunner(SREBatchRunnerBase):
         self._http = spicerack.requests_session(__name__, timeout=2.0, tries=2, backoff=2.0)
 
     @property
-    def allowed_aliases(self) -> List:
+    def allowed_aliases(self) -> list:
         """List of allowed aliases for host selection"""
         base_aliases = ["lvs", "lvs-high-traffic1", "lvs-high-traffic2", "lvs-secondary"]
         core_aliases = ["lvs-low-traffic"]
@@ -84,7 +83,7 @@ class LBRestartRunner(SREBatchRunnerBase):
         return "A:lvs"
 
     @property
-    def restart_daemons(self) -> List:
+    def restart_daemons(self) -> list:
         """Property to return a list of daemons to restart"""
         return ["pybal.service"]
 

@@ -1,6 +1,7 @@
 """Generic DNS Discovery Operations"""
 import logging
-from typing import cast, List, Iterator
+from collections.abc import Iterator
+from typing import cast
 
 import dns
 
@@ -110,7 +111,7 @@ def check_record_for_dc(no_fail: bool, dnsdisc: Discovery, datacenter: str, name
         raise DiscoveryCheckError('Failed to check record {name}'.format(name=name))
 
 
-def wipe_recursor_cache(services: List[str], remote: Remote):
+def wipe_recursor_cache(services: list[str], remote: Remote):
     """Wipe the cache of DNS recursors.
 
     Wipe the cache on resolvers to ensure they get updated quickly.
@@ -119,7 +120,7 @@ def wipe_recursor_cache(services: List[str], remote: Remote):
         Move this function to spicerack dns/dnsdisc.
 
     Arguments:
-        services (List[str]): list of service names to wipe cache for.
+        services (list[str]): list of service names to wipe cache for.
         remote (spicerack.remote.Remote): spicerack.remote.Remote instance.
 
     See Also:

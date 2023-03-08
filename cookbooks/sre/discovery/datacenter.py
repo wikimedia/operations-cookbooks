@@ -4,7 +4,6 @@ import logging
 import time
 
 from dataclasses import dataclass
-from typing import Dict, List, Set
 
 from spicerack import Spicerack
 from spicerack.administrative import Reason
@@ -119,7 +118,7 @@ class DiscoveryRecord:
         return self.record.dnsdisc
 
     @property
-    def state(self) -> Set[str]:
+    def state(self) -> set[str]:
         """The state of the dnsdisc object"""
         return set(self.record.instance.active_datacenters[self.name])
 
@@ -232,7 +231,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         self.insecure = args.fast_insecure
         # Stores the initial state of all services we've acted upon.
         # Used for rollbacks.
-        self.initial_state: Dict[str, Set[str]] = {}
+        self.initial_state: dict[str, set[str]] = {}
         self._recursors: RemoteHosts = spicerack.remote().query("A:dns-rec")
         self._authdns: RemoteHosts = spicerack.remote().query("A:dns-auth")
         if self.task_id is not None:
@@ -383,7 +382,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         # store the current state
         current_state = record.state
         self.initial_state[record.name] = current_state
-        desired_state: Set[str] = current_state.copy()
+        desired_state: set[str] = current_state.copy()
         if pool:
             # If we're pooling the current datacenter, we want it to be the only datacenter pooled in the end.
             desired_state = set(self.datacenter)
@@ -393,7 +392,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             desired_state.discard(self.datacenter)
         return (current_state, desired_state)
 
-    def _handle_active_active(self, record: DiscoveryRecord, current_state: Set[str], desired_state: Set[str]):
+    def _handle_active_active(self, record: DiscoveryRecord, current_state: set[str], desired_state: set[str]):
         if desired_state == current_state:
             logger.info("Service %s is already in the desired state", record.name)
             return
@@ -416,7 +415,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             record.check_records()
             record.clear_cache(self._recursors)
 
-    def _handle_active_passive(self, record: DiscoveryRecord, current_state: Set[str], desired_state: Set[str]):
+    def _handle_active_passive(self, record: DiscoveryRecord, current_state: set[str], desired_state: set[str]):
         if desired_state == current_state:
             logger.info("Service %s is already in the desired state", record.name)
             return
@@ -463,8 +462,8 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         for record in self.discovery_records["active_passive"]:
             record.clean_discovery_templates(self._authdns)
 
-    def _get_all_services(self) -> Dict[str, List[DiscoveryRecord]]:
-        all_services: Dict[str, List[DiscoveryRecord]] = {"active_active": [], "active_passive": []}
+    def _get_all_services(self) -> dict[str, list[DiscoveryRecord]]:
+        all_services: dict[str, list[DiscoveryRecord]] = {"active_active": [], "active_passive": []}
         # We exclude:
         # - mediawiki read/write endpoints
         # - services that need special handling for switchover

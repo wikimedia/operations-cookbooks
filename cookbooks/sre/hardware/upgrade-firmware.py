@@ -2,14 +2,14 @@
 import logging
 
 from argparse import ArgumentTypeError
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-
 from functools import cache
 from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import cast, Dict, Iterator, List, Optional, Tuple
+from typing import cast, Optional
 from zipfile import ZipFile
 
 from packaging import version
@@ -234,7 +234,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         product_slug: str,
         driver_type: DellDriverType,
         driver_category: DellDriverCategory,
-    ) -> Tuple[version.Version, Path]:
+    ) -> tuple[version.Version, Path]:
         """Download the latest idrac for the specific netbox model
 
         Arguments:
@@ -374,7 +374,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         return upload_id
 
     @staticmethod
-    def extract_message(error: Dict) -> str:
+    def extract_message(error: dict) -> str:
         """Extract the error messages from the redfish response.
 
         Arguments:
@@ -418,7 +418,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         return job_id
 
     @staticmethod
-    def most_recent_member(members: List[Dict], key):
+    def most_recent_member(members: list[dict], key):
         """Return the most recent member of members result from dell api.
 
         Members will be sorted on key and the most recent value is returned.
@@ -433,7 +433,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
 
-        def sorter(element: Dict) -> datetime:
+        def sorter(element: dict) -> datetime:
             return datetime.fromisoformat(element[key])
 
         return sorted(members, key=sorter)[-1]
@@ -488,7 +488,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         driver_category: DellDriverCategory,
         *,
         odata_id: Optional[str] = None,
-    ) -> Tuple[version.Version, Path]:
+    ) -> tuple[version.Version, Path]:
         """Select a list of files from ones already present on the file system
 
         Arguments:
@@ -543,7 +543,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         *,
         extract_payload: bool = False,
         odata_id: Optional[str] = None,
-    ) -> Tuple[version.Version, Optional[str]]:
+    ) -> tuple[version.Version, Optional[str]]:
         """Update the driver to the latest version.
 
         Arguments:
@@ -757,7 +757,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         self.poll_id(redfish_host, job_id, True)
         return self._check_version(redfish_host, target_version, driver_category)
 
-    def _get_members(self, redfish_host: Redfish, odata_id: str) -> List[str]:
+    def _get_members(self, redfish_host: Redfish, odata_id: str) -> list[str]:
         """Get a list of hw member odata.id's.
 
         Arguments:
@@ -773,7 +773,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     def _get_hw_members(
         self, redfish_host: Redfish, driver_category: DellDriverCategory
-    ) -> List[str]:
+    ) -> list[str]:
         """Get a list of hw member odata.id's.
 
         Arguments:

@@ -1,7 +1,6 @@
 """Update and deploy the hiera data generated from Netbox data."""
 from argparse import Namespace
 from pathlib import Path
-from typing import Dict
 
 import yaml
 
@@ -86,7 +85,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
         """Required by API"""
         return f"generate netbox hiera data: {self.reason.quoted()}"
 
-    def _get_netbox_data(self) -> Dict:
+    def _get_netbox_data(self) -> dict:
         """Fetch netbox data.
 
         Returns:

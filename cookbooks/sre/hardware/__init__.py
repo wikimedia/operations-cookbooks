@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any
 
 from packaging import version
 from requests import Session
@@ -16,7 +16,7 @@ from wmflib.interactive import ask_input
 logger = logging.getLogger(__name__)
 
 
-def list_picker(options: List) -> Any:
+def list_picker(options: list) -> Any:
     """Present a list of objects to the user and return the selection"""
     selection = 0
     if len(options) > 1:
@@ -101,14 +101,14 @@ class DellDriver:
     driver_type: DellDriverType
     category_id: str
     category_name: str
-    versions: Set[DellDriverVersion]
+    versions: set[DellDriverVersion]
 
     def __str__(self) -> str:
         """Return the name for str."""
         return self.name
 
     @staticmethod
-    def from_json(obj: Dict) -> "DellDriver":
+    def from_json(obj: dict) -> "DellDriver":
         """Create a driver from json
 
         Arguments:
@@ -155,11 +155,11 @@ class DellProduct:
     def __init__(self, name: str) -> None:
         """The init function."""
         self.name = name
-        self._drivers: Set[DellDriver] = set()
-        self._firmwares: Set[DellDriver] = set()
-        self._bioses: Set[DellDriver] = set()
+        self._drivers: set[DellDriver] = set()
+        self._firmwares: set[DellDriver] = set()
+        self._bioses: set[DellDriver] = set()
 
-    def _driver_type(self, driver_type: DellDriverType) -> Set[DellDriver]:
+    def _driver_type(self, driver_type: DellDriverType) -> set[DellDriver]:
         """Return the set matching a specific driver type
 
         Arguments:
@@ -190,7 +190,7 @@ class DellProduct:
 
     def find_driver(
         self, driver_type: DellDriverType, category_id: DellDriverCategory
-    ) -> Set[DellDriver]:
+    ) -> set[DellDriver]:
         """Find all drivers from a specific type and category.
 
         Arguments:

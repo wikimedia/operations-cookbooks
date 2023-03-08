@@ -2,7 +2,6 @@
 # mypy: ignore-errors
 import logging
 from argparse import ArgumentParser, Namespace
-from typing import List
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -83,7 +82,7 @@ class PoolDepoolClusterRunner(CookbookRunnerBase):
         reason = self.args.reason if self.args.reason else "maintenance"
         return f"{self.args.action} {services_msg} in {cluster_str}: {reason}"
 
-    def get_services(self) -> List[Service]:
+    def get_services(self) -> list[Service]:
         """Return a list of all services running in a specific Kubernetes cluster"""
         services = []
 

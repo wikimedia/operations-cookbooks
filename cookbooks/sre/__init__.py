@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from logging import getLogger
 from math import ceil
 from time import sleep
-from typing import List, Union
+from typing import Union
 
 from cumin import nodeset, NodeSet, nodeset_fromlist
 from spicerack import Spicerack
@@ -210,7 +210,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             return f"{self._args.query} and {self.allowed_aliases_query}"
         return f"A:{self._args.alias}"
 
-    def _hosts(self) -> List[RemoteHosts]:
+    def _hosts(self) -> list[RemoteHosts]:
         """Return a list of RemoteHosts to sequentially operate on"""
         query = self._query()
         self.logger.debug("Effective remote query is: %s", query)
@@ -220,13 +220,13 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         return [hosts]
 
     @property
-    def restart_daemons(self) -> List:
+    def restart_daemons(self) -> list:
         """Property to return a list of daemons to restart"""
         return []
 
     @property
     @abstractmethod
-    def allowed_aliases(self) -> List:
+    def allowed_aliases(self) -> list:
         """Property to return a list of allowed aliases must be implemented in the child"""
 
     @property
@@ -235,12 +235,12 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         return "(" + " or ".join([f"A:{x}" for x in self.allowed_aliases]) + ")"
 
     @property
-    def pre_scripts(self) -> List:
+    def pre_scripts(self) -> list:
         """Should return a list of scripts to run as prescripts or an empty list"""
         return []
 
     @property
-    def post_scripts(self) -> List:
+    def post_scripts(self) -> list:
         """Should return a list of scripts to run as post_scripts or an empty list"""
         return []
 
@@ -346,7 +346,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             self.results.fail(hosts.hosts)
             raise
 
-    def _run_scripts(self, scripts: List, hosts: RemoteHosts) -> None:
+    def _run_scripts(self, scripts: list, hosts: RemoteHosts) -> None:
         """Run a list of scripts
 
         This function is provided so users can simply populate the pre/post_scripts properties
@@ -355,7 +355,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
           * any other return value is considered an error
 
         Arguments:
-            scripts (List): a list of scripts to run (the script must exist on the host)
+            scripts (list): a list of scripts to run (the script must exist on the host)
             hosts (`RemoteHosts`): hosts to run the scripts on
 
         Raises:
@@ -468,7 +468,7 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         super().__init__(args, spicerack)
 
     @property
-    def depool_services(self) -> List[str]:
+    def depool_services(self) -> list[str]:
         """Property to return a list of specific services to depool/repool. If empty means all services."""
         return []
 

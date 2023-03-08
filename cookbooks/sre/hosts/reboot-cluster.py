@@ -22,7 +22,6 @@ import math
 import time
 
 from datetime import datetime, timedelta
-from typing import List
 
 import attr
 
@@ -71,9 +70,9 @@ def argument_parser():
 class Results:
     """Class used to manage result reporting."""
 
-    hosts: List[str] = attr.ib()
-    successful: List[str] = attr.ib()
-    failed: List[str] = attr.ib()
+    hosts: list[str] = attr.ib()
+    successful: list[str] = attr.ib()
+    failed: list[str] = attr.ib()
     failed_slices: int = attr.ib(default=0)
 
     def fail(self, nodes: NodeSet):
