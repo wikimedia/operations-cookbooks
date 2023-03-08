@@ -33,7 +33,7 @@ class U2f(CookbookBase):
         group.add_argument(
             '--disable', action='store_true', help='disable u2f logins for the user'
         )
-        parser.add_argument('username', required=True, help='the username to act on')
+        parser.add_argument('username', help='the username to act on')
         return parser
 
     def get_runner(self, args):
