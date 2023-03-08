@@ -411,33 +411,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             raise RuntimeError(f'failed to get find host: {pnode} from NetBox')
         return node
 
-    def _clear_dhcp_cache(self):
-        """If the host is in eqiad's row E/F clear the DHCP and MAC caches. Workaround for T306421."""
-        node = self._get_ganeti_host()
-
-        switch_netbox = node.primary_ip.assigned_object.connected_endpoint.device
-        switch_netbox.full_details()  # Full details, to load virtual chassis attr.
-
-        # Device does not require workaround, skip. Note that virtual chassis devices
-        # does not require us to clear the DHCP cache, regardles of rack, so skip
-        # those as well.
-        if (node.site.slug != 'eqiad'
-                or node.rack.name[:1] not in ('E', 'F')
-                or switch_netbox.virtual_chassis):
-            return
-
-        switch_fqdn = switch_netbox.primary_ip.dns_name
-        switch = self.remote.query(f'D{{{switch_fqdn}}}')
-        ip = ipaddress.ip_interface(node.primary_ip4).ip
-        mac = self.ganeti_data['nic.macs'][0]
-
-        commands = [
-            f'clear dhcp relay binding {ip} routing-instance PRODUCTION',
-            f'clear ethernet-switching mac-ip-table {mac}'
-        ]
-        switch.run_sync(*commands, print_progress_bars=False)
-        self.host_actions.success('Cleared switch DHCP cache and MAC table for the host IP and MAC (row E/F)')
-
     def run(self):  # pylint: disable=too-many-statements
         """Execute the reimage."""
         if self.phabricator is not None:
@@ -536,7 +509,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self._unmask_units()
         self._check_icinga()
         self._repool()
-        self._clear_dhcp_cache()
 
         # Comment on the Phabricator task
         logger.info('Reimage completed:\n%s\n', self.actions)
