@@ -208,17 +208,17 @@ class RollingOperationRunner(CookbookRunnerBase):
                         sleep(20)
 
                         # TODO: remove this condition when a better implementation is found.
-                        # NOTE: we repool nodes before thawing writes and re-enabling replication since they
+                        # NOTE: we repool nodes before re-enabling replication since they
                         #       can already serve traffic at this point.
                         if self.with_lvs:
                             nodes.pool_nodes()
 
-                    logger.info('wait for green on all clusters before thawing writes. If not green, still thaw writes')
+                    logger.info('Wait for green on all clusters before proceeding')
                     logger.info('#### This cookbook can be safely killed now. ####')
                     try:
                         self.elasticsearch_clusters.wait_for_green(timedelta(minutes=5))
                     except ElasticsearchClusterCheckError:
-                        logger.info('Cluster not yet green, thawing writes and resume waiting for green')
+                        logger.info('Cluster not yet green, continuing to wait for green')
 
             groups_restarted += 1
 
