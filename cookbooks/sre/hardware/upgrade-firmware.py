@@ -1,5 +1,6 @@
 """Decommission a host from all inventories."""
 import logging
+import shlex
 
 from argparse import ArgumentTypeError
 from collections.abc import Iterator
@@ -8,12 +9,15 @@ from datetime import datetime, timedelta
 from functools import cache
 from io import BufferedReader
 from pathlib import Path
+from socket import getfqdn
+from subprocess import CalledProcessError, run
 from tempfile import TemporaryDirectory
 from typing import cast, Optional
 from zipfile import ZipFile
 
 from packaging import version
 
+from spicerack.constants import KEYHOLDER_SOCK
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.netbox import NetboxError, NetboxServer
@@ -79,7 +83,7 @@ class FirmwareUpgrade(CookbookBase):
         parser.add_argument(
             "-f",
             "--force",
-            help="force the upgrade even if the firmware allready matches",
+            help="force the upgrade even if the firmware already matches",
             action="store_true",
         )
         parser.add_argument(
@@ -131,6 +135,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             )
         self.new = args.new
         self.cache_answers = not args.disable_cached_answers
+        self._cumin_hosts = self.spicerack.remote().query(f'A:cumin and not P{{{getfqdn()}}}').hosts
 
         if self.new:
             self.hosts = [args.query]
@@ -214,6 +219,16 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         # poweredge-r440-configc-202107
         return netbox_host.as_dict()["device_type"]["slug"].split("-config")[0]
 
+    def _sync_firmware_store(self) -> None:
+        """Sync the firmware store to all cumin hosts."""
+        environment = {"SSH_AUTH_SOCK": KEYHOLDER_SOCK}
+        for host in self._cumin_hosts:
+            command = f"rsync --archive --rsh=ssh {self.firmware_store}/ {host}:{self.firmware_store}"
+            try:
+                run(shlex.split(command), check=True, env=environment)
+            except CalledProcessError:
+                logger.warning("unable to sync {self.firmware_store} to {host}")
+
     def _firmware_path(
         self, product_slug: str, driver_category: DellDriverCategory
     ) -> Path:
@@ -265,6 +280,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             firmware_path.parent.chmod(0o775)
             logger.info("%s: Downloading %s", product_slug, driver_version.url)
             self.dell_api.download(driver_version.url, firmware_path)
+            self._sync_firmware_store()
         driver_version = driver_version.version
         return driver_version, firmware_path
 
