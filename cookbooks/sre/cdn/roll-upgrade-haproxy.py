@@ -54,7 +54,7 @@ class RollUpgradeHAProxyRunner(SREBatchRunnerBase):
         """Install the new HAProxy version after depooling the service"""
         return [
             'depool cdn',
-            ('DEBIAN_FRONTEND=noninteractive apt-get -q -y'
+            ('DEBIAN_FRONTEND=noninteractive apt-get -q -y '
              '-o DPkg::Options::="--force-confdef" '
              '-o DPkg::Options::="--force-confold" '
              'install haproxy'),
