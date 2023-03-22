@@ -87,7 +87,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
         except PuppetHostsCheckError as error:
             self.puppet_enabled = False
             logger.warning("Puppet is disabled we will not wait for a puppet run or monitoring: %s", error)
-            if args.pool:
+            if args.depool:
                 answer = ask_input(
                     "Puppet is disabled are you sure you want to manage the pool state",
                     ("yes", "no")
