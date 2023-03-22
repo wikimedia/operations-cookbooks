@@ -62,7 +62,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
         if len(self.remote_host) != 1:
             raise RuntimeError('Only a single server can be rebooted')
 
-        self.pool = False
+        self.depool = False
         self.alerting_hosts = spicerack.alerting_hosts(self.remote_host.hosts)
         self.icinga_hosts = spicerack.icinga_hosts(self.remote_host.hosts)
         self.puppet = spicerack.puppet(self.remote_host)
@@ -94,8 +94,6 @@ class RebootSingleHostRunner(CookbookRunnerBase):
                 )
                 if answer == 'yes':
                     self.depool = True
-                else:
-                    self.depool = False
 
     @property
     def runtime_description(self):
