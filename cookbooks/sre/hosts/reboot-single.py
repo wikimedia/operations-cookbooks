@@ -94,6 +94,8 @@ class RebootSingleHostRunner(CookbookRunnerBase):
                 )
                 if answer == 'yes':
                     self.depool = True
+                else:
+                    self.depool = False
 
     @property
     def runtime_description(self):
