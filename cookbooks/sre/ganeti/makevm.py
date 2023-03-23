@@ -120,10 +120,15 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
     def _propagate_dns(self, prefix):
         """Run the sre.dns.netbox cookbook to propagate the DNS records."""
-        confirm_on_failure(self.spicerack.run_cookbook, 'sre.dns.netbox', [f'{prefix} records for VM {self.fqdn}'])
+        def run_raise(name, args):
+            ret = self.spicerack.run_cookbook(name, args)
+            if ret:
+                raise RuntimeError(f'Failed to run cookbook {name}')
+
+        confirm_on_failure(run_raise, 'sre.dns.netbox', [f'{prefix} records for VM {self.fqdn}'])
         self.dns_propagated = True
         # Clean out DNS cache to remove stale NXDOMAINs
-        confirm_on_failure(self.spicerack.run_cookbook, 'sre.dns.wipe-cache', [self.fqdn])
+        confirm_on_failure(run_raise, 'sre.dns.wipe-cache', [self.fqdn])
 
     def _ganeti_netbox_sync(self):
         """Perform a sync from Ganeti to Netbox in the affected DC."""

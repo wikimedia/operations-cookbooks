@@ -440,14 +440,12 @@ class DecommissionHostRunner(CookbookRunnerBase):
             logger.info('Sleeping for 3 minutes to get netbox caches in sync')
             time.sleep(180)
 
-        try:
-            self.spicerack.run_cookbook(
-                'sre.dns.netbox', [f'{self.decom_hosts} decommissioned, removing all IPs except the asset tag one'])
-        except RemoteExecutionError as e:
-            message = 'Failed to run the sre.dns.netbox cookbook'
-            logger.exception(message)
-            self.spicerack.actions[COMMON_STEPS_KEY].failure(
-                '**{message}**: {e}'.format(message=message, e=e))
+        netbox_ret = self.spicerack.run_cookbook(
+            'sre.dns.netbox', [f'{self.decom_hosts} decommissioned, removing all IPs except the asset tag one'])
+        if netbox_ret:
+            message = 'Failed to run the sre.dns.netbox cookbook, run it manually'
+            logger.error(message)
+            self.spicerack.actions[COMMON_STEPS_KEY].failure(f'**{message}**')
             has_failures = True
 
         suffix = ''

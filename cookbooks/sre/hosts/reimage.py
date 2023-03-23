@@ -572,8 +572,14 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if current_status in ('planned', 'failed'):
             self.netbox_server.status = 'active'
             self.host_actions.success(f'Updated Netbox status {current_status} -> active')
-            self.spicerack.run_cookbook(
+            hiera_ret = self.spicerack.run_cookbook(
                 'sre.puppet.sync-netbox-hiera', [f'Triggered by {__name__}: {self.reason.reason}'])
+            if hiera_ret:
+                hiera_message = 'Failed to run the sre.puppet.sync-netbox-hiera cookbook, run it manually'
+                logger.warning(hiera_message)
+                self.host_actions.warning(f'//{hiera_message}//')
+            else:
+                self.host_actions.success('The sre.puppet.sync-netbox-hiera cookbook was run successfully')
 
         # See T306421
         self._clear_dhcp_cache()

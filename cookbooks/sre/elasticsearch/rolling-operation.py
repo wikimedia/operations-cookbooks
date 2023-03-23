@@ -275,8 +275,9 @@ class RollingOperationRunner(CookbookRunnerBase):
                 )
 
                 if ret_val != 0:
-                    print("Got non-zero exit code of {} for reimage cookbook on host {}".format(ret_val, hostname))
-                    print("Letting the cookbook keep doing its thing, operator can decide what to do later")
+                    logger.warning("Got non-zero exit code of %d for reimage cookbook on host %s\n"
+                                   "Letting the cookbook keep doing its thing, operator can decide what to do later",
+                                   ret_val, hostname)
 
             logger.info("Forcing puppet run after reimage:")
             puppet = self.spicerack.puppet(nodes.get_remote_hosts())

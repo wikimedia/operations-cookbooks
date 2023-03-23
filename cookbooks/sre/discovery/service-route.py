@@ -162,11 +162,13 @@ class DiscoveryServiceRouteRunner(CookbookRunnerBase):
 
         if self.args.wipe_cache:
             records = ' '.join([f'{service}.discovery.wmnet' for service in self.action_services])
-            self.spicerack.run_cookbook('sre.dns.wipe-cache', [records])
+            wipe_ret = self.spicerack.run_cookbook('sre.dns.wipe-cache', [records])
+            if wipe_ret:
+                logger.warning('Failed to wipe the DNS recursors caches for records: %s', records)
 
         sleep_time = records_propagated_at - time.time()
         if sleep_time > 0:
-            logging.info('Waiting %.2f seconds for DNS changes to propagate', sleep_time)
+            logger.info('Waiting %.2f seconds for DNS changes to propagate', sleep_time)
             if not self.spicerack.dry_run:
                 time.sleep(sleep_time)
 

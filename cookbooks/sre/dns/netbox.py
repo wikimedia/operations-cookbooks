@@ -82,7 +82,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
         if not metadata.get('no_changes', False):
             logger.info('Bailing out in DRY-RUN mode. Generated temporary files are available on %s:%s',
                         netbox_hostname, metadata.get('path'))
-        return
+        return 0
 
     if args.emergency_manual_edit:
         logger.info('Generated temporary files are available on %s:%s', netbox_hostname, metadata.get('path'))
@@ -97,7 +97,7 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
             sha1 = args.force
         else:
             logger.info('No changes to deploy.')
-            return
+            return 0
     else:
         ask_confirmation('Have you checked that the diff is OK?')
 
@@ -129,4 +129,6 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
             authdns_hosts.run_sync,
             'cd {git} && utils/deploy-check.py -g {netbox} --deploy'.format(
                 git=AUTHDNS_DNS_CHECKOUT_PATH, netbox=AUTHDNS_NETBOX_CHECKOUT_PATH))
-    spicerack.run_cookbook('sre.puppet.sync-netbox-hiera', [f'Triggered by {__name__}: {reason.reason}'])
+
+    # Use the netbox-hiera return code as return code for this one too
+    return spicerack.run_cookbook('sre.puppet.sync-netbox-hiera', [f'Triggered by {__name__}: {reason.reason}'])

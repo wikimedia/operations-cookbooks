@@ -739,10 +739,13 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         if self.new:
             redfish_host.chassis_reset(ChassisResetPolicy.FORCE_RESTART)
         else:
-            self.spicerack.run_cookbook(
+            ret = self.spicerack.run_cookbook(
                 "sre.hosts.reboot-single",
                 [netbox_host.fqdn, "--reason", "bios upgrade"],
             )
+            if ret:
+                logger.error("The sre.hosts.reboot-single cookbook failed for host %s", netbox_host.fqdn)
+                ask_confirmation("Are you sure you want to proceed anyway?")
 
     def update_bios(self, redfish_host: Redfish, netbox_host: NetboxServer) -> bool:
         """Update the bios to the latest version.
