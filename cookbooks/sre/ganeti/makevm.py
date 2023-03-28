@@ -221,6 +221,11 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
             'Attached IPv4 %s and IPv6 %s to VM %s and marked as primary IPs',
             ip_v4, ip_v6, vm)
 
+        # Update Puppet hiera data from NetBox.
+        hiera_ret = self.spicerack.run_cookbook("sre.puppet.sync-netbox-hiera",
+                                                [f'Triggered by {__name__}: created new VM {self.fqdn}'])
+        return hiera_ret
+
 
 def make_fqdn(hostname: str, network: str, datacenter: str) -> str:
     """Create a fqdn based on the hostname, network and datacenter"""
