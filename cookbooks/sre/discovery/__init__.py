@@ -5,6 +5,8 @@ from typing import cast
 
 import dns
 
+from dns.rdataclass import RdataClass
+
 from spicerack.decorators import retry
 from spicerack.dnsdisc import Discovery, DiscoveryError, DiscoveryCheckError
 from spicerack.remote import Remote
@@ -57,7 +59,7 @@ def resolve_with_client_ip(dnsdisc: Discovery, client_ip: str, name: str) -> Ite
                 # Make the actual query
                 resp = dns.query.udp(query_msg, cast(list, dns_resolver.nameservers)[0], port=dns_resolver.port)
                 # Build an Answer instance as a Stub Resolver would
-                answer = dns.resolver.Answer(record_name, rdtype, dns.rdataclass.IN, resp)
+                answer = dns.resolver.Answer(record_name, rdtype, RdataClass.IN, resp)
             except Exception as e:
                 # This is less than ideal, but dns.query.udp can return quite a lot of exceptions, there is no
                 # abstraction in dnspython 1.16.0 (2.0.0 has some) and I'm lazy.

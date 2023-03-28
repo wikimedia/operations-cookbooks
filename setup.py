@@ -9,11 +9,6 @@ install_requires = [
     'python-dateutil',
     'python-gitlab==3.11.0',
     'wikimedia-spicerack',
-    # [fixme]: The dnspython requirement is not reflected in puppet and should be
-    # removed when moving generic functions from sre.discovery.service-route to
-    # spicerack. 1.16.0 is currently in buster and 2.0.0 changed a lot, so I'm
-    # pinning this here to have the right version with local tox.
-    'dnspython==1.16.0',
 ]
 
 # Extra dependencies
