@@ -1,7 +1,11 @@
 """Update and deploy the hiera data generated from Netbox data."""
+import json
+
 from argparse import Namespace
+from collections import defaultdict
+from ipaddress import ip_network
 from pathlib import Path
-from typing import Optional, Union
+from typing import DefaultDict, Optional, Union
 
 import yaml
 
@@ -63,6 +67,19 @@ query {
             }
         }
     }
+}
+"""
+PREFIX_LIST = """
+query ($status: [String]) {
+  prefix_list(status: $status) {
+    site { slug }
+    tenant { slug }
+    role { slug }
+    vlan { name }
+    prefix
+    status
+    description
+  }
 }
 """
 
@@ -202,7 +219,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
         """Return the Virtual machine data.
 
         Arguments:
-            roles: the netbox devices roles to filer on
+            status: the netbox status to filter on
 
         Returns:
             dict: the management host data
@@ -262,6 +279,35 @@ class NetboxHieraRunner(CookbookRunnerBase):
 
         return results
 
+    def _prefixes(self, status: list[str]):
+        """Fetch and format the list of prefixes from netbox.
+
+        Arguments:
+            status: the netbox status to filter on
+
+        """
+        variables = {"status": status}
+        prefix_list = self._gql_execute(PREFIX_LIST, variables)['prefix_list']
+        prefixes: DefaultDict[str, dict] = defaultdict(dict)
+        # TODO: this is probably useful for all queries
+        for prefix_data in prefix_list:
+            prefix = prefixes[prefix_data['prefix']]
+            prefix['public'] = ip_network(prefix_data['prefix']).is_global
+            for key, value in prefix_data.items():
+                # skip empty values
+                if value is None or key == 'prefix':
+                    continue
+                if key == 'status':
+                    value = value.lower()
+                # collapse the slug and name
+                if isinstance(value, dict):
+                    for collapse_key in ['slug', 'name']:
+                        if collapse_key in value:
+                            value = value.get(collapse_key, value)
+                prefix[key] = value
+
+        return prefixes
+
     def _write_hiera_files(self, out_dir: Path) -> None:
         """Write out all the hiera files.
 
@@ -282,8 +328,14 @@ class NetboxHieraRunner(CookbookRunnerBase):
                 yaml.safe_dump(hiera_data, host_fh, default_flow_style=False)
 
         common_path = out_dir / "common.yaml"
+        mgmt_hosts = self._mgmt_hosts()
+        prefixes = self._prefixes(['active'])
+        # use json to get rid of defaultdicts
+        common_data = json.loads(json.dumps({
+            f"{self.hiera_prefix}::data::mgmt": mgmt_hosts,
+            f"{self.hiera_prefix}::data::prefixes": prefixes,
+        }))
         with common_path.open("w") as common_fh:
-            common_data = {f"{self.hiera_prefix}::data::mgmt": self._mgmt_hosts()}
             yaml.safe_dump(common_data, common_fh, default_flow_style=False)
 
     def update_puppetmasters(self, hexsha: str) -> None:
