@@ -335,7 +335,8 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
             if len(nics_with_link) != 1 or pick:
                 pxe_nic = ask_input(
-                    f'Unable to auto-detect NIC with link. Pick the one to set PXE on:\n{all_nics}', all_nics)
+                    f'Unable to auto-detect NIC with link. Pick the one to set PXE on:\n{all_nics}',
+                    all_nics if all_nics else 'no NIC detected')
 
         if not pxe_nic:
             if len(nics_with_link) == 1:
@@ -343,7 +344,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             else:
                 pxe_nic = ask_input(
                     f'Detected link on {len(nics_with_link)} interfaces. Pick the one to set PXE on:\n{nics_with_link}',
-                    nics_with_link)
+                    nics_with_link if nics_with_link else 'no NIC with link detected')
 
         logger.info('Enabling PXE boot on NIC %s', pxe_nic)
         for nic in all_nics:
