@@ -185,6 +185,9 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
     def run(self):
         """Run the cookbook."""
+        if not self.args.no_switch:
+            configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
+
         if not self.args.no_dhcp:
             self.dhcp.push_configuration(self.dhcp_config)
             self._dhcp_active = True
@@ -243,9 +246,6 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         sleep(10)  # Trying to avoid a race condition that seems to make IPMI fail right after changing the password
         self.ipmi.check_connection()
 
-        if not self.args.no_switch:
-            configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
-
     def rollback(self):
         """Rollback the DHCP setup if present."""
         if self._dhcp_active:
@@ -291,7 +291,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
         logger.info('All changes were applied successfully')
 
-    def _config_pxe(self, config):
+    def _config_pxe(self, config):  # pylint: disable=too-many-branches
         """Configure PXE boot on the correct NIC automatically or ask the user if unable to detect it.
 
         Example keys names::
@@ -310,6 +310,9 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         all_nics = sorted(key for key in config.components.keys() if key.startswith('NIC.'))
         nics_with_link = []
         nics_failed = []
+        if not all_nics:
+            raise RuntimeError('Unable to find any NIC.')
+
         for nic in all_nics:
             try:
                 nic_json = self.redfish.request(
@@ -335,16 +338,18 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
             if len(nics_with_link) != 1 or pick:
                 pxe_nic = ask_input(
-                    f'Unable to auto-detect NIC with link. Pick the one to set PXE on:\n{all_nics}',
-                    all_nics if all_nics else 'no NIC detected')
+                    f'Unable to auto-detect NIC with link. Pick the one to set PXE on:\n{all_nics}', all_nics)
 
         if not pxe_nic:
             if len(nics_with_link) == 1:
                 pxe_nic = nics_with_link[0]
-            else:
+            elif nics_with_link:
                 pxe_nic = ask_input(
                     f'Detected link on {len(nics_with_link)} interfaces. Pick the one to set PXE on:\n{nics_with_link}',
-                    nics_with_link if nics_with_link else 'no NIC with link detected')
+                    nics_with_link)
+            else:
+                pxe_nic = ask_input(
+                    f'Unable to auto-detect NIC with link. Pick the one to set PXE on:\n{all_nics}', all_nics)
 
         logger.info('Enabling PXE boot on NIC %s', pxe_nic)
         for nic in all_nics:
