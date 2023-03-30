@@ -6,15 +6,19 @@ import time
 
 from datetime import datetime
 from pathlib import Path
+from typing import Union
 
 from requests.exceptions import RequestException
 
 from cumin.transports import Command
+from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
-from spicerack.dhcp import DHCPConfOpt82
+from spicerack.dhcp import DHCPConfMac, DHCPConfOpt82
 from spicerack.exceptions import SpicerackError
+from spicerack.ganeti import Ganeti, GanetiRAPI, GntInstance
 from spicerack.icinga import IcingaError
+from spicerack.ipmi import Ipmi
 from spicerack.remote import RemoteError, RemoteExecutionError
 from wmflib.interactive import AbortError, ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
@@ -108,26 +112,23 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         # Shortcut variables
         self.fqdn = self.netbox_server.fqdn
-        self.mgmt_fqdn = self.netbox_server.mgmt_fqdn
+        self.output_filename = self._get_output_filename(spicerack.username)
         self.actions = spicerack.actions
         self.host_actions = self.actions[self.host]
         self.confctl_services = []
-
-        if self.netbox_server.virtual:
-            raise RuntimeError(f'Host {self.host} is a virtual machine. VMs are not yet supported.')
-
         self.dns = spicerack.dns()
         self.icinga_host = spicerack.icinga_hosts([self.host])
         self.alerting_host = spicerack.alerting_hosts([self.host])
         self.alertmanager_host = spicerack.alertmanager_hosts([self.host])
-        self.ipmi = spicerack.ipmi(self.mgmt_fqdn)
+        self.ganeti: Ganeti = spicerack.ganeti()
         self.reason = spicerack.admin_reason('Host reimage', task_id=self.args.task_id)
         self.puppet_master = spicerack.puppet_master()
         self.debmonitor = spicerack.debmonitor()
         self.confctl = spicerack.confctl('node')
         self.remote = spicerack.remote()
-        self.spicerack = spicerack
+        self.spicerack: Spicerack = spicerack
         self.requests = spicerack.requests_session(__name__, timeout=(5.0, 30.0))
+        self.virtual: bool = self.netbox_server.virtual
 
         try:
             self.remote_host = self.remote.query(self.fqdn)
@@ -166,9 +167,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         except RemoteError:  # Fallback to eqiad's install server if the above fails, i.e. for a new DC
             self.dhcp_hosts = self.remote.query('A:installserver and A:eqiad')
         self.dhcp = spicerack.dhcp(self.dhcp_hosts)
-        self.dhcp_config = self._get_dhcp_config()
-
-        self._validate()
 
         # Keep track of some specific actions for the eventual rollback
         self.rollback_masks = False
@@ -179,6 +177,21 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         else:
             self.phabricator = None
+
+        # Load properties / attributes specific to either virtual
+        # or physical hosts.
+        self.dhcp_config: Union[DHCPConfMac, DHCPConfOpt82]
+        if self.virtual:
+            self.ganeti_instance: GntInstance = self.ganeti.instance(self.fqdn)
+            self.ganeti_rapi: GanetiRAPI = self.ganeti.rapi(self.ganeti_instance.cluster)
+            self.ganeti_data: dict = self.ganeti_rapi.fetch_instance(self.fqdn)
+            self.dhcp_config = self._get_dhcp_config_mac()
+        else:
+            self.mgmt_fqdn = self.netbox_server.mgmt_fqdn
+            self.ipmi: Ipmi = self.spicerack.ipmi(self.mgmt_fqdn)
+            self.dhcp_config = self._get_dhcp_config_opt82()
+
+        self._validate()
 
     @property
     def runtime_description(self):
@@ -215,10 +228,12 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
     def _validate(self):
         """Perform all pre-reimage validation steps."""
-        for dns_name in (self.fqdn, self.mgmt_fqdn):
+        dns_names = (self.fqdn,) if self.virtual else (self.fqdn, self.mgmt_fqdn)
+        for dns_name in dns_names:
             self.dns.resolve_ips(dns_name)  # Will raise if not valid
 
-        self.ipmi.check_connection()  # Will raise if unable to connect
+        if not self.virtual:
+            self.ipmi.check_connection()  # Will raise if unable to connect
 
     def _depool(self):
         """Depool all the pooled services for the host."""
@@ -266,7 +281,25 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         else:
             self.host_actions.success('No changes in confctl are needed to restore the previous state.')
 
-    def _get_dhcp_config(self):
+    def _get_dhcp_config_mac(self) -> DHCPConfMac:
+        ip = ipaddress.IPv4Interface(self.netbox_data['primary_ip4']['address']).ip
+        mac = self.ganeti_data.get('nic.macs', None)
+
+        if not isinstance(ip, ipaddress.IPv4Address):
+            raise RuntimeError(f'Unable to find primary IPv4 address for {self.host}.')
+
+        if not mac or len(mac) != 1:
+            raise RuntimeError(f'Unable to get MAC from Ganeti for {self.host}')
+
+        return DHCPConfMac(
+            hostname=self.host,
+            ipv4=ip,
+            mac=mac[0],
+            ttys=0,
+            distro=self.args.os
+        )
+
+    def _get_dhcp_config_opt82(self) -> DHCPConfOpt82:
         """Instantiate a DHCP configuration to be used for the reimage."""
         netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
         switch_iface = netbox_host.primary_ip.assigned_object.connected_endpoint
@@ -299,10 +332,23 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
     def _install_os(self):
         """Perform the OS reinstall."""
         pxe_reboot_time = datetime.utcnow()
-        self.ipmi.force_pxe()
-        self.host_actions.success('Forced PXE for next reboot')
-        self.ipmi.reboot()
-        self.host_actions.success('Host rebooted via IPMI')
+
+        if self.virtual:
+            # Prepare a Ganeti VM for reboot and PXE boot for
+            # reimaging.
+            self.ganeti_instance.set_boot_media('network')
+            self.host_actions.success('Forced PXE for next reboot')
+            self.ganeti_instance.shutdown()
+            self.ganeti_instance.startup()
+            self.host_actions.success('Host rebooted via gnt-instance')
+        else:
+            # Prepare a physical host for reboot and PXE boot
+            # for reimaging.
+            self.ipmi.force_pxe()
+            self.host_actions.success('Forced PXE for next reboot')
+            self.ipmi.reboot()
+            self.host_actions.success('Host rebooted via IPMI')
+
         self.remote_installer.wait_reboot_since(pxe_reboot_time, print_progress_bars=False)
         time.sleep(30)  # Avoid race conditions, the host is in the d-i, need to wait anyway
         di_reboot_time = datetime.utcnow()
@@ -314,6 +360,16 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                              f'with: sudo install_console {self.fqdn}')
 
         self.host_actions.success('Host up (Debian installer)')
+
+        # Reset boot media allowing the newly installed OS to boot.
+        if self.virtual:
+            self.ganeti_instance.set_boot_media('disk')
+            self.host_actions.success('Set boot media to disk')
+        else:
+            self.ipmi.remove_boot_override()
+            self.ipmi.check_bootparams()
+            self.host_actions.success('Checked BIOS boot parameters are back to normal')
+
         self.rollback_clear_dhcp_cache = True
         self.remote_installer.wait_reboot_since(di_reboot_time, print_progress_bars=False)
         try:
@@ -323,6 +379,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                              f'Debian installer, please verify manually with: sudo install_console {self.fqdn}')
 
         result = self.remote_installer.run_sync('lsb_release -sc', print_output=False, print_progress_bars=False)
+
+        distro: str = 'unknown'
         for _, output in result:
             distro = output.message().decode()
 
@@ -409,6 +467,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.host_actions.warning('//Icinga status is not optimal, downtime not removed//')
 
     def _clear_dhcp_cache(self):
+        if self.virtual:
+            return
+
         """If the host is in eqiad's row E/F clear the DHCP and MAC caches. Workaround for T306421."""
         if self.netbox_data['site']['slug'] != 'eqiad' or self.netbox_data['rack']['name'][:1] not in ('E', 'F'):
             return
@@ -420,6 +481,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         ip = ipaddress.ip_interface(netbox_host.primary_ip4).ip
         mac_command = '/usr/bin/facter -p networking.mac'
         result = self.remote_host.run_sync(mac_command, is_safe=True, print_progress_bars=False, print_output=False)
+
+        mac: str = ''
         for _, output in result:
             mac = output.message().decode().strip()
 
@@ -449,13 +512,15 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             for line in data['log']:
                 logger.info('[%s] %s', line['status'], line['message'])
 
+        result = None
         try:
             result = self.requests.post(url, headers=headers, json=data)
             result.raise_for_status()
             self.host_actions.success('Updated Netbox data from PuppetDB')
         except RequestException:
             self.host_actions.failure(f'**Failed to execute Netbox script, try manually**: {url}')
-            logger.error(result.text)
+            if result:
+                logger.error(result.text)
         else:
             job_url = result.json()['result']['url']
             try:
@@ -550,10 +615,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if first_puppet_run is None:
             self.host_actions.warning('//First Puppet run failed and the operator skipped it//')
 
-        self.ipmi.remove_boot_override()
-        self.ipmi.check_bootparams()
-        self.host_actions.success('Checked BIOS boot parameters are back to normal')
-
         # Run puppet locally to get the new host public key, required to proceed
         self.puppet_localhost.run(quiet=True)
         # Run puppet on configmaster.wikimedia.org to allow wmf-update-known-hosts-production to get the new public
@@ -581,7 +642,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self._repool()
         self._update_netbox_data()
         current_status = self.netbox_server.status
-        if current_status in ('planned', 'failed'):
+        if not self.virtual and current_status in ('planned', 'failed'):
             self.netbox_server.status = 'active'
             self.host_actions.success(f'Updated Netbox status {current_status} -> active')
             hiera_ret = self.spicerack.run_cookbook(
