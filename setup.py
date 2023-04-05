@@ -5,6 +5,7 @@ from setuptools import find_namespace_packages, setup
 # The below list is only for CI
 # For prod add the libs to modules/profile/manifests/spicerack.pp
 install_requires = [
+    'aiohttp',
     'prettytable',
     'python-dateutil',
     'python-gitlab==3.11.0',
