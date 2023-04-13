@@ -790,10 +790,61 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         data = redfish_host.request("get", odata_id).json()
         return [member["@odata.id"] for member in data["Members"]]
 
-    def _get_hw_members(
+    @staticmethod
+    def _filter_storage(members: list[str]) -> Optional[str]:
+        """Filter the list of storage members to a single raid controller
+
+        Arguments:
+            members: list storage controller odata uri's
+
+        """
+        # for now we just filter for raid controllers
+        results = []
+        for member in members:
+            if member.split('/')[-1].startswith('RAID'):
+                results.append(member)
+
+        if not results:
+            return None
+
+        return list_picker(results)
+
+    @staticmethod
+    def _filter_network(redfish_host: Redfish, members: list[str]) -> Optional[str]:
+        """Filter the list of network members to only the one with a link status
+
+        Arguments:
+            redfish_host: The redfish host to act on.
+            members: list network adaptor odata uri's
+
+        """
+        results = {}
+        for member in members:
+            ports: set = set()
+            try:
+                member_data = redfish_host.request('get', member).json()
+                for controler in member_data['Controllers']:
+                    ports.update(port['@odata.id'] for port in controler['Links']['NetworkPorts'])
+            except KeyError as error:
+                raise RuntimeError("%s: unable to find network ports") from error
+            for port in ports:
+                port_data = redfish_host.request('get', port).json()
+                try:
+                    if port_data['LinkStatus'].lower() == 'up':
+                        results[f"{member_data['Id']}: {member_data['Manufacturer']}"] = member
+                except KeyError as error:
+                    raise RuntimeError("%s: unable to find link status") from error
+
+        if not results:
+            return None
+
+        selection = list_picker(list(results.keys()))
+        return results[selection]
+
+    def _get_hw_member(
         self, redfish_host: Redfish, driver_category: DellDriverCategory
-    ) -> list[str]:
-        """Get a list of hw member odata.id's.
+    ) -> Optional[str]:
+        """Get the member to upgrade.
 
         Arguments:
             redfish_host: The redfish host to act on.
@@ -801,23 +852,18 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_category: The driver category to get
 
         Returns:
-            members: A list of member odata.id's
+            members: A member odata.id
 
         """
-        try:
-            return {
-                DellDriverCategory.NETWORK: self._get_members(
-                    redfish_host,
-                    "/redfish/v1/Chassis/System.Embedded.1/NetworkAdapters",
-                ),
-                DellDriverCategory.STORAGE: self._get_members(
-                    redfish_host, '/redfish/v1/Systems/System.Embedded.1/Storage'
-                ),
-            }[driver_category]
-        except KeyError as error:
-            raise RuntimeError(
-                f"{redfish_host.hostname}: unsupported device catagory {driver_category}"
-            ) from error
+        if driver_category == DellDriverCategory.NETWORK:
+            members = self._get_members(redfish_host, "/redfish/v1/Chassis/System.Embedded.1/NetworkAdapters")
+            return self._filter_network(redfish_host, members)
+        if driver_category == DellDriverCategory.STORAGE:
+            members = self._get_members(redfish_host, '/redfish/v1/Systems/System.Embedded.1/Storage')
+            return self._filter_storage(members)
+        raise RuntimeError(
+            f"{redfish_host.hostname}: unsupported device catagory {driver_category}"
+        )
 
     def update_driver(
         self,
@@ -833,44 +879,39 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_category: The driver category to get
 
         """
-        status = True
         if redfish_host.firmware_version < version.Version('4'):
             logger.error('iDRAC version (%s) is too low to preform driver upgrades.  '
                          'please upgrade iDRAC first')
             return False
 
-        members = self._get_hw_members(redfish_host, driver_category)
-        if not members:
+        member = self._get_hw_member(redfish_host, driver_category)
+        if member is None:
             logger.info(
-                "%s: skipping %s as no members", netbox_host.fqdn, driver_category
+                "%s: skipping %s as no member", netbox_host.fqdn, driver_category
             )
             return True
 
-        for member in members:
-            target_version, job_id = self._update(
-                redfish_host,
-                netbox_host,
-                DellDriverType.FRMW,
-                driver_category,
-                odata_id=member,
-            )
-            if self._get_version_odata(redfish_host, driver_category, member) == target_version:
-                continue
-            if job_id is None:
-                logger.error('%s: no job_id for member (%s)', netbox_host.fqdn, member)
-                status = False
-                continue
+        target_version, job_id = self._update(
+            redfish_host,
+            netbox_host,
+            DellDriverType.FRMW,
+            driver_category,
+            odata_id=member,
+        )
+        if job_id is None:
+            logger.error('%s: no job_id for member (%s)', netbox_host.fqdn, member)
+            return False
 
-            if self.no_reboot:
-                continue
+        if self.no_reboot or self._get_version_odata(redfish_host, driver_category, member) == target_version:
+            return True
 
-            self._reboot(redfish_host, netbox_host)
-            self.poll_id(redfish_host, job_id, True)
-            if not self._check_version(
-                redfish_host, target_version, driver_category, odata_id=member
-            ):
-                status = False
-        return status
+        self._reboot(redfish_host, netbox_host)
+        self.poll_id(redfish_host, job_id, True)
+        if not self._check_version(
+            redfish_host, target_version, driver_category, odata_id=member
+        ):
+            return False
+        return True
 
     def run(self):
         """Required by Spicerack API."""
