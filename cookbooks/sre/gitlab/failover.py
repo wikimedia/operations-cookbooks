@@ -220,7 +220,7 @@ class FailoverRunner(CookbookRunnerBase):
         # ls -t1 will list files in date order, newest first. We can assume the first file is newest
         first_file_timestamp = file.split("_")[0]
         # If we found a file, but it wasn't new enough, we might be in dry_run mode, since a new backup was never made
-        if first_file_timestamp < int(backup_start_time) and not self.spicerack.dry_run:
+        if int(first_file_timestamp) < int(backup_start_time) and not self.spicerack.dry_run:
             raise RuntimeError(
                 f"Found {file}, but it is older than our backup start time {backup_start_time}"
             )
