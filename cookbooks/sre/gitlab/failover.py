@@ -216,7 +216,7 @@ class FailoverRunner(CookbookRunnerBase):
         for _, output in results:
             lines = output.message().decode().split()
 
-        file = lines[0]
+        file = lines[0].split("/")[-1]
         # ls -t1 will list files in date order, newest first. We can assume the first file is newest
         first_file_timestamp = file.split("_")[0]
         # If we found a file, but it wasn't new enough, we might be in dry_run mode, since a new backup was never made
