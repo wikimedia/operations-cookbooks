@@ -84,7 +84,7 @@ class FailoverRunner(CookbookRunnerBase):
         self.current_primary = spicerack.remote().query(f"{args.current_primary}.*")
         self.new_primary = spicerack.remote().query(f"{args.new_primary}.*")
         self.alerting_hosts = self.spicerack.alerting_hosts(self.current_primary.hosts | self.new_primary.hosts)
-        self.task_id = args.task_id
+        self.task_id = args.task
         self.downtime_id = None
         self.gitlab_token = get_secret("Gitlab API token")
         self.message = f"Failover of gitlab from {self.current_primary} to {self.new_primary}"
