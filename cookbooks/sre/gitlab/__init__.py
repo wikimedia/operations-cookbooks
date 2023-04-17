@@ -38,13 +38,14 @@ def get_disk_usage_for_path(host: RemoteHosts, path: str) -> int:
     raise RuntimeError(f"Unable to extract free space from: {path}")
 
 
-def pause_runners(token: str, url: str):
+def pause_runners(token: str, url: str, dry_run: bool = True):
     """Pause all active runners"""
     gitlab_instance = gitlab.Gitlab(url, private_token=token)
     active_runners = gitlab_instance.runners.all(scope='active', all=True)
     for runner in active_runners:
-        runner.paused = True
-        runner.save()
+        if not dry_run:
+            runner.paused = True
+            runner.save()
         logger.info('Paused %s runner', runner.id)
     return active_runners
 
@@ -55,9 +56,10 @@ def pause_runners(token: str, url: str):
     backoff_mode='constant',
     failure_message='Waiting for GitLab API to become available again',
     exceptions=(gitlab.exceptions.GitlabUpdateError, gitlab.exceptions.GitlabHttpError,))
-def unpause_runners(paused_runners):
+def unpause_runners(paused_runners, dry_run=True):
     """Unpause a list of runners"""
     for runner in paused_runners:
-        runner.paused = False
-        runner.save()
+        if not dry_run:
+            runner.paused = False
+            runner.save()
         logger.info('Unpaused %s runner', runner.id)

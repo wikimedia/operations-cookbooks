@@ -114,7 +114,7 @@ class FailoverRunner(CookbookRunnerBase):
         self.spicerack.puppet(self.current_primary).disable(self.reason)
         self.spicerack.puppet(self.new_primary).disable(self.reason)
 
-        paused_runners = pause_runners(self.gitlab_token, self.primary_gitlab_url)
+        paused_runners = pause_runners(self.gitlab_token, self.primary_gitlab_url, dry_run=self.spicerack.dry_run)
         self.make_host_read_only(self.current_primary)
 
         backup_file = self.start_backup_on_old_host()
@@ -143,7 +143,7 @@ class FailoverRunner(CookbookRunnerBase):
         self.spicerack.puppet(self.current_primary).run(enable_reason=self.reason)
 
         self.current_primary.run_sync("systemctl start ssh-gitlab", print_progress_bars=False)
-        unpause_runners(paused_runners)
+        unpause_runners(paused_runners, dry_run=self.spicerack.dry_run)
 
     @property
     def runtime_description(self) -> str:
@@ -205,7 +205,8 @@ class FailoverRunner(CookbookRunnerBase):
         try:
             results = self.current_primary.run_sync(
                 f"ls -t1 {BACKUP_DIRECTORY}/{file_pattern}",
-                print_progress_bars=False
+                print_progress_bars=False,
+                is_safe=True
             )
         except RemoteExecutionError:
             logger.error("Couldn't list backup files, caught an exception")
@@ -218,7 +219,8 @@ class FailoverRunner(CookbookRunnerBase):
         file = lines[0]
         # ls -t1 will list files in date order, newest first. We can assume the first file is newest
         first_file_timestamp = file.split("_")[0]
-        if first_file_timestamp < int(backup_start_time):
+        # If we found a file, but it wasn't new enough, we might be in dry_run mode, since a new backup was never made
+        if first_file_timestamp < int(backup_start_time) and not self.spicerack.dry_run:
             raise RuntimeError(
                 f"Found {file}, but it is older than our backup start time {backup_start_time}"
             )

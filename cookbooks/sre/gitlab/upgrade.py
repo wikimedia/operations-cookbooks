@@ -63,6 +63,7 @@ class UpgradeRunner(CookbookRunnerBase):
     def __init__(self, args, spicerack):
         """Initiliaze the provision runner."""
         ensure_shell_is_durable()
+        self.spicerack = spicerack
         self.remote_host = spicerack.remote().query(f'{args.host}.*')
         if len(self.remote_host) != 1:
             raise RuntimeError(f"Found the following hosts: {self.remote_host} for query {args.host}."
@@ -115,10 +116,10 @@ class UpgradeRunner(CookbookRunnerBase):
         self.create_data_backup()
         self.create_config_backup()
         self.fail_for_background_migrations()
-        paused_runners = pause_runners(self.token, self.url)
+        paused_runners = pause_runners(self.token, self.url, dry_run=self.spicerack.dry_run)
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=15)):
             self.install_debian_package()
-        unpause_runners(paused_runners)
+        unpause_runners(paused_runners, dry_run=self.spicerack.dry_run)
         broadcastmessage.delete()
 
         if self.phabricator is not None:
