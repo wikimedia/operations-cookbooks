@@ -92,7 +92,11 @@ class BanNodeRunner(CookbookRunnerBase):
             # not all hosts belong to all clusters, but at the moment we are OK with banning
             # non-existent nodes, as it does not harm the clusters.
             for cluster_name in cluster_names:
-                instance_names = [f"{host}-{cluster_name}" for host in target_hosts]
+                if "cloudelastic" in cluster_name:
+                    ce_cluster_name = f"{cluster_name.split('-https')[0]}-eqiad"
+                    instance_names = [f"{host}-{ce_cluster_name}" for host in target_hosts]
+                else:
+                    instance_names = [f"{host}-{cluster_name}" for host in target_hosts]
                 self.ban_or_unban_nodes(instance_names, cluster_name)
 
     def ban_or_unban_nodes(self, node_names, cluster_name):
