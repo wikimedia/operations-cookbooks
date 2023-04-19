@@ -5,9 +5,10 @@ import logging
 
 from datetime import timedelta, date
 from argparse import ArgumentParser
+from urllib.parse import urlparse
 
 from spicerack.remote import RemoteHosts, RemoteExecutionError
-from wmflib.interactive import ensure_shell_is_durable, ask_confirmation, get_secret
+from wmflib.interactive import ensure_shell_is_durable, ask_confirmation, get_secret, confirm_on_failure
 from cookbooks.sre import CookbookBase, CookbookRunnerBase
 from cookbooks.sre.gitlab import get_gitlab_url, get_disk_usage_for_path, pause_runners, unpause_runners
 
@@ -94,6 +95,12 @@ class FailoverRunner(CookbookRunnerBase):
         self.primary_gitlab_url = get_gitlab_url(self.current_primary)
         self.replica_gitlab_url = get_gitlab_url(self.new_primary)
 
+        self.dns = self.spicerack.dns()
+        self.pre_migration_ips = {
+            self.primary_gitlab_url: sorted(self.dns.resolve_ips(urlparse(self.primary_gitlab_url).netloc)),
+            self.replica_gitlab_url: sorted(self.dns.resolve_ips(urlparse(self.replica_gitlab_url).netloc)),
+        }
+
         # Ensure the new host isn't already configured to be gitlab.wmo, I can't imagine a reason
         # to go this direction with the migration.
         if "gitlab.wikimedia.org" in self.replica_gitlab_url:
@@ -129,11 +136,11 @@ class FailoverRunner(CookbookRunnerBase):
         self.spicerack.puppet(self.new_primary).run(enable_reason=self.reason)
         self.start_restore_process()
 
-        # TODO: It would be nice to verify that these records are in place.
         ask_confirmation(
             f"Please merge a DNS update to point `{self.primary_gitlab_url}` to {self.new_primary} "
             f"and `{self.replica_gitlab_url}` to {self.current_primary}"
         )
+        confirm_on_failure(self.check_for_correct_dns)
 
         ask_confirmation(
             f"Please verify that the switchover to {self.primary_gitlab_url} is operating as expected. Once you are "
@@ -248,3 +255,23 @@ class FailoverRunner(CookbookRunnerBase):
         )
 
         self.new_primary.run_sync(f"{GITLAB_RESTORE_PATH}/gitlab-restore.sh -F", print_progress_bars=False)
+
+    def check_for_correct_dns(self) -> None:
+        """Raises an exception if the IP addresses haven't changed since before the migration started"""
+        self.spicerack.run_cookbook('sre.dns.wipe-cache', ['gitlab.wikimedia.org'])
+
+        current_primary_ips = sorted(self.dns.resolve_ips(urlparse(self.primary_gitlab_url).netloc))
+        current_replica_ips = sorted(self.dns.resolve_ips(urlparse(self.replica_gitlab_url).netloc))
+
+        if current_primary_ips != self.pre_migration_ips[self.replica_gitlab_url]:
+            raise RuntimeError(
+                f"IP for {self.primary_gitlab_url} doesn't match the pre-migration IPs for {self.replica_gitlab_url}. "
+                "Has the DNS change been merged? Or maybe it's cached somewhere. (Should be "
+                f"{self.pre_migration_ips[self.primary_gitlab_url]}, but is {current_primary_ips})"
+            )
+        if current_replica_ips != self.pre_migration_ips[self.primary_gitlab_url]:
+            raise RuntimeError(
+                f"IP for {self.replica_gitlab_url} doesn't match the pre-migration IPs for {self.primary_gitlab_url}. "
+                "Has the DNS change been merged? Or maybe it's cached somewhere. (Should be "
+                f"{self.pre_migration_ips[self.replica_gitlab_url]}, but is {current_replica_ips})"
+            )
