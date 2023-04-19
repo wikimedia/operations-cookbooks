@@ -865,7 +865,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             f"{redfish_host.hostname}: unsupported device catagory {driver_category}"
         )
 
-    def update_driver(
+    def update_driver(  # pylint: disable=too-many-return-statements
         self,
         redfish_host: Redfish,
         netbox_host: NetboxServer,
@@ -902,7 +902,12 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             logger.error('%s: no job_id for member (%s)', netbox_host.fqdn, member)
             return False
 
-        if self.no_reboot or self._get_version_odata(redfish_host, driver_category, member) == target_version:
+        if self.no_reboot:
+            logger.info('%s: skipping reboot due to no-reboot (%s)', netbox_host.fqdn, member)
+            return True
+
+        if self._get_version_odata(redfish_host, driver_category, member) == target_version:
+            logger.info('%s: skipping reboot version already correct (%s)', netbox_host.fqdn, member)
             return True
 
         self._reboot(redfish_host, netbox_host)
