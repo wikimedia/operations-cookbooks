@@ -16,7 +16,7 @@ from spicerack.dhcp import DHCPConfOpt82
 from spicerack.exceptions import SpicerackError
 from spicerack.icinga import IcingaError
 from spicerack.remote import RemoteError, RemoteExecutionError
-from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
+from wmflib.interactive import AbortError, ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
@@ -109,7 +109,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         # Shortcut variables
         self.fqdn = self.netbox_server.fqdn
         self.mgmt_fqdn = self.netbox_server.mgmt_fqdn
-        self.output_filename = self._get_output_filename(spicerack.username)
         self.actions = spicerack.actions
         self.host_actions = self.actions[self.host]
         self.confctl_services = []
@@ -522,21 +521,34 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         def _first_puppet_run():
             """Print a nicer message on failure."""
             # TODO: remove once Cumin returns partial output on failure
+            output_filename = self._get_output_filename(self.spicerack.username)
+            results = None
             try:
-                return self.puppet_installer.first_run()
-            except RemoteExecutionError:
+                results = self.puppet_installer.first_run()
+                self.host_actions.success(f'First Puppet run completed and logged in {output_filename}')
+                return True
+            except RemoteExecutionError as e:
+                results = e.results
                 logger.error(('First Puppet run failed:\n'
-                              'Check the logs at https://puppetboard.wikimedia.org/node/%s\n'
-                              'Inspect the host with: sudo install_console %s'), self.fqdn, self.fqdn)
-                self.host_actions.failure('**First Puppet run failed, asking the operator what to do**')
+                              'Check the logs in %s and at https://puppetboard.wikimedia.org/node/%s\n'
+                              'Inspect the host with: sudo install_console %s'), output_filename, self.fqdn, self.fqdn)
+                self.host_actions.warning(f'//First Puppet run failed and logged in {output_filename}, asking the '
+                                          'operator what to do//')
                 raise
+            finally:
+                if results is not None:
+                    with open(output_filename, 'w', encoding='utf8') as output_file:
+                        for _, output in results:
+                            output_file.write(output.message().decode())
 
-        puppet_first_run = confirm_on_failure(_first_puppet_run)
-        self.host_actions.success(f'First Puppet run completed and logged in {self.output_filename}')
-        if puppet_first_run:
-            with open(self.output_filename, 'w', encoding='utf8') as output_file:
-                for _, output in puppet_first_run:
-                    output_file.write(output.message().decode())
+        try:
+            first_puppet_run = confirm_on_failure(_first_puppet_run)
+        except AbortError:
+            self.host_actions.failure('**First Puppet run failed and the operator aborted**')
+            raise
+
+        if first_puppet_run is None:
+            self.host_actions.warning('//First Puppet run failed and the operator skipped it//')
 
         self.ipmi.remove_boot_override()
         self.ipmi.check_bootparams()
