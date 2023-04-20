@@ -555,6 +555,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                                       'configmaster.wikimedia.org with the new host SSH public key for '
                                       'wmf-update-known-hosts-production//')
 
+        rm_state_cmd = 'rm -f /var/lib/puppet/state/last_run_summary.yaml /var/lib/puppet/state/last_run_report.yaml'
+        self.remote_host.run_sync(rm_state_cmd, print_output=False, print_progress_bars=False)
+
         reboot_time = datetime.utcnow()
         self.remote_host.reboot()
         time.sleep(60)  # Temporary workaround to prevent a race condition
