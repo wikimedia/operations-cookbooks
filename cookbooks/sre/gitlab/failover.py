@@ -258,7 +258,10 @@ class FailoverRunner(CookbookRunnerBase):
 
     def check_for_correct_dns(self) -> None:
         """Raises an exception if the IP addresses haven't changed since before the migration started"""
-        self.spicerack.run_cookbook('sre.dns.wipe-cache', ['gitlab.wikimedia.org'])
+        # The tool underlying the wipe-cache cookbook takes space-separated arguments, but run_cookbook needs a list
+        self.spicerack.run_cookbook(
+            'sre.dns.wipe-cache', [" ".join([self.primary_gitlab_url, self.replica_gitlab_url])]
+        )
 
         current_primary_ips = sorted(self.dns.resolve_ips(urlparse(self.primary_gitlab_url).netloc))
         current_replica_ips = sorted(self.dns.resolve_ips(urlparse(self.replica_gitlab_url).netloc))
@@ -267,11 +270,11 @@ class FailoverRunner(CookbookRunnerBase):
             raise RuntimeError(
                 f"IP for {self.primary_gitlab_url} doesn't match the pre-migration IPs for {self.replica_gitlab_url}. "
                 "Has the DNS change been merged? Or maybe it's cached somewhere. (Should be "
-                f"{self.pre_migration_ips[self.primary_gitlab_url]}, but is {current_primary_ips})"
+                f"{self.pre_migration_ips[self.replica_gitlab_url]}, but is {current_primary_ips})"
             )
         if current_replica_ips != self.pre_migration_ips[self.primary_gitlab_url]:
             raise RuntimeError(
                 f"IP for {self.replica_gitlab_url} doesn't match the pre-migration IPs for {self.primary_gitlab_url}. "
                 "Has the DNS change been merged? Or maybe it's cached somewhere. (Should be "
-                f"{self.pre_migration_ips[self.replica_gitlab_url]}, but is {current_replica_ips})"
+                f"{self.pre_migration_ips[self.primary_gitlab_url]}, but is {current_replica_ips})"
             )
