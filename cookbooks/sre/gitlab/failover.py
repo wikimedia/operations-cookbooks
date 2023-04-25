@@ -45,19 +45,19 @@ class Failover(CookbookBase):
     Usage example:
 
     # Changes gitlab.wmo from gitlab1003 to gitlab2002, and gitlab-replica.wmo from gitlab2002 to gitlab1003
-    cookbook sre.gitlab.failover --current-primary gitlab1003 --new-primary gitlab2002 -t T12345
+    cookbook sre.gitlab.failover --switch-from gitlab1003 --switch-to gitlab2002 -t T12345
     """
 
     def argument_parser(self) -> ArgumentParser:
         """Parses arguments"""
         parser = super().argument_parser()
         parser.add_argument(
-            "--current-primary",
-            help="Current host that runs the primary gitlab instance",
+            "--switch-from",
+            help="Host that we want to switch away from (e.g., existing gitlab.wm.o, will become gitlab-replica.wm.o)",
         )
         parser.add_argument(
-            "--new-primary",
-            help="Host that we intend to be the new primary gitlab instance",
+            "--switch-to",
+            help="Host that we want to switch to (e.g., existing gitlab-replica.wm.o, will become gitlab.wm.o)",
         )
         parser.add_argument(
             "-t",
@@ -82,35 +82,35 @@ class FailoverRunner(CookbookRunnerBase):
 
         self.spicerack = spicerack
 
-        self.current_primary = spicerack.remote().query(f"{args.current_primary}.*")
-        self.new_primary = spicerack.remote().query(f"{args.new_primary}.*")
-        self.alerting_hosts = self.spicerack.alerting_hosts(self.current_primary.hosts | self.new_primary.hosts)
+        self.switch_from_host = spicerack.remote().query(f"{args.switch_from_host}.*")
+        self.switch_to_host = spicerack.remote().query(f"{args.switch_to_host}.*")
+        self.alerting_hosts = self.spicerack.alerting_hosts(self.switch_from_host.hosts | self.switch_to_host.hosts)
         self.task_id = args.task
         self.downtime_id = None
         self.gitlab_token = get_secret("Gitlab API token")
-        self.message = f"Failover of gitlab from {self.current_primary} to {self.new_primary}"
+        self.message = f"Failover of gitlab from {self.switch_from_host} to {self.switch_to_host}"
 
         self.reason = self.spicerack.admin_reason(reason=self.message, task_id=self.task_id)
 
-        self.primary_gitlab_url = get_gitlab_url(self.current_primary)
-        self.replica_gitlab_url = get_gitlab_url(self.new_primary)
+        self.switch_from_gitlab_url = get_gitlab_url(self.switch_from_host)
+        self.switch_to_gitlab_url = get_gitlab_url(self.switch_to_host)
 
         self.dns = self.spicerack.dns()
         self.pre_migration_ips = {
-            self.primary_gitlab_url: sorted(self.dns.resolve_ips(urlparse(self.primary_gitlab_url).netloc)),
-            self.replica_gitlab_url: sorted(self.dns.resolve_ips(urlparse(self.replica_gitlab_url).netloc)),
+            self.switch_from_gitlab_url: sorted(self.dns.resolve_ips(urlparse(self.switch_from_gitlab_url).netloc)),
+            self.switch_to_gitlab_url: sorted(self.dns.resolve_ips(urlparse(self.switch_to_gitlab_url).netloc)),
         }
 
         # Ensure the new host isn't already configured to be gitlab.wmo, I can't imagine a reason
         # to go this direction with the migration.
-        if "gitlab.wikimedia.org" in self.replica_gitlab_url:
+        if "gitlab.wikimedia.org" in self.switch_to_gitlab_url:
             raise RuntimeError(
-                f"{self.new_primary} is already configured with gitlab.wikimedia.org. "
+                f"{self.switch_to_host} is already configured with gitlab.wikimedia.org. "
                 "We probably never want to do this."
             )
 
-        self.check_disk_space_available(self.current_primary)
-        self.check_disk_space_available(self.new_primary)
+        self.check_disk_space_available(self.switch_from_host)
+        self.check_disk_space_available(self.switch_to_host)
 
         self.confirm_before_proceeding()
 
@@ -118,38 +118,38 @@ class FailoverRunner(CookbookRunnerBase):
         """Entrypoint to execute cookbook"""
         self.downtime_id = self.alerting_hosts.downtime(self.reason, duration=timedelta(hours=2))
 
-        self.spicerack.puppet(self.current_primary).disable(self.reason)
-        self.spicerack.puppet(self.new_primary).disable(self.reason)
+        self.spicerack.puppet(self.switch_from_host).disable(self.reason)
+        self.spicerack.puppet(self.switch_to_host).disable(self.reason)
 
-        paused_runners = pause_runners(self.gitlab_token, self.primary_gitlab_url, dry_run=self.spicerack.dry_run)
-        self.make_host_read_only(self.current_primary)
+        paused_runners = pause_runners(self.gitlab_token, self.switch_from_gitlab_url, dry_run=self.spicerack.dry_run)
+        self.make_host_read_only(self.switch_from_host)
 
-        backup_file = self.start_backup_on_old_host()
+        backup_file = self.start_backup_on_switch_from_host()
         self.transfer_backup_file(backup_file)
 
         # TODO: It would be nice to add in something that would check the host to make sure the role is applied
         # correctly before proceeding
         ask_confirmation(
-            f"Please merge the change to set the puppet role for gitlab primary on {self.new_primary}. "
+            f"Please merge the change to set the puppet role for gitlab primary on {self.switch_to_host}. "
             "When you hit go, we will re-enable puppet and execute a puppet run"
         )
-        self.spicerack.puppet(self.new_primary).run(enable_reason=self.reason)
+        self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
         self.start_restore_process()
 
         ask_confirmation(
-            f"Please merge a DNS update to point `{self.primary_gitlab_url}` to {self.new_primary} "
-            f"and `{self.replica_gitlab_url}` to {self.current_primary}"
+            f"Please merge a DNS update to point `{self.switch_from_gitlab_url}` to {self.switch_to_host} "
+            f"and `{self.switch_to_gitlab_url}` to {self.switch_from_host}"
         )
         confirm_on_failure(self.check_for_correct_dns)
 
         ask_confirmation(
-            f"Please verify that the switchover to {self.primary_gitlab_url} is operating as expected. Once you are "
-            f"certain please merge the change to set the puppet role for {self.current_primary}, and we will "
-            " re-enable and run puppet."
+            f"Please verify that the switchover to {self.switch_from_gitlab_url} is operating as expected. "
+            f"Once you are certain please merge the change to set the puppet role for {self.switch_from_host}, "
+            "and we will re-enable and run puppet."
         )
-        self.spicerack.puppet(self.current_primary).run(enable_reason=self.reason)
+        self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
 
-        self.current_primary.run_sync("systemctl start ssh-gitlab", print_progress_bars=False)
+        self.switch_from_host.run_sync("systemctl start ssh-gitlab", print_progress_bars=False)
         unpause_runners(paused_runners, dry_run=self.spicerack.dry_run)
 
     @property
@@ -160,8 +160,8 @@ class FailoverRunner(CookbookRunnerBase):
     def confirm_before_proceeding(self) -> None:
         """Make sure the user knows what the cookbook will do and they can check the hosts are correct"""
         ask_confirmation(
-            f"This will migrate {self.primary_gitlab_url} to {self.new_primary}, and "
-            f"{self.replica_gitlab_url} to {self.current_primary}. Check that this is "
+            f"This will migrate {self.switch_from_gitlab_url} to {self.switch_to_host}, and "
+            f"{self.switch_to_gitlab_url} to {self.switch_from_host}. Check that this is "
             "definitely what you want to do."
         )
 
@@ -171,7 +171,7 @@ class FailoverRunner(CookbookRunnerBase):
             raise RuntimeError(f"Not enough disk space in {BACKUP_DIRECTORY}")
 
     def make_host_read_only(self, host) -> None:
-        """Makes Gitlab on the current primary read-only
+        """Makes Gitlab on the switch_from host read-only
 
         - Disabling sidekiq and Puma
         - Stop the ssh-gitlab service
@@ -186,16 +186,16 @@ class FailoverRunner(CookbookRunnerBase):
         logger.info("Placing 'deploy' page on %s", host)
         host.run_sync(f"{GITLAB_CTL} deploy-page up", print_progress_bars=False)
 
-    def start_backup_on_old_host(self) -> str:
+    def start_backup_on_switch_from_host(self) -> str:
         """Starts a backup on the existing Gitlab host"""
-        logger.info("Creates a backup on the old primary host.")
+        logger.info("Creates a backup on the switch_from host.")
         logger.info("*** THIS IS SLOW. IT WILL TAKE 30-45 MINUTES ***")
 
         # Keep track of when we started the backup. Then look for filenames
         # newer than this to get the specific file to transfer to the new host
         time_backup_started = time.time()
 
-        self.current_primary.run_sync(
+        self.switch_from_host.run_sync(
             "/usr/bin/gitlab-backup create CRON=1 STRATEGY=copy "
             'GZIP_RSYNCABLE="true" GITLAB_BACKUP_MAX_CONCURRENCY="4" '
             'GITLAB_BACKUP_MAX_STORAGE_CONCURRENCY="2"',
@@ -210,7 +210,7 @@ class FailoverRunner(CookbookRunnerBase):
         file_pattern = f"*_{today}*_gitlab_backup.tar"
 
         try:
-            results = self.current_primary.run_sync(
+            results = self.switch_from_host.run_sync(
                 f"ls -t1 {BACKUP_DIRECTORY}/{file_pattern}",
                 print_progress_bars=False,
                 is_safe=True
@@ -239,11 +239,11 @@ class FailoverRunner(CookbookRunnerBase):
         logger.info(
             "Starting to rsync %s to %s. This will take about 15 minutes",
             backup_file,
-            self.new_primary,
+            self.switch_to_host,
         )
 
-        self.current_primary.run_sync(
-            f"/usr/bin/rsync -avp /srv/gitlab-backup/{backup_file} rsync://{self.new_primary}/data-backup",
+        self.switch_from_host.run_sync(
+            f"/usr/bin/rsync -avp /srv/gitlab-backup/{backup_file} rsync://{self.switch_to_host}/data-backup",
             print_progress_bars=False
         )
 
@@ -251,30 +251,30 @@ class FailoverRunner(CookbookRunnerBase):
         """Initiates the Gitlab restore process"""
         logger.info(
             "Starting restore process on %s. This will take about 20 minutes",
-            self.new_primary,
+            self.switch_to_host,
         )
 
-        self.new_primary.run_sync(f"{GITLAB_RESTORE_PATH}/gitlab-restore.sh -F", print_progress_bars=False)
+        self.switch_to_host.run_sync(f"{GITLAB_RESTORE_PATH}/gitlab-restore.sh -F", print_progress_bars=False)
 
     def check_for_correct_dns(self) -> None:
         """Raises an exception if the IP addresses haven't changed since before the migration started"""
         # The tool underlying the wipe-cache cookbook takes space-separated arguments, but run_cookbook needs a list
         self.spicerack.run_cookbook(
-            'sre.dns.wipe-cache', [" ".join([self.primary_gitlab_url, self.replica_gitlab_url])]
+            'sre.dns.wipe-cache', [" ".join([self.switch_from_gitlab_url, self.switch_to_gitlab_url])]
         )
 
-        current_primary_ips = sorted(self.dns.resolve_ips(urlparse(self.primary_gitlab_url).netloc))
-        current_replica_ips = sorted(self.dns.resolve_ips(urlparse(self.replica_gitlab_url).netloc))
+        switch_from_host_ips = sorted(self.dns.resolve_ips(urlparse(self.switch_from_gitlab_url).netloc))
+        switch_to_host_ips = sorted(self.dns.resolve_ips(urlparse(self.switch_to_gitlab_url).netloc))
 
-        if current_primary_ips != self.pre_migration_ips[self.replica_gitlab_url]:
+        if switch_from_host_ips != self.pre_migration_ips[self.switch_to_gitlab_url]:
             raise RuntimeError(
-                f"IP for {self.primary_gitlab_url} doesn't match the pre-migration IPs for {self.replica_gitlab_url}. "
-                "Has the DNS change been merged? Or maybe it's cached somewhere. (Should be "
-                f"{self.pre_migration_ips[self.replica_gitlab_url]}, but is {current_primary_ips})"
+                f"IP for {self.switch_from_gitlab_url} doesn't match the pre-migration IPs for "
+                f"{self.switch_to_gitlab_url}. Has the DNS change been merged? Or maybe it's cached somewhere. "
+                f"(Should be {self.pre_migration_ips[self.switch_to_gitlab_url]}, but is {switch_from_host_ips})"
             )
-        if current_replica_ips != self.pre_migration_ips[self.primary_gitlab_url]:
+        if switch_to_host_ips != self.pre_migration_ips[self.switch_from_gitlab_url]:
             raise RuntimeError(
-                f"IP for {self.replica_gitlab_url} doesn't match the pre-migration IPs for {self.primary_gitlab_url}. "
-                "Has the DNS change been merged? Or maybe it's cached somewhere. (Should be "
-                f"{self.pre_migration_ips[self.primary_gitlab_url]}, but is {current_replica_ips})"
+                f"IP for {self.switch_to_gitlab_url} doesn't match the pre-migration IPs for "
+                f"{self.switch_from_gitlab_url}. Has the DNS change been merged? Or maybe it's cached somewhere. "
+                f"(Should be {self.pre_migration_ips[self.switch_from_gitlab_url]}, but is {switch_to_host_ips})"
             )
