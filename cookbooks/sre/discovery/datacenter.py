@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 # other cookbooks too, so make it a module constant.
 EXCLUDED_SERVICES = {
     "blubberoid": "blubberoid needs to follow swift replica for the docker registry",
-    "device-analytics": "Not in production yet",
     "docker-registry": "swift replica goes codfw => eqiad and needs manual switching",
     "releases": "not a 'service', strictly speaking, thus excluded",
     "puppetdb-api": "not a 'service', strictly speaking, thus excluded",
@@ -469,9 +468,13 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         # - mediawiki read/write endpoints
         # - services that need special handling for switchover
         # - all active/passive services unless explicitly asked
+        # - services that are not in lvs_state "production"
         for service in self.catalog:
             if service.discovery is None:
                 logger.debug("Skipping %s, as it doesn't have a discovery record", service.name)
+                continue
+            if service.state != "production":
+                logger.debug("Skipping %s, as its state %s is not production", service.name, service.state)
                 continue
             if service.name in EXCLUDED_SERVICES and self.do_filter:
                 logger.info("Skipping excluded service %s: %s", service.name, EXCLUDED_SERVICES[service.name])
