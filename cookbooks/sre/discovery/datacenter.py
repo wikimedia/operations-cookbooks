@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # other cookbooks too, so make it a module constant.
 EXCLUDED_SERVICES = {
     "blubberoid": "blubberoid needs to follow swift replica for the docker registry",
+    "device-analytics": "Not in production yet",
     "docker-registry": "swift replica goes codfw => eqiad and needs manual switching",
     "releases": "not a 'service', strictly speaking, thus excluded",
     "puppetdb-api": "not a 'service', strictly speaking, thus excluded",
