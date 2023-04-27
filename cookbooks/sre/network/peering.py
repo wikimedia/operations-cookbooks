@@ -88,6 +88,10 @@ class PeeringRunner(CookbookRunnerBase):
         self.dry_run = spicerack.dry_run
         if self.args.ASN == WIKIMEDIA_ASN:
             raise RuntimeError("That's our AS number...")
+        # Action "show" is here so it doesn't !log it
+        if self.args.action == 'show':
+            print(self.peering_matrix(WIKIMEDIA_ASN, self.args.ASN))
+            raise RuntimeError("Everything is fine.")
 
     @property
     def runtime_description(self):
