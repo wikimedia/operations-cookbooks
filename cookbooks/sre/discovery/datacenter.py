@@ -170,20 +170,29 @@ class DiscoveryDcRoute(CookbookBase):
     - Check which services are pooled in all datacenters:
       cookbook.sre.discovery.datacenter status all
 
-    *In case of emergency only*: use the `--fast-insecure` switch for pool/depool,
-    it will be making the cookbook much faster.
+    - Failover all active/passive services from codfw to eqiad:
+        cookbook.sre.discovery.datacenter failover_from codfw
 
-    When called without the --all switch, this cookbook will change the pooled
+    In normal use, this cookbook will check the DNS records for each service before wiping after its
+    migration so the move is more aggressive.
+
+    *In case of emergency only*: use the `--fast-insecure` switch, it will make the cookbook much faster
+    by not checking the records and wiping the caches twice at the end of the run.
+
+    When called in pool/depool mode without the --all switch, this cookbook will change the pooled
     state of all active-active to the desired state. It will prevent you from depooling
     a service that's only active in this datacenter, asking you if you prefer to skip
-    it or move it to another datacenter. After every migration it will wipe the resolver caches to make
-    the move more aggressive as this cookbook can be used in emergency situations.
+    it or move it to another datacenter.
 
     When called with the --all switch, this cookbook will try to also move all active/passive services
     with the notable exception of mediawiki-related services.
 
     When migrating an active-passive service, the cookbook will first set both datacenters to pooled, which
     will not trigger a dns change, then depool the desired datacenter, and only then wipe the resolver caches.
+
+    When called in failover_from mode, this cookbook will depool all active/passive services from the specified
+    datacenter after pooling them in the other core datacenter. Unlike depool, it will do so without asking for
+    confirmation for each service.
 
     """
 
@@ -192,14 +201,15 @@ class DiscoveryDcRoute(CookbookBase):
         parser = super().argument_parser()
         actions = parser.add_subparsers(dest="action", help="The action to perform")
 
-        for act in ["pool", "depool"]:
+        for act in ["pool", "depool", "failover_from"]:
             action = actions.add_parser(act)
             action.add_argument(
                 "datacenter", choices=CORE_DATACENTERS, help="Name of the datacenter. One of: %(choices)s."
             )
-            action.add_argument(
-                "--all", action="store_true", help="Depool also the active/passive services (minus MediaWiki)"
-            )
+            if act in ["pool", "depool"]:
+                action.add_argument(
+                    "--all", action="store_true", help="Depool also the active/passive services (minus MediaWiki)"
+                )
             action.add_argument("--fast-insecure", "-f", help="Run the commands faster but relatively insecurely.")
             action.add_argument("-r", "--reason", required=False, help="Admin reason", default="maintenance")
             action.add_argument("-t", "--task-id", help="the Phabricator task ID to update and refer (i.e.: T12345)")
@@ -215,6 +225,9 @@ class DiscoveryDcRoute(CookbookBase):
         if not self.spicerack.verbose:
             # Avoid conftool logs to flood INFO/DEBUG
             logging.getLogger("conftool").setLevel(logging.WARNING)
+        if args.action == "failover_from":
+            args.all = False
+
         if args.action == "status":
             args.all = True
             args.fast_insecure = False
@@ -259,12 +272,19 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
     @property
     def runtime_description(self) -> str:
         """Used to log the action performed to SAL"""
+        log_msg = ""
         if self.do_all:
             services_msg = "all services"
+        elif self.action == "failover_from":
+            services_msg = "all active/passive services"
         else:
             services_msg = "all active/active services"
 
-        log_msg = f"{self.action} {services_msg} in {self.datacenter}: {self.reason.reason} - {self.reason.task_id}"
+        if self.action in ["pool", "depool"]:
+            log_msg = f"{self.action} {services_msg} in {self.datacenter}: {self.reason.reason} - {self.reason.task_id}"
+        elif self.action == "failover_from":
+            log_msg = f"{services_msg} {self.action} {self.datacenter}: {self.reason.reason} - {self.reason.task_id}"
+
         # Indicate the cookbook is being run in emergency mode
         if self.insecure:
             log_msg = f"🤠EMERGENCY RUN🤠 {log_msg}"
@@ -294,23 +314,26 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
                 self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} started."
             )
         pool = self.action == "pool"
-        # For each A/A discovery record, check if the service is pooled in more than just the datacenter we're depooling
-        # from.
-        # If not, ask the user to choose between skipping it and moving it
         progress = 0
         total_records = sum(len(groups) for groups in self.discovery_records.values())
-        for record in self.discovery_records["active_active"]:
-            progress += 1
-            logger.info("[%d/%d] Handling A/A service %s", progress, total_records, record.name)
-            try:
-                # Unpack the state tuple returned by _get_active_active_states
-                (current_state, desired_state) = confirm_on_failure(self._get_active_active_states, record, pool)
-                self._handle_active_active(record, current_state, desired_state)
-            except TypeError:
-                # confirm_on_failure returns None when the skip option is chosen. Since we try to unpack the tuple
-                # returned by _get_active_active_states directly into variables, it throws a TypeError exception,
-                # which we catch to log and skip this record without breaking out of the loop.
-                logger.warning("Skipping %s", record.name)
+
+        if self.action in ["pool", "depool"]:
+            # For each A/A discovery record, check if the service is pooled in more than
+            # just the datacenter we're depooling from.
+            # If not, ask the user to choose between skipping it and moving it
+
+            for record in self.discovery_records["active_active"]:
+                progress += 1
+                logger.info("[%d/%d] Handling A/A service %s", progress, total_records, record.name)
+                try:
+                    # Unpack the state tuple returned by _get_active_active_states
+                    (current_state, desired_state) = confirm_on_failure(self._get_active_active_states, record, pool)
+                    self._handle_active_active(record, current_state, desired_state)
+                except TypeError:
+                    # confirm_on_failure returns None when the skip option is chosen. Since we try to unpack the tuple
+                    # returned by _get_active_active_states directly into variables, it throws a TypeError exception,
+                    # which we catch to log and skip this record without breaking out of the loop.
+                    logger.warning("Skipping %s", record.name)
 
         # For each A/P discovery record, first ensure we're pooling another core datacenter, then depool the current
         # one. We'll ask confirmation for each of them.
@@ -515,10 +538,12 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
                 if complete_record.name in MEDIAWIKI_SERVICES and self.do_filter:
                     logger.info("Skipping %s, (use the sre.switchdc.mediawiki cookbook instead)", complete_record.name)
                     continue
-                # Do not add active/passive services if do_all is not selected.
+                # Do not add active/passive services if do_all or failover_from is not selected.
+                # skip active/active services if failover_from is selected
                 if complete_record.active_active:
-                    all_services["active_active"].append(complete_record)
-                elif self.do_all:
+                    if self.action in ["pool", "depool"]:
+                        all_services["active_active"].append(complete_record)
+                elif self.do_all or self.action == "failover_from":
                     all_services["active_passive"].append(complete_record)
         return all_services
 
@@ -536,12 +561,13 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
                 dest = selected
 
         try:
-            action = ask_input(
-                f"{record.fqdn} is only pooled in {dc_from}: skip or move to {dest}?",
-                ["move", "skip"],
-            )
-            if action == "skip":
-                return
+            if self.action in ["pool", "depool"]:
+                action = ask_input(
+                    f"{record.fqdn} is only pooled in {dc_from}: skip or move to {dest}?",
+                    ["move", "skip"],
+                )
+                if action == "skip":
+                    return
 
             if selected is None:
                 selected = ask_input("Please pick a datacenter to move to", available_dcs)
