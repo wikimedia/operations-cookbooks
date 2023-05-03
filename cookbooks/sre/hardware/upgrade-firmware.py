@@ -1,4 +1,5 @@
 """Decommission a host from all inventories."""
+# pylint: disable=too-many-lines
 import logging
 import shlex
 
@@ -26,6 +27,7 @@ from spicerack.redfish import (
     DellSCPPowerStatePolicy,
     RedfishError,
     Redfish,
+    RedfishDell,
 )
 from wmflib.config import load_yaml_config
 from wmflib.interactive import ask_confirmation
@@ -918,21 +920,39 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             return False
         return True
 
+    def _redfish_host(self, hostname: str) -> Optional[RedfishDell]:
+        """Fetch a redfish host from a netbox host, and make sure its compatible.
+
+        Arguments:
+            hostname: The hostname to lookup
+
+        """
+        try:
+            redfish_host = self.spicerack.redfish(hostname)
+        except NetboxError as error:
+            logger.error("%s: Skipping: %s", hostname, error)
+            return None
+
+        if redfish_host.generation < 14:
+            logger.error('%s: SKIPPING - iDRAC generation (%s) is too low to perform updates.  '
+                         'please upgrade iDRAC/firmware manually',
+                         redfish_host.fqdn, redfish_host.generation)
+            return None
+
+        if redfish_host.firmware_version < version.Version('3.30.30.30'):
+            logger.error('%s: SKIPPING - iDRAC version (%s) is too low to perform updates.  '
+                         'please upgrade iDRAC to version 3.30.30.30 before proceeding',
+                         redfish_host.fqdn, redfish_host.firmware_version)
+            return None
+        return redfish_host
+
     def run(self):
         """Required by Spicerack API."""
         for host in self.hosts:
             hostname = host.split(".")[0]
             netbox_host = self.spicerack.netbox().get_server(hostname)
-            try:
-                redfish_host = self.spicerack.redfish(hostname)
-            except NetboxError as error:
-                logger.error("Skipping: %s", error)
-                continue
-            idrac_version = redfish_host.firmware_version
-            if idrac_version < version.Version('3.30.30.30'):
-                logger.error('%s: SKIPPING - iDRAC version (%s) is too low to perform updates.  '
-                             'please upgrade iDRAC to version 3.30.30.30 before proceeding',
-                             netbox_host.fqdn, idrac_version)
+            redfish_host = self._redfish_host(hostname)
+            if redfish_host is None:
                 continue
             # TODO: this is a bit of a hack to populate the generation property
             # We should do this in the Redfish.__init__
