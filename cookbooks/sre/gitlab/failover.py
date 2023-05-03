@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 from spicerack.remote import RemoteHosts, RemoteExecutionError
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation, get_secret, confirm_on_failure
-from cookbooks.sre import CookbookBase, CookbookRunnerBase
+from cookbooks.sre import CookbookBase, CookbookRunnerBase, PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.gitlab import get_gitlab_url, get_disk_usage_for_path, pause_runners, unpause_runners
 
 BACKUP_DIRECTORY = '/srv/gitlab-backup'
@@ -84,11 +84,13 @@ class FailoverRunner(CookbookRunnerBase):
 
         self.switch_from_host = spicerack.remote().query(f"{args.switch_from_host}.*")
         self.switch_to_host = spicerack.remote().query(f"{args.switch_to_host}.*")
-        self.alerting_hosts = self.spicerack.alerting_hosts(self.switch_from_host.hosts | self.switch_to_host.hosts)
-        self.task_id = args.task
-        self.downtime_id = None
         self.gitlab_token = get_secret("Gitlab API token")
         self.message = f"Failover of gitlab from {self.switch_from_host} to {self.switch_to_host}"
+        if args.task_id is not None:
+            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+            self.task_id = args.task_id
+        else:
+            self.phabricator = None
 
         self.reason = self.spicerack.admin_reason(reason=self.message, task_id=self.task_id)
 
@@ -100,6 +102,11 @@ class FailoverRunner(CookbookRunnerBase):
             self.switch_from_gitlab_url: sorted(self.dns.resolve_ips(urlparse(self.switch_from_gitlab_url).netloc)),
             self.switch_to_gitlab_url: sorted(self.dns.resolve_ips(urlparse(self.switch_to_gitlab_url).netloc)),
         }
+
+        # Until we merge any changes to puppet or DNS, we can effectively roll back by unpausing runners
+        # and restarting gitlab services. Keep track of whether we've merged changes so we can warn the user
+        self.safe_rollback = True
+        self.paused_runners = None
 
         # Ensure the new host isn't already configured to be gitlab.wmo, I can't imagine a reason
         # to go this direction with the migration.
@@ -116,16 +123,23 @@ class FailoverRunner(CookbookRunnerBase):
 
     def run(self) -> None:
         """Entrypoint to execute cookbook"""
-        self.downtime_id = self.alerting_hosts.downtime(self.reason, duration=timedelta(hours=2))
+        self.maybe_task_comment(f'Cookbook {__name__} ({self.runtime_description}) started')
+
+        alerting_hosts = self.spicerack.alerting_hosts(self.switch_from_host.hosts | self.switch_to_host.hosts)
+        alerting_hosts.downtime(self.reason, duration=timedelta(hours=2))
 
         self.spicerack.puppet(self.switch_from_host).disable(self.reason)
         self.spicerack.puppet(self.switch_to_host).disable(self.reason)
 
-        paused_runners = pause_runners(self.gitlab_token, self.switch_from_gitlab_url, dry_run=self.spicerack.dry_run)
+        self.paused_runners = pause_runners(
+            self.gitlab_token, self.switch_from_gitlab_url, dry_run=self.spicerack.dry_run
+        )
         self.make_host_read_only(self.switch_from_host)
 
         backup_file = self.start_backup_on_switch_from_host()
         self.transfer_backup_file(backup_file)
+
+        self.safe_rollback = False
 
         # TODO: It would be nice to add in something that would check the host to make sure the role is applied
         # correctly before proceeding
@@ -150,7 +164,44 @@ class FailoverRunner(CookbookRunnerBase):
         self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
 
         self.switch_from_host.run_sync("systemctl start ssh-gitlab", print_progress_bars=False)
-        unpause_runners(paused_runners, dry_run=self.spicerack.dry_run)
+        unpause_runners(self.paused_runners, dry_run=self.spicerack.dry_run)
+
+        self.maybe_task_comment(f'Cookbook {__name__} ({self.runtime_description}) finished')
+
+    def rollback(self) -> None:
+        """Provides cleanup/rollback fixes if the cookbook is interrupted mid-execution"""
+        self.maybe_task_comment(
+            f'Cookbook {__name__} ({self.runtime_description}) encountered errors. Rollback started'
+        )
+
+        if not self.safe_rollback:
+            # Using ask_confirmation because this is important, we need the user to see it.
+            ask_confirmation(
+                "We are rolling back the failover. Since you have merged puppet and/or DNS changes, it's *possible* "
+                f"that {self.switch_from_host} and {self.switch_to_host} are no longer in sync. This needs to be "
+                "manually addressed. Please read the 'Aborting Failover/Rollback' section below, and hit go. After "
+                "that, puppet will be re-enabled and the runners unpaused automatically. "
+                "https://wikitech.wikimedia.org/wiki/GitLab/Failover#Aborting_Failover/Rollback"
+            )
+
+        ask_confirmation(
+            "We will now unpause runners, re-enable and run puppet, and restart gitlab services. Please ensure that "
+            "either you have not merged any of the pre-prepared changes, or if you have that they have been reverted"
+        )
+
+        unpause_runners(self.paused_runners, dry_run=self.spicerack.dry_run)
+
+        # Re-enable puppet on all hosts
+        self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
+        self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
+
+        self.switch_from_host.run_sync("gitlab-ctl restart", progress_bars=False, is_safe=False)
+        self.switch_from_host.run_sync("systemctl restart ssh-gitlab", progress_bars=False, is_safe=False)
+        self.switch_from_host.run_sync("gitlab-ctl deploy-page down", progress_bars=False, is_safe=False)
+
+        self.maybe_task_comment(
+            f'Cookbook {__name__} ({self.runtime_description}) encountered errors. Rollback completed'
+        )
 
     @property
     def runtime_description(self) -> str:
@@ -278,3 +329,8 @@ class FailoverRunner(CookbookRunnerBase):
                 f"{self.switch_from_gitlab_url}. Has the DNS change been merged? Or maybe it's cached somewhere. "
                 f"(Should be {self.pre_migration_ips[self.switch_from_gitlab_url]}, but is {switch_to_host_ips})"
             )
+
+    def maybe_task_comment(self, message: str) -> None:
+        """Comments on a phabricator task with a message, if the task ID is set and we can access phabricator"""
+        if self.phabricator is not None:
+            self.phabricator.task_comment(self.task_id, message)
