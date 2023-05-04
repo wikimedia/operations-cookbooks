@@ -181,7 +181,7 @@ class RollingOperationRunner(CookbookRunnerBase):
             logger.info('#### Please don\'t kill this cookbook now. ####')
 
             with self.spicerack.alerting_hosts(remote_hosts.hosts).downtimed(
-                    self.reason, duration=timedelta(minutes=30)):
+                    self.reason, duration=timedelta(minutes=60)):
                 with puppet.disabled(self.reason):
                     with ExitStack() as stack:
                         if self.operation is not Operation.REIMAGE:
