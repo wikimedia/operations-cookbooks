@@ -40,10 +40,6 @@ class RollingOperation(CookbookBase):
         cookbook sre.elasticsearch.rolling-operation search_codfw "codfw cluster reboot" \
                 --reboot --nodes-per-run 3 --start-datetime 2021-03-24T23:55:35 --task-id T274204
 
-        (Perform a rolling reimage of relforge)
-        cookbook sre.elasticsearch.rolling-operation relforge "relforge cluster reimage" \
-                --reimage --nodes-per-run 1 --start-datetime 2021-03-24T23:55:35 --task-id T274204
-
         (Perform a rolling reimage of cloudelastic)
         cookbook sre.elasticsearch.rolling-operation cloudelastic "cloudelastic cluster reimage" \
                 --reimage --nodes-per-run 2 --start-datetime 2021-03-24T23:55:35 --task-id T274204
