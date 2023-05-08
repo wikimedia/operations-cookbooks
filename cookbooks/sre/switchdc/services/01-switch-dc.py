@@ -17,7 +17,7 @@ def run(args, spicerack):
     """Required by the Spicerack API."""
     post_process_args(args)
     discovery = spicerack.discovery(*args.services)
-    spicerack.irc_logger.info('Switching services %s: %s => %s', ", ".join(args.services),
+    spicerack.sal_logger.info('Switching services %s: %s => %s', ", ".join(args.services),
                               args.dc_from, args.dc_to)
     discovery.pool(args.dc_to)
     discovery.depool(args.dc_from)

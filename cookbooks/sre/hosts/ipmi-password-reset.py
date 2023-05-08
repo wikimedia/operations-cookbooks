@@ -89,7 +89,7 @@ def run(args, spicerack):
             continue
         break
 
-    spicerack.irc_logger.info(reason)
+    spicerack.sal_logger.info(reason)
     host_status = {'success': NodeSet(), 'fail_netbox': NodeSet(), 'fail_ipmi': NodeSet()}
     for host in remote_hosts:
         try:

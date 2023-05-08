@@ -28,4 +28,4 @@ def run(args, spicerack):
         logger.info('Set MediaWiki in read-write in %s', dc)
         mediawiki.set_readwrite(dc)
 
-    spicerack.irc_logger.info('%sMediaWiki read-only period ends at: %s', prefix, datetime.utcnow())
+    spicerack.sal_logger.info('%sMediaWiki read-only period ends at: %s', prefix, datetime.utcnow())

@@ -27,7 +27,7 @@ def run(args, spicerack):
         prefix = ''
 
     mediawiki = spicerack.mediawiki()
-    spicerack.irc_logger.info('%sMediaWiki read-only period starts at: %s', prefix, datetime.utcnow())
+    spicerack.sal_logger.info('%sMediaWiki read-only period starts at: %s', prefix, datetime.utcnow())
     for dc in (args.dc_to, args.dc_from):
         if args.live_test and dc is args.dc_to:
             logger.info('Skip setting MediaWiki read-only in %s', dc)

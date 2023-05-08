@@ -57,4 +57,4 @@ def run(args, spicerack):
 
     logger.info("Finalizing meta_p")
     s7_replicas.run_async(meta_p_cmd)
-    spicerack.irc_logger.info("Added views for new wiki: %s %s", args.database, args.task_id)
+    spicerack.sal_logger.info("Added views for new wiki: %s %s", args.database, args.task_id)
