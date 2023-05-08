@@ -561,7 +561,7 @@ class SREDiscoveryNoLVSBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
 
     def _check_active_active(self) -> None:
         """Sanity check for active/active services"""
-        if self.service.sites != self.service_record.state:
+        if set(self.service.sites) != self.service_record.state:
             ask_confirmation(
                 "Currently the active and expected datacenteres do no match. Do you want to continue"
             )
