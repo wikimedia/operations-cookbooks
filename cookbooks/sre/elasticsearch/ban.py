@@ -75,7 +75,7 @@ class BanNodeRunner(CookbookRunnerBase):
         """Ban hosts based on host selection"""
         if self.action == "unban":
             if self.hosts or self.row:
-                raise ValueError("Bad argument: action={}, but host or row was provided.".format(self.action))
+                raise ValueError("Bad argument: action={} takes no arguments".format(self.action))
             for cluster_name in self.es_cluster_info["search"][self.clustergroup]:
                 self.ban_or_unban_nodes(None, cluster_name)
         else:
