@@ -1,5 +1,5 @@
 """Cassandra reboot cookbook."""
-from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
+from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
 
 
 class CassandraReboot(SREBatchBase):
@@ -21,7 +21,7 @@ class CassandraReboot(SREBatchBase):
         return CassandraRebootRunner(args, self.spicerack)
 
 
-class CassandraRebootRunner(SRELBBatchRunnerBase):
+class CassandraRebootRunner(SREBatchRunnerBase):
     """Roll reboot a Cassandra cluster"""
 
     @property
