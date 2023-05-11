@@ -15,6 +15,7 @@ from cookbooks.sre.gitlab import get_gitlab_url, get_disk_usage_for_path, pause_
 
 
 BACKUP_PATH = "/srv/gitlab-backup"
+BACKUP_LOCK_FILE = "/opt/gitlab/embedded/service/gitlab-rails/tmp/backup_restore.pid"
 DISK_HIGH_THRESHOLD = 70
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,7 @@ class UpgradeRunner(CookbookRunnerBase):
         self.create_data_backup()
         self.create_config_backup()
         self.fail_for_background_migrations()
+        self.fail_for_running_backup()
         paused_runners = pause_runners(self.token, self.url, dry_run=self.spicerack.dry_run)
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=15)):
             self.install_debian_package()
@@ -181,7 +183,7 @@ class UpgradeRunner(CookbookRunnerBase):
         tries=20,
         delay=timedelta(seconds=10),
         backoff_mode='constant',
-        exceptions=(RemoteExecutionError,))
+        exceptions=(RuntimeError,))
     def fail_for_background_migrations(self):
         """Check for remaining background migrations"""
         logger.info('Check for remaining background migrations')
@@ -194,6 +196,16 @@ class UpgradeRunner(CookbookRunnerBase):
                 logger.info('No remaining background migrations found')
                 break
             raise RuntimeError("Background migration running currently")
+
+    @retry(
+        tries=20,
+        delay=timedelta(seconds=120),
+        backoff_mode='constant',
+        exceptions=(RemoteExecutionError,))
+    def fail_for_running_backup(self):
+        """Check for other running backups"""
+        logger.info('Check for other running backups')
+        self.remote_host.run_sync(f"[[ ! -e {BACKUP_LOCK_FILE} ]]", is_safe=True)
 
     def install_debian_package(self):
         """Install new Debian package (apt-get install)"""
