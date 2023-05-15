@@ -49,7 +49,7 @@ class ProvisionRunner(CookbookRunnerBase):
             raise RuntimeError(f'Device {self.device} has role {self.netbox_device.role.slug}, expected one of '
                                f'{PROVISION_ALLOWED_ROLES}')
 
-        if self.netbox_device.status not in PROVISION_ALLOWED_STATUSES:
+        if self.netbox_device.status.value not in PROVISION_ALLOWED_STATUSES:
             raise RuntimeError(f'Device {self.device} has status {self.netbox_device.status}, expected one of '
                                f'{PROVISION_ALLOWED_STATUSES}')
 
