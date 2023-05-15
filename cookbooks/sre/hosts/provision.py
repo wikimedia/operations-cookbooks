@@ -122,7 +122,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         self.dhcp_config = DHCPConfMgmt(
             datacenter=self.netbox_data['site']['slug'],
             serial=self.netbox_data['serial'],
-            manufacturer=self.netbox_data['manufacturer']['slug'],
+            manufacturer=self.netbox_data['device_type']['manufacturer']['slug'],
             fqdn=self.fqdn,
             ipv4=self.redfish.interface.ip,
         )

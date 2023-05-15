@@ -78,7 +78,7 @@ class ProvisionRunner(CookbookRunnerBase):
     def rollback(self):
         """Called by Spicerack in case of failure."""
         if self.rollback_ip and self.ip_address is not None:
-            logger.info('Rolling back IP creation, deleting IP {self.ip_address}')
+            logger.info('Rolling back IP creation, deleting IP %s', self.ip_address)
             self.ip_address.delete()
 
         if self.rollback_dns:
@@ -93,7 +93,7 @@ class ProvisionRunner(CookbookRunnerBase):
         return DHCPConfMgmt(
             datacenter=self.netbox_device.site.slug,
             serial=self.netbox_device.serial,
-            manufacturer=self.netbox_device.manufacturer.slug,
+            manufacturer=self.netbox_device.device_type.manufacturer.slug,
             fqdn=self.fqdn,
             ipv4=self.netbox_device.primary_ip4,
         )
