@@ -1,4 +1,5 @@
 """Zero-Touch provisioning of network devices."""
+import ipaddress
 import logging
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -79,7 +80,8 @@ class ProvisionRunner(CookbookRunnerBase):
         """Called by Spicerack in case of failure."""
         if self.rollback_ip and self.ip_address is not None:
             logger.info('Rolling back IP creation, deleting IP %s', self.ip_address)
-            self.ip_address.delete()
+            if not self.ip_address.delete():
+                logger.error('Failed to delete address %s, manual intervention required', self.ip_address)
 
         if self.rollback_dns:
             self._propagate_dns('Remove')
@@ -95,7 +97,7 @@ class ProvisionRunner(CookbookRunnerBase):
             serial=self.netbox_device.serial,
             manufacturer=self.netbox_device.device_type.manufacturer.slug,
             fqdn=self.fqdn,
-            ipv4=self.netbox_device.primary_ip4,
+            ipv4=ipaddress.IPv4Interface(self.netbox_device.primary_ip4).ip,
         )
 
     def _propagate_dns(self, prefix):
@@ -111,21 +113,31 @@ class ProvisionRunner(CookbookRunnerBase):
     def _allocate_ip(self):
         """Allocate the management IP in Netbox, set its DNS name and assign it to the correct interface."""
         interface = self.netbox.api.dcim.interfaces.get(device_id=self.netbox_device.id, mgmt_only=True, enabled=True)
+        if interface is None:
+            raise RuntimeError(f'Unable to find mgmt_only enabled interface for device {self.netbox_device}')
+
         prefix = self.netbox.api.ipam.prefixes.get(
             status='active',
             family=4,
             role='management',
             site=self.netbox_device.site.slug,
             tenant_id='null')
-        self.ip_address = prefix.available_ips.create({})
+        self.ip_address = prefix.available_ips.create()
+        if self.ip_address is None:
+            raise RuntimeError(f'Failed to allocate an IP in prefix {prefix}')
+
         self.ip_address.dns_name = self.fqdn
         self.ip_address.assigned_object_id = interface.id
         self.ip_address.assigned_object_type = 'dcim.interface'
         logger.info('Allocating IP %s with DNS name %s in prefix %s and attached it to the interface %s of device %s '
                     'marking it as primary IPv4', self.ip_address, self.fqdn, prefix, interface, self.netbox_device)
-        self.ip_address.save()
+        if not self.ip_address.save():
+            raise RuntimeError(f'Failed to save IP {self.ip_address}')
+
         self.netbox_device.primary_ip4 = self.ip_address
-        self.netbox_device.save()
+        if not self.netbox_device.save():
+            raise RuntimeError(f'Failed to set IP {self.ip_address} as primary for {self.netbox_device}')
+
         self.rollback_ip = True
         # Refresh the netbox device
         self.netbox_device = self._get_netbox_device()
