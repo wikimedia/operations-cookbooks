@@ -12,6 +12,8 @@ from spicerack.decorators import retry
 from spicerack.ganeti import INSTANCE_LINKS
 
 from cookbooks.sre.ganeti import add_location_args, set_default_group
+from cookbooks.sre.hosts import OS_VERSIONS
+
 
 logger = logging.getLogger(__name__)
 PRIMARY_INTERFACE_NAME = '##PRIMARY##'
@@ -62,6 +64,9 @@ class GanetiMakeVM(CookbookBase):
             '--disk', type=positive_int, default=10, help='The amount of disk to allocate to the VM in GB.')
         parser.add_argument('--network', choices=INSTANCE_LINKS, default='private',
                             help='Specify the type of network to assign to the VM.')
+        parser.add_argument('--os', choices=OS_VERSIONS + ('none',), required=True,
+                            help='the Debian version to install. One of %(choices)s, use "none" to skip installation')
+        parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         add_location_args(parser)
         parser.add_argument('hostname', type=validate_hostname, help='The hostname for the VM (not the FQDN).')
 
@@ -78,6 +83,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
     def __init__(self, args, spicerack):
         """Create a new Virtual Machine in Ganeti."""
+        self.args = args
         self.ganeti = spicerack.ganeti()
         self.group = self.ganeti.get_group(args.group, cluster=args.cluster)
         self.cluster = args.cluster
@@ -140,7 +146,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
             f'systemctl start netbox_ganeti_{self.group.site}{cluster_id}_sync.service')
         self.need_netbox_sync = False
 
-    def run(self):  # pylint: disable=too-many-locals
+    def run(self):  # pylint: disable=too-many-locals disable=too-many-statements
         """Create a new Ganeti VM as specified."""
         # Pre-allocate IPs
         # TODO: simplify the VLAN detection logic
@@ -193,7 +199,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         self._ganeti_netbox_sync()
 
         # Get the synced VM
-        @retry(tries=20, backoff_mode='linear', exceptions=(RuntimeError,))
+        @retry(tries=30, backoff_mode='linear', exceptions=(RuntimeError,))
         def get_vm(netbox):
             vm = netbox.api.virtualization.virtual_machines.get(name=self.hostname)
             if not vm:
@@ -227,9 +233,24 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
             ip_v4, ip_v6, vm)
 
         # Update Puppet hiera data from NetBox.
-        hiera_ret = self.spicerack.run_cookbook("sre.puppet.sync-netbox-hiera",
+        hiera_ret = self.spicerack.run_cookbook('sre.puppet.sync-netbox-hiera',
                                                 [f'Triggered by {__name__}: created new VM {self.fqdn}'])
-        return hiera_ret
+
+        if hiera_ret:
+            raise RuntimeError('Failed to update Puppet with NetBox data for VM: {vm}')
+
+        # No OS is specified, do not reimage.
+        if self.args.os == 'none':
+            logger.info('No operating system specified, no reimaging required or VM: %s', vm)
+            return hiera_ret
+
+        # Configure parameters for reimaging cookbook.
+        params = ['--new', '--os', self.args.os]
+        if self.args.task_id:
+            params.extend(['--task-id', self.args.task_id])
+        params.append(self.hostname)
+
+        return self.spicerack.run_cookbook('sre.hosts.reimage', params)
 
 
 def make_fqdn(hostname: str, network: str, datacenter: str) -> str:
