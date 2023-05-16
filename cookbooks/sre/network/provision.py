@@ -142,7 +142,7 @@ class ProvisionRunner(CookbookRunnerBase):
         # Refresh the netbox device
         self.netbox_device = self._get_netbox_device()
 
-    @retry(tries=10, backoff_mode='linear', failure_message='Device still not reachable, keep polling')
+    @retry(tries=20, backoff_mode='linear', failure_message='Device still not reachable, keep polling')
     def _poll_device(self, remote_device):
         """Poll the device via SSH until its reachable with the Homer's key."""
         command = 'show system uptime local'
@@ -163,6 +163,6 @@ class ProvisionRunner(CookbookRunnerBase):
         remote_device = self.remote.query(f'D{{{self.fqdn}}}')
 
         with self.dhcp.config(self._get_dhcp_config()):
-            self._poll_device(remote_device)
+            confirm_on_failure(self._poll_device, remote_device)
             logger.info('Device %s is now reachable', self.fqdn)
             # TODO: run homer on self.fqdn
