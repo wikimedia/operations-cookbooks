@@ -203,7 +203,7 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return f"Upgrade K8s version: {self.args.reason}"
 
-    def run(self) -> None:  # pylint: disable=too-many-branches,too-many-statements
+    def run(self) -> None:  # pylint: disable=too-many-branches
         """Required by Spicerack API."""
         affected_nodes = nodeset()
         if self.etcd_nodes:
@@ -332,13 +332,8 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                 "Does the list look good?")
             for host in self.worker_nodes.hosts:
                 hostname = host.split(".")[0]
-                netbox_server = self.spicerack.netbox_server(hostname)
-                if netbox_server.virtual:
-                    cookbook_name = "sre.ganeti.reimage"
-                else:
-                    cookbook_name = "sre.hosts.reimage"
                 return_code = self.spicerack.run_cookbook(
-                    cookbook_name,
+                    "sre.hosts.reimage",
                     ["--no-downtime", "--os", self.args.os, hostname]
                 )
                 if return_code:
