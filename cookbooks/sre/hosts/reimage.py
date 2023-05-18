@@ -302,15 +302,17 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
     def _get_dhcp_config_opt82(self) -> DHCPConfOpt82:
         """Instantiate a DHCP configuration to be used for the reimage."""
         netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
-        switch_iface = netbox_host.primary_ip.assigned_object.connected_endpoint
-        if switch_iface is None:  # Temporary workaround to support Ganeti hosts
-            ifaces = self.netbox.api.dcim.interfaces.filter(device=netbox_host.name, mgmt_only=False)
-            connected_ifaces = [iface for iface in ifaces if iface.connected_endpoint is not None]
+        netbox_int = netbox_host.primary_ip.assigned_object
+        switch_iface = netbox_int.connected_endpoint
+        if netbox_int.type.value == 'bridge':
+            # We need to get the physical port that belongs to the bridge instead
+            bridge_members = self.netbox.api.dcim.interfaces.filter(device=netbox_host.name, bridge_id=netbox_int.id)
+            connected_ifaces = [iface for iface in bridge_members if iface.connected_endpoint is not None]
             if len(connected_ifaces) == 1:
                 switch_iface = connected_ifaces[0].connected_endpoint
-            else:
-                raise RuntimeError(f'Unable to find the switch interface to which {self.host} is connected to. The '
-                                   f'interfaces that are connected in Netbox are: {connected_ifaces}')
+        if switch_iface is None:
+            raise RuntimeError(f'Error finding primary interface connected switch port for {self.host}. Netbox '
+                               'model of server connections is invalid.')
 
         switch_hostname = (
             switch_iface.device.virtual_chassis.name.split('.')[0]
