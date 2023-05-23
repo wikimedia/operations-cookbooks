@@ -195,6 +195,10 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         self.host_groups = self._hosts()
         self.all_hosts = nodeset_fromlist(group.hosts for group in self.host_groups)
         self.results = Results(action=args.action, hosts=self.all_hosts)
+        try:
+            self._action_method = getattr(self, f"_{args.action}_action")
+        except AttributeError as error:
+            raise RuntimeError(f"Invalid action ({args.action})") from error
 
     def _reason(self, hosts: NodeSet) -> Reason:
         """Return the reason for administrative actions on given hosts"""
@@ -264,11 +268,12 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             self.logger.info("Sleeping for %s seconds", seconds)
             sleep(seconds)
 
-    def _restart_daemons_action(self, hosts: RemoteHosts) -> None:
+    def _restart_daemons_action(self, hosts: RemoteHosts, reason: Reason) -> None:
         """Restart daemons on a set of hosts with downtime
 
         Arguments:
             hosts (`RemoteHosts`): A list of hosts to action
+            reason (`Reason`): the administrative reason to use to justify actions.
 
         """
         systemd_cmd = "/bin/systemctl"
@@ -281,72 +286,29 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         else:
             restart_cmds = [f"{systemd_cmd} restart {' '.join(self.restart_daemons)}"]
 
-        reason = self._reason(hosts.hosts)
-        puppet = self._spicerack.puppet(hosts.hosts)
-        icinga_hosts = self._spicerack.icinga_hosts(hosts.hosts)
-        alerting_hosts = self._spicerack.alerting_hosts(hosts.hosts)
-        try:
-            duration = timedelta(minutes=20)
-            with alerting_hosts.downtimed(reason, duration=duration):
-                if self.disable_puppet_on_restart:
-                    with puppet.disabled(reason):
-                        confirm_on_failure(hosts.run_sync, *restart_cmds)
-                else:
-                    confirm_on_failure(hosts.run_sync, *restart_cmds)
-                icinga_hosts.wait_for_optimal(skip_acked=True)
-            self.results.success(hosts.hosts)
-        except IcingaError as error:
-            ask_confirmation(f"Failed to downtime hosts: {error}")
-            self.logger.warning(error)
+        puppet = self._spicerack.puppet(hosts)
+        if self.disable_puppet_on_restart:
+            with puppet.disabled(reason):
+                confirm_on_failure(hosts.run_sync, *restart_cmds)
+        else:
+            confirm_on_failure(hosts.run_sync, *restart_cmds)
 
-        except AbortError as error:
-            # Some host failed to come up again, or something fundamental broke.
-            # log an error, exit *without* repooling
-            self.logger.error(error)
-            self.logger.error(
-                "Error restarting daemons on: Hosts %s, they may still be depooled",
-                hosts,
-            )
-            self.results.fail(hosts.hosts)
-            raise
-
-    def _reboot_action(self, hosts: RemoteHosts) -> None:
+    def _reboot_action(self, hosts: RemoteHosts, _: Reason) -> None:
         """Reboot a set of hosts with downtime
 
         Arguments:
             hosts (`NodeSet`): A list of hosts to reboot
 
         """
-        reason = self._reason(hosts)
         puppet = self._spicerack.puppet(hosts)
-        icinga_hosts = self._spicerack.icinga_hosts(hosts.hosts)
-        alerting_hosts = self._spicerack.alerting_hosts(hosts.hosts)
-        try:
-            duration = timedelta(minutes=20)
-            with alerting_hosts.downtimed(reason, duration=duration):
-                reboot_time = datetime.utcnow()
-                confirm_on_failure(hosts.reboot, batch_size=len(hosts))
-                # Avoid exceptions in dry_run mode:
-                # * "Uptime higher than threshold"
-                # * "Successful Puppet run too old"
-                if not self._spicerack.dry_run:
-                    hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
-                    puppet.wait_since(reboot_time)
-                icinga_hosts.wait_for_optimal(skip_acked=True)
-            self.results.success(hosts.hosts)
-        except IcingaError as error:
-            ask_confirmation(f"Failed to downtime hosts: {error}")
-            self.logger.warning(error)
-
-        except AbortError as error:
-            # Some host failed to come up again, or something fundamental broke.
-            # log an error, continue *without* repooling
-            self.logger.error(error)
-            self.logger.error(
-                "Error rebooting: Hosts %s, they may still be depooled", hosts
-            )
-            self.results.fail(hosts.hosts)
-            raise
+        reboot_time = datetime.utcnow()
+        confirm_on_failure(hosts.reboot, batch_size=len(hosts))
+        # Avoid exceptions in dry_run mode:
+        # * "Uptime higher than threshold"
+        # * "Successful Puppet run too old"
+        if not self._spicerack.dry_run:
+            hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
+            puppet.wait_since(reboot_time)
 
     def _run_scripts(self, scripts: list, hosts: RemoteHosts) -> None:
         """Run a list of scripts
@@ -391,11 +353,28 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             hosts (`RemoteHosts`): a list of functions to run
 
         """
-        action = self._args.action
+        reason = self._reason(hosts)
+        icinga_hosts = self._spicerack.icinga_hosts(hosts.hosts)
+        alerting_hosts = self._spicerack.alerting_hosts(hosts.hosts)
         try:
-            getattr(self, f"_{action}_action")(hosts)
-        except AttributeError as error:
-            raise RuntimeError(f"Invalid action ({action})") from error
+            duration = timedelta(minutes=20)
+            with alerting_hosts.downtimed(reason, duration=duration):
+                self._action_method(hosts, reason)  # Call the method tied to the specific action
+                icinga_hosts.wait_for_optimal(skip_acked=True)
+            self.results.success(hosts.hosts)
+        except IcingaError as error:
+            ask_confirmation(f"Failed to downtime hosts: {error}")
+            self.logger.warning(error)
+
+        except AbortError as error:
+            # Some host failed to come up again, or something fundamental broke.
+            # log an error and raise *without* repooling
+            self.logger.error(error)
+            self.logger.error(
+                "Error %s: Hosts %s, they may still be depooled", self._args.action, hosts
+            )
+            self.results.fail(hosts.hosts)
+            raise
 
     def post_action(self, hosts: RemoteHosts) -> None:
         """Run this function after performing the action on the batch of hosts

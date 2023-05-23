@@ -11,7 +11,7 @@ from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
 class UpdateExtrasBase(SREBatchBase):
     """Base class for updating the netbox-extras repository."""
 
-    valid_actions: tuple[str] = ('update',)
+    valid_actions: tuple[str] = ('restart_daemons',)
 
     def get_runner(self, args):
         """Required by base class."""
@@ -37,10 +37,10 @@ class UpdateExtrasRunner(SREBatchRunnerBase):
         """Return a slightly optimised query then the base class."""
         return "A:netbox-all"
 
-    def _update_action(self, hosts: RemoteHosts) -> None:
+    def action(self, hosts: RemoteHosts) -> None:
         """Action is used to only call the restart action if we need to."""
         if self.needs_restart:
-            self._restart_daemons_action(hosts)
+            super().action(hosts)
 
     @property
     def restart_daemons(self):
