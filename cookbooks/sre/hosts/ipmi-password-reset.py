@@ -119,3 +119,4 @@ def run(args, spicerack):
         {}
         '''.format(host_status['success'], host_status['fail_netbox'], host_status['fail_ipmi'])
     logger.info(message)
+    return 0

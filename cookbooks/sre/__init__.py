@@ -51,20 +51,20 @@ class Results:
         """Add nodes to the failed list."""
         unknown_hosts = nodes - self.hosts
         if unknown_hosts:
-            ValueError(f"unknown hosts: {unknown_hosts}")
+            raise ValueError(f"unknown hosts: {unknown_hosts}")
         intersection = self.successful.intersection(nodes)
         if intersection:
-            ValueError(f"hosts already recorded successful: {intersection}")
+            raise ValueError(f"hosts already recorded successful: {intersection}")
         self.failed.update(nodes)
 
     def success(self, nodes: NodeSet) -> None:
         """Add nodes to the success list."""
         unknown_hosts = nodes - self.hosts
         if unknown_hosts:
-            ValueError(f"unknown hosts: {unknown_hosts}")
+            raise ValueError(f"unknown hosts: {unknown_hosts}")
         intersection = self.failed.intersection(nodes)
         if intersection:
-            ValueError(f"hosts already recorded failed: {intersection}")
+            raise ValueError(f"hosts already recorded failed: {intersection}")
         self.successful.update(nodes)
 
     def report(self) -> int:

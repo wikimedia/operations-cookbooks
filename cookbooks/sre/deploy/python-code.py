@@ -78,7 +78,7 @@ class DeployRunner(CookbookRunnerBase):
         else:
             hosts_message = f'{len(self.remote_hosts)} hosts matching {args.query}'
 
-        self.message = (f'{self.project} to {hosts_message} with reason: {self.reason}')
+        self.message = f'{self.project} to {hosts_message} with reason: {self.reason}'
 
     @property
     def runtime_description(self):
