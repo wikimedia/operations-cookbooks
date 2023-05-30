@@ -28,7 +28,7 @@ from spicerack import Spicerack
 from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
 
 
-def check_http_redirect(host):
+def check_http_redirect(host, dry_run: bool) -> bool:
     """Check if HAProxy handle redirect correctly.
 
     Check also Varnish does not listen on port 80 (Varnish uses 'TLS Redirect'
@@ -38,6 +38,9 @@ def check_http_redirect(host):
         bool: False if any of the requirement fails.
 
     """
+    if dry_run:
+        return True
+
     headers = {'Host': 'wikimedia.org'}
 
     s = "http://{}".format(host)
@@ -131,6 +134,6 @@ class MovePort80Runner(SRELBBatchRunnerBase):
 
     def post_action(self, hosts):
         """Just to check that ports passed as parameters are open."""
-        if not check_http_redirect(hosts.hosts):
+        if not check_http_redirect(hosts.hosts, self._spicerack.dry_run):
             raise RuntimeError(f"Redirect check on host {hosts.hosts} failed!")
         super().post_action(hosts)
