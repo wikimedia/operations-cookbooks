@@ -45,8 +45,14 @@ class GanetiMakeVM(CookbookBase):
             value = int(param)
             if value <= 0:
                 raise argparse.ArgumentTypeError(f'{param} is not a positive integer')
-
             return value
+
+        def validate_memory(param):
+            """Type validator for argparse that accepts only positive floats greater or equal to 1.5."""
+            param = float(param)
+            if param <= 1.5:
+                raise argparse.ArgumentTypeError('Memory must be at least 1.5G')
+            return param
 
         def validate_hostname(param):
             """Helper to instruct people to pass in a hostname instead of fqdn"""
@@ -59,7 +65,9 @@ class GanetiMakeVM(CookbookBase):
         parser.add_argument(
             '--vcpus', type=positive_int, default=1, help='The number of virtual CPUs to assign to the VM.')
         parser.add_argument(
-            '--memory', type=positive_int, default=1, help='The amount of RAM to allocate to the VM in GB.')
+            '--memory', type=validate_memory, default=1.5,
+            help='The amount of RAM to allocate to the VM in GB. ints and floats values are allowed'
+        )
         parser.add_argument(
             '--disk', type=positive_int, default=10, help='The amount of disk to allocate to the VM in GB.')
         parser.add_argument('--network', choices=INSTANCE_LINKS, default='private',
