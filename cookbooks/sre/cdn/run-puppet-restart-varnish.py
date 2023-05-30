@@ -113,7 +113,7 @@ class MovePort80Runner(SRELBBatchRunnerBase):
         """Override the parent property to optimize the query."""
         return 'A:cp'  # This query must include all hosts matching all the allowed_aliases
 
-    def _custom_action(self, hosts):
+    def _custom_action(self, hosts, _):
         """The actual stop varnish / run puppet / start varnish logic resides here."""
         confirm_on_failure(hosts.run_async,
                            '/usr/bin/systemctl stop varnish-frontend.service')
