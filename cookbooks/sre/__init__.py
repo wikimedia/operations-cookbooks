@@ -403,7 +403,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             number_of_hosts = len(host_group.hosts)
             number_of_batches = ceil(number_of_hosts / self._batchsize(number_of_hosts))
             self.group_action(host_group_idx, number_of_batches)
-            for batch in host_group.split(number_of_batches):
+            for batch_idx, batch in enumerate(host_group.split(number_of_batches)):
                 if len(self.results.failed) >= self._args.max_failed:
                     self.logger.error(
                         "Too many errors. Stopping the rolling %s.  See report for further details",
@@ -414,7 +414,8 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                     self.pre_action(batch)
                     self.action(batch)
                     self.post_action(batch)
-                    self._sleep(self._args.grace_sleep)
+                    if batch_idx + 1 < number_of_batches:
+                        self._sleep(self._args.grace_sleep)
                     self.results.success(batch.hosts)
                 except Exception as error:  # pylint: disable=broad-except
                     self.results.fail(batch.hosts)
