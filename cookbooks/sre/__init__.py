@@ -93,7 +93,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
     batch_max = 40
     grace_sleep = 1
     max_failed = 1
-    valid_actions: tuple[str, ...] = ('reboot', 'restart_daemons')
+    valid_actions: tuple[str, ...] = ("reboot", "restart_daemons")
 
     def argument_parser(self) -> ArgumentParser:
         """Parse arguments"""
@@ -263,7 +263,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
     def _sleep(self, seconds: Union[int, float]) -> None:
         """A DRY-RUN aware version of time.sleep()."""
         if self._spicerack.dry_run:
-            self.logger.info('Would have slept for %s seconds', seconds)
+            self.logger.info("Would have slept for %s seconds", seconds)
         else:
             self.logger.info("Sleeping for %s seconds", seconds)
             sleep(seconds)
@@ -359,7 +359,9 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         try:
             duration = timedelta(minutes=20)
             with alerting_hosts.downtimed(reason, duration=duration):
-                self._action_method(hosts, reason)  # Call the method tied to the specific action
+                self._action_method(
+                    hosts, reason
+                )  # Call the method tied to the specific action
                 icinga_hosts.wait_for_optimal(skip_acked=True)
             self.results.success(hosts.hosts)
         except IcingaError as error:
@@ -371,7 +373,9 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
             # log an error and raise *without* repooling
             self.logger.error(error)
             self.logger.error(
-                "Error %s: Hosts %s, they may still be depooled", self._args.action, hosts
+                "Error %s: Hosts %s, they may still be depooled",
+                self._args.action,
+                hosts,
             )
             self.results.fail(hosts.hosts)
             raise
@@ -503,8 +507,8 @@ class SREDiscoveryNoLVSBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
 
     service_name: Optional[str] = None
     ip_per_dc_map: dict[str, str] = {
-        'eqiad': '10.64.0.1',
-        'codfw': '10.192.0.1',
+        "eqiad": "10.64.0.1",
+        "codfw": "10.192.0.1",
     }
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
