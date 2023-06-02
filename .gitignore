@@ -1,6 +1,7 @@
 /.eggs/
 /.tox/
 /.idea/
+/.vscode/
 /build/
 /wikimedia_cookbooks.egg-info/
 __pycache__/
