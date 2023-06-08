@@ -116,12 +116,7 @@ def reboot_with_downtime(spicerack, remote_hosts, results, no_fail_on_icinga):
             remote_hosts.reboot(batch_size=len(remote_hosts))
             remote_hosts.wait_reboot_since(reboot_time)
             puppet.wait_since(reboot_time)
-            # First let's try to check if icinga is already in optimal state.
-            # If not, we require a recheck all service, then
-            # wait a grace period before declaring defeat.
-            if not icinga_hosts.get_status().optimal:
-                icinga_hosts.recheck_all_services()
-                icinga_hosts.wait_for_optimal()
+            icinga_hosts.wait_for_optimal(skip_acked=True)
         results.success(remote_hosts.hosts)
     except IcingaError as e:
         # Icinga didn't run correctly. log an error
