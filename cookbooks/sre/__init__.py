@@ -1,6 +1,6 @@
 """SRE Cookbooks"""
 from abc import abstractmethod, ABCMeta
-from argparse import ArgumentParser, Namespace, SUPPRESS
+from argparse import ArgumentParser, ArgumentTypeError, Namespace, SUPPRESS
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -92,6 +92,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
     batch_default = 1
     batch_max = 40
     grace_sleep = 1
+    min_grace_sleep = 1
     max_failed = 1
     valid_actions: tuple[str, ...] = ("reboot", "restart_daemons")
 
@@ -101,6 +102,11 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
 
         # Later, specific cookbooks the default alias will be part of the cookbook
         # and the Cumin syntax an optional override
+        def validate_sleep(grace_sleep):
+            grace_sleep = int(grace_sleep)
+            if grace_sleep < self.min_grace_sleep:
+                raise ArgumentTypeError(f"grace sleep can not be smaller than {self.min_grace_sleep}")
+            return grace_sleep
 
         targets = parser.add_mutually_exclusive_group(required=True)
         targets.add_argument(
@@ -137,7 +143,7 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
         )
         parser.add_argument(
             "--grace-sleep",
-            type=int,
+            type=validate_sleep,
             default=self.grace_sleep,
             help="the amount of time to sleep in seconds between each batch",
         )
