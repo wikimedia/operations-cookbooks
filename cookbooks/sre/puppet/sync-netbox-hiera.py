@@ -242,13 +242,13 @@ class NetboxHieraRunner(CookbookRunnerBase):
         for host in hosts:
             # TODO: i think we should be able to filter this stuff out via the
             # GraphQL query directly
-            if not host['ip_addresses']:
+            if not host['ip_addresses'] or not host['ip_addresses'][0]['dns_name']:
                 continue
 
             device = host['device']
             if device['tenant'] is not None:
                 continue
-            if device['status'] in ['OFFLINE', 'PLANNED', 'DECOMMISSIONING']:
+            if device['status'] in ['OFFLINE', 'PLANNED', 'DECOMMISSIONING', 'FAILED']:
                 continue
 
             data = {
