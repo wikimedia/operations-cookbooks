@@ -107,6 +107,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         self.allocated = []  # Store allocated IPs to rollback them on failure
         self.dns_propagated = False  # Whether to run the DNS cookbook on rollback
         self.need_netbox_sync = False  # Whether to sync the VM to Netbox on rollback
+        self.skip_rollback = False  # Whether to skip the rollback actions because the VM has been created
 
         print('Ready to create Ganeti VM {a.fqdn} in the {a.cluster} cluster on group {a.group.name} with {a.vcpus} '
               'vCPUs, {a.memory}GB of RAM, {a.disk}GB of disk in the {a.network} network.'.format(a=self))
@@ -121,6 +122,9 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
     def rollback(self):
         """Rollback IP and DNS assignments on failure."""
+        if self.skip_rollback:
+            return
+
         for address in self.allocated:
             ip = self.netbox.api.ipam.ip_addresses.get(address=address)
             logger.info('Deleting assigned IP %s', ip)
@@ -246,6 +250,9 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
         if hiera_ret:
             raise RuntimeError('Failed to update Puppet with NetBox data for VM: {vm}')
+
+        # The VM is now created, no need to rollback anything.
+        self.skip_rollback = True
 
         # No OS is specified, do not reimage.
         if self.args.os == 'none':
