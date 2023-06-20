@@ -142,6 +142,9 @@ def run_for_instance(args, spicerack, instance):
 
             _transfer_datadir(args.source, data_path, files, args.dest, args.encrypt)
 
+            for file in files:
+                dest.run_sync('chown blazegraph: "{file}"'.format(file=file))
+
             if args.blazegraph_instance in ('wikidata', 'commons'):
                 logger.info('Touching "data_loaded" file to show that data load is completed.')
                 dest.run_sync('touch {data_path}/data_loaded'.format(
