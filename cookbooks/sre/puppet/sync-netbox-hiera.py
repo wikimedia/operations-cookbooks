@@ -34,7 +34,10 @@ query ($role: [String], $status: [String]) {
             master { name }
         }
         device_role { slug }
-        device_type { slug }
+        device_type {
+            slug
+            manufacturer { slug }
+        }
         site { slug }
         tenant { name }
         primary_ip4 {
@@ -266,10 +269,12 @@ class NetboxHieraRunner(CookbookRunnerBase):
             )
             data = {
                 'primary_fqdn': device['primary_ip4']['dns_name'],
+                'manufacturer': device['device_type']['manufacturer']['slug'],
                 'site': device['site']['slug'],
                 'role': device['device_role']['slug'],
                 'ipv4': device['primary_ip4']['address'].split('/')[0],
             }
+
             if (
                 device['device_type']['slug'] == 'mx480'
                 and device['device_role']['slug'] == 'cr'
