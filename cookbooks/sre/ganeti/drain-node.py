@@ -78,7 +78,7 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
         self.secondary_instances = []
         self.plain_instances = []
 
-        if self.node not in spicerack.remote().query('O:ganeti').hosts:
+        if self.node not in spicerack.remote().query('A:ganeti-all').hosts:
             raise RuntimeError(
                 f'{self.node} is not a Ganeti server')
 
