@@ -49,7 +49,7 @@ class GanetiDrainNode(CookbookBase):
                             help='If enabled, also migrate secondary instances')
         parser.add_argument('-t', '--task-id',
                             help='An optional task ID to refer in the downtime message.')
-        parser.add_argument('node', help='The FQDN of the Ganeti node to drain.', required=True)
+        parser.add_argument('node', help='The FQDN of the Ganeti node to drain.')
 
         return parser
 
