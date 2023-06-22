@@ -7,7 +7,7 @@ class WipeCache(CookbookBase):
     """Cookbook to wipedns cache entries.
 
     Perform the actions outlined in the following wiki:
-    https://wikitech.wikimedia.org/wiki/DNS#How_to_Remove_a_record_from_the_DNS_resolver_caches
+    https://wikitech.wikimedia.org/wiki/DNS#Wipe_caches
 
     Usage example:
         cookbook sre.dns.wipe-cache puppet.esqin.wmnet
