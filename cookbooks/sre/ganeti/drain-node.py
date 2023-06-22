@@ -47,6 +47,8 @@ class GanetiDrainNode(CookbookBase):
         add_location_args(parser)
         parser.add_argument('--full', action='store_true', default=False,
                             help='If enabled, also migrate secondary instances')
+        parser.add_argument('--reboot', action='store_true', default=False,
+                            help='If enabled, offer a reboot after the node has been drained')
         parser.add_argument('-t', '--task-id',
                             help='An optional task ID to refer in the downtime message.')
         parser.add_argument('node', help='The FQDN of the Ganeti node to drain.')
@@ -68,8 +70,10 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
 
         self.rapi = self.ganeti.rapi(args.cluster)
         self.master = spicerack.remote().query(self.rapi.master)
+        self.spicerack = spicerack
 
         self.node = args.node
+        self.reboot = args.reboot
         if args.full:
             self.mode = Drain.FULL
         else:
@@ -96,9 +100,9 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
 
     def instance_overview(self):
         """Generate/print an overview of running instances."""
-        nodes = self.rapi.nodes()
-        self.primary_instances = nodes[self.node]['pinst_list']
-        self.secondary_instances = nodes[self.node]['sinst_list']
+        node = [node for node in self.rapi.nodes(bulk=True) if node['name'] == self.node][0]
+        self.primary_instances = node['pinst_list']
+        self.secondary_instances = node['sinst_list']
 
         for instance in self.primary_instances:
             if self.rapi.fetch_instance(instance).get('disk_template') == 'plain':
@@ -108,6 +112,12 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
         logger.info(self.primary_instances)
         logger.info("The following secondary instances are running")
         logger.info(self.secondary_instances)
+
+    def offer_reboot_node(self):
+        """Offer to reboot the node now that it's drained."""
+        if self.reboot:
+            ask_confirmation(f'Reboot {self.node}?')
+            self.spicerack.run_cookbook("sre.hosts.reboot-single", [self.node])
 
     def run_cmd(self, cmd):
         """Run a command on the Ganeti master node and and bail out if missed"""
@@ -125,18 +135,18 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
 
             if len(self.primary_instances) == 0:
                 logger.info('No primary instances to migrate, nothing to do')
+                self.offer_reboot_node()
                 return 0
 
             if set(self.primary_instances) == set(self.plain_instances):
                 logger.info('All remaining primary instances are using plain disks, all good')
+                self.offer_reboot_node()
                 return 0
 
             if self.phabricator is not None:
                 self.phabricator.task_comment(self.task_id, self.message)
             self.run_cmd(
                 f'gnt-node migrate -f {self.node}')
-
-            self.instance_overview()
 
         elif self.mode == Drain.FULL:
             ask_confirmation(f'Ready to migrate all secondary instances away from {self.node}?')
@@ -157,5 +167,7 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
             self.run_cmd(
                 f'gnt-node evacuate -s {self.node}')
 
-            self.instance_overview()
+        self.instance_overview()
+        self.offer_reboot_node()
+
         return 0
