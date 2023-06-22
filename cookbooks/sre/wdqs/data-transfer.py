@@ -88,13 +88,13 @@ def _transfer_datadir(source, path, files, dest, encrypt):
 def run(args, spicerack):
     """Run the data transfer on each indicated instance."""
     if args.blazegraph_instance == 'wdqs-all':
-        run_for_instance(args, spicerack, BLAZEGRAPH_INSTANCES['wikidata'])
-        run_for_instance(args, spicerack, BLAZEGRAPH_INSTANCES['categories'])
+        run_for_instance(args, spicerack, 'wikidata', BLAZEGRAPH_INSTANCES['wikidata'])
+        run_for_instance(args, spicerack, 'categories', BLAZEGRAPH_INSTANCES['categories'])
     else:
-        run_for_instance(args, spicerack, BLAZEGRAPH_INSTANCES[args.blazegraph_instance])
+        run_for_instance(args, spicerack, args.blazegraph_instance, BLAZEGRAPH_INSTANCES[args.blazegraph_instance])
 
 
-def run_for_instance(args, spicerack, instance):
+def run_for_instance(args, spicerack, bg_instance_name, instance):
     # pylint:disable=too-many-locals
     """Required by Spicerack API."""
     remote = spicerack.remote()
@@ -140,27 +140,29 @@ def run_for_instance(args, spicerack, instance):
                 for file in files:
                     dest.run_sync('rm -fv {}'.format(file))
 
+                dest.run_sync('rm -fv /srv/wdqs/data_loaded')
+
             _transfer_datadir(args.source, data_path, files, args.dest, args.encrypt)
 
             for file in files:
                 dest.run_sync('chown blazegraph: "{file}"'.format(file=file))
 
-            if args.blazegraph_instance in ('wikidata', 'commons'):
+            if bg_instance_name in ('wikidata', 'commons'):
                 logger.info('Touching "data_loaded" file to show that data load is completed.')
                 dest.run_sync('touch {data_path}/data_loaded'.format(
                     data_path=data_path))
 
-            if args.blazegraph_instance == 'categories':
+            if bg_instance_name == 'categories':
                 logger.info('Reloading nginx to load new categories mapping.')
                 dest.run_sync('systemctl reload nginx')
 
             source_hostname = get_hostname(args.source)
             dest_hostname = get_hostname(args.dest)
 
-            if args.blazegraph_instance in MUTATION_TOPICS:
+            if bg_instance_name in MUTATION_TOPICS:
                 logger.info('Transferring Kafka offsets')
                 kafka = spicerack.kafka()
-                kafka.transfer_consumer_position([MUTATION_TOPICS[args.blazegraph_instance]],
+                kafka.transfer_consumer_position([MUTATION_TOPICS[bg_instance_name]],
                                                  ConsumerDefinition(get_site(source_hostname, spicerack), 'main',
                                                                     source_hostname),
                                                  ConsumerDefinition(get_site(dest_hostname, spicerack), 'main',
@@ -169,7 +171,7 @@ def run_for_instance(args, spicerack, instance):
             logger.info('Starting services [%s]', start_services_cmd)
             remote_hosts.run_sync(start_services_cmd)
 
-            if args.blazegraph_instance in MUTATION_TOPICS:
+            if bg_instance_name in MUTATION_TOPICS:
                 wait_for_updater(prometheus, get_site(source_hostname, spicerack), source)
                 wait_for_updater(prometheus, get_site(dest_hostname, spicerack), dest)
 
