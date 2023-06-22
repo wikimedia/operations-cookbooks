@@ -6,6 +6,7 @@ from enum import Enum
 
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.remote import RemoteExecutionError
 from cookbooks.sre.ganeti import add_location_args
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
@@ -98,20 +99,28 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return f'for draining ganeti node {self.node}'
 
+    def update_plain_instances(self):
+        """Determine which VMs are not using DRBD."""
+        node = [node for node in self.rapi.nodes(bulk=True) if node['name'] == self.node][0]
+        self.primary_instances = node['pinst_list']
+
+        for instance in self.primary_instances:
+            if self.rapi.fetch_instance(instance).get('disk_template') == 'plain':
+                self.plain_instances.append(instance)
+
     def instance_overview(self):
         """Generate/print an overview of running instances."""
         node = [node for node in self.rapi.nodes(bulk=True) if node['name'] == self.node][0]
         self.primary_instances = node['pinst_list']
         self.secondary_instances = node['sinst_list']
 
-        for instance in self.primary_instances:
-            if self.rapi.fetch_instance(instance).get('disk_template') == 'plain':
-                self.plain_instances.append(instance)
-
-        logger.info("The following primary instances are running")
-        logger.info(self.primary_instances)
-        logger.info("The following secondary instances are running")
-        logger.info(self.secondary_instances)
+        for elem in [('primary', self.primary_instances), ('secondary', self.secondary_instances),
+                     ('plain', self.plain_instances)]:
+            if elem[1]:
+                logger.info("The following %s instances are running:", elem[0])
+                logger.info('\n'.join([" - {}".format(h) for h in elem[1]]))
+            else:
+                logger.info("No %s instances are running:", elem[0])
 
     def offer_reboot_node(self):
         """Offer to reboot the node now that it's drained."""
@@ -121,13 +130,17 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
 
     def run_cmd(self, cmd):
         """Run a command on the Ganeti master node and and bail out if missed"""
+        all_hosts_migrated = True
         try:
             next(self.master.run_sync(cmd))
-        except StopIteration as e:
-            raise RuntimeError('Failed to run command') from e
+        except RemoteExecutionError:
+            all_hosts_migrated = False
+
+        return all_hosts_migrated
 
     def run(self):
         """Drain a Ganeti node of running instances"""
+        self.update_plain_instances()
         self.instance_overview()
 
         if self.mode == Drain.PRIMARY:
@@ -145,8 +158,14 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
 
             if self.phabricator is not None:
                 self.phabricator.task_comment(self.task_id, self.message)
-            self.run_cmd(
-                f'gnt-node migrate -f {self.node}')
+            if not self.run_cmd(f'gnt-node migrate -f {self.node}'):
+                logger.info("Not all hosts could be migrated:")
+                self.update_plain_instances()
+                if set(self.primary_instances) == set(self.plain_instances):
+                    logger.info('But all remaining primary instances are using plain disks, so all good')
+                else:
+                    logger.info('The following instances failed to migrate and are using DRBD:')
+                    logger.info(set(self.primary_instances) - set(self.plain_instances))
 
         elif self.mode == Drain.FULL:
             ask_confirmation(f'Ready to migrate all secondary instances away from {self.node}?')
