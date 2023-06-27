@@ -36,6 +36,8 @@ class GanetiDrainNode(CookbookBase):
     inherently non-redundant). If a node is fully drained, such instances need to be
     temporarily switched to DRBD using the sre.ganeti.changedisk cookbook first.
 
+    Optionally using the -reboot argument, the cookbook can also initiate a reboot.
+
     Usage example:
         cookbook sre.ganeti.drain-node --cluster codfw ganeti2022.codfw.wmnet
         cookbook sre.ganeti.drain-node --cluster codfw --full ganeti2022.codfw.wmnet
@@ -125,8 +127,11 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
     def offer_reboot_node(self):
         """Offer to reboot the node now that it's drained."""
         if self.reboot:
-            ask_confirmation(f'Reboot {self.node}?')
-            self.spicerack.run_cookbook("sre.hosts.reboot-single", [self.node])
+            if str(self.master) == self.node:
+                logger.info("This node is the master node, you need to failover first")
+            else:
+                ask_confirmation(f'Reboot {self.node}?')
+                self.spicerack.run_cookbook("sre.hosts.reboot-single", [self.node])
 
     def run_cmd(self, cmd):
         """Run a command on the Ganeti master node and and bail out if missed"""
