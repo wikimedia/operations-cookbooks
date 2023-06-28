@@ -189,7 +189,7 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
             if self.phabricator is not None:
                 self.phabricator.task_comment(self.task_id, self.message)
             self.run_cmd(
-                f'gnt-node evacuate -s {self.node}')
+                f'gnt-node evacuate -f -s {self.node}')
 
         self.instance_overview()
         self.offer_reboot_node()
