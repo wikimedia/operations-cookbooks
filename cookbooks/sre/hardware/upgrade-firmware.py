@@ -639,6 +639,14 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         # print(json.dumps(result, indent=4, sort_keys=True))
         return target_version, job_id
 
+    # After firmware has been updated there is a small period between the job finishing
+    # where the endpoint returns a 503.  As such we are a bit more persistent here
+    @retry(
+        tries=5,
+        delay=timedelta(seconds=3),
+        backoff_mode="constant",
+        exceptions=(RedfishError,),
+    )
     def _check_version(
         self,
         redfish_host: Redfish,

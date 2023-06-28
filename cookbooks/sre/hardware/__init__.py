@@ -5,11 +5,13 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
 from packaging import version
 from requests import Session
+from requests.exceptions import RequestException
 
 from wmflib.interactive import ask_input
 
@@ -45,6 +47,31 @@ def extract_version(firmware_file: Path) -> version.Version:
     if match is None:
         raise RuntimeError(f'unable to extract version from: {firmware_file}')
     return version.parse(match['version'])
+
+
+# TODO: remove pylint disable once on python10
+# https://bugs.python.org/issue31844
+class ParseMeta(HTMLParser):  # pylint: disable=abstract-method
+    """simple parser to extract drivers-csrf-token meta tag"""
+
+    def __init__(self, *args, **kwargs):
+        """Init method."""
+        super().__init__(*args, **kwargs)
+        self.csrf_token = ''  # nosec
+
+    def handle_starttag(self, tag, attrs):
+        """Parse tags for meta object."""
+        if tag != 'meta' or self.csrf_token:
+            return
+        in_csrf = False
+        content = ''
+        for name, value in attrs:
+            if name == 'name' and value == 'drivers-csrf-token':
+                in_csrf = True
+            if name == 'content':
+                content = value
+        if in_csrf and content:
+            self.csrf_token = content
 
 
 class DellDriverType(Enum):
@@ -208,6 +235,10 @@ class DellProduct:
         return results
 
 
+class DellAPIError(Exception):
+    """Raise when there is a error with the dell api"""
+
+
 class DellAPI:
     """Class to interface with dell json API."""
 
@@ -226,12 +257,23 @@ class DellAPI:
         }
         self.session.headers = {
             "X-Requested-With": "XMLHttpRequest",
-            "Accept-Language": "en-GB,en;q=0.5",
         }
         # set launguage pref
         self.session.cookies["lwp"] = "c=uk&l=en&s=bsd&cs=ukbsdt1"
         # populate cookie store
         self.session.get("https://www.dell.com/support/home")
+        # We need to grab this page to get the csrf-token
+        response = self.session.get(
+            "https://www.dell.com/support/driver/es-es/ips/driverlist/product/poweredge-r430"
+        )
+
+        parser = ParseMeta()
+        parser.feed(response.content.decode())
+        if not parser.csrf_token:
+            raise DellAPIError("Unable to find drivers-csrf-token")
+
+        self.session.headers.update({'anti-csrf-token': parser.csrf_token})
+
         self._products: dict[str, DellProduct] = {}
 
     def get(self, product: str, force: bool = False) -> DellProduct:
@@ -267,8 +309,17 @@ class DellAPI:
             # The idrac [mostly] expects to receive an exe self extracting zip targeted for windows
             "oscode": "W12R2",
         }
-        response = self.session.get(self.url_base, params=data)
-        json_data = response.json()
+        try:
+            response = self.session.get(self.url_base, params=data)
+            response.raise_for_status()
+            if response.status_code == 204:
+                raise DellAPIError("No content received from DellAPI")
+            json_data = response.json()
+        except RequestException as error:
+            raise DellAPIError("Unable to fetch dell drivers") from error
+        except ValueError as error:
+            raise DellAPIError("Unable to parse json output") from error
+
         for driver in json_data["DriverListData"]:
             if driver["Type"] not in (d.name for d in DellDriverType):
                 continue
