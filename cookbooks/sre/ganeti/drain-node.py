@@ -132,6 +132,7 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
             else:
                 ask_confirmation(f'Reboot {self.node}?')
                 self.spicerack.run_cookbook("sre.hosts.reboot-single", [self.node])
+                self.run_cmd('gnt-cluster verify-disks')
 
     def run_cmd(self, cmd):
         """Run a command on the Ganeti master node and and bail out if missed"""
