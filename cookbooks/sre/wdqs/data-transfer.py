@@ -6,7 +6,7 @@ Usage example for hosts behind lvs:
 
 Usage example for test hosts:
     cookbook sre.wdqs.data-transfer --source wdqs1009.eqiad.wmnet --dest wdqs1010.eqiad.wmnet
-     --reason "moving away from legacy updater" --no-depool --blazegraph_instance wikidata --task-id T12345
+     --reason "moving away from legacy updater" --lvs_strategy --blazegraph_instance wikidata --task-id T12345
 
 """
 import argparse
@@ -45,6 +45,8 @@ BLAZEGRAPH_INSTANCES = {
     },
 }
 
+LVS_STRATEGY = ['ignore', 'source-only', 'dest-only', 'both']
+
 __title__ = "WDQS data transfer cookbook"
 logger = logging.getLogger(__name__)
 
@@ -60,7 +62,7 @@ def argument_parser():
     parser.add_argument('--reason', required=True, help='Administrative Reason')
     parser.add_argument('--downtime', type=int, default=6, help="Hours of downtime")
     parser.add_argument('--task-id', help='task_id for the change')
-    parser.add_argument('--no-depool', action='store_false', dest='depool', help='Do not depool host')
+    parser.add_argument('--lvs-strategy', required=True, help='which hosts to depool/repool', choices=LVS_STRATEGY)
     parser.add_argument('--encrypt', action='store_true', help='Enable encryption on transfer')
     parser.add_argument('--force', action='store_true', help='Delete files on target before transfer')
 
@@ -92,6 +94,32 @@ def run(args, spicerack):
         run_for_instance(args, spicerack, 'categories', BLAZEGRAPH_INSTANCES['categories'])
     else:
         run_for_instance(args, spicerack, args.blazegraph_instance, BLAZEGRAPH_INSTANCES[args.blazegraph_instance])
+
+
+def _pool_host(host_type, host):
+    """Pool the source or dest host"""
+    logger.info('pooling %s host %s', host_type, host)
+    host.run_sync('pool')
+    sleep(120)
+
+
+def _depool_host(host_type, host):
+    """Depool the source or dest host"""
+    logger.info('depooling %s host %s', host_type, host)
+    host.run_sync('depool')
+    sleep(120)
+
+
+def lvs_action(action_func, lvs_strategy, source, dest):
+    """Decide which hosts to operate on"""
+    # Use lvs_strategy to decide hosts to target
+    if lvs_strategy == "both":
+        action_func('source', source)
+        action_func('dest', dest)
+    elif lvs_strategy == "source-only":
+        action_func('source', source)
+    elif lvs_strategy == "dest-only":
+        action_func('dest', dest)
 
 
 def run_for_instance(args, spicerack, bg_instance_name, instance):
@@ -126,10 +154,7 @@ def run_for_instance(args, spicerack, bg_instance_name, instance):
 
     with alerting_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
         with puppet.disabled(reason):
-            if args.depool:
-                logger.info('depooling %s', remote_hosts)
-                remote_hosts.run_sync('depool')
-                sleep(180)
+            lvs_action(_depool_host, args.lvs_strategy, source, dest)
 
             logger.info('Stopping services [%s]', stop_services_cmd)
             remote_hosts.run_sync(stop_services_cmd)
@@ -147,7 +172,7 @@ def run_for_instance(args, spicerack, bg_instance_name, instance):
             for file in files:
                 dest.run_sync('chown blazegraph: "{file}"'.format(file=file))
 
-            if bg_instance_name in ('wikidata', 'commons'):
+            if bg_instance_name not in ('commons'):
                 logger.info('Touching "data_loaded" file to show that data load is completed.')
                 dest.run_sync('touch {data_path}/data_loaded'.format(
                     data_path=data_path))
@@ -175,6 +200,4 @@ def run_for_instance(args, spicerack, bg_instance_name, instance):
                 wait_for_updater(prometheus, get_site(source_hostname, spicerack), source)
                 wait_for_updater(prometheus, get_site(dest_hostname, spicerack), dest)
 
-            if args.depool:
-                logger.info('pooling %s', remote_hosts)
-                remote_hosts.run_sync('pool')
+            lvs_action(_pool_host, args.lvs_strategy, source, dest)
