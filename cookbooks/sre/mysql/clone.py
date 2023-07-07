@@ -72,8 +72,11 @@ class CloneMySQLRunner(CookbookRunnerBase):
         # this also handles string->bool conversion where necessary
         self.tp_options = transferpy.transfer.assign_default_options(
             self.tp_options)
-        # Some of our transfers are cross-DC, so enable encryption
-        self.tp_options['encrypt'] = True
+        # If source and target are in different dcs, encrypt
+        netbox_source = spicerack.netbox_server(str(self.source_host).split('.', maxsplit=1)[0])
+        netbox_target = spicerack.netbox_server(str(self.target_host).split('.', maxsplit=1)[0])
+        if netbox_source.as_dict()['site']['slug'] != netbox_target.as_dict()['site']['slug']:
+            self.tp_options['encrypt'] = True
 
     @property
     def runtime_description(self):
