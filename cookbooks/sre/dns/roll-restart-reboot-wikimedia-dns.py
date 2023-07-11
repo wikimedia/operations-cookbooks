@@ -1,5 +1,11 @@
-"""Rolling restart of all services comprising Wikimedia DNS."""
+"""Rolling restart of Wikimedia DNS services or full reboot.
 
+Whether restarting the services or rebooting the entire host, typical
+decommissioning logic is preserved. systemd unit ordering should safeguard
+these units as well.
+"""
+
+from spicerack.remote import RemoteHosts
 from wmflib.constants import ALL_DATACENTERS
 
 from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
@@ -11,7 +17,8 @@ class WDNSRestart(SREBatchBase):
     Example usage:
         cookbook sre.cdn.roll-restart-wikimedia-dns \
             --alias doh-codfw \
-            --reason "Scheduled maintenance"
+            --reason "Scheduled maintenance" \
+            restart_daemons
 
         cookbook sre.cdn.roll-restart-wikimedia-dns \
             --query 'A:doh-eqiad and not P{doh1001*}' \
@@ -19,12 +26,19 @@ class WDNSRestart(SREBatchBase):
             --task-id "T12345" \
             --ignore-restart-errors \
             --batchsize 2 \
-            --grace-sleep 90
+            --grace-sleep 90 \
+            restart_daemons
+
+        cookbook sre.cdn.roll-restart-wikimedia-dns \
+            --query 'A:doh-eqiad and not P{doh1001*}' \
+            --reason "Scheduled maintenance" \
+            --task-id "T12345" \
+            --batchsize 2 \
+            reboot
     """
 
     batch_default = 1
     grace_sleep = 30
-    valid_actions = ('restart_daemons',)
 
     def get_runner(self, args) -> SREBatchRunnerBase:
         """As specified by Spicerack API."""
@@ -49,6 +63,24 @@ class Runner(SREBatchRunnerBase):
         """Override the parent property to optimize the query."""
         # This query must include all hosts matching all the allowed_aliases
         return "A:wikidough"
+
+    def pre_action(self, hosts: RemoteHosts) -> None:
+        """Run before performing the action on the batch of hosts."""
+        reason = self._reason(hosts)
+        if self._args.action == "reboot":
+            puppet = self._spicerack.puppet(hosts)
+            puppet.disable(reason)
+
+        # Depooling WDNS involves stopping bird instead of e.g. confctl
+        hosts.run_async("/bin/systemctl stop bird.service")
+
+    def post_action(self, hosts: RemoteHosts) -> None:
+        """Run after performing the action on the batch of hosts."""
+        hosts.run_async("/bin/systemctl start bird.service")
+        if self._args.action == "reboot":
+            reason = self._reason(hosts)
+            puppet = self._spicerack.puppet(hosts)
+            puppet.enable(reason)
 
     @property
     def restart_daemons(self) -> list:
