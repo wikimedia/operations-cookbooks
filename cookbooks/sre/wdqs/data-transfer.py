@@ -152,52 +152,53 @@ def run_for_instance(args, spicerack, bg_instance_name, instance):
     services.reverse()
     start_services_cmd = " && sleep 10 && ".join(["systemctl start " + service for service in services])
 
-    with alerting_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
-        with puppet.disabled(reason):
-            lvs_action(_depool_host, args.lvs_strategy, source, dest)
+    alerting_hosts.downtime(reason, duration=timedelta(hours=args.downtime))
 
-            logger.info('Stopping services [%s]', stop_services_cmd)
-            remote_hosts.run_sync(stop_services_cmd)
+    with puppet.disabled(reason):
+        lvs_action(_depool_host, args.lvs_strategy, source, dest)
 
-            data_path = instance['data_path']
+        logger.info('Stopping services [%s]', stop_services_cmd)
+        remote_hosts.run_sync(stop_services_cmd)
 
-            if args.force:
-                for file in files:
-                    dest.run_sync('rm -fv {}'.format(file))
+        data_path = instance['data_path']
 
-                dest.run_sync('rm -fv /srv/wdqs/data_loaded')
-
-            _transfer_datadir(args.source, data_path, files, args.dest, args.encrypt)
-
+        if args.force:
             for file in files:
-                dest.run_sync('chown blazegraph: "{file}"'.format(file=file))
+                dest.run_sync('rm -fv {}'.format(file))
 
-            if bg_instance_name not in ('commons'):
-                logger.info('Touching "data_loaded" file to show that data load is completed.')
-                dest.run_sync('touch {data_path}/data_loaded'.format(
-                    data_path=data_path))
+            dest.run_sync('rm -fv /srv/wdqs/data_loaded')
 
-            if bg_instance_name == 'categories':
-                logger.info('Reloading nginx to load new categories mapping.')
-                dest.run_sync('systemctl reload nginx')
+        _transfer_datadir(args.source, data_path, files, args.dest, args.encrypt)
 
-            source_hostname = get_hostname(args.source)
-            dest_hostname = get_hostname(args.dest)
+        for file in files:
+            dest.run_sync('chown blazegraph: "{file}"'.format(file=file))
 
-            if bg_instance_name in MUTATION_TOPICS:
-                logger.info('Transferring Kafka offsets')
-                kafka = spicerack.kafka()
-                kafka.transfer_consumer_position([MUTATION_TOPICS[bg_instance_name]],
-                                                 ConsumerDefinition(get_site(source_hostname, spicerack), 'main',
-                                                                    source_hostname),
-                                                 ConsumerDefinition(get_site(dest_hostname, spicerack), 'main',
-                                                                    dest_hostname))
+        if bg_instance_name not in ('commons'):
+            logger.info('Touching "data_loaded" file to show that data load is completed.')
+            dest.run_sync('touch {data_path}/data_loaded'.format(
+                data_path=data_path))
 
-            logger.info('Starting services [%s]', start_services_cmd)
-            remote_hosts.run_sync(start_services_cmd)
+        if bg_instance_name == 'categories':
+            logger.info('Reloading nginx to load new categories mapping.')
+            dest.run_sync('systemctl reload nginx')
 
-            if bg_instance_name in MUTATION_TOPICS:
-                wait_for_updater(prometheus, get_site(source_hostname, spicerack), source)
-                wait_for_updater(prometheus, get_site(dest_hostname, spicerack), dest)
+        source_hostname = get_hostname(args.source)
+        dest_hostname = get_hostname(args.dest)
 
-            lvs_action(_pool_host, args.lvs_strategy, source, dest)
+        if bg_instance_name in MUTATION_TOPICS:
+            logger.info('Transferring Kafka offsets')
+            kafka = spicerack.kafka()
+            kafka.transfer_consumer_position([MUTATION_TOPICS[bg_instance_name]],
+                                             ConsumerDefinition(get_site(source_hostname, spicerack), 'main',
+                                                                source_hostname),
+                                             ConsumerDefinition(get_site(dest_hostname, spicerack), 'main',
+                                                                dest_hostname))
+
+        logger.info('Starting services [%s]', start_services_cmd)
+        remote_hosts.run_sync(start_services_cmd)
+
+        if bg_instance_name in MUTATION_TOPICS:
+            wait_for_updater(prometheus, get_site(source_hostname, spicerack), source)
+            wait_for_updater(prometheus, get_site(dest_hostname, spicerack), dest)
+
+        lvs_action(_pool_host, args.lvs_strategy, source, dest)
