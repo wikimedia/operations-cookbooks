@@ -320,7 +320,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
         else:  # Physical host
             self.spicerack.actions[fqdn].success('Found physical host')
             try:
-                self.spicerack.alerting_hosts(f'{hostname}.mgmt', verbatim_hosts=True).downtime(self.reason)
+                self.spicerack.alerting_hosts([f'{hostname}.mgmt'], verbatim_hosts=True).downtime(self.reason)
                 self.spicerack.actions[fqdn].success(
                     'Downtimed management interface on Icinga/Alertmanager')
             except IcingaError:
