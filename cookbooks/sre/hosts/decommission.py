@@ -8,6 +8,7 @@ from pynetbox.core.query import RequestError
 from wmflib.dns import DnsError, DnsNotFound
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
+from spicerack.alertmanager import AlertmanagerError
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.icinga import IcingaError
@@ -320,14 +321,11 @@ class DecommissionHostRunner(CookbookRunnerBase):
         else:  # Physical host
             self.spicerack.actions[fqdn].success('Found physical host')
             try:
-                self.spicerack.alerting_hosts([f'{hostname}.mgmt'], verbatim_hosts=True).downtime(self.reason)
+                self.spicerack.alertmanager_hosts([f'{hostname}.mgmt'], verbatim_hosts=True).downtime(self.reason)
                 self.spicerack.actions[fqdn].success(
-                    'Downtimed management interface on Icinga/Alertmanager')
-            except IcingaError:
-                self.spicerack.actions[fqdn].warning(
-                    '//Management interface not found on Icinga, unable to downtime it//')
-            except RemoteExecutionError:
-                self.spicerack.actions[fqdn].warning('//Failed to downtime management interface on Icinga//')
+                    'Downtimed management interface on Alertmanager')
+            except AlertmanagerError:
+                self.spicerack.actions[fqdn].warning('//Failed to downtime management interface on Alertmanager//')
 
             try:
                 remote_host.run_sync('true')
