@@ -49,6 +49,7 @@ class Runner(SREBatchRunnerBase):
     """Wikimedia DNS restart Cookbook runner."""
 
     disable_puppet_on_restart = True
+    disable_puppet_on_reboot = True
 
     @property
     def allowed_aliases(self) -> list:
@@ -66,21 +67,11 @@ class Runner(SREBatchRunnerBase):
 
     def pre_action(self, hosts: RemoteHosts) -> None:
         """Run before performing the action on the batch of hosts."""
-        reason = self._reason(hosts)
-        if self._args.action == "reboot":
-            puppet = self._spicerack.puppet(hosts)
-            puppet.disable(reason)
-
-        # Depooling WDNS involves stopping bird instead of e.g. confctl
         hosts.run_async("/bin/systemctl stop bird.service")
 
     def post_action(self, hosts: RemoteHosts) -> None:
         """Run after performing the action on the batch of hosts."""
         hosts.run_async("/bin/systemctl start bird.service")
-        if self._args.action == "reboot":
-            reason = self._reason(hosts)
-            puppet = self._spicerack.puppet(hosts)
-            puppet.enable(reason)
 
     @property
     def restart_daemons(self) -> list:
