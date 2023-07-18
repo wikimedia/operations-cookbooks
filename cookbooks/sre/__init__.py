@@ -186,6 +186,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
     """
 
     disable_puppet_on_restart = False
+    disable_puppet_on_reboot = False
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Initialize the runner."""
@@ -299,20 +300,27 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         else:
             confirm_on_failure(hosts.run_sync, *restart_cmds)
 
-    def _reboot_action(self, hosts: RemoteHosts, _: Reason) -> None:
+    def _reboot_action(self, hosts: RemoteHosts, reason: Reason) -> None:
         """Reboot a set of hosts with downtime
 
         Arguments:
             hosts (`NodeSet`): A list of hosts to reboot
+            reason (`Reason`): the administrative reason to use to justify actions.
 
         """
         puppet = self._spicerack.puppet(hosts)
         reboot_time = datetime.utcnow()
-        confirm_on_failure(hosts.reboot, batch_size=len(hosts))
         # Avoid exceptions in dry_run mode:
         # * "Uptime higher than threshold"
         # * "Successful Puppet run too old"
         if not self._spicerack.dry_run:
+            if self.disable_puppet_on_reboot:
+                with puppet.disabled(reason):
+                    confirm_on_failure(hosts.reboot, batch_size=len(hosts))
+                    hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
+            else:
+                confirm_on_failure(hosts.reboot, batch_size=len(hosts))
+
             hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
             puppet.wait_since(reboot_time)
 
