@@ -15,12 +15,12 @@ class WDNSRestart(SREBatchBase):
     """Rolling restart of Wikimedia DNS services
 
     Example usage:
-        cookbook sre.cdn.roll-restart-wikimedia-dns \
+        cookbook sre.cdn.roll-restart-reboot-wikimedia-dns \
             --alias doh-codfw \
             --reason "Scheduled maintenance" \
             restart_daemons
 
-        cookbook sre.cdn.roll-restart-wikimedia-dns \
+        cookbook sre.cdn.roll-restart-reboot-wikimedia-dns \
             --query 'A:doh-eqiad and not P{doh1001*}' \
             --reason "Scheduled maintenance" \
             --task-id "T12345" \
@@ -29,7 +29,7 @@ class WDNSRestart(SREBatchBase):
             --grace-sleep 90 \
             restart_daemons
 
-        cookbook sre.cdn.roll-restart-wikimedia-dns \
+        cookbook sre.cdn.roll-restart-reboot-wikimedia-dns \
             --query 'A:doh-eqiad and not P{doh1001*}' \
             --reason "Scheduled maintenance" \
             --task-id "T12345" \
