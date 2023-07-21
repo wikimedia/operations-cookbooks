@@ -944,13 +944,13 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         if redfish_host.generation < 14:
             logger.error('%s: SKIPPING - iDRAC generation (%s) is too low to perform updates.  '
                          'please upgrade iDRAC/firmware manually',
-                         redfish_host.fqdn, redfish_host.generation)
+                         redfish_host.hostname, redfish_host.generation)
             return None
 
         if redfish_host.firmware_version < version.Version('3.30.30.30'):
             logger.error('%s: SKIPPING - iDRAC version (%s) is too low to perform updates.  '
                          'please upgrade iDRAC to version 3.30.30.30 before proceeding',
-                         redfish_host.fqdn, redfish_host.firmware_version)
+                         redfish_host.hostname, redfish_host.firmware_version)
             return None
         return redfish_host
 
