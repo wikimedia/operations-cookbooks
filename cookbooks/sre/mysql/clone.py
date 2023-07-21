@@ -2,10 +2,10 @@
 import logging
 from datetime import timedelta
 import re
-from getpass import getpass
 import time
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from wmflib.config import load_yaml_config
 from wmflib.interactive import AbortError, confirm_on_failure, ensure_shell_is_durable
 import transferpy.transfer
 from transferpy.Transferer import Transferer
@@ -77,6 +77,9 @@ class CloneMySQLRunner(CookbookRunnerBase):
         netbox_target = spicerack.netbox_server(str(self.target_host).split('.', maxsplit=1)[0])
         if netbox_source.as_dict()['site']['slug'] != netbox_target.as_dict()['site']['slug']:
             self.tp_options['encrypt'] = True
+        config = load_yaml_config(spicerack.config_dir / "mysql" / "config.yaml")
+        self.replication_user = config['replication_user']
+        self.replication_password = config['replication_password']
 
     @property
     def runtime_description(self):
@@ -124,11 +127,11 @@ class CloneMySQLRunner(CookbookRunnerBase):
         ]
         self._run_scripts(self.target_host, scripts)
 
-        repl_password = getpass(prompt='Please type the replication password: ')
         sql = (
             f"CHANGE MASTER TO master_host='{self.primary_host}', "
             f"master_port=3306, master_ssl=1, master_log_file='{binlog_file}', "
-            f"master_log_pos={repl_position}, master_user='repl', master_password='{repl_password}';"
+            f"master_log_pos={repl_position}, master_user='{self.replication_user}', "
+            f"master_password='{self.replication_user}';"
         )
         sql = sql.replace('"', '\\"')
         scripts = [
