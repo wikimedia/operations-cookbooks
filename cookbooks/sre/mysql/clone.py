@@ -131,7 +131,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
             f"CHANGE MASTER TO master_host='{self.primary_host}', "
             f"master_port=3306, master_ssl=1, master_log_file='{binlog_file}', "
             f"master_log_pos={repl_position}, master_user='{self.replication_user}', "
-            f"master_password='{self.replication_user}';"
+            f"master_password='{self.replication_password}';"
         )
         sql = sql.replace('"', '\\"')
         scripts = [
