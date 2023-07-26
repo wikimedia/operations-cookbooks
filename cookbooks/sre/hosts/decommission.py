@@ -32,6 +32,7 @@ PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'
 PUPPET_PRIVATE_REPO_PATH = '/srv/private'
 COMMON_STEPS_KEY = 'COMMON_STEPS'
 DEPLOYMENT_CHARTS_REPO_PATH = '/srv/deployment-charts'
+AUTHDNS_REPO_PATH = '/srv/authdns/git'
 
 
 @dataclass(frozen=True)
@@ -286,6 +287,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
         self.deployment_host = self.remote.query(self.dns.resolve_cname(DEPLOYMENT_HOST))
         self.patterns = get_grep_patterns(self.dns, self.decom_hosts)
         self.reason = self.spicerack.admin_reason('Host decommission', task_id=self.task_id)
+        self.authdns_hosts = spicerack.authdns_active_hosts
 
     @property
     def runtime_description(self):
@@ -425,12 +427,12 @@ class DecommissionHostRunner(CookbookRunnerBase):
         """Required by Spicerack API."""
         has_failures = False
         # Check for references in the Puppet and mediawiki-config repositories.
-        # TODO: once all the host DNS records are automatically generated from Netbox check also the DNS repository.
         check_patterns_in_repo((
             GitRepoPath(remote_host=self.puppet_master, path=PUPPET_REPO_PATH, pathspec=':!manifests/site.pp'),
             GitRepoPath(remote_host=self.puppet_master, path=PUPPET_PRIVATE_REPO_PATH),
             GitRepoPath(remote_host=self.deployment_host, path=MEDIAWIKI_CONFIG_REPO_PATH),
             GitRepoPath(remote_host=self.deployment_host, path=DEPLOYMENT_CHARTS_REPO_PATH),
+            GitRepoPath(remote_host=self.authdns_hosts, path=AUTHDNS_REPO_PATH),
         ), self.patterns)
 
         find_kerberos_credentials(self.kerberos_kadmin, self.decom_hosts)
