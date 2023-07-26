@@ -3,6 +3,8 @@ import logging
 import re
 import time
 
+from dataclasses import dataclass
+
 from cumin.transports import Command
 from pynetbox.core.query import RequestError
 from wmflib.dns import DnsError, DnsNotFound
@@ -15,7 +17,7 @@ from spicerack.icinga import IcingaError
 from spicerack.netbox import MANAGEMENT_IFACE_NAME, NetboxError
 from spicerack.ipmi import IpmiError
 from spicerack.puppet import get_puppet_ca_hostname
-from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError
+from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError, RemoteHosts
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.network import configure_switch_interfaces
@@ -32,28 +34,40 @@ COMMON_STEPS_KEY = 'COMMON_STEPS'
 DEPLOYMENT_CHARTS_REPO_PATH = '/srv/deployment-charts'
 
 
-def check_patterns_in_repo(host_paths, patterns):
+@dataclass(frozen=True)
+class GitRepoPath:
+    """Define a git repository to search for matches."""
+
+    remote_host: RemoteHosts
+    path: str
+    pathspec: str = ''
+
+
+def check_patterns_in_repo(repos: tuple[GitRepoPath, ...], patterns: list[str]):
     """Git grep for all the given patterns in the given hosts and path and ask for confirmation if any is found.
 
     Arguments:
-        host_paths (sequence): a sequence of 2-item tuples with the RemoteHost instance and the path of the
-            repositories to check.
-        patterns (sequence): a sequence of patterns to check.
+        repos: a sequence of GitRepoPath instances.
+        patterns: a sequence of patterns to check.
 
     """
-    grep_command = "git -C '{{path}}' grep -E '({patterns})'".format(patterns='|'.join(patterns))
+    grep_patterns = '|'.join(patterns)
     ask = False
-    for remote_host, path in host_paths:
-        logger.info('Looking for matches in %s:%s', remote_host, path)
-        for _nodeset, _output in remote_host.run_sync(Command(grep_command.format(path=path), ok_codes=[])):
+    for repo in repos:
+        logger.info('Looking for matches in %s:%s %s', repo.remote_host, repo.path, repo.pathspec)
+        grep_command = f"git -C '{repo.path}' grep -E '({grep_patterns})'"
+        if repo.pathspec:
+            grep_command += f" '{repo.pathspec}'"
+
+        for _nodeset, _output in repo.remote_host.run_sync(Command(grep_command, ok_codes=[])):
             ask = True
 
     if ask:
         ask_confirmation(
-            'Found match(es) in the Puppet or mediawiki-config repositories '
-            '(see above), proceed anyway?')
+            'Found match(es) in some git repositories for the host to be decommissioned '
+            '(see above), verify they were not left by mistake before proceeding!')
     else:
-        logger.info('No matches found in the Puppet or mediawiki-config repositories')
+        logger.info('No matches found for the host to be decommissioned in various git repositories')
 
 
 def get_grep_patterns(dns, decom_hosts):
@@ -413,10 +427,10 @@ class DecommissionHostRunner(CookbookRunnerBase):
         # Check for references in the Puppet and mediawiki-config repositories.
         # TODO: once all the host DNS records are automatically generated from Netbox check also the DNS repository.
         check_patterns_in_repo((
-            (self.puppet_master, PUPPET_REPO_PATH),
-            (self.puppet_master, PUPPET_PRIVATE_REPO_PATH),
-            (self.deployment_host, MEDIAWIKI_CONFIG_REPO_PATH),
-            (self.deployment_host, DEPLOYMENT_CHARTS_REPO_PATH),
+            GitRepoPath(remote_host=self.puppet_master, path=PUPPET_REPO_PATH, pathspec=':!manifests/site.pp'),
+            GitRepoPath(remote_host=self.puppet_master, path=PUPPET_PRIVATE_REPO_PATH),
+            GitRepoPath(remote_host=self.deployment_host, path=MEDIAWIKI_CONFIG_REPO_PATH),
+            GitRepoPath(remote_host=self.deployment_host, path=DEPLOYMENT_CHARTS_REPO_PATH),
         ), self.patterns)
 
         find_kerberos_credentials(self.kerberos_kadmin, self.decom_hosts)
