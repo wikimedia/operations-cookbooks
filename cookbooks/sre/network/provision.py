@@ -142,7 +142,7 @@ class ProvisionRunner(CookbookRunnerBase):
         # Refresh the netbox device
         self.netbox_device = self._get_netbox_device()
 
-    @retry(tries=20, backoff_mode='linear', failure_message='Device still not reachable, keep polling')
+    @retry(tries=60, backoff_mode='linear', failure_message='Device still not reachable, keep polling')
     def _poll_device(self, remote_device):
         """Poll the device via SSH until its reachable with the Homer's key."""
         command = 'show system uptime local'
