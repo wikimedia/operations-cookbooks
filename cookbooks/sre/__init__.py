@@ -318,11 +318,12 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                 with puppet.disabled(reason):
                     confirm_on_failure(hosts.reboot, batch_size=len(hosts))
                     hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
+                confirm_on_failure(puppet.run, quiet=True)
+
             else:
                 confirm_on_failure(hosts.reboot, batch_size=len(hosts))
-
-            hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
-            puppet.wait_since(reboot_time)
+                hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
+                puppet.wait_since(reboot_time)
 
     def _run_scripts(self, scripts: list, hosts: RemoteHosts) -> None:
         """Run a list of scripts
