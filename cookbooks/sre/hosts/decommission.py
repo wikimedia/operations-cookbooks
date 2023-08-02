@@ -229,8 +229,8 @@ class DecommissionHostRunner(CookbookRunnerBase):
             logger.debug("Query '%s' did not match any host or failed", args.query, exc_info=True)
             decom_hosts = NodeSet(args.query)
             ask_confirmation(
-                'ATTENTION: the query does not match any host in PuppetDB or failed\n'
-                'Hostname expansion matches {n} hosts: {hosts}\n'
+                'ATTENTION: the query DOES NOT MATCH any host in PuppetDB or failed\n'
+                'Hostname expansion matches {n} UNVERIFIED hosts: {hosts}\n'
                 'Do you want to proceed anyway?'
                 .format(n=len(decom_hosts), hosts=decom_hosts))
             self.decom_hosts = decom_hosts
@@ -255,6 +255,10 @@ class DecommissionHostRunner(CookbookRunnerBase):
         for fqdn in self.decom_hosts:
             hostname = fqdn.split('.')[0]
             self.netbox_servers[hostname] = spicerack.netbox_server(hostname)
+            netbox_fqdn = self.netbox_servers[hostname].fqdn
+            if netbox_fqdn and fqdn != netbox_fqdn:
+                raise RuntimeError(f'Mismatched FQDN {fqdn} does not match Netbox FQDN {netbox_fqdn}')
+
             if self.netbox_servers[hostname].virtual:
                 continue
 
