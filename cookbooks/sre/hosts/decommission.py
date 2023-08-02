@@ -60,7 +60,7 @@ def check_patterns_in_repo(repos: tuple[GitRepoPath, ...], patterns: list[str]):
         if repo.pathspec:
             grep_command += f" '{repo.pathspec}'"
 
-        for _nodeset, _output in repo.remote_host.run_sync(Command(grep_command, ok_codes=[])):
+        for _nodeset, _output in repo.remote_host.run_sync(Command(grep_command, ok_codes=[]), is_safe=True):
             ask = True
 
     if ask:
