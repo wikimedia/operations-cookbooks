@@ -159,7 +159,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.puppet = spicerack.puppet(self.remote_host)
         # The same as self.puppet but using the SSH key valid only during installation before the first Puppet run
         self.puppet_installer = spicerack.puppet(self.remote_installer)
-        self.puppet_configmaster = spicerack.puppet(self.remote.query('P:configmaster'))
+        self.puppet_configmaster = spicerack.puppet(
+            self.remote.query('P{P:configmaster} and not P{config-master[1-2]*}'))
 
         # DHCP automation
         try:
