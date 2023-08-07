@@ -1,14 +1,13 @@
 """Manage SONiC users SSH keys"""
 
-from base64 import b64decode
+from pathlib import Path
 from typing import Optional
 
 import logging
-import yaml
 
-from wmflib.requests import http_session
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
+from wmflib.config import load_yaml_config
 
 from cookbooks.sre.network import parse_results
 
@@ -32,6 +31,8 @@ class SonicSsh(CookbookBase):
         # TODO maybe add a <user> parameter to tackle single users
         parser = super().argument_parser()
         parser.add_argument('device', help='Short hostname.')
+        parser.add_argument('--homer-public-path', default='/srv/homer/public/', type=Path,
+                            help="Path to the local homer-public directory.")
         return parser
 
     def get_runner(self, args):
@@ -49,7 +50,8 @@ class SonicSshRunner(CookbookRunnerBase):
         self.dry_run = spicerack.dry_run
         self.remote = spicerack.remote()
         self.device = args.device
-        self.http_session = http_session(__name__)
+        self.homer_public_path = args.homer_public_path
+        self.http_session = spicerack.requests_session(__name__)
 
         self.netbox_device = self.netbox.api.dcim.devices.get(name=self.device)
         if not self.netbox_device:
@@ -71,14 +73,10 @@ class SonicSshRunner(CookbookRunnerBase):
 
     def get_wanted_users(self) -> dict:
         """Get the list of users from the source of truth."""
-        # From Gerrit homer-public until T335870 is done
-        # Can be replaced with reading /srv/homer/public/config/common.yaml too
-        homer_public_url = 'https://gerrit.wikimedia.org/r/plugins/gitiles/operations/homer/public'
-        common_config_url = f"{homer_public_url}/+/refs/heads/master/config/common.yaml?format=TEXT"
-        common_config_yaml = b64decode(self.http_session.get(common_config_url).content.decode("utf-8"))
-
         wanted_users = {}
-        for user in yaml.safe_load(common_config_yaml)['users']:
+        # From homer-public until T335870 is done
+        common_config = load_yaml_config(self.homer_public_path / 'config' / 'common.yaml')
+        for user in common_config['users']:
             wanted_users[user['name']] = user['sshkeys']
         return wanted_users
 
@@ -130,7 +128,7 @@ class SonicSshRunner(CookbookRunnerBase):
         configured_names = set(configured_users.keys())
         wanted_names = set(wanted_users.keys())
         if configured_names != wanted_names:
-            logger.warning("Discrepency between wanted and configured users, please run Homer to fix.")
+            logger.warning("Discrepancy between wanted and configured users, please run Homer to fix.")
             logger.warning("Should be removed: %s.", configured_names.difference(wanted_names))
             logger.warning("Should be created: %s.", wanted_names.difference(configured_names))
 
