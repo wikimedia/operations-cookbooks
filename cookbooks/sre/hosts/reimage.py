@@ -403,24 +403,17 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         @retry(tries=50, backoff_mode='linear')
         def poll_puppetdb():
             """Poll PuppetDB until we find the Nagios_host resource for the newly installed host."""
-            query = {
-                "query": [
-                    "and",
-                    ["=", "certname", self.fqdn],
-                    ["=", "type", "Nagios_host"],
-                    ["=", "exported", True]
-                ]
-            }
-            response = self.requests.post(
-                'https://puppetdb-api.discovery.wmnet:8090/pdb/query/v4/resources',
-                json=query
-            )
+            puppetdb_host = self.dns.resolve_ptr(self.dns.resolve_ipv4('puppetdb-api.discovery.wmnet')[0])[0]
+            response = self.requests.post(f'https://{puppetdb_host}/pdb/query/v4/resources/Nagios_host/{self.host}')
             json_response = response.json()
             if not json_response:  # PuppetDB returns empty list for non-matching results
                 raise SpicerackError(f'Nagios_host resource with title {self.host} not found yet')
 
             if len(json_response) != 1:
                 raise RuntimeError(f'Expected 1 result from PuppetDB got {len(json_response)}')
+            if json_response[0]['exported'] is not True:
+                raise RuntimeError(
+                    f'Expected the Nagios_host resource to be exported, got: {json_response[0]["exported"]}')
 
         poll_puppetdb()
         self.host_actions.success('Found Nagios_host resource for this host in PuppetDB')
