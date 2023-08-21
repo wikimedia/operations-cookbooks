@@ -22,7 +22,7 @@ class Batch(SREBatchBase):
     """
 
     batch_default = 1
-    min_grace_sleep = 1200
+    min_grace_sleep = 300
     grace_sleep = 1800
     valid_actions = ('reboot',)
 
