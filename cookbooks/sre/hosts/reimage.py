@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class Reimage(CookbookBase):
-    """Image or re-image a physical host.
+    """Image or re-image a physical host or a ganeti VM
 
     All data will be lost unless a specific partman recipe to retain partition data is used.
 
