@@ -77,8 +77,10 @@ class TlsRunner(CookbookRunnerBase):
         self.remote_host = self.remote.query('D{' + self.device_fqdn + '}')
         if self.netbox_device.device_type.manufacturer.slug == 'dell':
             self.platform = 'sonic'
+            self.port = 8080
         elif self.netbox_device.device_type.manufacturer.slug == 'juniper':
             self.platform = 'junos'
+            self.port = 32767
         else:
             raise RuntimeError(f'{self.device}: invalid manufacturer, must be dell or juniper.')
 
@@ -124,7 +126,7 @@ class TlsRunner(CookbookRunnerBase):
         """Query a TLS endpoint and return its certificate."""
         try:
             # TODO add the "timeout" parameter once cumin hosts are running python >= 3.10 to speed things up
-            cert_pem = get_server_certificate((self.device_fqdn, 8080))
+            cert_pem = get_server_certificate((self.device_fqdn, self.port))
             return x509.load_pem_x509_certificate(str.encode(cert_pem))
         except (ConnectionRefusedError, gaierror, TimeoutError):
             logger.info("%s: ❌ Can't connect to device, assuming initial bootstrap.", self.device)
