@@ -150,12 +150,9 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
     def _ganeti_netbox_sync(self):
         """Perform a sync from Ganeti to Netbox in the affected DC."""
-        logger.info('Syncing VMs in DC %s to Netbox', self.group.site)
-        cluster_id = ''
-        if self.group.site in PER_RACK_VLAN_DATACENTERS:
-            cluster_id = self.group.cluster.fqdn.split('.')[0][-2:]
+        logger.info('Syncing VMs in cluster group %s to Netbox', self.group.name)
         self.spicerack.netbox_master_host.run_sync(
-            f'systemctl start netbox_ganeti_{self.group.site}{cluster_id}_sync.service')
+            f'systemctl start netbox_ganeti_{self.group.name}_sync.service')
         self.need_netbox_sync = False
 
     def run(self):  # pylint: disable=too-many-locals disable=too-many-statements
