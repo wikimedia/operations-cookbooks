@@ -31,4 +31,4 @@ def set_default_group(netbox, args) -> None:
         raise RuntimeError(f'Ganeti cluster group {args.cluster} in Netbox has {len(groups)} clusters, specify one '
                            'via the --group argument.')
 
-    args.group = groups[0].name
+    args.group = next(groups).name
