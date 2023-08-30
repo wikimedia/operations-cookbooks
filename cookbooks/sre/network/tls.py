@@ -147,7 +147,7 @@ class TlsRunner(CookbookRunnerBase):
             return True
         if cert_name != self.device_fqdn:
             logger.info("%s: 🟡 Certificate doesn't match device FQDN (%s vs. %s).", self.device,
-                        cert_org_name,
+                        cert_name,
                         self.device_fqdn)
             return True
         return False
