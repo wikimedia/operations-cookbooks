@@ -244,7 +244,7 @@ class TlsRunner(CookbookRunnerBase):
             self.remote_host.run_sync("start shell sh command \"cat /var/preserve/key.pem >> /var/tmp/cert.pem\"",
                                       print_output=self.verbose, print_progress_bars=False)
 
-        self.remote_host.run_sync((f"configure;set security certificates local {self.device}-cert "
+        self.remote_host.run_sync((f"configure;set security certificates local {self.device_fqdn.split('.')[0]}-cert "
                                    "load-key-file /var/tmp/cert.pem;commit"),
                                   print_output=self.verbose, print_progress_bars=False)
         self.remote_host.run_sync("file delete /var/tmp/cert.pem",
