@@ -91,8 +91,8 @@ class CloneMySQLRunner(CookbookRunnerBase):
         # Guard against useless conftool messages
         logging.getLogger("conftool").setLevel(logging.WARNING)
         hosts_to_downtime = [list(self.source_host.hosts)[0], list(self.target_host.hosts)[0]]
-        with self.alerting_hosts(hosts_to_downtime).downtimed(self.admin_reason, duration=timedelta(hours=48)):
-            self._run_clone()
+        self.alerting_hosts(hosts_to_downtime).downtime(self.admin_reason, duration=timedelta(hours=48))
+        self._run_clone()
 
     def _run_clone(self):
         self.logger.info('Stopping mariadb on %s', self.source_host)
