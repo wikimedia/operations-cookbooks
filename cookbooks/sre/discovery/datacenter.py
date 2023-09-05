@@ -34,6 +34,10 @@ EXCLUDED_SERVICES = {
     "toolhub": "T288685: needs to match m5 database cluster replication",
     "wdqs": "T329193: capacity limitations in codfw",
     "wdqs-ssl": "T329193: capacity limitations in codfw",
+    "apt": "T330849: needs additional Puppet change, not in scope for bi-annual switchovers",
+    "netbox": "T234997: caused issues on last switchover, should stay in eqiad",
+    "k8s-ingress-staging": "should stay in eqiad",
+    "k8s-ingress-aux": "no cluster in codfw",
 }
 
 
