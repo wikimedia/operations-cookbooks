@@ -1,12 +1,12 @@
 """WDQS data transfer cookbook for source node
 
 Usage example for hosts behind lvs:
-    cookbook sre.wdqs.data-transfer --source wdqs1004.eqiad.wmnet --dest wdqs1003.eqiad.wmnet
-     --reason "allocator troubles" --blazegraph_instance wikidata --task-id T12345
+    cookbook sre.wdqs.data-transfer --source wdqs1004.eqiad.wmnet --dest wdqs1003.eqiad.wmnet \
+    --lvs-strategy both --reason "allocator troubles" --blazegraph_instance wdqs-all --task-id T12345
 
-Usage example for test hosts:
-    cookbook sre.wdqs.data-transfer --source wdqs1009.eqiad.wmnet --dest wdqs1010.eqiad.wmnet
-     --reason "moving away from legacy updater" --lvs_strategy --blazegraph_instance wikidata --task-id T12345
+Usage example for test hosts (not lvs managed):
+    cookbook sre.wdqs.data-transfer --source wdqs1009.eqiad.wmnet --dest wdqs1010.eqiad.wmnet \
+    --lvs-strategy neither --reason "moving away from legacy updater" --blazegraph_instance wdqs-all --task-id T12345
 
 """
 import argparse
@@ -45,7 +45,7 @@ BLAZEGRAPH_INSTANCES = {
     },
 }
 
-LVS_STRATEGY = ['ignore', 'source-only', 'dest-only', 'both']
+LVS_STRATEGY = ['neither', 'source-only', 'dest-only', 'both']
 
 __title__ = "WDQS data transfer cookbook"
 logger = logging.getLogger(__name__)
