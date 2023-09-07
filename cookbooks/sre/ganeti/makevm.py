@@ -277,7 +277,7 @@ def make_fqdn(hostname: str, network: str, datacenter: str) -> str:
         if first != expected:
             raise RuntimeError(f'Hostname expected to match {expected}###, got {match.group()} instead')
 
-    if network == 'public':
+    if network in ('public', 'sandbox'):
         return f'{hostname}.wikimedia.org'
 
     return f'{hostname}.{datacenter}.wmnet'
