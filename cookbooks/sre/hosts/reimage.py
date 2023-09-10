@@ -117,8 +117,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.netbox_server = spicerack.netbox_server(self.host, read_write=True)
         self.netbox_data = self.netbox_server.as_dict()
 
-        ask_confirmation(f'ATTENTION: destructive action for host: {self.host}\nAre you sure to proceed?')
-
+        ask_confirmation(f'ATTENTION: Destructive action for {self.host}. Proceed?')
         # Shortcut variables
         self.fqdn = self.netbox_server.fqdn
         self.output_filename = self._get_output_filename(spicerack.username)
@@ -137,6 +136,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.spicerack: Spicerack = spicerack
         self.requests = spicerack.requests_session(__name__, timeout=(5.0, 30.0))
         self.virtual: bool = self.netbox_server.virtual
+
+        print(f'Starting reimage on {self.host}. You can check progress via serial console '
+              f'or by running `install-console {self.fqdn}` on any cumin host')
 
         try:
             self.remote_host = self.remote.query(self.fqdn)
@@ -252,7 +254,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if self.rollback_clear_dhcp_cache:
             self._clear_dhcp_cache()
 
-        self.host_actions.failure('**The reimage failed, see the cookbook logs for the details**')
+        self.host_actions.failure('**The reimage failed, see the cookbook logs for the details,'
+                                  f'You can also try typing "install-console" {self.fqdn} to get a root shell'
+                                  'but depending on the failure this may not work.**')
         logger.error('Reimage executed with errors:\n%s\n', self.actions)
         if self.phabricator is not None:
             self.phabricator.task_comment(
