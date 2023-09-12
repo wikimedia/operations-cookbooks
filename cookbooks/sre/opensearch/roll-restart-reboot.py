@@ -13,7 +13,7 @@ from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
 
 logger = logging.getLogger(__name__)
 
-CLUSTERGROUPS = ("datasearchub",)
+CLUSTERGROUPS = ("datahubsearch", "logstash-eqiad", "logstash-codfw")
 
 
 class ClusterHealthNotGreen(Exception):
@@ -52,7 +52,7 @@ class RollingOperationRunner(SREBatchRunnerBase):
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Required by SREBatchRunnerBase"""
         super().__init__(args, spicerack)
-        self.http_session = self._spicerack.requests_session(__name__)
+        self._http_session = self._spicerack.requests_session(__name__)
 
     @retry(
         tries=60,
@@ -63,7 +63,7 @@ class RollingOperationRunner(SREBatchRunnerBase):
     def check_for_green_indices(self, hosts: RemoteHosts):
         """Make sure the cluster indices are all green"""
         for host in hosts.hosts:
-            resp = self.http_session.get(f"http://{host}:9200/_cluster/health")
+            resp = self._http_session.get(f"http://{host}:9200/_cluster/health")
             resp.raise_for_status()
             data = resp.json()
             if data["status"] != "green":
@@ -80,7 +80,13 @@ class RollingOperationRunner(SREBatchRunnerBase):
     @property
     def restart_daemons(self) -> list:
         """Property to return a list of daemons to restart"""
-        return ["opensearch_1@datahub"]
+        # The service name depends on the cluster
+        # datahubsearch: opensearch_1@datahub.service
+        # logstash: opensearch_2@production-elk7-eqiad.service
+        # As systemd suports glob syntax in its parameter syntax
+        # (https://www.freedesktop.org/software/systemd/man/systemctl.html#Parameter%20Syntax),
+        # we can generalize this into a simple pattern
+        return ["opensearch_[1-2]@*.service"]
 
     def pre_action(self, hosts: RemoteHosts) -> None:
         """Make sure the cluster is in a green state before proceeding with the action"""
