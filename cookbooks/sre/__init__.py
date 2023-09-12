@@ -653,7 +653,7 @@ class SREDiscoveryNoLVSBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         self._pool(exclude=current_site)
         self.service_discovery.depool(current_site)
         # Sleep to allow confd::file to refresh
-        self._sleep(15)
+        self._sleep(30)
         self.service.check_dns_state(self.ip_per_dc_map)
         self._spicerack.run_cookbook("sre.dns.wipe-cache", [self.discovery_record])
 
@@ -666,6 +666,6 @@ class SREDiscoveryNoLVSBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         report = super().run()
         self._pool_initial()
         # Sleep to allow confd::file to refresh
-        self._sleep(15)
+        self._sleep(30)
         self.service.check_dns_state(self.ip_per_dc_map)
         return report
