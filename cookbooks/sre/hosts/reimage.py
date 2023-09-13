@@ -360,7 +360,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.remote_installer.run_sync(env_command, print_output=False, print_progress_bars=False)
         except RemoteExecutionError:
             ask_confirmation('Unable to verify that the host is inside the Debian installer, please verify manually '
-                             f'with: sudo install_console {self.fqdn}')
+                             f'with: sudo install-console {self.fqdn}')
 
         self.host_actions.success('Host up (Debian installer)')
 
@@ -379,7 +379,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.remote_installer.run_sync(f'! {env_command}', print_output=False, print_progress_bars=False)
         except RemoteExecutionError:
             ask_confirmation('Unable to verify that the host rebooted into the new OS, it might still be in the '
-                             f'Debian installer, please verify manually with: sudo install_console {self.fqdn}')
+                             f'Debian installer, please verify manually with: sudo install-console {self.fqdn}')
 
         result = self.remote_installer.run_sync('lsb_release -sc', print_output=False, print_progress_bars=False)
 
@@ -606,7 +606,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 results = e.results
                 logger.error(('First Puppet run failed:\n'
                               'Check the logs in %s and at https://puppetboard.wikimedia.org/node/%s\n'
-                              'Inspect the host with: sudo install_console %s'), output_filename, self.fqdn, self.fqdn)
+                              'Inspect the host with: sudo install-console %s'), output_filename, self.fqdn, self.fqdn)
                 self.host_actions.warning(f'//First Puppet run failed and logged in {output_filename}, asking the '
                                           'operator what to do//')
                 raise
