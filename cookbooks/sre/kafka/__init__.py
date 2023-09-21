@@ -38,23 +38,4 @@ There are some things to keep into consideration:
    same time it becomes a big problem).
 """
 
-import argparse
-
-from spicerack.cookbook import ArgparseFormatter
-
-
 __title__ = __doc__
-
-
-def parse_kafka_arguments(description, cluster_choices):
-    """Helper for arguments that are shared between Kafka cookbooks."""
-    combined_description = '\n\n'.join([__doc__, 'Cookbook-specific documentation:', description])
-    parser = argparse.ArgumentParser(description=combined_description, formatter_class=ArgparseFormatter)
-    parser.add_argument('cluster', help='The name of the Kafka cluster to work on.',
-                        choices=cluster_choices)
-    parser.add_argument('--batch-sleep-seconds', type=float, default=300.0,
-                        help="Seconds to sleep between each broker restart.")
-    parser.add_argument('--sleep-before-pref-replica-election', type=int, default=900,
-                        help="Seconds to sleep between a broker restart and "
-                             "the kafka preferred-replica-election execution.")
-    return parser
