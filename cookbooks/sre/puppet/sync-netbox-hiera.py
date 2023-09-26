@@ -173,8 +173,6 @@ class NetboxHiera(CookbookBase):
 class NetboxHieraRunner(CookbookRunnerBase):
     """Collect netbox hiera data."""
 
-    # TODO: get rid of this hard coded directory
-    client_repo_dir = "/srv/netbox-hiera"
     hiera_prefix = "profile::netbox"
     host_prefix = f"{hiera_prefix}::host"
 
@@ -196,6 +194,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
         self.args = args
         self.reposync = spicerack.reposync("netbox-hiera")
         self.puppetmasters = spicerack.remote().query("A:puppetmaster")
+        self.puppetservers = spicerack.remote().query("A:puppetserver")
         self.reason = spicerack.admin_reason(args.message, task_id=args.task_id)
         self._uri = f"{config['api_url']}graphql/"
         self._headers = {"Authorization": f"Token {config['api_token_ro']}"}
@@ -465,6 +464,20 @@ class NetboxHieraRunner(CookbookRunnerBase):
         with common_path.open("w") as common_fh:
             yaml.safe_dump(common_data, common_fh, default_flow_style=False)
 
+    def update_puppetservers(self, hexsha: str) -> None:
+        """Update the puppet masters to a specific hash
+
+        Arguments:
+            hexsha (str): The hexsha to checkout
+
+        """
+        client_repo_dir = "/srv/git/netbox-hiera"
+        commands = [
+            f"sudo -u gitpuppet git -C {client_repo_dir} fetch",
+            f"sudo -u gitpuppet git -C {client_repo_dir} merge --ff-only {hexsha}",
+        ]
+        confirm_on_failure(self.puppetservers.run_sync, *commands)
+
     def update_puppetmasters(self, hexsha: str) -> None:
         """Update the puppet masters to a specific hash
 
@@ -472,9 +485,10 @@ class NetboxHieraRunner(CookbookRunnerBase):
             hexsha (str): The hexsha to checkout
 
         """
+        client_repo_dir = "/srv/netbox-hiera"
         commands = [
-            f"git -C {self.client_repo_dir} fetch",
-            f"git -C {self.client_repo_dir} merge --ff-only {hexsha}",
+            f"git -C {client_repo_dir} fetch",
+            f"git -C {client_repo_dir} merge --ff-only {hexsha}",
         ]
         confirm_on_failure(self.puppetmasters.run_sync, *commands)
 
@@ -483,6 +497,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
         if self.args.sha:
             self.reposync.force_sync()
             self.update_puppetmasters(self.args.sha)
+            self.update_puppetservers(self.args.sha)
             return 0
         try:
             with self.reposync.update(str(self.reason)) as working_dir:
@@ -497,4 +512,5 @@ class NetboxHieraRunner(CookbookRunnerBase):
         if self.args.check:
             return 1
         self.update_puppetmasters(self.reposync.hexsha)
+        self.update_puppetservers(self.reposync.hexsha)
         return 0
