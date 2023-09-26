@@ -52,11 +52,11 @@ class Failover(CookbookBase):
         """Parses arguments"""
         parser = super().argument_parser()
         parser.add_argument(
-            "--switch-from",
+            "--switch-from-host",
             help="Host that we want to switch away from (e.g., existing gitlab.wm.o, will become gitlab-replica.wm.o)",
         )
         parser.add_argument(
-            "--switch-to",
+            "--switch-to-host",
             help="Host that we want to switch to (e.g., existing gitlab-replica.wm.o, will become gitlab.wm.o)",
         )
         parser.add_argument(
