@@ -26,8 +26,10 @@ def configure_switch_interfaces(remote: Remote, netbox: Netbox, netbox_data: dic
     """
     # Get all the device's main interfaces (production, connected)
     # Most servers have 1 uplink, some have 2, a few have more
-    nb_device_interfaces = netbox.api.dcim.interfaces.filter(
-        device_id=netbox_data['id'], mgmt_only=False, connected=True)
+    nb_device_interfaces = list(netbox.api.dcim.interfaces.filter(
+        device_id=netbox_data['id'], mgmt_only=False, connected=True))
+    if not nb_device_interfaces:
+        raise RuntimeError(f"No non-mgmt connected interfaces found for {netbox_data['name']}. Please check Netbox.")
     # Tackle interfaces one at a time
     for nb_device_interface in nb_device_interfaces:
 
