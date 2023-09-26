@@ -45,7 +45,7 @@ class Failover(CookbookBase):
     Usage example:
 
     # Changes gitlab.wmo from gitlab1003 to gitlab2002, and gitlab-replica.wmo from gitlab2002 to gitlab1003
-    cookbook sre.gitlab.failover --switch-from gitlab1003 --switch-to gitlab2002 -t T12345
+    cookbook sre.gitlab.failover --switch-from-host gitlab1003 --switch-to-host gitlab2002 -t T12345
     """
 
     def argument_parser(self) -> ArgumentParser:
@@ -61,7 +61,7 @@ class Failover(CookbookBase):
         )
         parser.add_argument(
             "-t",
-            "--task",
+            "--task-id",
             required=False,
             help="Optional task ID to refer to in the downtime message",
         )
