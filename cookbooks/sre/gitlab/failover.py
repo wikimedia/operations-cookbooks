@@ -1,13 +1,12 @@
 """GitLab failover cookbook"""
 
-import time
 import logging
 
-from datetime import timedelta, date
+from datetime import timedelta
 from argparse import ArgumentParser
 from urllib.parse import urlparse
 
-from spicerack.remote import RemoteHosts, RemoteExecutionError
+from spicerack.remote import RemoteHosts
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation, get_secret, confirm_on_failure
 from cookbooks.sre import CookbookBase, CookbookRunnerBase, PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.gitlab import get_gitlab_url, get_disk_usage_for_path, pause_runners, unpause_runners
@@ -242,48 +241,12 @@ class FailoverRunner(CookbookRunnerBase):
         logger.info("Creates a backup on the switch_from host.")
         logger.info("*** THIS IS SLOW. IT WILL TAKE 30-45 MINUTES ***")
 
-        # Keep track of when we started the backup. Then look for filenames
-        # newer than this to get the specific file to transfer to the new host
-        time_backup_started = time.time()
-
         self.switch_from_host.run_sync(
-            "/usr/bin/gitlab-backup create CRON=1 STRATEGY=copy "
-            'GZIP_RSYNCABLE="true" GITLAB_BACKUP_MAX_CONCURRENCY="4" '
-            'GITLAB_BACKUP_MAX_STORAGE_CONCURRENCY="2"',
+            f"{BACKUP_DIRECTORY}/gitlab-backup.sh failover",
             print_progress_bars=False
         )
 
-        return self.find_backup_file(time_backup_started)
-
-    def find_backup_file(self, backup_start_time: float) -> str:
-        """Searches for the most recently created backup file"""
-        today = date.today().strftime("%Y_%m_%d")
-        file_pattern = f"*_{today}*_gitlab_backup.tar"
-
-        try:
-            results = self.switch_from_host.run_sync(
-                f"ls -t1 {BACKUP_DIRECTORY}/{file_pattern}",
-                print_progress_bars=False,
-                is_safe=True
-            )
-        except RemoteExecutionError:
-            logger.error("Couldn't list backup files, caught an exception")
-            raise
-
-        lines = []
-        for _, output in results:
-            lines = output.message().decode().split()
-
-        file = lines[0].split("/")[-1]
-        # ls -t1 will list files in date order, newest first. We can assume the first file is newest
-        first_file_timestamp = file.split("_")[0]
-        # If we found a file, but it wasn't new enough, we might be in dry_run mode, since a new backup was never made
-        if int(first_file_timestamp) < int(backup_start_time) and not self.spicerack.dry_run:
-            raise RuntimeError(
-                f"Found {file}, but it is older than our backup start time {backup_start_time}"
-            )
-
-        return file
+        return 'failover_gitlab_backup.tar'
 
     def transfer_backup_file(self, backup_file: str) -> None:
         """Transfers backup file from old to new Gitlab host"""
