@@ -322,7 +322,7 @@ def run(args, spicerack):
     def reload_wikibase(reload_fn, mutation_topic):
         prometheus = spicerack.prometheus()
         hostname = get_hostname(args.host)
-        consumer_definition = ConsumerDefinition(get_site(hostname, spicerack), 'main', hostname)
+        consumer_definition = ConsumerDefinition(get_site(hostname, spicerack.netbox()), 'main', hostname)
         reload_fn(remote_host, puppet, spicerack.kafka(), {mutation_topic: kafka_timestamp},
                   consumer_definition, reason)
         logger.info('Data reload for blazegraph is complete. Waiting for updater to catch up')

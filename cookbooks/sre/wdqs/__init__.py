@@ -37,11 +37,10 @@ def wait_for_updater(prometheus, site, remote_host):
         raise ValueError("Let's wait for updater to catch up (lag of {} is too high)".format(lag))
 
 
-def get_site(host, spicerack):
+def get_site(host, netbox):
     """Get site for the host."""
-    netbox_server = spicerack.netbox_server(host)
-    site = netbox_server.as_dict()['site']['slug']
-    return site
+    server = netbox.get_server(host)
+    return server.as_dict()['site']['slug']
 
 
 def get_hostname(fqdn):
