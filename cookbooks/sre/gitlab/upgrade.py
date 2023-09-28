@@ -47,6 +47,8 @@ class Upgrade(CookbookBase):
         parser.add_argument('-r', '--reason', required=True,
                             help=('The reason for the downtime. The current username and originating host are '
                                   'automatically added.'))
+        parser.add_argument('-s', '--skip-replica-backups', help='Skips creating a backup on replica hosts',
+                            action='store_true')
         parser.add_argument('-t', '--task-id', required=False,
                             help='An optional task ID to refer in the downtime message (i.e. T12345).')
         return parser
@@ -74,6 +76,10 @@ class UpgradeRunner(CookbookRunnerBase):
         self.admin_reason = spicerack.admin_reason(args.reason)
         self.url = get_gitlab_url(self.remote_host)
         self.target_version = args.version
+
+        if args.skip_replica_backups and not self.check_can_skip_backup():
+            raise RuntimeError(f"--skip_replica-backups can't be used on {self.url}")
+        self.skip_replica_backups = args.skip_replica_backups
 
         self.token = get_secret('GitLab API Token')
         self.gitlab_instance = gitlab.Gitlab(self.url, private_token=self.token)
@@ -114,8 +120,11 @@ class UpgradeRunner(CookbookRunnerBase):
             'broadcast_type': 'notification'
         })
         self.preload_debian_package()
-        self.create_data_backup()
-        self.create_config_backup()
+        if self.skip_replica_backups:
+            logger.info("Skipping creation of backups")
+        else:
+            self.create_data_backup()
+            self.create_config_backup()
         self.fail_for_background_migrations()
         self.fail_for_running_backup()
         paused_runners = pause_runners(self.token, self.url, dry_run=self.spicerack.dry_run)
@@ -156,6 +165,12 @@ class UpgradeRunner(CookbookRunnerBase):
         """Available disk space must be below DISK_HIGH_THRESHOLD."""
         if get_disk_usage_for_path(self.remote_host, BACKUP_PATH) > DISK_HIGH_THRESHOLD:
             raise RuntimeError(f"Not enough disk space in {BACKUP_PATH}")
+
+    def check_can_skip_backup(self):
+        """Check that we aren't running on the "production" host (i.e., gitlab.wm.o)"""
+        if "gitlab.wikimedia.org" in self.url:
+            return False
+        return True
 
     def create_data_backup(self):
         """Create data backup"""
