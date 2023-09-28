@@ -1,5 +1,5 @@
 """Maps master rolling restart/reboot cookbook."""
-from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
+from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
 
 
 class MapsMasterRestartReboot(SREBatchBase):
@@ -21,7 +21,7 @@ class MapsMasterRestartReboot(SREBatchBase):
         return MapsMasterRestartRebootRunner(args, self.spicerack)
 
 
-class MapsMasterRestartRebootRunner(SRELBBatchRunnerBase):
+class MapsMasterRestartRebootRunner(SREBatchRunnerBase):
     """Roll restart an maps master"""
 
     @property
