@@ -125,7 +125,7 @@ class FailoverRunner(CookbookRunnerBase):
         self.maybe_task_comment(f'Cookbook {__name__} ({self.runtime_description}) started')
 
         alerting_hosts = self.spicerack.alerting_hosts(self.switch_from_host.hosts | self.switch_to_host.hosts)
-        alerting_hosts.downtime(self.reason, duration=timedelta(hours=2))
+        alerting_hosts.downtime(self.reason, duration=timedelta(hours=4))
 
         self.spicerack.puppet(self.switch_from_host).disable(self.reason)
         self.spicerack.puppet(self.switch_to_host).disable(self.reason)
