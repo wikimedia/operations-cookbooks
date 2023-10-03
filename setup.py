@@ -27,7 +27,8 @@ extras_require = {
         'types-python-dateutil',
         'types-PyYAML',
         'types-redis',
-        'types-requests',
+        # Uppe limit because it requires urllib3>2, incompatible with elasticsearch, elasticsearch-curator and botocore
+        'types-requests<2.31.0.7',
         'types-setuptools',
     ],
     'prospector': [
