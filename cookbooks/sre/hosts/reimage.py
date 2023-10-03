@@ -2,6 +2,7 @@
 import ipaddress
 import logging
 import os
+import re
 import time
 
 from datetime import datetime
@@ -265,10 +266,12 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         for obj in self.confctl_services:
             if obj.pooled == self.args.conftool_value:
                 continue  # Nothing to do
-            tags = ','.join(f'{k}={v}' for k, v in obj.tags.items())
-            commands.append(f"sudo confctl select '{tags}' set/pooled={obj.pooled}")
+            tags = [f'name={re.escape(self.fqdn)}']
+            tags += [f'{k}={re.escape(v)}' for k, v in obj.tags.items()]
+            tags_line = ','.join(tags)
+            commands.append(f"sudo confctl select '{tags_line}' set/pooled={obj.pooled}")
             if obj.weight <= 0:
-                weights.append("sudo confctl select '{tags}' set/weight=NN")
+                weights.append("sudo confctl select '{tags_line}' set/weight=NN")
 
         if weights:
             weights_lines = '\n'.join(weights)
