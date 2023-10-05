@@ -160,6 +160,8 @@ class FailoverRunner(CookbookRunnerBase):
             f"Once you are certain please merge the change to set the puppet role for {self.switch_from_host}, "
             "and we will re-enable and run puppet."
         )
+
+        self.switch_from_host.run_sync("gitlab-ctl deploy-page down", progress_bars=False, is_safe=False)
         self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
 
         self.switch_from_host.run_sync("systemctl start ssh-gitlab", print_progress_bars=False)
