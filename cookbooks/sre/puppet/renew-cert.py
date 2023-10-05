@@ -21,14 +21,13 @@ class RenewCert(CookbookBase):
 
     Usage example:
         cookbook sre.hosts.renew-cert sretest1001.eqiad.wmnet
-        cookbook sre.hosts.renew-cert --allow-alt-names --installer sretest1001.eqiad.wmnet
+        cookbook sre.hosts.renew-cert --installer sretest1001.eqiad.wmnet
     """
 
     def argument_parser(self):
         """Parse arguments"""
         parser = super().argument_parser()
         parser.add_argument('query', help='A single host whose puppet certificate should be renewed')
-        parser.add_argument('--allow-alt-names', action='store_true', help='To allow SAN in the Puppet certificate')
         parser.add_argument('--installer', action='store_true',
                             help=('To use the installer SSH key to connect to the host, the one set by the Debian '
                                   'installer and valid until the first Puppet run. Needed for example when '
@@ -45,7 +44,6 @@ class RenewCertRunner(CookbookRunnerBase):
 
     def __init__(self, args, spicerack):
         """Initialize the runner."""
-        self.allow_alt_names = args.allow_alt_names
         self.installer = args.installer
 
         hosts = spicerack.remote(installer=self.installer).query(args.query)
@@ -81,6 +79,6 @@ class RenewCertRunner(CookbookRunnerBase):
             self.puppet.disable(self.reason)
         fingerprints = self.puppet.regenerate_certificate()
         self.puppet_master.wait_for_csr(self.host)
-        self.puppet_master.sign(self.host, fingerprints[self.host], self.allow_alt_names)
+        self.puppet_master.sign(self.host, fingerprints[self.host])
         if not self.installer:
             self.puppet.run(enable_reason=self.reason, quiet=True)
