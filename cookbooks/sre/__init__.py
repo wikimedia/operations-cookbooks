@@ -652,8 +652,6 @@ class SREDiscoveryNoLVSBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         current_site = self._dc_indexes[host_group_idx]
         self._pool(exclude=current_site)
         self.service_discovery.depool(current_site)
-        # Sleep to allow confd::file to refresh
-        self._sleep(30)
         self.service.check_dns_state(self.ip_per_dc_map)
         self._spicerack.run_cookbook("sre.dns.wipe-cache", [self.discovery_record])
 
@@ -665,7 +663,5 @@ class SREDiscoveryNoLVSBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         """Perform rolling reboot servers in batches"""
         report = super().run()
         self._pool_initial()
-        # Sleep to allow confd::file to refresh
-        self._sleep(30)
         self.service.check_dns_state(self.ip_per_dc_map)
         return report
