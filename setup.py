@@ -7,6 +7,7 @@ from setuptools import find_namespace_packages, setup
 install_requires = [
     'aiohttp',
     'cryptography',
+    'packaging',
     'prettytable',
     'python-dateutil',
     'python-gitlab==3.11.0',
