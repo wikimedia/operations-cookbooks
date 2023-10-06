@@ -1,5 +1,6 @@
 """Add a new node to a Ganeti cluster"""
 import logging
+import socket
 
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -132,8 +133,9 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
              'remove the stale swap entry from fstab as well'),
         )
 
+        host_ip = socket.gethostbyname(self.fqdn)
         self.validate_state(
-            f'grep {self.fqdn} /etc/ferm/conf.d/10_ganeti_ssh_cluster',
+            f'grep {host_ip} /etc/ferm/conf.d/10_ganeti_ssh_cluster',
             ('The node cannot be found in the Ferm config of the Ganeti master.'
              'Make sure to add it to the profile::ganeti::nodes Hiera config.'),
             run_on_masternode=True,
