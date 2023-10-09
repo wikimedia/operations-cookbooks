@@ -42,12 +42,18 @@ def pause_runners(token: str, url: str, dry_run: bool = True):
     """Pause all active runners"""
     gitlab_instance = gitlab.Gitlab(url, private_token=token)
     active_runners = gitlab_instance.runners.all(scope='active', all=True)
+    paused_runners = []
     for runner in active_runners:
         if not dry_run:
-            runner.paused = True
-            runner.save()
+            try:
+                runner.paused = True
+                runner.save()
+            except (gitlab.exceptions.GitlabHttpError, gitlab.exceptions.GitlabUpdateError) as caught_exception:
+                logger.error("Failed to pause runner %s with error %s", runner, caught_exception.error_message)
+                continue
+        paused_runners.append(runner)
         logger.info('Paused %s runner', runner.id)
-    return active_runners
+    return paused_runners
 
 
 @retry(
