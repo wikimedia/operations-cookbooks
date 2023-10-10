@@ -564,9 +564,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                     self.host_actions.warning('//Unable to disable Puppet, the host may have been unreachable//')
 
         self.puppet_master.delete(self.fqdn)
-        self.host_actions.success('Removed from Puppet and PuppetDB if present')
-        self.puppet_master.destroy(self.fqdn)
-        self.host_actions.success('Deleted any existing Puppet certificate')
+        self.host_actions.success('Removed from Puppet and PuppetDB if present and delete any certificates')
         self.debmonitor.host_delete(self.fqdn)
         self.host_actions.success('Removed from Debmonitor if present')
 
