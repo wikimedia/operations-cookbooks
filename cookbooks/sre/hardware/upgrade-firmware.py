@@ -265,7 +265,11 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         """
         firmware_path = None
         product = self.dell_api.fetch(product_slug)
-        driver = list_picker(sorted(product.find_driver(driver_type, driver_category)))
+        drivers = product.find_driver(driver_type, driver_category)
+        if not drivers:
+            raise RuntimeError(f"unable to find any drivers for: {product_slug}\n"
+                               "Please ensure that the slug is correct.")
+        driver = list_picker(sorted(drivers))
         if len(driver.versions) > 1:
             # TODO: right now we will only have one version as I haven't worked out
             # how to get old versions
