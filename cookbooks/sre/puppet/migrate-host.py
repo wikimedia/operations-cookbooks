@@ -104,6 +104,5 @@ class MigrateHostsRunner(CookbookRunnerBase):
             fingerprints = self.puppet.regenerate_certificate()
             self.puppet_server.sign(self.fqdn, fingerprints[self.fqdn])
             confirm_on_failure(self.puppet.run)
-            # We do this at the end to make sure the ssh fingerprint stays around
-            self.puppet_master.delete(self.fqdn)
+            # Clean up the certs on the old puppet master
             self.puppet_master.destroy(self.fqdn)
