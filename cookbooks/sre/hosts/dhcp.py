@@ -1,7 +1,7 @@
 """Set the DHCP temporary config for the given host."""
 import ipaddress
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.dhcp import DHCPConfOpt82
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
@@ -60,6 +60,11 @@ class DhcpRunner(CookbookRunnerBase):
     def runtime_description(self):
         """Runtime description for the IRC/SAL logging."""
         return f'for host {self.fqdn}'
+
+    @property
+    def lock_args(self):
+        """Make the cookbook lock per-host."""
+        return LockArgs(suffix=self.host, concurrency=1, ttl=3600)
 
     def _get_dhcp_config(self):
         """Instantiate a DHCP configuration to be used."""
