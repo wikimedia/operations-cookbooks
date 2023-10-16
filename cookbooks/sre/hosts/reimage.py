@@ -15,7 +15,7 @@ from requests.exceptions import RequestException
 
 from cumin.transports import Command
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.decorators import retry
 from spicerack.dhcp import DHCPConfMac, DHCPConfOpt82
 from spicerack.exceptions import SpicerackError
@@ -250,6 +250,11 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
     def runtime_description(self):
         """Runtime description for the IRC/SAL logging."""
         return f'for host {self.fqdn} with OS {self.args.os}'
+
+    @property
+    def lock_args(self):
+        """Make the cookbook lock per-host."""
+        return LockArgs(suffix=self.host, concurrency=1, ttl=3600)
 
     def rollback(self):
         """Update the Phabricator task with the failure."""
