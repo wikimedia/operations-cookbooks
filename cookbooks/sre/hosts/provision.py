@@ -5,7 +5,7 @@ from pprint import pformat
 from socket import gethostname
 from time import sleep
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.dhcp import DHCPConfMgmt
 from spicerack.redfish import ChassisResetPolicy, DellSCPPowerStatePolicy, DellSCPRebootPolicy, RedfishError
 from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
@@ -177,6 +177,11 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
     def runtime_description(self):
         """Runtime description for the IRC/SAL logging."""
         return f'for host {self.netbox_server.mgmt_fqdn} with reboot policy {self.reboot_policy.name}'
+
+    @property
+    def lock_args(self):
+        """Make the cookbook lock per-host."""
+        return LockArgs(suffix=self.args.host, concurrency=1, ttl=1800)
 
     def run(self):
         """Run the cookbook."""
