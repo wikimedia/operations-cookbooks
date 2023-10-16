@@ -4,7 +4,7 @@ import time
 
 from datetime import datetime, timedelta
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.icinga import IcingaError
 from spicerack.puppet import PuppetHostsCheckError
 from wmflib.interactive import ask_input
@@ -99,6 +99,11 @@ class RebootSingleHostRunner(CookbookRunnerBase):
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
         return 'for host {}'.format(self.remote_host.hosts)
+
+    @property
+    def lock_args(self):
+        """Make the cookbook lock per-host."""
+        return LockArgs(suffix=str(self.remote_host.hosts).split('.', 1)[0], concurrency=1, ttl=600)
 
     def run(self):
         """Reboot the host"""
