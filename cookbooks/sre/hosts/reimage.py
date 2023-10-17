@@ -170,12 +170,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.puppet_configmaster = spicerack.puppet(
             self.remote.query('P{P:configmaster} and not P{config-master[1-2]*}'))
 
-        # DHCP automation
-        try:
-            self.dhcp_hosts = self.remote.query(f'A:installserver and A:{self.netbox_data["site"]["slug"]}')
-        except RemoteError:  # Fallback to eqiad's install server if the above fails, i.e. for a new DC
-            self.dhcp_hosts = self.remote.query('A:installserver and A:eqiad')
-        self.dhcp = spicerack.dhcp(self.dhcp_hosts)
+        self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
 
         # Keep track of some specific actions for the eventual rollback
         self.rollback_masks = False

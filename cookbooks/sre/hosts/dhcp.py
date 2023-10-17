@@ -3,7 +3,6 @@ import ipaddress
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.dhcp import DHCPConfOpt82
-from spicerack.remote import RemoteError
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from cookbooks.sre.hosts import OS_VERSIONS
@@ -54,12 +53,7 @@ class DhcpRunner(CookbookRunnerBase):
             raise RuntimeError(f'Host {self.host} is a virtual machine. VMs are not yet supported.')
 
         self.remote_host = self.remote.query(f'D{{{self.fqdn}}}')
-        # DHCP automation
-        try:
-            self.dhcp_hosts = self.remote.query(f'A:installserver and A:{self.netbox_data["site"]["slug"]}')
-        except RemoteError:  # Fallback to eqiad's install server if the above fails, i.e. for a new DC
-            self.dhcp_hosts = self.remote.query('A:installserver and A:eqiad')
-        self.dhcp = spicerack.dhcp(self.dhcp_hosts)
+        self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
         self.dhcp_config = self._get_dhcp_config()
 
     @property
@@ -101,6 +95,7 @@ class DhcpRunner(CookbookRunnerBase):
         """Set the DHCP config and give control to the user."""
         with self.dhcp.config(self.dhcp_config):
             ask_confirmation(
-                f'Temporary DHCP config for host {self.fqdn} has been setup on {self.dhcp_hosts} in '
-                '/etc/dhcp/automation. The DHCP setting will be cleared on continuation. You can debug the host now!'
+                f'Temporary DHCP config for host {self.fqdn} has been setup on the install host(s) in the '
+                f'{self.netbox_data["site"]["slug"]} datacenter in /etc/dhcp/automation. The DHCP setting will be '
+                'cleared on continuation. You can debug the host now!'
             )

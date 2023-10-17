@@ -8,7 +8,6 @@ from time import sleep
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.dhcp import DHCPConfMgmt
 from spicerack.redfish import ChassisResetPolicy, DellSCPPowerStatePolicy, DellSCPRebootPolicy, RedfishError
-from spicerack.remote import RemoteError
 from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
 
 from cookbooks.sre.network import configure_switch_interfaces
@@ -113,12 +112,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         self.redfish = spicerack.redfish(self.args.host, password=password)
 
         # DHCP automation
-        try:
-            self.dhcp_hosts = self.remote.query(f'A:installserver and A:{self.netbox_data["site"]["slug"]}')
-        except RemoteError:  # Fallback to eqiad's install server if the above fails, i.e. for a new DC
-            self.dhcp_hosts = self.remote.query('A:installserver and A:eqiad')
-
-        self.dhcp = spicerack.dhcp(self.dhcp_hosts)
+        self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
         self.dhcp_config = DHCPConfMgmt(
             datacenter=self.netbox_data['site']['slug'],
             serial=self.netbox_data['serial'],

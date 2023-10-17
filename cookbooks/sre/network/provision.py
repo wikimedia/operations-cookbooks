@@ -6,7 +6,6 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.dhcp import DHCPConfMgmt
 from spicerack.exceptions import SpicerackError
-from spicerack.remote import RemoteError
 from wmflib.interactive import confirm_on_failure, ensure_shell_is_durable
 
 
@@ -60,13 +59,7 @@ class ProvisionRunner(CookbookRunnerBase):
 
         self.fqdn = f'{self.netbox_device.name}.mgmt.{self.netbox_device.site.slug}.wmnet'
         self.remote = spicerack.remote()
-        # DHCP automation
-        try:
-            self.dhcp_hosts = self.remote.query(f'A:installserver and A:{self.netbox_device.site.slug}')
-        except RemoteError:  # Fallback to eqiad's install server if the above fails, i.e. for a new DC
-            self.dhcp_hosts = self.remote.query('A:installserver and A:eqiad')
-
-        self.dhcp = spicerack.dhcp(self.dhcp_hosts)
+        self.dhcp = spicerack.dhcp(self.netbox_device.site.slug)
         self.ip_address = None
         self.rollback_ip = False
         self.rollback_dns = False
