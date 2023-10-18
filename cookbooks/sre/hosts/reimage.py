@@ -210,7 +210,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 Press continue when the change is merged
                 """
             ))
-        else:
+
+        if not self.args.new:
             current_puppet_version = self._get_puppet_version()
             if current_puppet_version is None:
                 raise RuntimeError(f"unable to get puppet version for {self.host}")
@@ -225,8 +226,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 ret = self.spicerack.run_cookbook("sre.puppet.migrate-host", [self.fqdn])
                 if ret:
                     raise RuntimeError(f"Failed to run: sre.puppet.migrate-host {self.fqdn}")
+
         if self.args.puppet_version == 5:
             return self.spicerack.puppet_master()
+
         return self.spicerack.puppet_server()
 
     def _get_puppet_version(self) -> Union[version.Version, None]:
@@ -619,7 +622,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                     self.host_actions.warning('//Unable to disable Puppet, the host may have been unreachable//')
 
         self.puppet_server.delete(self.fqdn)
-        self.host_actions.success('Removed from Puppet and PuppetDB if present and delete any certificates')
+        if self.args.puppet_version == 7:  # Ensure we delete the old certificate from the Puppet 5 infra
+            self.spicerack.puppet_master().delete(self.fqdn)
+
+        self.host_actions.success('Removed from Puppet and PuppetDB if present and deleted any certificates')
         self.debmonitor.host_delete(self.fqdn)
         self.host_actions.success('Removed from Debmonitor if present')
 
