@@ -10,7 +10,6 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Union
 
-from packaging import version
 from requests.exceptions import RequestException
 
 from cumin.transports import Command
@@ -28,6 +27,7 @@ from wmflib.interactive import AbortError, ask_confirmation, confirm_on_failure,
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
+from cookbooks.sre.puppet import get_puppet_version
 
 
 logger = logging.getLogger(__name__)
@@ -212,7 +212,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             ))
 
         if not self.args.new:
-            current_puppet_version = self._get_puppet_version()
+            current_puppet_version = get_puppet_version(self.requests, self.host)
             if current_puppet_version is None:
                 raise RuntimeError(f"unable to get puppet version for {self.host}")
             if self.args.puppet_version == 5 and current_puppet_version.major == 7:
@@ -231,20 +231,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             return self.spicerack.puppet_master()
 
         return self.spicerack.puppet_server()
-
-    def _get_puppet_version(self) -> Union[version.Version, None]:
-        """Get the puppet version for a specific host."""
-        try:
-            response = self.requests.get(
-                f"https://puppetdb-api.discovery.wmnet:8090/v1/facts/puppetversion/{self.host}"
-            )
-            if response.status_code == 404:
-                return None
-            response.raise_for_status()
-        except RequestException as err:
-            raise RuntimeError(f"Unable to get puppet version for: {self.host}") from err
-        # the micro services returns a json string we just strip it instead of using json.loads
-        return version.parse(response.text.strip('"\n'))
 
     @property
     def runtime_description(self):
