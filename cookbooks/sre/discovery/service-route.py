@@ -3,7 +3,7 @@ import logging
 import time
 
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.confctl import ConfctlError
 from wmflib.constants import CORE_DATACENTERS
 
@@ -115,6 +115,20 @@ class DiscoveryServiceRouteRunner(CookbookRunnerBase):
         else:
             log_msg = f"{self.args.action} {services_msg} in {self.args.datacenter}: {reason}"
         return log_msg
+
+    @property
+    def lock_args(self):
+        """Customize the lock arguments."""
+        if self.args.action == 'check':
+            suffix = "ro"
+            concurrency = CookbookRunnerBase.max_concurrency
+            ttl = 60
+        else:
+            suffix = "rw"
+            concurrency = 1
+            ttl = 600
+
+        return LockArgs(suffix=suffix, concurrency=concurrency, ttl=ttl)
 
     def check(self):
         """Check the current state of the service in conftool and on authoritative DNS servers."""
