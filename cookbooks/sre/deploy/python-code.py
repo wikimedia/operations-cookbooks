@@ -1,7 +1,7 @@
 """Deploy a simple Python code software."""
 import logging
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from wmflib.interactive import ask_confirmation, confirm_on_failure
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -84,6 +84,11 @@ class DeployRunner(CookbookRunnerBase):
     def runtime_description(self):
         """Return a nicely formatted string that represents the downtime action."""
         return self.message
+
+    @property
+    def lock_args(self):
+        """Make the cookbook lock exclusive per-project."""
+        return LockArgs(suffix=self.project, concurrency=1, ttl=1800)
 
     def run(self):
         """Required by Spicerack API."""
