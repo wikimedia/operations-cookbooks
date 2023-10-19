@@ -16,6 +16,8 @@ from wmflib.interactive import ask_confirmation, confirm_on_failure
 
 
 __title__ = 'Update and deploy the DNS records generated from Netbox'
+MAX_CONCURRENCY = 1
+LOCK_TTL = 300
 logger = logging.getLogger(__name__)
 NETBOX_BARE_REPO_PATH = '/srv/netbox-exports/dns.git'
 NETBOX_USER = 'netbox'
