@@ -175,6 +175,9 @@ class NetboxHieraRunner(CookbookRunnerBase):
 
     hiera_prefix = "profile::netbox"
     host_prefix = f"{hiera_prefix}::host"
+    # Customize the cookbook's lock
+    max_concurrency = 1
+    lock_ttl = 300
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Init function.
