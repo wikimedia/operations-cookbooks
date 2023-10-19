@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from spicerack import Spicerack
 from spicerack.administrative import Reason
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.decorators import retry
 from spicerack.dnsdisc import DiscoveryCheckError, DiscoveryError
 from spicerack.remote import RemoteHosts, RemoteExecutionError
@@ -266,6 +266,20 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         if self.insecure:
             log_msg = f"🤠EMERGENCY RUN🤠 {log_msg}"
         return log_msg
+
+    @property
+    def lock_args(self):
+        """Customize the lock based on the action."""
+        if self.action == "status":
+            suffix = "ro"
+            concurrency = CookbookRunnerBase.max_concurrency
+            ttl = 60
+        else:
+            suffix = "rw"
+            concurrency = 1
+            ttl = 3600
+
+        return LockArgs(suffix=suffix, concurrency=concurrency, ttl=ttl)
 
     def run(self):
         """Execute the desired action."""
