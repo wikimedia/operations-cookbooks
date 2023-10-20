@@ -6,10 +6,10 @@ from packaging import version
 
 import gitlab
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable, get_secret
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError
 
-from cookbooks.sre import CookbookBase, CookbookRunnerBase
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.gitlab import get_gitlab_url, get_disk_usage_for_path, pause_runners, unpause_runners
 
@@ -42,8 +42,9 @@ class Upgrade(CookbookBase):
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
-        parser.add_argument('--host', help='Short hostname of the gitlab host to upgrade, not FQDN')
-        parser.add_argument('--version', help='Version of new GitLab Debian package in Debian versioning schema')
+        parser.add_argument('--host', required=True, help='Short hostname of the gitlab host to upgrade, not FQDN')
+        parser.add_argument('--version', required=True,
+                            help='Version of new GitLab Debian package in Debian versioning schema')
         parser.add_argument('-r', '--reason', required=True,
                             help=('The reason for the downtime. The current username and originating host are '
                                   'automatically added.'))
@@ -52,8 +53,6 @@ class Upgrade(CookbookBase):
         parser.add_argument('-t', '--task-id', required=False,
                             help='An optional task ID to refer in the downtime message (i.e. T12345).')
         return parser
-
-    batch_default = 1
 
     def get_runner(self, args):
         """As specified by Spicerack API."""
@@ -67,6 +66,7 @@ class UpgradeRunner(CookbookRunnerBase):
         """Initiliaze the provision runner."""
         ensure_shell_is_durable()
         self.spicerack = spicerack
+        self.host = args.host
         self.remote_host = spicerack.remote().query(f'{args.host}.*')
         if len(self.remote_host) != 1:
             raise RuntimeError(f"Found the following hosts: {self.remote_host} for query {args.host}."
@@ -98,6 +98,11 @@ class UpgradeRunner(CookbookRunnerBase):
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
         return self.message
+
+    @property
+    def lock_args(self):
+        """Make the cookbook lock exclusive per-host."""
+        return LockArgs(suffix=self.host, concurrency=1, ttl=7200)
 
     def rollback(self):
         """Comment on phabricator in case of a failed run."""

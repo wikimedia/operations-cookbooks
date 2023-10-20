@@ -52,10 +52,12 @@ class Failover(CookbookBase):
         parser = super().argument_parser()
         parser.add_argument(
             "--switch-from-host",
+            required=True,
             help="Host that we want to switch away from (e.g., existing gitlab.wm.o, will become gitlab-replica.wm.o)",
         )
         parser.add_argument(
             "--switch-to-host",
+            required=True,
             help="Host that we want to switch to (e.g., existing gitlab-replica.wm.o, will become gitlab.wm.o)",
         )
         parser.add_argument(
@@ -74,6 +76,10 @@ class Failover(CookbookBase):
 
 class FailoverRunner(CookbookRunnerBase):
     """Runner class for executing Failover"""
+
+    # Customize Cookbook lock
+    max_concurrency = 1
+    lock_ttl = 10800
 
     def __init__(self, args, spicerack) -> None:
         """Initialize failover runner"""
