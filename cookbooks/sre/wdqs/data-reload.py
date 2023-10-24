@@ -16,10 +16,12 @@ import argparse
 import logging
 
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime, timedelta
 import dateutil.parser
 
 from spicerack.kafka import ConsumerDefinition
+from spicerack.remote import RemoteExecutionError
 
 from cookbooks.sre.wdqs import check_hosts_are_valid, wait_for_updater, get_site, MUTATION_TOPICS, get_hostname
 
@@ -75,8 +77,10 @@ def argument_parser():
     parser.add_argument('--reason', required=True, help='Administrative Reason')
     parser.add_argument('--downtime', type=int, default=336, help='Hour(s) of downtime')
     parser.add_argument('--no-depool', action='store_true', help='Don\'t depool host (use for non-lvs-managed hosts)')
-    parser.add_argument('--reload-data', required=True, choices=['wikidata', 'categories', 'commons'],
+    parser.add_argument('--reload-data', required=True, choices=['wikidata', 'categories', 'commons', 'graph_split'],
                         help='Type of data to reload')
+    parser.add_argument('--lexemes-dump', help='full path to desired Lexeme dump for graph split')
+    parser.add_argument('--wikidata-dump', help='full path to wikidata dump for graph split')
     return parser
 
 
@@ -145,7 +149,6 @@ def reload_commons(remote_host, puppet, kafka, timestamps, consumer_definition, 
             'rm -fv /srv/query_service/wcqs.jnl',
             'systemctl start wcqs-blazegraph',
         )
-
     logger.info('Loading commons dump')
     watch = StopWatch()
     remote_host.run_sync(
@@ -200,6 +203,40 @@ def reload_wikidata(remote_host, puppet, kafka, timestamps, consumer_definition,
     )
 
 
+def reload_graph_split(remote_host, puppet, reason):
+    """Execute commands on host to reload wikidata data on a graph split host."""
+    logger.info('Prepare to load wikidata data for blazegraph')
+    with puppet.disabled(reason):
+        remote_host.run_sync(
+            'rm -fv /srv/wdqs/data_loaded',
+            'systemctl stop wdqs-blazegraph',
+            'rm -fv /srv/wdqs/wikidata.jnl',
+            'systemctl start wdqs-blazegraph',
+        )
+    logger.info('Loading wikidata dump')
+    watch = StopWatch()
+    remote_host.run_sync(
+        'sleep 60',
+        'test -f /srv/wdqs/wikidata.jnl',
+        "bash /srv/deployment/wdqs/wdqs/loadData.sh -n wdq -d {munge_path}".format(
+            munge_path=NFS_DUMPS['wikidata']['munge_path']
+        )
+    )
+    logger.info('Wikidata dump loaded in %s', watch.elapsed())
+    logger.info('Loading lexeme dump')
+    watch.reset()
+    remote_host.run_sync(
+        "bash /srv/deployment/wdqs/wdqs/loadData.sh -n wdq -d {munge_path}".format(
+            munge_path=NFS_DUMPS['lexeme']['munge_path']
+        )
+    )
+    logger.info('Lexeme dump loaded in %s', watch.elapsed())
+    logger.info('Performing final steps')
+    remote_host.run_sync(
+        'touch /srv/wdqs/data_loaded',
+    )
+
+
 def reload_categories(remote_host, puppet, reason):
     """Execute commands on host to reload categories data."""
     logger.info('Preparing to load data for categories')
@@ -220,6 +257,16 @@ def reload_categories(remote_host, puppet, reason):
     logger.info('Categories loaded in %s', watch.elapsed())
 
 
+def is_behind_lvs(remote_host):
+    """Check for LVS on host by looking for the 'pool' command"""
+    try:
+        remote_host.run_sync('which pool')
+        return True
+    except RemoteExecutionError:
+        logger.info('This host is not behind LVS')
+        return False
+
+
 def run(args, spicerack):
     """Required by Spicerack API."""
     remote = spicerack.remote()
@@ -236,11 +283,11 @@ def run(args, spicerack):
     reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
 
     # Get and validate kafka timestamp
-    kafka_timestamp = extract_kafka_timestamp(remote_host, args.reload_data)
+    if args.reload_data != 'graph_split':
+        kafka_timestamp = extract_kafka_timestamp(remote_host, args.reload_data)
+        validate_dump_age(kafka_timestamp, check_time="before_reload")
     if args.reload_data in ['wikidata', 'commons'] and kafka_timestamp is None:
         raise ValueError("We don't have a timestamp, automated timestamp extraction must have failed")
-
-    validate_dump_age(kafka_timestamp, check_time="before_reload")
 
     dumps = []
     if 'wikidata' == args.reload_data:
@@ -251,6 +298,15 @@ def run(args, spicerack):
         dumps = [NFS_DUMPS['commons']]
         munge(dumps, remote_host)
 
+    if 'graph_split' == args.reload_data:
+        wikidata_dump_obj = deepcopy(NFS_DUMPS['wikidata'])
+        lexemes_dump_obj = deepcopy(NFS_DUMPS['lexeme'])
+        wikidata_dump_obj['read_path'] = args.wikidata_dump
+        lexemes_dump_obj['read_path'] = args.lexemes_dump
+        # lexeme_dump_obj['read_path'] = str(list(dump_paths[x].glob('wikidata-*-lexemes-BETA.ttl.bz2'))[0])
+        dumps = [wikidata_dump_obj, lexemes_dump_obj]
+        munge(dumps, remote_host)
+
     @contextmanager
     def noop_change_and_revert():
         yield
@@ -258,7 +314,7 @@ def run(args, spicerack):
     def change_and_revert():
         return confctl.change_and_revert('pooled', True, False, name=remote_host.hosts[0])
 
-    if args.no_depool:
+    if args.no_depool or not is_behind_lvs(remote_host):
         depool_host = noop_change_and_revert
     else:
         depool_host = change_and_revert
@@ -283,4 +339,6 @@ def run(args, spicerack):
                 reload_wikibase(reload_wikidata, MUTATION_TOPICS['wikidata'])
             elif 'commons' == args.reload_data:
                 reload_wikibase(reload_commons, MUTATION_TOPICS['commons'])
+            elif 'graph_split' == args.reload_data:
+                reload_graph_split(remote_host, puppet, reason)
             validate_dump_age(kafka_timestamp, check_time="after_reload")
