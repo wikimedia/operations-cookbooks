@@ -10,9 +10,11 @@ DNS_SHORT_TTL = 10  # DNS short TTL in seconds to use during the switchdc
 DEFAULT_READ_ONLY_REASON = ("You can't edit now. This is because of maintenance. Copy and save your text and try again "
                             "in a few minutes.")
 MEDIAWIKI_SERVICES = ('api-rw', 'appservers-rw', 'jobrunner', 'mwdebug',
-                      'parsoid-php', 'videoscaler', 'mw-web', 'mw-api-ext', 'mw-api-int')
+                      'parsoid-php', 'videoscaler', 'mw-web', 'mw-api-ext', 'mw-api-int',
+                      'mw-wikifunctions')
 # Read-only mediawiki services that are active-active by default and won't be touched by this switchover.
-MEDIAWIKI_RO_SERVICES = ("api-ro", "appservers-ro", "mw-web-ro", "mw-api-ext-ro", "mw-api-int-ro")
+MEDIAWIKI_RO_SERVICES = ("api-ro", "appservers-ro", "mw-web-ro", "mw-api-ext-ro", "mw-api-int-ro",
+                         "mw-wikifunctions-ro")
 # Regex matching services to downtime, when disabling read-only checks on the MariaDB primaries. The blank is for the
 # section name, e.g. "MariaDB read only s1 #page".
 READ_ONLY_SERVICE_RE = r"MariaDB read only \S+ #page"
