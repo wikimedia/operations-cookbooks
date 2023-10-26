@@ -29,7 +29,6 @@ from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
 from cookbooks.sre.puppet import get_puppet_version
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -535,15 +534,24 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.host_actions.warning('//Icinga status is not optimal, downtime not removed//')
 
     def _clear_dhcp_cache(self):
+        """If the host is connected to EVPN switch clear the DHCP and MAC caches. Workaround for T306421."""
         if self.virtual:
             return
-
-        """If the host is in eqiad's row E/F clear the DHCP and MAC caches. Workaround for T306421."""
-        if self.netbox_data['site']['slug'] != 'eqiad' or self.netbox_data['rack']['name'][:1] not in ('E', 'F'):
+        netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
+        # We only have EVPN running in eqiad and codfw
+        if netbox_host.site.slug not in ('eqiad', 'codfw'):
+            return
+        iface = netbox_host.primary_ip.assigned_object
+        # Return if connected switch is not QFX5120 - all EVPN ones are
+        if not iface.connected_endpoint.device.device_type.model.lower().startswith('qfx5120'):
+            return
+        # Otherwise check if a vlan with the rack name exists
+        rack_vlan_name = f'private1-{netbox_host.rack.name.lower()}-{netbox_host.site.slug}'
+        netbox_rack_vlan = self.netbox.api.ipam.vlans.get(name=rack_vlan_name)
+        if not netbox_rack_vlan:
             return
 
-        netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
-        iface = netbox_host.primary_ip.assigned_object
+        # Get switch IP and server interface MAC to clear caches
         switch_fqdn = iface.connected_endpoint.device.primary_ip.dns_name
         switch = self.remote.query(f'D{{{switch_fqdn}}}')
         ip = ipaddress.ip_interface(netbox_host.primary_ip4).ip
