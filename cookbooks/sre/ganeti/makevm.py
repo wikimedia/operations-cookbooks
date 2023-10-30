@@ -75,6 +75,8 @@ class GanetiMakeVM(CookbookBase):
         parser.add_argument('--os', choices=OS_VERSIONS + ('none',), required=True,
                             help='the Debian version to install. One of %(choices)s, use "none" to skip installation')
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
+        parser.add_argument('-p', '--puppet-version', choices=(5, 7), default=5, type=int,
+                            help='The puppet version to use when reimaging. One of %(choices)s.')
         add_location_args(parser)
         parser.add_argument('hostname', type=validate_hostname, help='The hostname for the VM (not the FQDN).')
 
@@ -258,7 +260,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
             return hiera_ret
 
         # Configure parameters for reimaging cookbook.
-        params = ['--new', '--os', self.args.os]
+        params = ['--new', '--os', self.args.os, '--puppet-version', self.args.puppet_version]
         if self.args.task_id:
             params.extend(['--task-id', self.args.task_id])
         params.append(self.hostname)
