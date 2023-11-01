@@ -135,8 +135,8 @@ class UpgradeRunner(CookbookRunnerBase):
         paused_runners = pause_runners(self.token, self.url, dry_run=self.spicerack.dry_run)
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=15)):
             self.install_debian_package()
-        unpause_runners(paused_runners, dry_run=self.spicerack.dry_run)
-        broadcastmessage.delete()
+            unpause_runners(paused_runners, dry_run=self.spicerack.dry_run)
+            broadcastmessage.delete()
 
         if self.phabricator is not None:
             self.phabricator.task_comment(
