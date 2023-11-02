@@ -42,8 +42,9 @@ class MigrateRoleRunner(CookbookRunnerBase):
         self.dry_run = spicerack.dry_run
         self.role = args.role
         self.logger = getLogger(__name__)
+        query = f"P{{O:{self.role}}} and P{{F:puppetversion ~ '^5\\.' and not F:lsbmajdistrelease = '10'}}"
         try:
-            self.remote_hosts = spicerack.remote().query(f"P{{O:{self.role}}} and P{{F:puppetversion ~ '^5\\.'}}")
+            self.remote_hosts = spicerack.remote().query(query)
         except RemoteError as error:
             raise RuntimeError("No hosts found matching {self.role} still running puppet5") from error
 
