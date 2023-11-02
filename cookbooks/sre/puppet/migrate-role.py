@@ -66,19 +66,18 @@ class MigrateRoleRunner(CookbookRunnerBase):
     )
     def update_hiera(self):
         """Inform the user to manually update the hiera config and check this has been performed."""
-        with self.puppet.disabled(self.reason):
-            ask_confirmation(
-                dedent(
-                    f"""\
-                Please add the following hiera entry to:
+        ask_confirmation(
+            dedent(
+                f"""\
+            Please add the following hiera entry to:
 
-                hieradata/role/common/{self.role.replace('::', '/')}.yaml
-                    profile::puppet::agent::force_puppet7: true
+            hieradata/role/common/{self.role.replace('::', '/')}.yaml
+                profile::puppet::agent::force_puppet7: true
 
-                Press continue when the change is merged
-                """
-                )
+            Press continue when the change is merged
+            """
             )
+        )
         common_msg = (
             "Please ensure you have merged the above change and puppet ran successfully"
         )
@@ -102,9 +101,15 @@ class MigrateRoleRunner(CookbookRunnerBase):
                     f"{host}: use_srv_records is not enabled. {common_msg}"
                 )
 
+    def rollback(self):
+        """Rollback actions."""
+        self.remote_hosts.run_sync('systemctl start puppet-agent-timer.timer')
+        print("The cookbook has failed you will need to manually investigate the state.")
+
     def run(self):
         """Main run method either query or clear MigrateRole events."""
         with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
+            self.remote_hosts.run_sync('systemctl stop puppet-agent-timer.timer')
             self.update_hiera()
             fingerprints = self.puppet.regenerate_certificate()
             for fqdn, fingerprint in fingerprints.items():
@@ -113,3 +118,4 @@ class MigrateRoleRunner(CookbookRunnerBase):
             # Clean up the certs on the old puppet master
             for fqdn in fingerprints.keys():
                 self.puppet_master.destroy(fqdn)
+            self.remote_hosts.run_sync('systemctl start puppet-agent-timer.timer')

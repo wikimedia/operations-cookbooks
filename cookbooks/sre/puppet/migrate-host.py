@@ -97,12 +97,19 @@ class MigrateHostsRunner(CookbookRunnerBase):
         if use_srv_records != "true":
             raise RuntimeError(f"use_srv_records is not enabled. {common_msg}")
 
+    def rollback(self):
+        """Rollback actions."""
+        self.remote_host.run_sync('systemctl start puppet-agent-timer.timer')
+        print("The cookbook has failed you will need to manually investigate the state.")
+
     def run(self):
         """Main run method either query or clear MigrateHosts events."""
         with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
+            self.remote_host.run_sync('systemctl stop puppet-agent-timer.timer')
             self.update_hiera()
             fingerprints = self.puppet.regenerate_certificate()
             self.puppet_server.sign(self.fqdn, fingerprints[self.fqdn])
             confirm_on_failure(self.puppet.run)
             # Clean up the certs on the old puppet master
             self.puppet_master.destroy(self.fqdn)
+            self.remote_host.run_sync('systemctl start puppet-agent-timer.timer')
