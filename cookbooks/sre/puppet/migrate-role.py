@@ -74,6 +74,7 @@ class MigrateRoleRunner(CookbookRunnerBase):
 
             hieradata/role/common/{self.role.replace('::', '/')}.yaml
                 profile::puppet::agent::force_puppet7: true
+                acmechief_host: acmechief2002.codfw.wmnet
 
             Press continue when the change is merged
             """
