@@ -557,7 +557,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
     def _update_netbox_data(self):
         """Update Netbox data from PuppetDB running the Netbox script."""
         # Apparently pynetbox doesn't allow to execute a Netbox script
-        url = self.netbox.api.extras.scripts.get('interface_automation.ImportPuppetDB').url
+        url = self.netbox.api.extras.scripts.get('import_server_facts.ImportPuppetDB').url
         headers = {'Authorization': f'Token {self.netbox.api.token}'}
         data = {'data': {'device': self.host}, 'commit': 1}
 
