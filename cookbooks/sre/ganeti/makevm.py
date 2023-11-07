@@ -260,7 +260,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
             return hiera_ret
 
         # Configure parameters for reimaging cookbook.
-        params = ['--new', '--os', self.args.os, '--puppet-version', self.args.puppet_version]
+        params = ['--new', '--os', self.args.os, '--puppet-version', str(self.args.puppet_version)]
         if self.args.task_id:
             params.extend(['--task-id', self.args.task_id])
         params.append(self.hostname)
