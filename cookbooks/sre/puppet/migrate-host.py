@@ -100,17 +100,19 @@ class MigrateHostsRunner(CookbookRunnerBase):
 
     def rollback(self):
         """Rollback actions."""
-        self.remote_host.run_sync('systemctl start puppet-agent-timer.timer')
+        self.remote_host.run_sync('rm -f /run/puppet/disabled')
         print("The cookbook has failed you will need to manually investigate the state.")
 
     def run(self):
         """Main run method either query or clear MigrateHosts events."""
         with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
-            self.remote_host.run_sync('systemctl stop puppet-agent-timer.timer')
+            # Stop any runs that have already started
+            self.remote_host.run_sync('systemctl stop puppet-agent-timer.service')
+            self.remote_host.run_sync('touch /run/puppet/disabled')
             self.update_hiera()
             fingerprints = self.puppet.regenerate_certificate()
             self.puppet_server.sign(self.fqdn, fingerprints[self.fqdn])
             confirm_on_failure(self.puppet.run)
             # Clean up the certs on the old puppet master
             self.puppet_master.destroy(self.fqdn)
-            self.remote_host.run_sync('systemctl start puppet-agent-timer.timer')
+            self.remote_host.run_sync('rm -f /run/puppet/disabled')

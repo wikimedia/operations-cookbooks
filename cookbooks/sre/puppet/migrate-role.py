@@ -105,13 +105,15 @@ class MigrateRoleRunner(CookbookRunnerBase):
 
     def rollback(self):
         """Rollback actions."""
-        self.remote_hosts.run_sync('systemctl start puppet-agent-timer.timer')
+        self.remote_hosts.run_sync('rm -f /run/puppet/disabled')
         print("The cookbook has failed you will need to manually investigate the state.")
 
     def run(self):
         """Main run method either query or clear MigrateRole events."""
         with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
-            self.remote_hosts.run_sync('systemctl stop puppet-agent-timer.timer')
+            # Stop any runs that have already started
+            self.remote_hosts.run_sync('systemctl stop puppet-agent-timer.service')
+            self.remote_hosts.run_sync('touch /run/puppet/disabled')
             self.update_hiera()
             fingerprints = self.puppet.regenerate_certificate()
             for fqdn, fingerprint in fingerprints.items():
@@ -120,4 +122,4 @@ class MigrateRoleRunner(CookbookRunnerBase):
             # Clean up the certs on the old puppet master
             for fqdn in fingerprints.keys():
                 self.puppet_master.destroy(fqdn)
-            self.remote_hosts.run_sync('systemctl start puppet-agent-timer.timer')
+            self.remote_hosts.run_sync('rm -f /run/puppet/disabled')
