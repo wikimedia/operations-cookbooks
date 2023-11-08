@@ -330,6 +330,7 @@ If no reply or an extended downtime, we will have to delete the session(s).\n\n"
         msg['From'] = 'peering@wikimedia.org'
         msg['To'] = ', '.join(recipients)
         msg['Cc'] = 'peering@wikimedia.org'
+        msg['Auto-Submitted'] = 'auto-generated'
         msg.set_content(body)
 
         with smtplib.SMTP('localhost') as smtp:
