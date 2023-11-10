@@ -23,7 +23,7 @@ from spicerack.icinga import IcingaError
 from spicerack.ipmi import Ipmi
 from spicerack.puppet import PuppetMaster, PuppetServer
 from spicerack.remote import RemoteError, RemoteExecutionError
-from wmflib.interactive import AbortError, ask_confirmation, confirm_on_failure, ensure_shell_is_durable
+from wmflib.interactive import AbortError, ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
@@ -87,7 +87,7 @@ class Reimage(CookbookBase):
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         parser.add_argument('--os', choices=OS_VERSIONS, required=True,
                             help='the Debian version to install. Mandatory parameter. One of %(choices)s.')
-        parser.add_argument('-p', '--puppet-version', choices=(5, 7), default=5, type=int,
+        parser.add_argument('-p', '--puppet-version', choices=(5, 7), type=int,
                             help='The puppet version to use when reimaging. One of %(choices)s.')
         parser.add_argument('host', help='Short hostname of the host to be reimaged, not FQDN')
 
@@ -109,8 +109,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         if '.' in self.host:
             raise RuntimeError('You need to pass only the host name, not the FQDN.')
-        if args.puppet_version == 7 and args.os == 'buster':
-            raise RuntimeError('Puppet 7 is not supported on buster you must first upgrade the os.')
 
         self.netbox = spicerack.netbox()
         self.netbox_server = spicerack.netbox_server(self.host, read_write=True)
@@ -155,6 +153,12 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if len(self.remote_host) != 1:
             raise RuntimeError(
                 f'Expected 1 host for query {self.fqdn} but got {len(self.remote_host)}: {self.remote_host}')
+
+        if args.puppet_version is None and args.new:
+            args.puppet_version = int(ask_input("Select puppet version to install with", ('5', '7')))
+
+        if args.puppet_version == 7 and args.os == 'buster':
+            raise RuntimeError('Puppet 7 is not supported on buster you must first upgrade the os.')
 
         # The same as self.remote_host but using the SSH key valid only during installation before the first Puppet run
         self.remote_installer = spicerack.remote(installer=True).query(self.fqdn)
@@ -214,17 +218,20 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             current_puppet_version = get_puppet_version(self.requests, self.host)
             if current_puppet_version is None:
                 raise RuntimeError(f"unable to get puppet version for {self.host}")
-            if self.args.puppet_version == 5 and current_puppet_version.major == 7:
-                raise RuntimeError("This cookbook does not support going from puppet 5 to puppet 7")
-            if self.args.puppet_version != current_puppet_version.major:
-                ask_confirmation(f"you have specified puppet version {self.args.puppet_version} however {self.host}"
-                                 f" is currently running puppet version {current_puppet_version}."
-                                 " Are you sure you want to continue")
-            if self.args.puppet_version == 7 and current_puppet_version.major != 7:
-                # Lets migrate the host first
-                ret = self.spicerack.run_cookbook("sre.puppet.migrate-host", [self.fqdn])
-                if ret:
-                    raise RuntimeError(f"Failed to run: sre.puppet.migrate-host {self.fqdn}")
+            if self.args.puppet_version is None:
+                self.args.puppet_version = current_puppet_version.major
+            else:
+                if self.args.puppet_version == 5 and current_puppet_version.major == 7:
+                    raise RuntimeError("This cookbook does not support going from puppet 5 to puppet 7")
+                if self.args.puppet_version != current_puppet_version.major:
+                    ask_confirmation(f"you have specified puppet version {self.args.puppet_version} however {self.host}"
+                                     f" is currently running puppet version {current_puppet_version}."
+                                     " Are you sure you want to continue")
+                if self.args.puppet_version == 7 and current_puppet_version.major != 7:
+                    # Lets migrate the host first
+                    ret = self.spicerack.run_cookbook("sre.puppet.migrate-host", [self.fqdn])
+                    if ret:
+                        raise RuntimeError(f"Failed to run: sre.puppet.migrate-host {self.fqdn}")
 
         if self.args.puppet_version == 5:
             return self.spicerack.puppet_master()
