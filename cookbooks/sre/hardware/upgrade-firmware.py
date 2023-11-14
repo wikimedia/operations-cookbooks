@@ -960,11 +960,17 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     def run(self):
         """Required by Spicerack API."""
+        failures = 0
         for host in self.hosts:
-            return self._run_host(host)  # Yes it was already a bug, fixed in the next CR
+            failures += self._run_host(host)
+
+        if failures:
+            return 1
+
+        return 0
 
     def _run_host(self, host: str) -> int:
-        """Run the cookbook for a single host."""
+        """Run the cookbook for a single host. Return 1 on failure, 0 on success."""
         hostname = host.split(".")[0]
         netbox_host = self.spicerack.netbox().get_server(hostname)
         redfish_host = self._redfish_host(hostname)
@@ -975,7 +981,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         logger.info(
             "%s (Gen %d): starting", netbox_host.fqdn, redfish_host.generation
         )
-        status = True
+        failed = False
         initial_power_state = redfish_host.get_power_state()
         # Need to power the server on for any firmware updates
         manage_power = len(self.component) > 1 or self.component != {"idrac"}
@@ -1001,19 +1007,19 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         if "bios" in self.component:
             if not self.update_bios(redfish_host, netbox_host):
-                status = False
+                failed = True
 
         if "nic" in self.component:
             if not self.update_driver(
                 redfish_host, netbox_host, DellDriverCategory.NETWORK
             ):
-                status = False
+                failed = True
 
         if "storage" in self.component:
             if not self.update_driver(
                 redfish_host, netbox_host, DellDriverCategory.STORAGE
             ):
-                status = False
+                failed = True
 
         if self.no_reboot:
             logging.warning(
@@ -1026,5 +1032,5 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             and manage_power
         ):
             redfish_host.chassis_reset(ChassisResetPolicy.FORCE_OFF)
-        # cookbooks should exit with an int
-        return int(not status)
+
+        return int(failed)
