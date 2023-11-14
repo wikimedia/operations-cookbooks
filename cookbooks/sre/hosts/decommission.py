@@ -302,6 +302,8 @@ class DecommissionHostRunner(CookbookRunnerBase):
         """Perform all the decommissioning actions on a single host and return its switch if physical."""
         hostname = fqdn.split('.')[0]
         puppet_master = self.spicerack.puppet_master()
+        puppet_server = self.spicerack.puppet_server()
+
         debmonitor = self.spicerack.debmonitor()
         netbox = self.spicerack.netbox(read_write=True)
         netbox_server = self.netbox_servers[hostname]
@@ -396,6 +398,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
         self.spicerack.actions[fqdn].success('Removed from DebMonitor')
 
         puppet_master.delete(fqdn)
+        puppet_server.delete(fqdn)
         self.spicerack.actions[fqdn].success('Removed from Puppet master and PuppetDB')
 
         if netbox_server.virtual:
