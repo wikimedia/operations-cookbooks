@@ -137,12 +137,12 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             )
         self.new = args.new
         self.cache_answers = not args.disable_cached_answers
-        self._cumin_hosts = self.spicerack.remote().query(f'A:cumin and not P{{{getfqdn()}}}').hosts
+        self._cumin_hosts = spicerack.remote().query(f'A:cumin and not P{{{getfqdn()}}}').hosts
 
         if self.new:
             self.hosts = [args.query]
         else:
-            self.hosts = self.spicerack.remote().query(args.query).hosts
+            self.hosts = spicerack.remote().query(args.query).hosts
 
         for host in self.hosts:
             netbox_server = spicerack.netbox_server(host.split("."))
@@ -960,22 +960,25 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     def run(self):
         """Required by Spicerack API."""
+        lock = self.spicerack.lock()
         failures = 0
         for host in self.hosts:
-            failures += self._run_host(host)
+            hostname = host.split(".")[0]
+            with lock.acquired(f"sre.hardware.upgrade-firmware:{hostname}", concurrency=1, ttl=3600):
+                failures += self._run_host(hostname)
 
         if failures:
             return 1
 
         return 0
 
-    def _run_host(self, host: str) -> int:
+    def _run_host(self, hostname: str) -> int:
         """Run the cookbook for a single host. Return 1 on failure, 0 on success."""
-        hostname = host.split(".")[0]
         netbox_host = self.spicerack.netbox().get_server(hostname)
         redfish_host = self._redfish_host(hostname)
         if redfish_host is None:
             return 0
+
         # TODO: this is a bit of a hack to populate the generation property
         # We should do this in the Redfish.__init__
         logger.info(
