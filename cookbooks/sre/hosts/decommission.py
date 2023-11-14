@@ -445,14 +445,16 @@ class DecommissionHostRunner(CookbookRunnerBase):
         find_kerberos_credentials(self.kerberos_kadmin, self.decom_hosts)
         phabricator = self.spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
+        lock = self.spicerack.lock()
         for fqdn in self.decom_hosts:  # Doing one host at a time to track executed actions.
-            try:
-                self._decommission_host(fqdn)
-            except Exception as e:  # pylint: disable=broad-except
-                message = 'Host steps raised exception'
-                logger.exception(message)
-                self.spicerack.actions[fqdn].failure(
-                    '**{message}**: {e}'.format(message=message, e=e))
+            with lock.acquired(f'sre.hosts.decommission:{fqdn.split(".")[0]}', concurrency=1, ttl=600):
+                try:
+                    self._decommission_host(fqdn)
+                except Exception as e:  # pylint: disable=broad-except
+                    message = 'Host steps raised exception'
+                    logger.exception(message)
+                    self.spicerack.actions[fqdn].failure(
+                        '**{message}**: {e}'.format(message=message, e=e))
 
             if self.spicerack.actions[fqdn].has_failures:
                 has_failures = True
