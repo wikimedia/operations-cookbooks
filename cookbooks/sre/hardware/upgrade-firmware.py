@@ -961,66 +961,70 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
     def run(self):
         """Required by Spicerack API."""
         for host in self.hosts:
-            hostname = host.split(".")[0]
-            netbox_host = self.spicerack.netbox().get_server(hostname)
-            redfish_host = self._redfish_host(hostname)
-            if redfish_host is None:
-                continue
-            # TODO: this is a bit of a hack to populate the generation property
-            # We should do this in the Redfish.__init__
-            logger.info(
-                "%s (Gen %d): starting", netbox_host.fqdn, redfish_host.generation
-            )
-            status = True
-            initial_power_state = redfish_host.get_power_state()
-            # Need to power the server on for any firmware updates
-            manage_power = len(self.component) > 1 or self.component != {"idrac"}
+            return self._run_host(host)  # Yes it was already a bug, fixed in the next CR
 
-            if "idrac" in self.component:
-                if self.no_reboot:
-                    logger.warning(
-                        "%s: idrac updates will restart the idrac card regardless of the --no-reboot flags",
-                        netbox_host.fqdn,
-                    )
-                self.update_idrac(redfish_host, netbox_host)
+    def _run_host(self, host: str) -> int:
+        """Run the cookbook for a single host."""
+        hostname = host.split(".")[0]
+        netbox_host = self.spicerack.netbox().get_server(hostname)
+        redfish_host = self._redfish_host(hostname)
+        if redfish_host is None:
+            return 0
+        # TODO: this is a bit of a hack to populate the generation property
+        # We should do this in the Redfish.__init__
+        logger.info(
+            "%s (Gen %d): starting", netbox_host.fqdn, redfish_host.generation
+        )
+        status = True
+        initial_power_state = redfish_host.get_power_state()
+        # Need to power the server on for any firmware updates
+        manage_power = len(self.component) > 1 or self.component != {"idrac"}
 
-            if (
-                initial_power_state == DellSCPPowerStatePolicy.OFF.value
-                and manage_power
-            ):
-                logger.info("%s: host powered off, powering on", netbox_host.fqdn)
-                reboot_time = datetime.now()
-                redfish_host.chassis_reset(ChassisResetPolicy.ON)
-                if not self.new:
-                    remote = self.spicerack.remote().query(netbox_host.fqdn)
-                    remote.wait_reboot_since(reboot_time, False)
-
-            if "bios" in self.component:
-                if not self.update_bios(redfish_host, netbox_host):
-                    status = False
-
-            if "nic" in self.component:
-                if not self.update_driver(
-                    redfish_host, netbox_host, DellDriverCategory.NETWORK
-                ):
-                    status = False
-
-            if "storage" in self.component:
-                if not self.update_driver(
-                    redfish_host, netbox_host, DellDriverCategory.STORAGE
-                ):
-                    status = False
-
+        if "idrac" in self.component:
             if self.no_reboot:
-                logging.warning(
-                    "%s: --no-reboot used, you must reboot the host manually",
-                    redfish_host.hostname,
+                logger.warning(
+                    "%s: idrac updates will restart the idrac card regardless of the --no-reboot flags",
+                    netbox_host.fqdn,
                 )
+            self.update_idrac(redfish_host, netbox_host)
 
-            if (
-                initial_power_state == DellSCPPowerStatePolicy.OFF.value
-                and manage_power
+        if (
+            initial_power_state == DellSCPPowerStatePolicy.OFF.value
+            and manage_power
+        ):
+            logger.info("%s: host powered off, powering on", netbox_host.fqdn)
+            reboot_time = datetime.now()
+            redfish_host.chassis_reset(ChassisResetPolicy.ON)
+            if not self.new:
+                remote = self.spicerack.remote().query(netbox_host.fqdn)
+                remote.wait_reboot_since(reboot_time, False)
+
+        if "bios" in self.component:
+            if not self.update_bios(redfish_host, netbox_host):
+                status = False
+
+        if "nic" in self.component:
+            if not self.update_driver(
+                redfish_host, netbox_host, DellDriverCategory.NETWORK
             ):
-                redfish_host.chassis_reset(ChassisResetPolicy.FORCE_OFF)
-            # cookbooks should exit with an int
-            return int(not status)
+                status = False
+
+        if "storage" in self.component:
+            if not self.update_driver(
+                redfish_host, netbox_host, DellDriverCategory.STORAGE
+            ):
+                status = False
+
+        if self.no_reboot:
+            logging.warning(
+                "%s: --no-reboot used, you must reboot the host manually",
+                redfish_host.hostname,
+            )
+
+        if (
+            initial_power_state == DellSCPPowerStatePolicy.OFF.value
+            and manage_power
+        ):
+            redfish_host.chassis_reset(ChassisResetPolicy.FORCE_OFF)
+        # cookbooks should exit with an int
+        return int(not status)
