@@ -16,7 +16,7 @@ class RenewCert(CookbookBase):
     * puppet cert clean the old certificate on the puppet master
     * delete the old certificate on the host
     * run puppet to generate a new certificate and the host
-    * validate the puppet master see's the new certificate on the puppet master
+    * validate the puppet master sees the new certificate on the puppet master
     * sign the new certificate on the puppet master
     * run puppet on the host to ensure everything works as expected
     * optionally allow for alternative names in the Puppet certificate
