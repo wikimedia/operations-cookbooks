@@ -29,6 +29,7 @@ class CloneMySQL(CookbookBase):
         parser.add_argument(
             '--primary', help='Cumin query to match the host of the primary.'
         )
+
         return parser
 
     def get_runner(self, args):
@@ -148,9 +149,10 @@ class CloneMySQLRunner(CookbookRunnerBase):
             'mysql -e "START SLAVE;"',
         ]
         self._run_scripts(self.target_host, scripts)
-
         scripts = [
             'systemctl start mariadb',
+            'mysql_upgrade --force',
+            'systemctl restart mariadb',
             'mysql -e "START SLAVE;"',
         ]
         self._run_scripts(self.source_host, scripts)
