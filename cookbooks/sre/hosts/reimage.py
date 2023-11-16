@@ -132,7 +132,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.remote = spicerack.remote()
         self.spicerack: Spicerack = spicerack
         self.requests = spicerack.requests_session(__name__, timeout=(5.0, 30.0))
-        self.puppet_server = self._get_puppet_server()
         self.virtual: bool = self.netbox_server.virtual
 
         try:
@@ -171,6 +170,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         # The same as self.puppet but using the SSH key valid only during installation before the first Puppet run
         self.puppet_installer = spicerack.puppet(self.remote_installer)
         self.puppet_configmaster = spicerack.puppet(self.remote.query('O:config_master'))
+        self.puppet_server = self._get_puppet_server()
 
         self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
 
