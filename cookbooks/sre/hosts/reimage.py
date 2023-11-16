@@ -549,7 +549,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         # Otherwise check if a vlan with the rack name exists
         rack_vlan_name = f'private1-{netbox_host.rack.name.lower()}-{netbox_host.site.slug}'
         netbox_rack_vlan = self.netbox.api.ipam.vlans.get(name=rack_vlan_name)
-        if not netbox_rack_vlan:
+        if netbox_rack_vlan is None:
             return
 
         # Get switch IP and server interface MAC to clear caches
@@ -568,7 +568,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             f'clear ethernet-switching mac-ip-table {mac}'
         ]
         switch.run_sync(*commands, print_progress_bars=False)
-        self.host_actions.success('Cleared switch DHCP cache and MAC table for the host IP and MAC (row E/F)')
+        self.host_actions.success('Cleared switch DHCP cache and MAC table for the host IP and MAC (EVPN Switch)')
 
     def _update_netbox_data(self):
         """Update Netbox data from PuppetDB running the Netbox script."""
