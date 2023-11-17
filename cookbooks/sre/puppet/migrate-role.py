@@ -83,8 +83,8 @@ class MigrateRoleRunner(CookbookRunnerBase):
         common_msg = (
             "Please ensure you have merged the above change and puppet ran successfully"
         )
-        confirm_on_failure(self.puppet.run)
-        confirm_on_failure(self.apt_get.install, 'puppet-agent')
+        self.puppet.run()
+        self.apt_get.install('puppet-agent')
         versions = self.remote_hosts.run_async("puppet --version", is_safe=True)
         try:
             for host, version in versions:
@@ -93,14 +93,14 @@ class MigrateRoleRunner(CookbookRunnerBase):
                         f"{host}: the puppet version {version} is not 7. {common_msg}"
                     )
         except ValueError as err:
-            raise RuntimeError(f"Major version: {version}") from err
+            raise RuntimeError(f"Major version: {version}.  Please double check the hiera change") from err
         use_srv_records = self.remote_hosts.run_async(
             "puppet config --section agent print use_srv_records", is_safe=True
         )
         for host, use_srv_record in use_srv_records:
             if use_srv_record.message().decode() != "true":
                 raise RuntimeError(
-                    f"{host}: use_srv_records is not enabled. {common_msg}"
+                    f"{host}: use_srv_records is not enabled. {common_msg}.  Please double check the hiera change"
                 )
 
     def rollback(self):
