@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from time import sleep
 
+from cumin import nodeset
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
@@ -69,7 +70,7 @@ class RebootDruidWorkersRunner(CookbookRunnerBase):
 
     def reboot_druid_node(self, host):
         """Reboot a single Druid node."""
-        node = self.remote.query('D{' + host + '}')
+        node = self.druid_workers.get_subset(nodeset(host))
         puppet = self.puppet(node)
 
         stop_process_commands = []

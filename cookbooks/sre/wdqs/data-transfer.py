@@ -16,6 +16,7 @@ from datetime import timedelta
 from time import sleep
 
 import transferpy.transfer
+from cumin import nodeset
 from transferpy.Transferer import Transferer
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -106,15 +107,15 @@ class DataTransferRunner(CookbookRunnerBase):
         """Unpack and sanity-check args & store in self."""
         self.remote = spicerack.remote()
 
-        self.r_source = self.remote.query(args.source)
-        self.r_dest = self.remote.query(args.dest)
+        self.remote_hosts = self.remote.query("{source},{dest}".format(source=args.source, dest=args.dest))
+
+        self.r_source = self.remote_hosts.get_subset(nodeset(args.source))
+        self.r_dest = self.remote_hosts.get_subset(nodeset(args.dest))
 
         for argument in self.r_source, self.r_dest:
             if len(argument) != 1:
-                raise ValueError("Only one argument is needed. Not {total}({argument})".
+                raise ValueError("Only one host is needed. Not {total}({argument})".
                                  format(total=len(argument), argument=argument))
-
-        self.remote_hosts = self.remote.query("{source},{dest}".format(source=self.r_source, dest=self.r_dest))
 
         self.blazegraph_instance = args.blazegraph_instance
         self.reason = args.reason

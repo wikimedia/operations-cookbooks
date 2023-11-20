@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from time import sleep
 
+from cumin import nodeset
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ensure_shell_is_durable
 
@@ -59,7 +60,7 @@ class RebootPrestoWorkersRunner(CookbookRunnerBase):
 
     def _reboot_presto_node(self, host):
         """Reboot a single Presto node."""
-        node = self.remote.query('D{' + host + '}')
+        node = self.presto_workers.get_subset(nodeset(host))
         puppet = self.puppet(node)
         duration = timedelta(minutes=120)
 

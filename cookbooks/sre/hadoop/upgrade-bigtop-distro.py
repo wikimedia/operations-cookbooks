@@ -76,9 +76,8 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
         self.hadoop_hdfs_journal_workers = spicerack_remote.query(HDFS_JOURNAL_CUMIN_ALIAS + suffix)
         if args.journalnodes_cumin_query:
             hadoop_hdfs_journal_override = spicerack_remote.query(args.journalnodes_cumin_query)
-            self.hadoop_hdfs_journal_workers = spicerack_remote.query(
-                "D{{{}}}".format(
-                    self.hadoop_hdfs_journal_workers.hosts.intersection(hadoop_hdfs_journal_override.hosts)))
+            self.hadoop_hdfs_journal_workers = self.hadoop_hdfs_journal_workers.get_subset(
+                self.hadoop_hdfs_journal_workers.hosts.intersection(hadoop_hdfs_journal_override.hosts))
             ask_confirmation(
                 'The cookbook will run only on the following journal hosts ({}), please verify that '
                 'the list looks correct: {}'
@@ -87,8 +86,8 @@ class UpgradeBigtopRunner(CookbookRunnerBase):
         self.hadoop_workers = spicerack_remote.query(WORKERS_CUMIN_ALIAS + suffix)
         if args.workers_cumin_query:
             hadoop_workers_override = spicerack_remote.query(args.workers_cumin_query)
-            self.hadoop_workers = spicerack_remote.query(
-                "D{{{}}}".format(self.hadoop_workers.hosts.intersection(hadoop_workers_override.hosts)))
+            self.hadoop_workers = self.hadoop_workers.get_subset(
+                self.hadoop_workers.hosts.intersection(hadoop_workers_override.hosts))
             ask_confirmation(
                 'The cookbook will run only on the following worker hosts ({}), please verify that '
                 'the list looks correct: {}'
