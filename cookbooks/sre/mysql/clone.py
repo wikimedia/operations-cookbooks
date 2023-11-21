@@ -145,13 +145,13 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         scripts = [
             'mysql -e "STOP SLAVE;"',
+            'mysql_upgrade --force',
             'mysql -e "CHANGE MASTER TO MASTER_USE_GTID=Slave_pos;"',
             'mysql -e "START SLAVE;"',
         ]
         self._run_scripts(self.target_host, scripts)
         scripts = [
             'systemctl start mariadb',
-            'mysql_upgrade --force',
             'systemctl restart mariadb',
             'mysql -e "START SLAVE;"',
         ]
