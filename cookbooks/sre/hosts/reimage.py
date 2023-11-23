@@ -222,7 +222,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                     """
                 ))
         else:
-            has_puppet7 = self.puppet_server.hiera_lookup(self.host, "profile::puppet::agent::force_puppet7")
+            has_puppet7 = self.puppet_server.hiera_lookup(self.fqdn, "profile::puppet::agent::force_puppet7")
             if has_puppet7 == "true":
                 self.args.puppet_version = 7
             else:
