@@ -27,7 +27,7 @@ from wmflib.interactive import AbortError, ask_confirmation, ask_input, confirm_
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
-from cookbooks.sre.puppet import get_puppet_version
+
 
 logger = logging.getLogger(__name__)
 
@@ -87,13 +87,17 @@ class Reimage(CookbookBase):
         parser.add_argument('--os', choices=OS_VERSIONS, required=True,
                             help='the Debian version to install. Mandatory parameter. One of %(choices)s.')
         parser.add_argument('-p', '--puppet-version', choices=(5, 7), type=int,
-                            help='The puppet version to use when reimaging. One of %(choices)s.')
+                            help=('The puppet version to use when reimaging a new host and --new is set. '
+                                  'Is autodetected for existing hosts. One of %(choices)s.'))
         parser.add_argument('host', help='Short hostname of the host to be reimaged, not FQDN')
 
         return parser
 
     def get_runner(self, args):
         """As required by Spicerack API."""
+        if not args.new and args.puppet_version is not None:
+            raise RuntimeError("-p/--puppet-version can be specified only when --new is set")
+
         return ReimageRunner(args, self.spicerack)
 
 
@@ -170,7 +174,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         # The same as self.puppet but using the SSH key valid only during installation before the first Puppet run
         self.puppet_installer = spicerack.puppet(self.remote_installer)
         self.puppet_configmaster = spicerack.puppet(self.remote.query('O:config_master'))
-        self.puppet_server = self._get_puppet_server()
+        self.puppet_master = spicerack.puppet_master()
+        self.puppet_server = spicerack.puppet_server()
+        self.new_puppet_server = self._get_puppet_server()
 
         self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
 
@@ -201,37 +207,26 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
     def _get_puppet_server(self) -> Union[PuppetMaster, PuppetServer]:
         """Validate that the puppet version is set correctly."""
-        if self.args.new and self.args.puppet_version == 7:
-            ask_confirmation(dedent(
-                f"""\
-                Please add the following hiera entry to:
+        if self.args.new:
+            if self.args.puppet_version == 7:
+                ask_confirmation(dedent(
+                    f"""\
+                    Unless the host's role has been already migrated to Puppet 7,
+                    to migrate this host change its hiera values to:
 
-                hieradata/hosts/{self.host}.yaml
-                    profile::puppet::agent::force_puppet7: true
-                    acmechief_host: acmechief2002.codfw.wmnet
+                    hieradata/hosts/{self.host}.yaml
+                        profile::puppet::agent::force_puppet7: true
+                        acmechief_host: acmechief2002.codfw.wmnet
 
-                Press continue when the change is merged
-                """
-            ))
-
-        if not self.args.new:
-            current_puppet_version = get_puppet_version(self.requests, self.host)
-            if current_puppet_version is None:
-                raise RuntimeError(f"unable to get puppet version for {self.host}")
-            if self.args.puppet_version is None:
-                self.args.puppet_version = current_puppet_version.major
+                    Press continue when the change is merged
+                    """
+                ))
+        else:
+            has_puppet7 = self.puppet_server.hiera_lookup(self.host, "profile::puppet::agent::force_puppet7")
+            if has_puppet7 == "true":
+                self.args.puppet_version = 7
             else:
-                if self.args.puppet_version == 5 and current_puppet_version.major == 7:
-                    raise RuntimeError("This cookbook does not support going from puppet 5 to puppet 7")
-                if self.args.puppet_version != current_puppet_version.major:
-                    ask_confirmation(f"you have specified puppet version {self.args.puppet_version} however {self.host}"
-                                     f" is currently running puppet version {current_puppet_version}."
-                                     " Are you sure you want to continue")
-                if self.args.puppet_version == 7 and current_puppet_version.major != 7:
-                    # Lets migrate the host first
-                    ret = self.spicerack.run_cookbook("sre.puppet.migrate-host", [self.fqdn])
-                    if ret:
-                        raise RuntimeError(f"Failed to run: sre.puppet.migrate-host {self.fqdn}")
+                self.args.puppet_version = 5
 
         if self.args.puppet_version == 5:
             return self.spicerack.puppet_master()
@@ -627,9 +622,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 except RemoteExecutionError:
                     self.host_actions.warning('//Unable to disable Puppet, the host may have been unreachable//')
 
+        # Clear both old Puppet5 and new Puppet7 infra in all cases, it doesn't fail if the host is not present
         self.puppet_server.delete(self.fqdn)
-        if self.args.puppet_version == 7:  # Ensure we delete the old certificate from the Puppet 5 infra
-            self.spicerack.puppet_master().delete(self.fqdn)
+        self.puppet_master.delete(self.fqdn)
 
         self.host_actions.success('Removed from Puppet and PuppetDB if present and deleted any certificates')
         self.debmonitor.host_delete(self.fqdn)
@@ -644,8 +639,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self._mask_units()
         fingerprint = self.puppet_installer.regenerate_certificate()[self.fqdn]
         self.host_actions.success('Generated Puppet certificate')
-        self.puppet_server.wait_for_csr(self.fqdn)
-        self.puppet_server.sign(self.fqdn, fingerprint)
+        self.new_puppet_server.wait_for_csr(self.fqdn)
+        self.new_puppet_server.sign(self.fqdn, fingerprint)
         self.host_actions.success('Signed new Puppet certificate')
 
         self._populate_puppetdb()
