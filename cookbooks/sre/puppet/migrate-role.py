@@ -48,6 +48,8 @@ class MigrateRoleRunner(CookbookRunnerBase):
         except RemoteError as error:
             raise RuntimeError("No hosts found matching {self.role} still running puppet5") from error
 
+        ask_confirmation(f'Please confirm the list of Puppet 5 hosts to convert, ok to proceed? {self.remote_hosts}')
+
         self.puppet = spicerack.puppet(self.remote_hosts)
         if len(self.remote_hosts) == 0:
             raise RuntimeError(f"All host matching the role {self.role} already seem to be running puppet7")
