@@ -18,6 +18,8 @@ NEW_SERIAL_MODELS = (
     'poweredge r450',
     'poweredge r650',
     'poweredge r650xs',
+    'poweredge r750',
+    'poweredge r750xs',
 )
 logger = logging.getLogger(__name__)
 
