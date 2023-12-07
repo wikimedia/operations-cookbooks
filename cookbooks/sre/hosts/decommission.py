@@ -1,11 +1,8 @@
 """Decommission a host from all inventories."""
 import logging
-import re
 import time
 
-from dataclasses import dataclass
 
-from cumin.transports import Command
 from pynetbox.core.query import RequestError
 from wmflib.dns import DnsError, DnsNotFound
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
@@ -17,94 +14,27 @@ from spicerack.icinga import IcingaError
 from spicerack.netbox import MANAGEMENT_IFACE_NAME, NetboxError
 from spicerack.ipmi import IpmiError
 from spicerack.puppet import get_puppet_ca_hostname
-from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError, RemoteHosts
+from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+from cookbooks.sre.hosts import (
+    check_patterns_in_repo,
+    find_kerberos_credentials,
+    get_grep_patterns,
+    GitRepoPath,
+    DEPLOYMENT_HOST,
+    MEDIAWIKI_CONFIG_REPO_PATH,
+    KERBEROS_KADMIN_CUMIN_ALIAS,
+    PUPPET_REPO_PATH,
+    PUPPET_PRIVATE_REPO_PATH,
+    COMMON_STEPS_KEY,
+    DEPLOYMENT_CHARTS_REPO_PATH,
+    AUTHDNS_REPO_PATH,
+)
 from cookbooks.sre.network import configure_switch_interfaces
 
 
 logger = logging.getLogger(__name__)
-DEPLOYMENT_HOST = 'deployment.eqiad.wmnet'
-MEDIAWIKI_CONFIG_REPO_PATH = '/srv/mediawiki-staging'
-KERBEROS_KDC_KEYTAB_PATH = '/srv/kerberos/keytabs'
-KERBEROS_KADMIN_CUMIN_ALIAS = 'A:kerberos-kadmin'
-PUPPET_REPO_PATH = '/var/lib/git/operations/puppet'
-PUPPET_PRIVATE_REPO_PATH = '/srv/private'
-COMMON_STEPS_KEY = 'COMMON_STEPS'
-DEPLOYMENT_CHARTS_REPO_PATH = '/srv/deployment-charts'
-AUTHDNS_REPO_PATH = '/srv/authdns/git'
-
-
-@dataclass(frozen=True)
-class GitRepoPath:
-    """Define a git repository to search for matches."""
-
-    remote_host: RemoteHosts
-    path: str
-    pathspec: str = ''
-
-
-def check_patterns_in_repo(repos: tuple[GitRepoPath, ...], patterns: list[str]):
-    """Git grep for all the given patterns in the given hosts and path and ask for confirmation if any is found.
-
-    Arguments:
-        repos: a sequence of GitRepoPath instances.
-        patterns: a sequence of patterns to check.
-
-    """
-    grep_patterns = '|'.join(patterns)
-    ask = False
-    for repo in repos:
-        logger.info('Looking for matches in %s:%s %s', repo.remote_host, repo.path, repo.pathspec)
-        grep_command = f"git -C '{repo.path}' grep -E '({grep_patterns})'"
-        if repo.pathspec:
-            grep_command += f" '{repo.pathspec}'"
-
-        for _nodeset, _output in repo.remote_host.run_sync(Command(grep_command, ok_codes=[]), is_safe=True):
-            ask = True
-
-    if ask:
-        ask_confirmation(
-            'Found match(es) in some git repositories for the host to be decommissioned '
-            '(see above), verify they were not left by mistake before proceeding!')
-    else:
-        logger.info('No matches found for the host to be decommissioned in various git repositories')
-
-
-def get_grep_patterns(dns, decom_hosts):
-    """Given a list of hostnames return the list of regex patterns for the hostname and all its IPs."""
-    patterns = []
-    for host in decom_hosts:
-        patterns.append(re.escape(host))
-        try:
-            ips = dns.resolve_ips(host)
-        except DnsNotFound:
-            logger.warning('No DNS record found for host %s. Generating grep patterns for the name only', host)
-            continue
-
-        patterns.extend('[^0-9A-Za-z]{}[^0-9A-Za-z]'.format(re.escape(ip)) for ip in ips)
-
-    return patterns
-
-
-def find_kerberos_credentials(remote_host, decom_hosts):
-    """Check if any host provided has a kerberos keytab stored on the KDC hosts."""
-    cred_found = False
-    logger.info('Looking for Kerberos credentials on KDC kadmin node.')
-    for host in decom_hosts:
-        find_keytabs_command = 'find {} -name "{}*"'.format(KERBEROS_KDC_KEYTAB_PATH, host)
-        check_princs_command = '/usr/local/sbin/manage_principals.py list "*{}*"'.format(host)
-        cumin_commands = [Command(find_keytabs_command, ok_codes=[]),
-                          Command(check_princs_command, ok_codes=[])]
-        for _nodeset, _output in remote_host.run_sync(*cumin_commands):
-            cred_found = True
-
-    if cred_found:
-        logger.info('Please follow this guide to drop unused credentials: '
-                    'https://wikitech.wikimedia.org/wiki/Analytics/Systems/Kerberos'
-                    '#Delete_Kerberos_principals_and_keytabs_when_a_host_is_decommissioned')
-    else:
-        logger.info('No Kerberos credentials found.')
 
 
 # Temporary workaround as Netbox sometimes fails with 500 when updating the device because of a stale reference
