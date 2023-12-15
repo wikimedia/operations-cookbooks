@@ -119,11 +119,15 @@ class UpgradeRunner(CookbookRunnerBase):
             self.phabricator.task_comment(
                 self.task_id,
                 f'Cookbook {__name__} was started by {self.admin_reason.owner} {self.runtime_description}')
+        try:
+            broadcastmessage = self.gitlab_instance.broadcastmessages.create({
+                'message': f'Maintenance {self.message} starting soon.',
+                'broadcast_type': 'notification'
+            })
+        except gitlab.exceptions.GitlabCreateError as e:
+            raise RuntimeError("Unable to create broadcast message."
+                               "Make sure your access token uses scope api and admin_mode.") from e
 
-        broadcastmessage = self.gitlab_instance.broadcastmessages.create({
-            'message': f'Maintenance {self.message} starting soon.',
-            'broadcast_type': 'notification'
-        })
         self.preload_debian_package()
         if self.skip_replica_backups:
             logger.info("Skipping creation of backups")
@@ -154,7 +158,8 @@ class UpgradeRunner(CookbookRunnerBase):
 
         gitlab_version = self.gitlab_instance.version()[0]
         if gitlab_version == "unknown":
-            raise RuntimeError("Failed to get GitLab version from API, check API token and URL")
+            raise RuntimeError("Failed to get GitLab version from API."
+                               "Check instance, API token (scope api and admin_mode) and URL")
 
         current = version.parse(gitlab_version)
         target = version.parse(self.target_version.split("-")[0])
