@@ -33,4 +33,4 @@ class SwiftProxiesMSRestartRebootRunner(SRELBBatchRunnerBase):
     @property
     def restart_daemons(self):
         """Return a list of daemons to restart when using the restart action"""
-        return ['swift-proxy', 'nginx']
+        return ['swift-proxy', 'envoyproxy']
