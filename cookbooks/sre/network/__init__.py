@@ -172,10 +172,13 @@ def run_junos_commands(remote_host: RemoteHosts, conf_commands: list) -> None:
                         'commit check',
                         'exit']
 
-        remote_host.run_sync(';'.join(commands), is_safe=is_safe, print_progress_bars=False)
+        results_raw = remote_host.run_sync(';'.join(commands), is_safe=is_safe, print_progress_bars=False)
         if mode == 'compare':
             ask_confirmation('Commit the above change?')
         elif mode == 'commit':
+            output_lines = RemoteHosts.results_to_list(results_raw)[0][1].split('\n')
+            if output_lines[-2] != 'commit complete':
+                raise RuntimeError('JunOS config commit failed - see above - device may need Homer run')
             logger.info('Commited the above change, needs to be confirmed')
         elif mode == 'confirm':
             logger.info('Change confirmed')
