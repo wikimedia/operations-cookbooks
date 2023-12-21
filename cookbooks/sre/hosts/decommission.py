@@ -229,10 +229,10 @@ class DecommissionHostRunner(CookbookRunnerBase):
             logger.debug("Query '%s' did not match any host or failed", args.query, exc_info=True)
             decom_hosts = NodeSet(args.query)
             ask_confirmation(
-                'ATTENTION: the query DOES NOT MATCH any host in PuppetDB or failed\n'
-                'Hostname expansion matches {n} UNVERIFIED hosts: {hosts}\n'
+                'ATTENTION: the query DOES NOT MATCH any host in PuppetDB\n'
+                f'Hostname expansion matches {len(decom_hosts)} UNVERIFIED hosts: {decom_hosts}\n'
                 'Do you want to proceed anyway?'
-                .format(n=len(decom_hosts), hosts=decom_hosts))
+            )
             self.decom_hosts = decom_hosts
 
         if len(self.decom_hosts) > 20:
@@ -255,9 +255,19 @@ class DecommissionHostRunner(CookbookRunnerBase):
         for fqdn in self.decom_hosts:
             hostname = fqdn.split('.')[0]
             self.netbox_servers[hostname] = spicerack.netbox_server(hostname)
-            netbox_fqdn = self.netbox_servers[hostname].fqdn
-            if netbox_fqdn and fqdn != netbox_fqdn:
-                raise RuntimeError(f'Mismatched FQDN {fqdn} does not match Netbox FQDN {netbox_fqdn}')
+            try:
+                netbox_fqdn = self.netbox_servers[hostname].fqdn
+                if netbox_fqdn and fqdn != netbox_fqdn:
+                    raise RuntimeError(f'Mismatched FQDN {fqdn} does not match Netbox FQDN {netbox_fqdn}')
+            except NetboxError:
+                spicerack.actions[fqdn].warning(
+                    f'//Missing DNSName in Nebox for {hostname}, unable to verify it.//')
+
+            try:
+                self.dns.resolve_ips(fqdn)
+            except DnsNotFound:
+                spicerack.actions[fqdn].warning(
+                    f'//Missing DNS record for {fqdn}, the steps requiring DNS will fail.//')
 
             if self.netbox_servers[hostname].virtual:
                 continue
