@@ -2,7 +2,7 @@
 import logging
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.remote import RemoteExecutionError
+from spicerack.remote import RemoteExecutionError, RemoteHosts
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -18,7 +18,7 @@ class UpdateWikireplicaViews(CookbookBase):
     https://wikitech.wikimedia.org/wiki/Portal:Data_Services/Admin/Wiki_Replicas#Updating_views
 
     Usage example:
-      cookbook sre.wikireplicas.update-views --section s1 --task-id T12345
+      cookbook sre.wikireplicas.update-views --task-id T12345
     """
 
     def argument_parser(self):
@@ -26,23 +26,6 @@ class UpdateWikireplicaViews(CookbookBase):
         parser = super().argument_parser()
         parser.add_argument(
             "-t", "--task-id", help="Phabricator task ID (e.g. T123456) to log to"
-        )
-
-        # TODO eventually "all" sections could be passed, which would iterate through each section.
-        parser.add_argument(
-            "--section",
-            choices=[
-                "s1",
-                "s2",
-                "s3",
-                "s4",
-                "s5",
-                "s6",
-                "s7",
-                "s8",
-            ],
-            help="Database section to be updated.",
-            required=True,
         )
         return parser
 
@@ -67,7 +50,6 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
         self.actions = spicerack.actions
 
         self.task_id = args.task_id
-        self.section = args.section
 
         if self.task_id is not None:
             self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
@@ -97,18 +79,8 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
 
         ask_confirmation("Ready to proceed?")
 
-    def _determine_clouddb_hostname_to_update(self, section, category) -> str:
-        query = f"P{{O:wmcs::db::wikireplicas::{category}_multiinstance}} and A:db-section-{section}"
-
-        clouddb_hosts = self.remote.query(query).hosts
-
-        if len(clouddb_hosts) != 1:
-            raise RuntimeError(f"Expected 1 clouddb host, got {clouddb_hosts}")
-
-        return clouddb_hosts[0]
-
     @staticmethod
-    def _run_sql_test_pre():
+    def _run_sql_test_pre(host: RemoteHosts):
         # TODO allow passing the sql command as an argument, like:
         #     --test-sql 'select * from enwiki.flaggedrevs limit 1'
         # which would be run like:
@@ -118,39 +90,41 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
         print("Run your test sql statement now.")
 
         ask_confirmation(
-            "Does your sql statement reflect the expected pre-update state?"
+            f"Does your SQL statement reflect the expected pre-update state on {host}?"
         )
 
-    def _run_maintain_views(self, clouddb_hostname):
-        host_actions = self.actions[clouddb_hostname]
-
-        remote_host = self.remote.query(clouddb_hostname)
+    def _run_maintain_views_on_host(self, remote_hosts: RemoteHosts):
+        host_actions = self.actions[str(remote_hosts)]
 
         try:
-            # TODO is it a reasonable approach to run against all tables and all databases?
-            # It takes longer to run, but it simplifies the logic of filtering for specific
-            # databases or tables.
+            # TODO: allow passing a table filter as an argument
             command = "maintain-views --all-databases --replace-all"
-            remote_host.run_sync(command)
-            host_actions.success(f"Ran {command}")
+            remote_hosts.run_sync(command)
+            host_actions.success(f"Ran '{command}'")
         except RemoteExecutionError:
             host_actions.failure(
-                "**The maintain-views failed, see OUTPUT of 'maintain-views ...' above for details**"
+                "**The maintain-views run failed, see OUTPUT of 'maintain-views ...' above for details**"
             )
             raise
 
+    def _run_maintain_views(self, remote_hosts: RemoteHosts):
+        for host in remote_hosts.split(len(remote_hosts)):
+            self._run_maintain_views_on_host(host)
+
     @staticmethod
-    def _run_sql_test_post():
+    def _run_sql_test_post(host: RemoteHosts):
         print(
             "Now re-run the sql statement that failed before, to test the views have been updated."
         )
 
-        ask_confirmation("Does your sql statement reflect the expected outcome?")
+        ask_confirmation(f"Does your SQL statement reflect the expected outcome on {host}?")
 
-    def _update_views_on_host(self, clouddb_hostname):
-        self._run_sql_test_pre()
-        self._run_maintain_views(clouddb_hostname)
-        self._run_sql_test_post()
+    def _test_with_dedicated_host(self, query: str):
+        """Interactively check that the change looks fine on the special dedicated analytics host."""
+        remote_hosts = self.remote.query(query)
+        self._run_sql_test_pre(remote_hosts)
+        self._run_maintain_views(remote_hosts)
+        self._run_sql_test_post(remote_hosts)
 
     def rollback(self):
         """Comment on phabricator in case of a failed run."""
@@ -158,32 +132,27 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
             self.phabricator.task_comment(
                 self.task_id,
                 (
-                    f"Cookbook {__name__} for section {self.section} started by {self.username} executed with errors:\n"
+                    f"Cookbook {__name__} started by {self.username} executed with errors:\n"
                     f"{self.actions}\n"
                 ),
             )
 
     def run(self):
         """Run the cookbook."""
-        db_categories = ["analytics", "web"]
-
         if self.phabricator is not None:
-            phab_message = self._format_phab_message(
-                "Started updating wikireplica views"
-            )
+            phab_message = self._format_phab_message("Started updating wiki replica views")
             self.phabricator.task_comment(self.task_id, phab_message)
 
-        for category in db_categories:
-            clouddb_hostname = self._determine_clouddb_hostname_to_update(
-                self.section, category
-            )
-            self._update_views_on_host(clouddb_hostname)
+        self._test_with_dedicated_host("O:wmcs::db::wikireplicas::dedicated::analytics_multiinstance")
+
+        for category in ["analytics", "web"]:
+            self._run_maintain_views(self.remote.query(f"P{{O:wmcs::db::wikireplicas::{category}_multiinstance}}"))
 
         if self.phabricator is not None:
             self.phabricator.task_comment(
                 self.task_id,
                 (
-                    f"Cookbook {__name__} for section {self.section} started by {self.username} completed:\n"
+                    f"Cookbook {__name__} started by {self.username} completed:\n"
                     f"{self.actions}\n"
                 ),
             )
