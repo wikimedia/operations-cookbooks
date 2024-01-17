@@ -42,8 +42,9 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
     def __init__(self, args, spicerack):
         """Add a new node to a Ganeti cluster."""
         ganeti = spicerack.ganeti()
-        # Validate cluster and group names, will raise if they're not correct.
-        ganeti.get_group(args.group, cluster=args.cluster)
+        # Validate cluster and group names while getting routed status
+        # will raise if they're not correct.
+        self.routed = ganeti.get_group(args.group, cluster=args.cluster).cluster.routed
         self.remote = spicerack.remote()
         self.master = self.remote.query(ganeti.rapi(args.cluster).master)
         self.remote_host = self.remote.query(args.fqdn)
@@ -141,11 +142,12 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
             run_on_masternode=True,
         )
 
-        self.is_valid_bridge('private')
-        self.is_valid_bridge('public')
+        if not self.routed:
+            self.is_valid_bridge('private')
+            self.is_valid_bridge('public')
 
-        if self.fqdn in self.remote.query('A:eqiad').hosts:
-            self.is_valid_bridge('analytics')
+            if self.fqdn in self.remote.query('A:eqiad').hosts:
+                self.is_valid_bridge('analytics')
 
         self.master.run_sync(f'gnt-node add --no-ssh-key-check -g "{self.group}" "{self.fqdn}"')
         ask_confirmation('Has the node been added correctly?')

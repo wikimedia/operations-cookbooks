@@ -96,6 +96,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         self.args = args
         self.ganeti = spicerack.ganeti()
         self.group = self.ganeti.get_group(args.group, cluster=args.cluster)
+        self.routed = self.group.cluster.routed
         self.cluster = args.cluster
         self.hostname = args.hostname
         self.vcpus = args.vcpus
@@ -158,8 +159,19 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
             f'systemctl start netbox_ganeti_{cluster}_sync.service')
         self.need_netbox_sync = False
 
-    def run(self):  # pylint: disable=too-many-locals disable=too-many-statements
-        """Create a new Ganeti VM as specified."""
+    def _v4_mapped_v6_ip(self, prefix_v6, ip_v4) -> str:
+        """Generate the IPv6 address embedding the IPv4 address."""
+        # For example from an IPv4 address 10.0.0.1 and an IPv6 prefix 2001:db8:3c4d:15::/64
+        # the mapped IPv6 address 2001:db8:3c4d:15:10:0:0:1/64 is generated.
+        prefix_v6_base, prefix_v6_mask = str(prefix_v6).split("/")
+        mapped_v4 = str(ip_v4).split('/', maxsplit=1)[0].replace(".", ":")
+        prefix_v6 = prefix_v6_base.rstrip(':')
+        if self.routed:
+            prefix_v6_mask = '128'
+        return f'{prefix_v6}:{mapped_v4}/{prefix_v6_mask}'
+
+    def _find_switched_prefixes(self) -> tuple:
+        """Fetch the v4 and v6 prefixes matching the hosts site and vlan type."""
         # Pre-allocate IPs
         # TODO: simplify the VLAN detection logic
         if self.group.site in CORE_DATACENTERS or self.group.site in PER_RACK_VLAN_DATACENTERS:
@@ -174,22 +186,42 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
         prefix_v4 = self.netbox.api.ipam.prefixes.get(vlan_id=vlan.id, family=4)
         prefix_v6 = self.netbox.api.ipam.prefixes.get(vlan_id=vlan.id, family=6)
+        return (prefix_v4, prefix_v6)
+
+    def _find_routed_prefixes(self) -> tuple:
+        """Fetch the v4 and v6 prefixes matching the host site and network type for routed Ganeti."""
+        filters = {'status': 'active',
+                   'role': 'virtual-machines',
+                   'site': self.group.site,
+                   'description__isw': self.network}  # A bit brittle
+        try:
+            prefix_v4 = self.netbox.api.ipam.prefixes.get(family=4, **filters)
+            prefix_v6 = self.netbox.api.ipam.prefixes.get(family=6, **filters)
+        except ValueError as e:
+            raise RuntimeError(('More than 1 possible prefix found to allocate IPs.')) from e
+        return (prefix_v4, prefix_v6)
+
+    def run(self):  # pylint: disable=too-many-statements
+        """Create a new Ganeti VM as specified."""
+        if self.routed:
+            prefix_v4, prefix_v6 = self._find_routed_prefixes()
+        else:
+            prefix_v4, prefix_v6 = self._find_switched_prefixes()
+        if not prefix_v4 or not prefix_v6:
+            raise RuntimeError('No IPv4 or v6 prefix found to allocate IPs to this VM.')
         ip_v4_data = prefix_v4.available_ips.create({})
-        self.allocated.append(ip_v4_data['address'])
-        logger.info('Allocated IPv4 %s', ip_v4_data['address'])
         ip_v4 = self.netbox.api.ipam.ip_addresses.get(address=ip_v4_data['address'])
+        if self.routed:
+            # by default Netbox creates IPs with the same prefix than the subnet, but we need a /32s v4
+            ip_v4.address = f"{str(ip_v4.address).split('/', maxsplit=1)[0]}/32"
         ip_v4.dns_name = self.fqdn
         if not ip_v4.save():
             raise RuntimeError(f'Failed to save DNS name for IP {ip_v4} on Netbox')
-
+        logger.info('Allocated IPv4 %s', ip_v4.address)
+        self.allocated.append(ip_v4.address)
         logger.info('Set DNS name of IP %s to %s', ip_v4, self.fqdn)
 
-        # Generate the IPv6 address embedding the IPv4 address, for example from an IPv4 address 10.0.0.1 and an
-        # IPv6 prefix 2001:db8:3c4d:15::/64 the mapped IPv6 address 2001:db8:3c4d:15:10:0:0:1/64 is generated.
-        prefix_v6_base, prefix_v6_mask = str(prefix_v6).split("/")
-        mapped_v4 = str(ip_v4).split('/', maxsplit=1)[0].replace(".", ":")
-        prefix_v6 = prefix_v6_base.rstrip(':')
-        ipv6_address = f'{prefix_v6}:{mapped_v4}/{prefix_v6_mask}'
+        ipv6_address = self._v4_mapped_v6_ip(prefix_v6, ip_v4)
         if self.skip_v6:
             dns_name_v6 = ''
         else:
@@ -206,7 +238,8 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         logger.info('The Ganeti\'s command output will be printed at the end.')
 
         self.need_netbox_sync = True
-        instance.add(group=self.group.name, vcpus=self.vcpus, memory=self.memory, disk=self.disk, link=self.network)
+        net = ip_v4.address.ip if self.routed else self.network
+        instance.add(group=self.group.name, vcpus=self.vcpus, memory=self.memory, disk=self.disk, net=net)
 
         self._ganeti_netbox_sync()
 
