@@ -86,6 +86,7 @@ class DowntimeRunner(CookbookRunnerBase):
         self.icinga_hosts = spicerack.icinga_hosts(self.hosts, verbatim_hosts=args.force)
         self.alerting_hosts = spicerack.alerting_hosts(self.hosts, verbatim_hosts=args.force)
         self.reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
+        self.lock = spicerack.lock
 
         if args.force_puppet:
             self.puppet = spicerack.puppet(spicerack.icinga_master_host)
@@ -113,7 +114,9 @@ class DowntimeRunner(CookbookRunnerBase):
         """Required by Spicerack API."""
         if self.puppet is not None:
             logging.info('Forcing a Puppet run on the Icinga server')
-            self.puppet.run(quiet=True, attempts=60, timeout=600)
+            # lock to work around T355187
+            with self.lock().acquired('sre.hosts.downtime:force-puppet', concurrency=1, ttl=600):
+                self.puppet.run(quiet=True, attempts=60, timeout=600)
             logging.info('Polling Icinga status to wait for all hosts to be known to Icinga')
             self._poll_status()
 
