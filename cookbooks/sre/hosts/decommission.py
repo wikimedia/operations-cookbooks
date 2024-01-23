@@ -110,7 +110,7 @@ def find_kerberos_credentials(remote_host, decom_hosts):
 # Temporary workaround as Netbox sometimes fails with 500 when updating the device because of a stale reference
 # to one of the primary IPs.
 @retry(tries=4, exceptions=(RequestError,))
-def update_netbox(netbox, netbox_data, dry_run):
+def update_netbox(netbox, netbox_data, keep_mgmt_dns, dry_run):
     """Delete all non-mgmt IPs, disable remote interfaces/vlan and set the status to Decommissioning."""
     # TODO: this is needed instead of calling put_hosts_status() because Netbox cache doesn't get invalidated
     #       immediately making the call to fail. A sleep of 10 seconds did not fix the issue either.
@@ -123,6 +123,10 @@ def update_netbox(netbox, netbox_data, dry_run):
 
     for interface in netbox.api.dcim.interfaces.filter(device_id=netbox_data['id']):
         if interface.mgmt_only:  # Leave it but remove the DNS name
+            if keep_mgmt_dns:
+                logger.info('Skipping removal of DNS names on interface %s', interface.name)
+                continue
+
             if interface.count_ipaddresses > 0:
                 for ip in netbox.api.ipam.ip_addresses.filter(interface_id=interface.id):
                     logger.info('Unset DNS name for IP %s on %s', ip.address, ip.assigned_object.name)
@@ -208,6 +212,8 @@ class DecommissionHost(CookbookBase):
         parser.add_argument('-t', '--task-id', required=True, help='the Phabricator task ID (e.g. T12345)')
         parser.add_argument('--force', action='store_true',
                             help='Bypass the default limit of 5 hosts at a time, but only up to 20 hosts.')
+        parser.add_argument('--keep-mgmt-dns', action='store_true',
+                            help='Do not remove DNS names from management addresses')
 
         return parser
 
@@ -296,6 +302,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
 
         self.spicerack = spicerack
         self.task_id = args.task_id
+        self.keep_mgmt_dns = args.keep_mgmt_dns
         self.puppet_master = self.remote.query(get_puppet_ca_hostname())
         self.kerberos_kadmin = self.remote.query(KERBEROS_KADMIN_CUMIN_ALIAS)
         self.deployment_host = self.remote.query(self.dns.resolve_cname(DEPLOYMENT_HOST))
@@ -392,7 +399,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     '**Failed to power off, manual intervention required**: {e}'
                     .format(e=e))
 
-            update_netbox(netbox, netbox_data, self.spicerack.dry_run)
+            update_netbox(netbox, netbox_data, self.keep_mgmt_dns, self.spicerack.dry_run)
             self.spicerack.actions[fqdn].success(
                 '[Netbox] Set status to Decommissioning, deleted all non-mgmt IPs,  '
                 'updated switch interfaces (disabled, removed vlans, etc)')
