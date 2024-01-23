@@ -7,7 +7,7 @@ import shlex
 
 from socket import gaierror
 
-from ssl import get_server_certificate
+from ssl import get_server_certificate, SSLError
 from subprocess import CalledProcessError, run
 from typing import Optional
 
@@ -128,7 +128,7 @@ class TlsRunner(CookbookRunnerBase):
             # TODO add the "timeout" parameter once cumin hosts are running python >= 3.10 to speed things up
             cert_pem = get_server_certificate((self.device_fqdn, self.port))
             return x509.load_pem_x509_certificate(str.encode(cert_pem))
-        except (ConnectionRefusedError, gaierror, TimeoutError):
+        except (ConnectionRefusedError, gaierror, TimeoutError, SSLError):
             logger.info("%s: ❌ Can't connect to device, assuming initial bootstrap.", self.device)
             return None
 
