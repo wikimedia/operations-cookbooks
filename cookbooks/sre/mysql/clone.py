@@ -178,7 +178,8 @@ class CloneMySQLRunner(CookbookRunnerBase):
         SELECT greatest(0, TIMESTAMPDIFF(MICROSECOND, max(ts), UTC_TIMESTAMP(6)) - 500000)/1000000
         FROM heartbeat.heartbeat
         ORDER BY ts LIMIT 1;
-        """.replace('\n', '')
+        """
+        query = query.replace('\n', '')
         query_res = host.run_sync(f'mysql -e "{query}"')
         query_res = list(query_res)[0][1].message().decode('utf-8')
         replag = 1000.0
