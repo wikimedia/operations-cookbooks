@@ -4,6 +4,8 @@ import argparse
 import logging
 import re
 
+from ipaddress import ip_interface
+
 from wmflib.constants import CORE_DATACENTERS, DATACENTER_NUMBERING_PREFIX
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
@@ -238,7 +240,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         logger.info('The Ganeti\'s command output will be printed at the end.')
 
         self.need_netbox_sync = True
-        net = ip_v4.address.ip if self.routed else self.network
+        net = ip_interface(ip_v4.address).ip if self.routed else self.network
         instance.add(group=self.group.name, vcpus=self.vcpus, memory=self.memory, disk=self.disk, net=net)
 
         self._ganeti_netbox_sync()
