@@ -5,6 +5,7 @@ decommissioning logic is preserved. systemd unit ordering should safeguard
 these units as well.
 """
 
+from spicerack.administrative import Reason
 from spicerack.remote import RemoteHosts
 from wmflib.constants import ALL_DATACENTERS
 
@@ -48,8 +49,10 @@ class WDNSRestart(SREBatchBase):
 class Runner(SREBatchRunnerBase):
     """Wikimedia DNS restart Cookbook runner."""
 
-    disable_puppet_on_restart = True
-    disable_puppet_on_reboot = True
+    def _reboot_action(self, hosts: RemoteHosts, reason: Reason) -> None:
+        # Depool by stopping bird, explicitly.
+        hosts.run_async("/bin/systemctl stop bird.service")
+        super()._reboot_action(hosts, reason)
 
     @property
     def allowed_aliases(self) -> list:
@@ -64,14 +67,6 @@ class Runner(SREBatchRunnerBase):
         """Override the parent property to optimize the query."""
         # This query must include all hosts matching all the allowed_aliases
         return "A:wikidough"
-
-    def pre_action(self, hosts: RemoteHosts) -> None:
-        """Run before performing the action on the batch of hosts."""
-        hosts.run_async("/bin/systemctl stop bird.service")
-
-    def post_action(self, hosts: RemoteHosts) -> None:
-        """Run after performing the action on the batch of hosts."""
-        hosts.run_async("/bin/systemctl start bird.service")
 
     @property
     def restart_daemons(self) -> list:
