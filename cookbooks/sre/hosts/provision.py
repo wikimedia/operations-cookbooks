@@ -2,7 +2,6 @@
 import logging
 
 from pprint import pformat
-from socket import gethostname
 from time import sleep
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
@@ -136,13 +135,13 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
         self.mgmt_password = spicerack.management_password
 
-        # Testing that the management password is correct connecting to the current cumin host
-        localhost = gethostname()
+        # Testing that the management password is correct connecting to the first physical cumin host
+        cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
         try:
-            spicerack.redfish(localhost).check_connection()
+            spicerack.redfish(cumin_host).check_connection()
         except RedfishError:
             raise RuntimeError(
-                f'The management password provided seems incorrect, it does not work on {localhost}.') from None
+                f'The management password provided seems incorrect, it does not work on {cumin_host}.') from None
 
         self.config_changes = {
             'BIOS.Setup.1-1': {
