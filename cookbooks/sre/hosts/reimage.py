@@ -1,4 +1,4 @@
-"""Image or re-image a physical host."""
+"""Image or re-image a physical host or a Ganeti VM."""
 import ipaddress
 import logging
 import os
