@@ -137,7 +137,7 @@ class UpgradeRunner(CookbookRunnerBase):
         self.fail_for_background_migrations()
         self.fail_for_running_backup()
         paused_runners = pause_runners(self.token, self.url, dry_run=self.spicerack.dry_run)
-        with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=15)):
+        with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=180)):
             self.install_debian_package()
             unpause_runners(paused_runners, dry_run=self.spicerack.dry_run)
             broadcastmessage.delete()
