@@ -241,7 +241,8 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
         self.need_netbox_sync = True
         net = ip_interface(ip_v4.address).ip if self.routed else self.network
-        instance.add(group=self.group.name, vcpus=self.vcpus, memory=self.memory, disk=self.disk, net=net)
+        ip6 = ip_interface(ip_v6.address).ip
+        instance.add(group=self.group.name, vcpus=self.vcpus, memory=self.memory, disk=self.disk, net=net, ip6=ip6)
 
         self._ganeti_netbox_sync()
 
