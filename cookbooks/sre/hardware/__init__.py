@@ -260,6 +260,10 @@ class DellAPI:
         }
         # set launguage pref
         self.session.cookies["lwp"] = "c=uk&l=en&s=bsd&cs=ukbsdt1"
+        self._products: dict[str, DellProduct] = {}
+
+    def refresh_session(self):
+        """Refresh the session with the lastest cookies and csrf token."""
         # populate cookie store
         self.session.get("https://www.dell.com/support/home")
         # We need to grab this page to get the csrf-token
@@ -273,8 +277,6 @@ class DellAPI:
             raise DellAPIError("Unable to find drivers-csrf-token")
 
         self.session.headers.update({'anti-csrf-token': parser.csrf_token})
-
-        self._products: dict[str, DellProduct] = {}
 
     def get(self, product: str, force: bool = False) -> DellProduct:
         """Getter for products, includes caching.
@@ -304,6 +306,7 @@ class DellAPI:
         dell_product = DellProduct(product)
         three_years_ago = datetime.now() - timedelta(days=3 * 365)
 
+        self.refresh_session()
         data = {
             "productcode": product,
             # The idrac [mostly] expects to receive an exe self extracting zip targeted for windows
