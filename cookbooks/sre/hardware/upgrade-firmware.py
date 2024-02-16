@@ -1,4 +1,4 @@
-"""Decommission a host from all inventories."""
+"""Audit and if necessary update firmware on a host."""
 # pylint: disable=too-many-lines
 import logging
 import shlex
@@ -113,10 +113,10 @@ class FirmwareUpgrade(CookbookBase):
 
 
 class FirmwareUpgradeRunner(CookbookRunnerBase):
-    """Decommission host runner."""
+    """Firmware upgrade runner."""
 
     def __init__(self, args, spicerack):
-        """Decommission a host from all inventories."""
+        """Audit and possibly upgrade host firmware."""
         config = load_yaml_config(
             spicerack.config_dir / "cookbooks" / "sre.hardware.upgrade-firmware.yaml"
         )
