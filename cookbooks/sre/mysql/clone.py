@@ -99,6 +99,8 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self.logger.info('Stopping mariadb on %s', self.source_host)
 
         self._run_scripts(self.source_host, ['mysql -e "STOP SLAVE;"'])
+        # Sleep for a second to make sure the position is updated
+        time.sleep(1)
         replication_status = self.source_host.run_sync('mysql -e "SHOW SLAVE STATUS\\G"')
         replication_status = list(replication_status)[0][1].message().decode('utf-8')
         binlog_file = re.findall(r'\sMaster_Log_File:\s*(\S+)', replication_status)
