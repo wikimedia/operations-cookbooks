@@ -438,7 +438,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             ask_confirmation('Unable to verify that the host rebooted into the new OS, it might still be in the '
                              f'Debian installer, please verify manually with: sudo install-console {self.fqdn}')
 
-        result = self.remote_installer.run_sync('lsb_release -sc', print_output=False, print_progress_bars=False)
+        result = self.remote_installer.run_sync('lsb_release -sc',
+                                                print_output=False, print_progress_bars=False, is_safe=True)
 
         distro: str = 'unknown'
         for _, output in result:
