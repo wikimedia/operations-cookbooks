@@ -280,7 +280,9 @@ class PeeringRunner(CookbookRunnerBase):
         if not grouped_sessions or list(grouped_sessions.keys()) == ['Established']:
             logger.info('Nothing to do')
             return set(), '', ''
-
+        if 'Idle' in grouped_sessions:
+            logger.info('Please clear the idle BGP session(s) using the "clear" cookbook action.')
+            return set(), '', ''
         them_human = f"{sessions[0]['name_r']} (AS{asn_r})"
         body = f"Hello {them_human},\n\n"
 
@@ -318,6 +320,9 @@ Please see the table below and let us know.
 As we use data from PeeringDB please make sure your records are up to date.
 If no reply or an extended downtime, we will have to delete the session(s).\n\n"""
 
+        if not subject_actions:
+            raise RuntimeError("Not all sessions are established, but can't automatically find what's wrong.")
+
         subject = f"{' and '.join(subject_actions)} between the Wikimedia Foundation (AS14907) and {them_human}"
         body += str(peering_matrix) + '\n' + FOOTER
 
@@ -343,7 +348,7 @@ If no reply or an extended downtime, we will have to delete the session(s).\n\n"
         if not subject:
             return
         print(f'\nSubject: {subject} \n\n {body}')
-        if recipients is None:
+        if not recipients:
             logger.error('No recipients')
             return
         if self.dry_run:
