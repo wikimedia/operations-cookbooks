@@ -535,33 +535,47 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
     def _clear_dhcp_cache(self):
         """If the host is connected to EVPN switch clear the DHCP and MAC caches. Workaround for T306421."""
-        if self.virtual:
-            return
-        netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
         # We only have EVPN running in eqiad and codfw
-        if netbox_host.site.slug not in ('eqiad', 'codfw'):
+        if self.netbox_data["site"]["slug"] not in ('eqiad', 'codfw'):
             return
-        iface = netbox_host.primary_ip.assigned_object
+
+        if self.virtual:
+            # set netbox_host to the hypervisor host so we can find the attached switch
+            hypervisor_name = self.ganeti_data['pnode'].split('.')[0]
+            netbox_host = self.netbox.api.dcim.devices.get(name=hypervisor_name)
+            # on ganeti hosts the primary IP is on a bridge device, need to get physical member
+            hypervisor_iface = netbox_host.primary_ip.assigned_object
+            if hypervisor_iface.type.value == 'bridge':
+                iface = self.netbox.api.dcim.interfaces.get(device_id=netbox_host.id, bridge_id=hypervisor_iface.id,
+                                                            type__n=('virtual', 'lag', 'bridge'), mgmt_only=False)
+            else:
+                iface = hypervisor_iface
+        else:
+            netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
+            iface = netbox_host.primary_ip.assigned_object
+
+        nb_switch = self.netbox.api.dcim.devices.get(id=iface.connected_endpoint.device.id)
+
         # Return if connected switch is not QFX5120 - all EVPN ones are
-        if not iface.connected_endpoint.device.device_type.model.lower().startswith('qfx5120'):
+        if not nb_switch.device_type.model.lower().startswith('qfx5120'):
             return
-        # Otherwise check if a vlan with the rack name exists
+        # Check if a private vlan matching our convention exists, to avoid cloudsw
         rack_vlan_name = f'private1-{netbox_host.rack.name.lower()}-{netbox_host.site.slug}'
         netbox_rack_vlan = self.netbox.api.ipam.vlans.get(name=rack_vlan_name)
         if netbox_rack_vlan is None:
             return
 
-        # Get switch IP and server interface MAC to clear caches
-        switch_fqdn = iface.connected_endpoint.device.primary_ip.dns_name
-        switch = self.remote.query(f'D{{{switch_fqdn}}}')
-        ip = ipaddress.ip_interface(netbox_host.primary_ip4).ip
+        # Get MAC address of host primary interface
         mac_command = '/usr/bin/facter -p networking.mac'
         result = self.remote_host.run_sync(mac_command, is_safe=True, print_progress_bars=False, print_output=False)
-
         mac: str = ''
         for _, output in result:
             mac = output.message().decode().strip()
 
+        ip = ipaddress.ip_interface(self.netbox_data['primary_ip4']['address']).ip
+        # Get switch object and run commands to clear MAC and DHCP caches
+        switch_fqdn = nb_switch.primary_ip.dns_name
+        switch = self.remote.query(f'D{{{switch_fqdn}}}')
         commands = [
             f'clear dhcp relay binding {ip} routing-instance PRODUCTION',
             f'clear ethernet-switching mac-ip-table {mac}'
