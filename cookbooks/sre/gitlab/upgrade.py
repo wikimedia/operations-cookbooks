@@ -52,6 +52,8 @@ class Upgrade(CookbookBase):
                             action='store_true')
         parser.add_argument('-t', '--task-id', required=False,
                             help='An optional task ID to refer in the downtime message (i.e. T12345).')
+        parser.add_argument("-c", "--skip-confirm-prompt", default=False,
+                            help="Skip confirmation prompt before restarting hosts")
         return parser
 
     def get_runner(self, args):
@@ -76,6 +78,7 @@ class UpgradeRunner(CookbookRunnerBase):
         self.admin_reason = spicerack.admin_reason(args.reason)
         self.url = get_gitlab_url(self.remote_host)
         self.target_version = args.version
+        self.skip_confirm_prompt = args.skip_confirm_prompt
 
         if args.skip_replica_backups and not self.check_can_skip_backup():
             raise RuntimeError(f"--skip_replica-backups can't be used on {self.url}")
@@ -134,8 +137,19 @@ class UpgradeRunner(CookbookRunnerBase):
         else:
             self.create_data_backup()
             self.create_config_backup()
+
         self.fail_for_background_migrations()
         self.fail_for_running_backup()
+
+        if not self.skip_replica_backups and not self.skip_confirm_prompt:
+            self.spicerack.irc_logger.info(
+                f"{self.spicerack.username}: The switchover backup on on {self.host} is complete"
+            )
+            ask_confirmation(
+                "The backup is complete, and we are ready to install the package. Gitlab will restart and be "
+                "unavailable once you continue. Ready to go?"
+            )
+
         paused_runners = pause_runners(self.token, self.url, dry_run=self.spicerack.dry_run)
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=180)):
             self.install_debian_package()
