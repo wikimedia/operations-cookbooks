@@ -465,8 +465,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 "query": [
                     "and",
                     ["=", "title", self.host],
-                    ["=", "type", "Nagios_host"],
-                    ["=", "exported", True]
+                    ["=", "type", "Nagios_host"]
                 ]
             }
             response = self.requests.post(
