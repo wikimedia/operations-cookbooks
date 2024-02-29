@@ -26,6 +26,8 @@ OLD_SERIAL_MODELS = (
 DELL_VENDOR_SLUG = 'dell'
 SUPERMICRO_VENDOR_SLUG = 'supermicro'
 SUPPORTED_VENDORS = [DELL_VENDOR_SLUG]
+# Hostname prefixes that usually need --enable-virtualization
+VIRT_PREFIXES = ('ganeti', 'cloudvirt')
 logger = logging.getLogger(__name__)
 
 
@@ -121,6 +123,9 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 password = DELL_DEFAULT
 
         self.redfish = spicerack.redfish(self.args.host, password=password)
+
+        if self.args.host.startswith(VIRT_PREFIXES) and not self.args.enable_virtualization:
+            ask_confirmation("Virtualization not enabled but this host might need it, continue?")
 
         # DHCP automation
         self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
