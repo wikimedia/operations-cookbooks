@@ -83,6 +83,9 @@ class Reimage(CookbookBase):
             '--pxe-media', default='installer',
             help=('Specify a different media suffix to use in the PXE settings of the DHCP configuration. To be used '
                   'when a specific installer is needed that is available as tftpboot/$OS-$PXE_MEDIA/.'))
+        parser.add_argument(
+            '--move-vlan', action='store_true',
+            help='Call the sre.hosts.move-vlan cookbook to migrate the host to the new VLAN during the reimage.')
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         parser.add_argument('--os', choices=OS_VERSIONS, required=True,
                             help='the Debian version to install. Mandatory parameter. One of %(choices)s.')
@@ -639,6 +642,19 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                     self.host_actions.success('Disabled Puppet')
                 except RemoteExecutionError:
                     self.host_actions.warning('//Unable to disable Puppet, the host may have been unreachable//')
+
+        if self.args.move_vlan:
+            move_vlan_retcode = self.spicerack.run_cookbook(
+                'sre.hosts.move-vlan', ['reimage', self.host])
+            if move_vlan_retcode == 0:
+                self.host_actions.success('Host successfully migrated to the new VLAN')
+            else:
+                self.host_actions.failure('**Failed to migrate host to the new VLAN, '
+                                          f'sre.hosts.move-vlan cookbook returned {move_vlan_retcode}**')
+                raise RuntimeError(f'sre.hosts.move-vlan cookbook returned {move_vlan_retcode}')
+            # Update the DHCP config with the New IP
+            self.dhcp_config = self._get_dhcp_config_opt82()
+            self._validate()
 
         # Clear both old Puppet5 and new Puppet7 infra in all cases, it doesn't fail if the host is not present
         self.puppet_server.delete(self.fqdn)
