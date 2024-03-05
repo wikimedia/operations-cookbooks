@@ -25,3 +25,8 @@ def run(args, spicerack):
     logger.info('Stopping MediaWiki maintenance jobs in %s', ', '.join(datacenters))
     for datacenter in datacenters:
         spicerack.mediawiki().stop_periodic_jobs(datacenter)
+        batch_api = spicerack.kubernetes('main', datacenter).api.batch()
+        if spicerack.dry_run:
+            logger.info('Skipping deletion of mw-script Kubernetes jobs in %s, due to --dry-run', datacenter)
+        else:
+            batch_api.delete_collection_namespaced_job('mw-script')
