@@ -20,6 +20,10 @@ from cookbooks.sre.hosts import (
 __title__ = 'Restart pods in mw-jobrunner on kubernetes in DC_FROM.'
 logger = logging.getLogger(__name__)
 HELMFILE_PATH = f"{DEPLOYMENT_CHARTS_REPO_PATH}/helmfile.d/services/mw-jobrunner"
+env_vars = ('HELM_CACHE_HOME="/var/cache/helm"',
+            'HELM_DATA_HOME="/usr/share/helm"',
+            'HELM_HOME="/etc/helm"',
+            'HELM_CONFIG_HOME="/etc/helm"')
 
 
 def argument_parser():
@@ -35,4 +39,4 @@ def run(args, spicerack):
     spicerack.remote().query(f"A:mw-jobrunner-{args.dc_from}").run_sync('systemctl restart envoyproxy')
     logger.info('Restarting pods in mw-jobrunner on kubernetes in %s', args.dc_from)
     spicerack.remote().query(deployment_cname).run_async(
-        f"cd {HELMFILE_PATH} ; helmfile -e {args.dc_from} --state-values-set roll_restart=1 sync")
+        f"cd {HELMFILE_PATH}; {' '.join(env_vars)} helmfile -e {args.dc_from} --state-values-set roll_restart=1 sync")
