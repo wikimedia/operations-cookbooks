@@ -143,7 +143,7 @@ class UpgradeRunner(CookbookRunnerBase):
 
         if not self.skip_replica_backups and not self.skip_confirm_prompt:
             self.spicerack.irc_logger.info(
-                f"{self.spicerack.username}: The switchover backup on on {self.host} is complete"
+                f"{self.spicerack.username}: The backup on {self.host} is complete, ready to proceed with upgrade."
             )
             ask_confirmation(
                 "The backup is complete, and we are ready to install the package. Gitlab will restart and be "
