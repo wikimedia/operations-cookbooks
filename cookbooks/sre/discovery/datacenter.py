@@ -10,7 +10,7 @@ from spicerack.administrative import Reason
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.dnsdisc import DiscoveryCheckError, DiscoveryError
-from spicerack.remote import RemoteHosts
+from spicerack.remote import RemoteHosts, RemoteExecutionError
 from spicerack.service import ServiceDiscoveryRecord, ServiceIPs
 from spicerack.confctl import ConfctlError
 from wmflib.constants import CORE_DATACENTERS
@@ -61,11 +61,20 @@ class DiscoveryRecord:
         recursors.run_sync(f"sudo rec_control wipe-cache {self.fqdn}")
 
     def clean_discovery_templates(self, authdns: RemoteHosts):
-        """Removes spurious dns discovery errors when switching A/P services."""
+        """Removes spurious dns discovery errors when switching A/P services, best effort."""
         if self.active_active:
             logger.debug("NOT clearing confd templates for %s as it's an active/active service.", self.name)
             return
-        authdns.run_sync(f"rm -fv /var/run/confd-template/.discovery-{self.name}.state*.err")
+
+        # As authdns hosts could be depooled and under maintenance but still receiving confd updates and hence
+        # generating the error files, attempt to delete them best-effort, just logging in case of failure.
+        try:
+            authdns.run_sync(f"rm -fv /var/run/confd-template/.discovery-{self.name}.state*.err")
+        except RemoteExecutionError:
+            logger.warning(
+                "Confd templates error files not properly cleared, check the output above for failures. "
+                "Check if any dnsauth host was unreachable or under maintenance."
+            )
 
     @retry(backoff_mode="constant", exceptions=(DiscoveryCheckError, DiscoveryError), tries=15)
     def check_records(self):

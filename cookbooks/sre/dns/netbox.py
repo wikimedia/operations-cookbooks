@@ -24,7 +24,6 @@ NETBOX_USER = 'netbox'
 NETBOX_HOSTS_QUERY = 'A:netbox'
 AUTHDNS_NETBOX_CHECKOUT_PATH = '/srv/git/netbox_dns_snippets'
 AUTHDNS_USER = 'netboxdns'
-AUTHDNS_HOSTS_QUERY = 'A:dns-auth'
 AUTHDNS_DNS_CHECKOUT_PATH = '/srv/authdns/git'
 
 
@@ -115,7 +114,11 @@ def run(args, spicerack):  # pylint: disable=too-many-locals
     passive_netbox_hosts.run_sync('runuser -u {user} -- git -C "{path}" fetch {host} master:master'.format(
         path=NETBOX_BARE_REPO_PATH, user=NETBOX_USER, host=netbox_hostname))
 
-    authdns_hosts = remote.query(AUTHDNS_HOSTS_QUERY)
+    # Get only pooled hosts
+    conftool = spicerack.confctl('node')
+    authdns_hostnames = [
+        h.name for h in conftool.filter_objects({'pooled': 'yes'}, cluster='dnsbox', service='authdns-update')]
+    authdns_hosts = remote.query(','.join(authdns_hostnames))
     logger.info('Updating the authdns copies of the repository on %s', authdns_hosts)
     confirm_on_failure(
         authdns_hosts.run_sync,
