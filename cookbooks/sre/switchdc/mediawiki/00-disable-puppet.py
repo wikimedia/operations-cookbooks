@@ -1,4 +1,4 @@
-"""Disable Puppet where Puppet patches are required to switch datacenter"""
+"""Disable Puppet on maintenance hosts so that it doesn't restart stopped jobs"""
 import logging
 
 from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args, PUPPET_REASON

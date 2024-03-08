@@ -1,4 +1,4 @@
-"""Set the core DB masters in read-only mode and check replication"""
+"""Set the old-site core DB masters in read-only mode and check replication"""
 import logging
 
 from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args
