@@ -167,7 +167,7 @@ class FailoverRunner(CookbookRunnerBase):
             "and we will re-enable and run puppet."
         )
 
-        self.switch_from_host.run_sync("gitlab-ctl deploy-page down", progress_bars=False, is_safe=False)
+        self.switch_from_host.run_sync("gitlab-ctl deploy-page down", print_progress_bars=False, is_safe=False)
         self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
 
         self.switch_from_host.run_sync("systemctl start ssh-gitlab", print_progress_bars=False)
@@ -202,9 +202,9 @@ class FailoverRunner(CookbookRunnerBase):
         self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
         self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
 
-        self.switch_from_host.run_sync("gitlab-ctl restart", progress_bars=False, is_safe=False)
-        self.switch_from_host.run_sync("systemctl restart ssh-gitlab", progress_bars=False, is_safe=False)
-        self.switch_from_host.run_sync("gitlab-ctl deploy-page down", progress_bars=False, is_safe=False)
+        self.switch_from_host.run_sync("gitlab-ctl restart", print_progress_bars=False, is_safe=False)
+        self.switch_from_host.run_sync("systemctl restart ssh-gitlab", print_progress_bars=False, is_safe=False)
+        self.switch_from_host.run_sync("gitlab-ctl deploy-page down", print_progress_bars=False, is_safe=False)
 
         self.maybe_task_comment(
             f'Cookbook {__name__} ({self.runtime_description}) encountered errors. Rollback completed'
