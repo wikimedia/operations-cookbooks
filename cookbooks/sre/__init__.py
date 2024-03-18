@@ -116,7 +116,8 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
             "--query",
             help=(
                 "A Cumin query addressing a more narrow set of servers."
-                " This parameter requires queries to be formatted using the global grammar"
+                " This parameter requires queries to be formatted using the global,"
+                " grammar, e.g. 'P{foobar102[4-5]*}' to query the puppetdb backend"
             ),
         )
         parser.add_argument(
