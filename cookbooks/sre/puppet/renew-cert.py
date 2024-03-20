@@ -34,7 +34,9 @@ class RenewCert(CookbookBase):
         parser.add_argument('--installer', action='store_true',
                             help=('To use the installer SSH key to connect to the host, the one set by the Debian '
                                   'installer and valid until the first Puppet run. Needed for example when '
-                                  'reinstalling in place instead of using the reimage cookbook.'))
+                                  'reinstalling in place instead of using the reimage cookbook. This is also useful '
+                                  'if the host has been evicted from puppetdb (if puppet was disabled too long) '
+                                  'and the host is no longer known to the monitoring hosts.'))
         return parser
 
     def get_runner(self, args):
