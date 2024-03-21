@@ -47,7 +47,7 @@ class DNSBoxRebootRunner(SRELBBatchRunnerBase):
 
     # Let's wait a bit after depooling and re-pooling to make sure changes are
     # pulled in by confd on the respective host.
-    deepol_sleep = 60
+    depool_sleep = 60
     repool_sleep = 60
 
     @property
