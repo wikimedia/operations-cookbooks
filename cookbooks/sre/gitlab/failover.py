@@ -249,6 +249,8 @@ class FailoverRunner(CookbookRunnerBase):
         logger.info("Creates a backup on the switch_from host.")
         logger.info("*** THIS IS SLOW. IT WILL TAKE 30-45 MINUTES ***")
 
+        logger.info("Locking backups on destination host %s", self.switch_to_host)
+        self.switch_to_host.run_sync(f"{BACKUP_DIRECTORY}/gitlab-backup.sh lock")
         self.switch_from_host.run_sync(
             f"{BACKUP_DIRECTORY}/gitlab-backup.sh failover",
             print_progress_bars=False
@@ -276,6 +278,7 @@ class FailoverRunner(CookbookRunnerBase):
             self.switch_to_host,
         )
 
+        self.switch_to_host.run_sync(f"{BACKUP_DIRECTORY}/gitlab-backup.sh unlock")
         self.switch_to_host.run_sync(f"{GITLAB_RESTORE_PATH}/gitlab-restore.sh -F", print_progress_bars=False)
 
     def check_for_correct_dns(self) -> None:
