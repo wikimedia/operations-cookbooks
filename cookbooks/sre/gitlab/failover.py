@@ -204,6 +204,11 @@ class FailoverRunner(CookbookRunnerBase):
 
         self.switch_from_host.run_sync("gitlab-ctl restart", print_progress_bars=False, is_safe=False)
         self.switch_from_host.run_sync("systemctl restart ssh-gitlab", print_progress_bars=False, is_safe=False)
+        self.switch_from_host.run_sync(
+            "systemctl restart wmf_auto_restart_ssh-gitlab.service",
+            print_progress_bars=False,
+            is_safe=False,
+        )
         self.switch_from_host.run_sync("gitlab-ctl deploy-page down", print_progress_bars=False, is_safe=False)
 
         self.maybe_task_comment(
