@@ -20,7 +20,8 @@ class MigrateHosts(CookbookBase):
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
-
+        parser.add_argument("--no-downtime", action="store_true",
+                            help="Do not downtime the host during the migration.")
         parser.add_argument("fqdn", help="The host to migrate.")
         return parser
 
@@ -37,6 +38,7 @@ class MigrateHostsRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
         self.dry_run = spicerack.dry_run
         self.fqdn = args.fqdn
+        self.no_downtime = args.no_downtime
         self.logger = getLogger(__name__)
         try:
             self.remote_host = spicerack.remote().query(self.fqdn)
@@ -105,14 +107,21 @@ class MigrateHostsRunner(CookbookRunnerBase):
 
     def run(self):
         """Main run method either query or clear MigrateHosts events."""
-        with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
-            # Stop any runs that have already started
-            self.remote_host.run_sync('systemctl stop puppet-agent-timer.service')
-            self.remote_host.run_sync('touch /run/puppet/disabled')
-            self.update_hiera()
-            fingerprints = self.puppet.regenerate_certificate()
-            self.puppet_server.sign(self.fqdn, fingerprints[self.fqdn])
-            confirm_on_failure(self.puppet.run)
-            # Clean up the certs on the old puppet master
-            self.puppet_master.destroy(self.fqdn)
-            self.remote_host.run_sync('rm -f /run/puppet/disabled')
+        if self.no_downtime:
+            self._run()
+        else:
+            with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
+                self._run()
+
+    def _run(self):
+        """Run all the commands."""
+        # Stop any runs that have already started
+        self.remote_host.run_sync('systemctl stop puppet-agent-timer.service')
+        self.remote_host.run_sync('touch /run/puppet/disabled')
+        self.update_hiera()
+        fingerprints = self.puppet.regenerate_certificate()
+        self.puppet_server.sign(self.fqdn, fingerprints[self.fqdn])
+        confirm_on_failure(self.puppet.run)
+        # Clean up the certs on the old puppet master
+        self.puppet_master.destroy(self.fqdn)
+        self.remote_host.run_sync('rm -f /run/puppet/disabled')
