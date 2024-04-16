@@ -19,7 +19,7 @@ from cookbooks.sre.hosts import OS_VERSIONS
 
 logger = logging.getLogger(__name__)
 PRIMARY_INTERFACE_NAME = '##PRIMARY##'
-PER_RACK_VLAN_DATACENTERS = ('drmrs', 'esams')
+PER_RACK_VLAN_DATACENTERS = ('drmrs', 'esams', 'magru')
 
 
 class GanetiMakeVM(CookbookBase):
