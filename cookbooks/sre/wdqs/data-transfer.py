@@ -232,10 +232,10 @@ class DataTransferRunner(CookbookRunnerBase):
                 if bg_instance_name in MUTATION_TOPICS:
                     logger.info('Transferring Kafka offsets')
                     self.kafka.transfer_consumer_position([MUTATION_TOPICS[bg_instance_name]],
-                                                          ConsumerDefinition(get_site(source_hostname, self.netbox()),
+                                                          ConsumerDefinition(get_site(source_hostname, self.netbox),
                                                                              'main',
                                                                              source_hostname),
-                                                          ConsumerDefinition(get_site(dest_hostname, self.netbox()),
+                                                          ConsumerDefinition(get_site(dest_hostname, self.netbox),
                                                                              'main',
                                                                              dest_hostname))
 
@@ -243,8 +243,8 @@ class DataTransferRunner(CookbookRunnerBase):
                 self.remote_hosts.run_sync(start_services_cmd)
 
                 if bg_instance_name in MUTATION_TOPICS:
-                    wait_for_updater(self.prometheus, get_site(source_hostname, self.netbox()), self.r_source)
-                    wait_for_updater(self.prometheus, get_site(dest_hostname, self.netbox()), self.r_dest)
+                    wait_for_updater(self.prometheus, get_site(source_hostname, self.netbox), self.r_source)
+                    wait_for_updater(self.prometheus, get_site(dest_hostname, self.netbox), self.r_dest)
 
                 DataTransferRunner.lvs_action(DataTransferRunner._pool_host,
                                               self.lvs_strategy, self.r_source, self.r_dest)
