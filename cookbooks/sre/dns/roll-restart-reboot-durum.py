@@ -46,7 +46,7 @@ class Runner(SREBatchRunnerBase):
     @property
     def allowed_aliases(self) -> list:
         """Required by RebootRunnerBase"""
-        aliases = []
+        aliases = ['durum']
         for datacenter in ALL_DATACENTERS:
             aliases.append(f"durum-{datacenter}")
         return aliases
