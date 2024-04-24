@@ -74,7 +74,7 @@ class AddWikiRunner(CookbookRunnerBase):
         index_cmd = f"/usr/local/sbin/maintain-replica-indexes --database {self.database}"
         view_cmd = f"/usr/local/sbin/maintain-views --replace-all --databases {self.database}"
         meta_p_cmd = f"/usr/local/sbin/maintain-meta_p --databases {self.database}"
-        wiki_dns_cmd = "source /root/novaenv.sh; wmcs-wikireplica-dns --aliases"
+        wiki_dns_cmd = "/usr/local/sbin/wmcs-wikireplica-dns --aliases"
         logger.info("Generating views...")
         replicas.run_async(index_cmd, view_cmd)
         if not self.skip_dns:
