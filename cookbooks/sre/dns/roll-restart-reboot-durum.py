@@ -4,7 +4,6 @@ This is based on the roll-restart-reboot-wikimedia-dns cookbook, with relevant
 changes to durum.
 """
 
-from spicerack.remote import RemoteHosts
 from wmflib.constants import ALL_DATACENTERS
 
 from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
@@ -40,9 +39,6 @@ class DurumRestart(SREBatchBase):
 class Runner(SREBatchRunnerBase):
     """durum restart Cookbook runner."""
 
-    disable_puppet_on_restart = True
-    disable_puppet_on_reboot = True
-
     @property
     def allowed_aliases(self) -> list:
         """Required by RebootRunnerBase"""
@@ -56,14 +52,6 @@ class Runner(SREBatchRunnerBase):
         """Override the parent property to optimize the query."""
         # This query must include all hosts matching all the allowed_aliases
         return "A:durum"
-
-    def pre_action(self, hosts: RemoteHosts) -> None:
-        """Run before performing the action on the batch of hosts."""
-        hosts.run_async("/bin/systemctl stop bird.service")
-
-    def post_action(self, hosts: RemoteHosts) -> None:
-        """Run after performing the action on the batch of hosts."""
-        hosts.run_async("/bin/systemctl start bird.service")
 
     @property
     def restart_daemons(self) -> list:
