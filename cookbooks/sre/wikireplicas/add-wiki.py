@@ -53,6 +53,12 @@ class AddWikiRunner(CookbookRunnerBase):
         self.task_id = task_id
         self.skip_dns = skip_dns
 
+    @property
+    def runtime_description(self) -> str:
+        """What gets logged to SAL."""
+        task_id = f" ({self.task_id})" if self.task_id else ""
+        return f"for database {self.database}{task_id}"
+
     def run(self):
         """Required by Spicerack API."""
         remote = self.spicerack.remote()
@@ -77,4 +83,3 @@ class AddWikiRunner(CookbookRunnerBase):
 
         logger.info("Finalizing meta_p")
         s7_replicas.run_async(meta_p_cmd)
-        self.spicerack.sal_logger.info("Added views for new wiki: %s %s", self.database, self.task_id)
