@@ -4,7 +4,7 @@ import logging
 from datetime import timedelta
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from wmflib.interactive import ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from cookbooks.sre.cassandra import CASSANDRA_CLUSTERS
 
@@ -63,12 +63,19 @@ class RollRestartCassandraRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
 
         self.cassandra_nodes = spicerack.remote().query(self.query)
+        # In case we use a specific query to select nodes,
+        # it is best to highlight the targets before proceeding.
+        if args.cluster is None:
+            ask_confirmation(
+                f"Are the target nodes correct? {self.cassandra_nodes.hosts}"
+            )
+        self.puppet = spicerack.puppet(self.cassandra_nodes)
+        self.reason = spicerack.admin_reason(reason=args.reason)
         self.alerting_hosts = spicerack.alerting_hosts(self.cassandra_nodes.hosts)
         self.reason = spicerack.admin_reason(args.reason)
         self.instance_sleep_seconds = args.instance_sleep_seconds
         self.batch_sleep_seconds = args.batch_sleep_seconds
 
-        logger.info('Checking that all Cassandra nodes are reported up by their systemd unit status.')
         # perhaps we should create a c-foreach-status script?
         # See also https://phabricator.wikimedia.org/T229916
         status_cmd = """\
@@ -85,10 +92,14 @@ class RollRestartCassandraRunner(CookbookRunnerBase):
 
     def run(self):
         """Restart some or all Cassandra nodes on a given cluster"""
-        with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=240)):
-            self.cassandra_nodes.run_sync(
-                'c-foreach-restart -d ' + str(self.instance_sleep_seconds) + ' -a 20 -r 12',
-                batch_size=1,
-                batch_sleep=self.batch_sleep_seconds)
+        # Puppet needs to be disabled on the target Cassandra hosts
+        # to avoid any interference with c-foreach-restart
+        with self.puppet.disabled(self.reason):
+            logger.info('Checking that all Cassandra nodes are reported up by their systemd unit status.')
+            with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=240)):
+                self.cassandra_nodes.run_sync(
+                    'c-foreach-restart -d ' + str(self.instance_sleep_seconds) + ' -a 20 -r 12',
+                    batch_size=1,
+                    batch_sleep=self.batch_sleep_seconds)
 
-        logger.info('All Cassandra restarts completed!')
+                logger.info('All Cassandra restarts completed!')
