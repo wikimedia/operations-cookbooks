@@ -36,4 +36,4 @@ class LogstashCollectorsRestartRebootRunner(SRELBBatchRunnerBase):
     @property
     def restart_daemons(self):
         """Return a list of daemons to restart when using the restart action"""
-        return ['apache2', 'logstash', 'opensearch-dashboards']
+        return ['apache2', 'logstash', 'opensearch-dashboards', 'envoyproxy']
