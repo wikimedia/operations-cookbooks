@@ -10,7 +10,7 @@ from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
 
 
 class RestartNginx(SREBatchBase):
-    """Roll-restart nginx on WQDS/WCQS clusters"""
+    """Roll-restart nginx and Envoy on WQDS/WCQS clusters"""
 
     batch_default = 1
     valid_actions = ('restart_daemons',)
@@ -34,4 +34,4 @@ class RestartNginxRunner(SREBatchRunnerBase):
     @property
     def restart_daemons(self):
         """Required by RebootRunnerBase"""
-        return ['nginx']
+        return ['nginx', 'envoyproxy']
