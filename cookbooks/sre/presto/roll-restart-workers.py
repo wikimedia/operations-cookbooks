@@ -21,7 +21,7 @@ class RestartPrestoWorkers(CookbookBase):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument('cluster', help='The name of the Presto cluster to work on.',
-                            choices=['analytics'])
+                            choices=['an-presto', 'an-presto-canary', 'an-presto-test'])
         return parser
 
     def get_runner(self, args):
@@ -36,7 +36,7 @@ class RestartPrestoWorkersRunner(CookbookRunnerBase):
         """Restart Presto on a given cluster."""
         ensure_shell_is_durable()
         self.cluster = args.cluster
-        self.presto_workers = spicerack.remote().query("A:presto-" + self.cluster)
+        self.presto_workers = spicerack.remote().query("A:" + self.cluster)
         self.alerting_hosts = spicerack.alerting_hosts(self.presto_workers.hosts)
         self.admin_reason = spicerack.admin_reason('Roll restart of all Presto\'s jvm daemons.')
 

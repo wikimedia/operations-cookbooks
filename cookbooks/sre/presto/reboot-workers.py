@@ -26,7 +26,7 @@ class RebootPrestoWorkers(CookbookBase):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument('cluster', help='The name of the Presto cluster to work on.',
-                            choices=['analytics'])
+                            choices=['an-presto', 'an-presto-canary', 'an-presto-test'])
         return parser
 
     def get_runner(self, args):
@@ -48,7 +48,7 @@ class RebootPrestoWorkersRunner(CookbookRunnerBase):
 
         self.cluster = args.cluster
 
-        cluster_cumin_alias = 'A:presto-' + self.cluster
+        cluster_cumin_alias = 'A:' + self.cluster
 
         self.presto_workers = self.remote.query(cluster_cumin_alias)
 
