@@ -1,7 +1,7 @@
 """WDQS/WCQS cookbook to perform rolling restart of nginx
 
 Usage example:
-    cookbook sre.wdqs.restart-nginx --alias wdqs-public \
+    cookbook sre.wdqs.restart-nginx-envoy --alias wdqs-public \
        --reason "Rolling restart to pick up OpenSSL update" restart
 
 """
@@ -28,7 +28,7 @@ class RestartNginxRunner(SREBatchRunnerBase):
     @property
     def allowed_aliases(self):
         """Required by SREBatchRunnerBase"""
-        return ['wcqs-public', 'wdqs-all', 'wdqs-main', 'wdqs-internal'
+        return ['wcqs-public', 'wdqs-all', 'wdqs-main', 'wdqs-internal',
                 'wdqs-public', 'wdqs-test']
 
     @property
