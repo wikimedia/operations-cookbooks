@@ -25,6 +25,9 @@ class UpdateWikireplicaViews(CookbookBase):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument(
+            "--filter", help="Filter options for maintain-views (e.g. --filter=\"--table globaluser\")"
+        )
+        parser.add_argument(
             "-t", "--task-id", help="Phabricator task ID (e.g. T123456) to log to"
         )
         return parser
@@ -49,6 +52,7 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
         self.username = spicerack.username
         self.actions = spicerack.actions
 
+        self.filter = args.filter
         self.task_id = args.task_id
 
         if self.task_id is not None:
@@ -97,8 +101,7 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
         host_actions = self.actions[str(remote_hosts)]
 
         try:
-            # TODO: allow passing a table filter as an argument
-            command = "maintain-views --all-databases --replace-all"
+            command = f"maintain-views --all-databases --replace-all --auto-depool {self.filter}"
             remote_hosts.run_sync(command)
             host_actions.success(f"Ran '{command}'")
         except RemoteExecutionError:
