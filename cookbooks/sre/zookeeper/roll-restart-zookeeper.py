@@ -31,11 +31,25 @@ class RollRestartZookeeper(CookbookBase):
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
-        parser.add_argument('cluster', help='The name of the Zookeeper cluster to work on.',
-                            choices=['main-eqiad', 'main-codfw', 'druid-public',
-                                     'druid-analytics', 'analytics'])
-        parser.add_argument('--batch-sleep-seconds', type=float, default=120.0,
-                            help="Seconds to sleep between each restart.")
+        parser.add_argument(
+            "cluster",
+            help="The name of the Zookeeper cluster to work on.",
+            choices=[
+                "main-eqiad",
+                "main-codfw",
+                "druid-public",
+                "druid-analytics",
+                "analytics",
+                "flink-eqiad",
+                "flink-codfw",
+            ],
+        )
+        parser.add_argument(
+            "--batch-sleep-seconds",
+            type=float,
+            default=120.0,
+            help="Seconds to sleep between each restart.",
+        )
         return parser
 
     def get_runner(self, args):
