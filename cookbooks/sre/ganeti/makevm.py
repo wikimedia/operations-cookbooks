@@ -128,6 +128,8 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
     def rollback(self):
         """Rollback IP and DNS assignments on failure."""
         if self.skip_rollback:
+            logger.warning('The VM %s has been fully created, not performing rollback. If the reimage failed just '
+                           'run the reimage cookbook for it.', self.fqdn)
             return
 
         for address in self.allocated:
