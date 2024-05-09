@@ -35,11 +35,11 @@ class RollRestartRebootBrokers(SREBatchBase):
     5) Sleep for args.grace_sleep before the next kafka broker restart
 
     Usage example:
-        cookbook sre.kafka.roll-restart-brokers \
+        cookbook sre.kafka.roll-restart-reboot-brokers \
             --alias kafka-jumbo-eqiad \
             --reason "reload broker config" \
             restart_daemons
-        cookbook sre.kafka.roll-restart-brokers \
+        cookbook sre.kafka.roll-restart-reboot-brokers \
             --alias kafka-main-eqiad \
             --reason "upgrade kernel" \
             reboot
