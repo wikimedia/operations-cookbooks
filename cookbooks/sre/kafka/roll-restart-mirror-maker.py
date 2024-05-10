@@ -32,8 +32,8 @@ class RollRestartMirrorMaker(CookbookBase):
     (We should probably move MirrorMaker into k8s anyway).
 
     Usage example:
-        cookbook sre.kafka.roll-mirror-maker jumbo-eqiad
-        cookbook sre.kafka.roll-mirror-maker --batch-sleep-seconds 180 main-eqiad
+        cookbook sre.kafka.roll-restart-mirror-maker jumbo-eqiad
+        cookbook sre.kafka.roll-restart-mirror-maker --batch-sleep-seconds 180 main-eqiad
 
     """
 
