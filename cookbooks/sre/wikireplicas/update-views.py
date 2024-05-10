@@ -1,9 +1,12 @@
 """Cookbook for updating wikireplica views."""
 import logging
+from typing import Optional
 
+from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError, RemoteHosts
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
+from wmflib.phabricator import Phabricator
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
@@ -45,20 +48,20 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
         cookbook_name = __name__
         return f"Cookbook {cookbook_name} run by {self.username}: {message}"
 
-    def __init__(self, args, spicerack):
+    def __init__(self, args, spicerack: Spicerack):
         """Initialize the runner."""
         ensure_shell_is_durable()
 
+        self.spicerack = spicerack
         self.username = spicerack.username
         self.actions = spicerack.actions
 
         self.filter = args.filter
         self.task_id = args.task_id
 
+        self.phabricator: Optional[Phabricator] = None
         if self.task_id is not None:
             self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        else:
-            self.phabricator = None
 
         self.remote = spicerack.remote()
 
@@ -111,7 +114,9 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
             raise
 
     def _run_maintain_views(self, remote_hosts: RemoteHosts):
+        self.spicerack.puppet(remote_hosts).run()
         for host in remote_hosts.split(len(remote_hosts)):
+            self.actions[str(host)].success("Ran Puppet agent")
             self._run_maintain_views_on_host(host)
 
     @staticmethod
