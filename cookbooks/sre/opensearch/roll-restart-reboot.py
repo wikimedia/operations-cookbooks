@@ -26,12 +26,12 @@ class RollingOperation(SREBatchBase):
     The command can either restart the opensearch daemons or reboot the hosts.
 
     Usage examples:
-        cookbook sre.opensearch.rolling-restart-reboot \
+        cookbook sre.opensearch.roll-restart-reboot \
             --alias datahubsearch \
             --reason "Rolling reboot to pick up new kernel" \
             reboot
 
-        cookbook sre.opensearch.rolling-restart-reboot \
+        cookbook sre.opensearch.roll-restart-reboot \
             --alias datahubsearch \
             --reason "Rolling restart to pick new OpenSSL" \
             restart_daemons
