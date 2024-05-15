@@ -10,6 +10,9 @@ from spicerack.decorators import retry
 
 MUTATION_TOPICS = {
     'wikidata': 'rdf-streaming-updater.mutation',
+    'wikidata_full': 'rdf-streaming-updater.mutation',
+    'wikidata_main': 'rdf-streaming-updater.mutation-main',
+    'scholarly_articles': 'rdf-streaming-updater.mutation-scholarly',
     'commons': 'mediainfo-streaming-updater.mutation',
 }
 
