@@ -27,7 +27,7 @@ causes the HDFS Namenodes to shutdown (as precautionary measure).
 __title__ = "Hadoop Clusters Operations"
 
 # List of Hadoop cluster names (reused across cookbooks)
-HADOOP_CLUSTER_NAMES = ('test', 'backup', 'analytics')
+HADOOP_CLUSTER_NAMES = ('test', 'analytics')
 
 CLUSTER_CUMIN_ALIAS = 'A:hadoop'
 MASTER_CUMIN_ALIAS = 'A:hadoop-master'
@@ -38,8 +38,7 @@ HADOOP_CLIENT_CUMIN_ALIASES = [
     'A:hadoop-dumps-client', 'A:an-airflow',
     'A:an-launcher', 'A:an-presto', 'A:druid-analytics',
     'A:druid-public', 'A:hadoop-client', 'A:hadoop-hue', 'A:hadoop-yarn',
-    'A:hadoop-coordinator-primary', 'A:hadoop-coordinator-secondary',
-    'A:hadoop-hdfs-backup']
+    'A:hadoop-coordinator-primary', 'A:hadoop-coordinator-secondary']
 HADOOP_TEST_CLIENT_CUMIN_ALIASES = [
     'A:druid-test', 'A:hadoop-client-test', 'A:hadoop-ui-test',
     'A:hadoop-coordinator-test', 'A:an-presto-test']
