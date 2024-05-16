@@ -21,9 +21,10 @@ from datetime import datetime, timedelta
 import dateutil.parser
 
 from spicerack.kafka import ConsumerDefinition
-from spicerack.remote import RemoteExecutionError
 
-from cookbooks.sre.wdqs import check_hosts_are_valid, wait_for_updater, get_site, MUTATION_TOPICS, get_hostname
+from cookbooks.sre.wdqs import check_hosts_are_valid, wait_for_updater, get_site, MUTATION_TOPICS
+from cookbooks.sre.wdqs import get_hostname, StopWatch, is_behind_lvs
+
 
 __title__ = "WDQS data reload cookbook"
 logger = logging.getLogger(__name__)
@@ -50,23 +51,6 @@ NFS_DUMPS = {
 }
 
 
-class StopWatch:
-    """Stop watch to measure time."""
-
-    def __init__(self) -> None:
-        """Create a new StopWatch initialized with current time."""
-        self._start_time = datetime.now()
-
-    def elapsed(self) -> timedelta:
-        """Returns the time elapsed since the StopWatch was started."""
-        end_time = datetime.now()
-        return end_time - self._start_time
-
-    def reset(self):
-        """Reset the StopWatch to current time."""
-        self._start_time = datetime.now()
-
-
 def argument_parser():
     """Parse the command line arguments for this cookbook."""
     parser = argparse.ArgumentParser(description=__doc__,
@@ -77,7 +61,7 @@ def argument_parser():
     parser.add_argument('--reason', required=True, help='Administrative Reason')
     parser.add_argument('--downtime', type=int, default=336, help='Hour(s) of downtime')
     parser.add_argument('--no-depool', action='store_true', help='Don\'t depool host (use for non-lvs-managed hosts)')
-    parser.add_argument('--reload-data', required=True, choices=['wikidata', 'categories', 'commons', 'graph_split'],
+    parser.add_argument('--reload-data', required=True, choices=['wikidata', 'commons', 'graph_split'],
                         help='Type of data to reload')
     parser.add_argument('--lexemes-dump', help='full path to desired Lexeme dump for graph split')
     parser.add_argument('--wikidata-dump', help='full path to wikidata dump for graph split')
@@ -237,36 +221,6 @@ def reload_graph_split(remote_host, puppet, reason):
     )
 
 
-def reload_categories(remote_host, puppet, reason):
-    """Execute commands on host to reload categories data."""
-    logger.info('Preparing to load data for categories')
-    with puppet.disabled(reason):
-        remote_host.run_sync(
-            'systemctl stop wdqs-categories',
-            'rm -fv /srv/wdqs/categories.jnl',
-            'systemctl start wdqs-categories'
-        )
-
-    logger.info('Loading data for categories')
-    watch = StopWatch()
-    remote_host.run_sync(
-        'sleep 30',
-        'test -f /srv/wdqs/categories.jnl',
-        '/usr/local/bin/reloadCategories.sh wdqs'
-    )
-    logger.info('Categories loaded in %s', watch.elapsed())
-
-
-def is_behind_lvs(remote_host):
-    """Check for LVS on host by looking for the 'pool' command"""
-    try:
-        remote_host.run_sync('which pool')
-        return True
-    except RemoteExecutionError:
-        logger.info('This host is not behind LVS')
-        return False
-
-
 def run(args, spicerack):
     """Required by Spicerack API."""
     remote = spicerack.remote()
@@ -314,7 +268,7 @@ def run(args, spicerack):
     def change_and_revert():
         return confctl.change_and_revert('pooled', True, False, name=remote_host.hosts[0])
 
-    if args.no_depool or not is_behind_lvs(remote_host):
+    if args.no_depool or not is_behind_lvs(confctl, remote_host):
         depool_host = noop_change_and_revert
     else:
         depool_host = change_and_revert
@@ -333,9 +287,7 @@ def run(args, spicerack):
     with alerting_hosts.downtimed(reason, duration=timedelta(hours=args.downtime)):
         with depool_host():
             remote_host.run_sync('sleep 180')
-            if 'categories' == args.reload_data:
-                reload_categories(remote_host, puppet, reason)
-            elif 'wikidata' == args.reload_data:
+            if 'wikidata' == args.reload_data:
                 reload_wikibase(reload_wikidata, MUTATION_TOPICS['wikidata'])
             elif 'commons' == args.reload_data:
                 reload_wikibase(reload_commons, MUTATION_TOPICS['commons'])

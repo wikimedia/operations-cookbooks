@@ -1,13 +1,19 @@
 """WDQS Cookbooks"""
 __title__ = __doc__
 
-from datetime import timedelta
+import logging
+from datetime import timedelta, datetime
+
+from spicerack import RemoteHosts, ConftoolEntity
+from spicerack.confctl import ConfctlError
 from spicerack.decorators import retry
 
 MUTATION_TOPICS = {
     'wikidata': 'rdf-streaming-updater.mutation',
     'commons': 'mediainfo-streaming-updater.mutation',
 }
+
+logger = logging.getLogger(__name__)
 
 
 def check_hosts_are_valid(remote_hosts, remote):
@@ -46,3 +52,33 @@ def get_site(host, netbox):
 def get_hostname(fqdn):
     """Get short hostname from a Fully Qualified Domain Name"""
     return fqdn.split(".")[0]
+
+
+class StopWatch:
+    """Stop watch to measure time."""
+
+    def __init__(self) -> None:
+        """Create a new StopWatch initialized with current time."""
+        self._start_time = datetime.now()
+
+    def elapsed(self) -> timedelta:
+        """Returns the time elapsed since the StopWatch was started."""
+        end_time = datetime.now()
+        return end_time - self._start_time
+
+    def reset(self):
+        """Reset the StopWatch to current time."""
+        self._start_time = datetime.now()
+
+
+def is_behind_lvs(conftool: ConftoolEntity, remote_host: RemoteHosts) -> bool:
+    """Check for LVS on host by looking for the 'pool' command"""
+    if len(remote_host.hosts) > 1:
+        raise ValueError("Only one host supported by this function")
+    try:
+        next(conftool.get(name=str(remote_host.hosts)))
+        return True
+    except ConfctlError:
+        # ConftoolEntity raises ConfctlError("No match found") when no entries are found
+        logger.info('This host is not behind LVS')
+        return False
