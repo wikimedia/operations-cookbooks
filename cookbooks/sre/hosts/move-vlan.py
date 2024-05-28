@@ -97,7 +97,6 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         if self.netbox_host.primary_ip.assigned_object:
             self.pre_config['count_ipaddresses'] = self.netbox_host.primary_ip.assigned_object.count_ipaddresses
 
-        self.remote_host = self.remote.query(self.netbox_server.fqdn)
         self.reason = self.spicerack.admin_reason('Migrating vlan and changing IPs')
 
         # Keep track of some specific actions for the eventual rollback
