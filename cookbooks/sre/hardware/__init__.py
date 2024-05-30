@@ -51,7 +51,7 @@ def extract_version(firmware_file: Path) -> version.Version:
 
 # TODO: remove pylint disable once on python10
 # https://bugs.python.org/issue31844
-class ParseMeta(HTMLParser):  # pylint: disable=abstract-method
+class ParseMeta(HTMLParser):  # pylint: disable=abstract-method,useless-suppression
     """simple parser to extract drivers-csrf-token meta tag"""
 
     def __init__(self, *args, **kwargs):
