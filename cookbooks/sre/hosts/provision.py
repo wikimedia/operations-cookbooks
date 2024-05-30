@@ -23,6 +23,9 @@ OLD_SERIAL_MODELS = (
     'poweredge r740xd',
     'poweredge r740xd2',
 )
+DELL_VENDOR_SLUG = 'dell'
+SUPERMICRO_VENDOR_SLUG = 'supermicro'
+SUPPORTED_VENDORS = [DELL_VENDOR_SLUG]
 logger = logging.getLogger(__name__)
 
 
@@ -100,9 +103,12 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         if self.netbox_server.virtual:
             raise RuntimeError(f'Host {self.args.host} is a virtual machine. VMs are not supported.')
 
-        if self.netbox_data['device_type']['manufacturer']['slug'] != 'dell':
+        self.vendor = self.netbox_data['device_type']['manufacturer']['slug']
+        if self.vendor not in SUPPORTED_VENDORS:
             vendor = self.netbox_data['device_type']['manufacturer']['name']
-            raise RuntimeError(f'Host {self.args.host} manufacturer is {vendor}. Only Dell is supported.')
+            raise RuntimeError(
+                f'Host {self.args.host} manufacturer is {vendor}. '
+                f'The only supported ones are {SUPPORTED_VENDORS}.')
 
         if self.netbox_server.status == 'active' and (not self.args.no_dhcp or not self.args.no_users):
             raise RuntimeError(
@@ -111,7 +117,8 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         if self.args.no_users:
             password = ''  # nosec
         else:
-            password = DELL_DEFAULT
+            if self.vendor == DELL_VENDOR_SLUG:
+                password = DELL_DEFAULT
 
         self.redfish = spicerack.redfish(self.args.host, password=password)
 
@@ -135,6 +142,11 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
         self.mgmt_password = spicerack.management_password
 
+        self.dell_platform_doc_link = (
+            "https://wikitech.wikimedia.org/wiki/SRE/Dc-operations/"
+            "Platform-specific_documentation/Dell_Documentation#Troubleshooting_2"
+        )
+
         # Testing that the management password is correct connecting to the first physical cumin host
         cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
         try:
@@ -143,7 +155,12 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             raise RuntimeError(
                 f'The management password provided seems incorrect, it does not work on {cumin_host}.') from None
 
-        self.config_changes = {
+        ask_confirmation(f'Are you sure to proceed to apply BIOS/iDRAC settings {self.runtime_description}?')
+
+    @property
+    def dell_config_changes(self):
+        """Return BIOS/iDRAC/etc.. settings for Dell hosts."""
+        return {
             'BIOS.Setup.1-1': {
                 'BootMode': 'Bios',
                 'CpuInterconnectBusLinkPower': 'Enabled',
@@ -175,8 +192,6 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             }
         }
 
-        ask_confirmation(f'Are you sure to proceed to apply BIOS/iDRAC settings {self.runtime_description}?')
-
     @property
     def runtime_description(self):
         """Runtime description for the IRC/SAL logging."""
@@ -201,41 +216,43 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 self.redfish.check_connection()
             except RedfishError as e:
                 raise RuntimeError(
-                    f'Unable to connect to the Redfish API of {self.args.host}. Follow '
-                    'https://wikitech.wikimedia.org/wiki/SRE/Dc-operations/Platform-specific_documentation'
-                    '/Dell_Documentation#Troubleshooting_2') from e
+                    f"Unable to connect to the Redfish API of {self.args.host}. "
+                    f"Follow {self.dell_platform_doc_link}"
+                ) from e
 
         confirm_on_failure(check_connection)
 
-        try:
-            storage = self.redfish.request('get', '/redfish/v1/Systems/System.Embedded.1/Storage/').json()
-            has_raid = False
-            for storage_member in storage['Members']:
-                if storage_member['@odata.id'].split('/')[-1].startswith('RAID'):
-                    has_raid = True
-                    break
-        except Exception:  # pylint: disable=broad-except
-            logger.warning('Unable to detect if there is Hardware RAID on the host, ASSUMING IT HAS RAID.')
-            has_raid = True
-
-        if has_raid:
+        if self.vendor == DELL_VENDOR_SLUG:
+            has_hw_raid = self._detect_dell_hw_raid()
+        elif self.vendor == SUPERMICRO_VENDOR_SLUG:
+            has_hw_raid = self._detect_supermicro_hw_raid()
+        else:
+            has_hw_raid = False
+        if has_hw_raid:
             action = ask_input(
-                'Detected Hardware RAID. Please configure the RAID at this point (the password is still DELL default '
-                'one). Once done select "modified" if the RAID was modified or "untouched" if it was not touched. '
-                'If the RAID was modified the host will be rebooted to make sure the changes are applied.',
-                ('untouched', 'modified'))
+                'Detected Hardware RAID. Please configure the RAID '
+                f'at this point (the password is still {self.vendor} default one). '
+                'Once done select "modified" if the RAID was modified '
+                'or "untouched" if it was not touched. '
+                'If the RAID was modified the host will be rebooted to '
+                'make sure the changes are applied.',
+                ('untouched', 'modified')
+            )
 
             if action == 'modified':
-                logger.info('Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy)
+                logger.info(
+                    'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
+                )
                 self.redfish.chassis_reset(self.chassis_reset_policy)
                 # TODO: replace the sleep with auto-detection of the completiono of the RAID job.
                 sleep(180)
 
-        try:
-            self._config()
-        except Exception:  # pylint: disable=broad-except
-            logger.warning('First attempt to load the new configuration failed, auto-retrying once')
-            confirm_on_failure(self._config)
+        if self.vendor == DELL_VENDOR_SLUG:
+            try:
+                self._config_dell_host()
+            except Exception:  # pylint: disable=broad-except
+                logger.warning('First attempt to load the new configuration failed, auto-retrying once')
+                confirm_on_failure(self._config_dell_host)
 
         if not self.args.no_dhcp:
             self.dhcp.remove_configuration(self.dhcp_config)
@@ -256,24 +273,42 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             logger.info('Rolling back DHCP setup')
             self.dhcp.remove_configuration(self.dhcp_config)
 
-    def _get_config(self):
+    def _detect_supermicro_hw_raid(self):
+        """Get if a hardware raid configuration is set for a Supermicro host."""
+        return False
+
+    def _detect_dell_hw_raid(self):
+        """Get if a hardware raid configuration is set for a Dell host."""
+        try:
+            storage = self.redfish.request('get', '/redfish/v1/Systems/System.Embedded.1/Storage/').json()
+            has_raid = False
+            for storage_member in storage['Members']:
+                if storage_member['@odata.id'].split('/')[-1].startswith('RAID'):
+                    has_raid = True
+                    break
+        except Exception:  # pylint: disable=broad-except
+            logger.warning('Unable to detect if there is Hardware RAID on the host, ASSUMING IT HAS RAID.')
+            has_raid = True
+        return has_raid
+
+    def _get_dell_config(self):
         """Get the current BIOS/iDRAC configuration."""
         self.redfish.check_connection()
         return self.redfish.scp_dump(allow_new_attributes=True)
 
-    def _config(self):
+    def _config_dell_host(self):
         """Provision the BIOS and iDRAC settings."""
-        config = self._get_config()
+        config = self._get_dell_config()
         if config.model.lower() in OLD_SERIAL_MODELS:
-            self.config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedirCom2'
-            self.config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Serial1Com1Serial2Com2'
-            self.config_changes['BIOS.Setup.1-1']['InternalUsb'] = 'Off'
+            self.dell_config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedirCom2'
+            self.dell_config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Serial1Com1Serial2Com2'
+            self.dell_config_changes['BIOS.Setup.1-1']['InternalUsb'] = 'Off'
         else:
-            self.config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedir'
-            self.config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Com2'
+            self.dell_config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedir'
+            self.dell_config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Com2'
 
-        self._config_pxe(config)
-        was_changed = config.update(self.config_changes)
+        self._config_dell_pxe(config)
+        was_changed = config.update(self.dell_config_changes)
         if not was_changed:
             logger.warning('Skipping update of BIOS/iDRAC, all settings have already the correct values')
             return
@@ -287,15 +322,17 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         logger.debug('SCP import results:\n%s', pformat(response))
 
         logger.info('Checking if all the changes were applied successfully')
-        config = self._get_config()
-        was_changed = config.update(self.config_changes)
+        config = self._get_dell_config()
+        was_changed = config.update(self.dell_config_changes)
         if was_changed:
-            raise RuntimeError('Not all changes were applied successfully, see the ones reported above that starts '
-                               'with "Updated value..."')
+            raise RuntimeError(
+                'Not all changes were applied successfully, see the ones '
+                'reported above that starts with "Updated value..."'
+            )
 
         logger.info('All changes were applied successfully')
 
-    def _config_pxe(self, config):  # pylint: disable=too-many-branches
+    def _config_dell_pxe(self, config):  # pylint: disable=too-many-branches
         """Configure PXE boot on the correct NIC automatically or ask the user if unable to detect it.
 
         Example keys names::
@@ -358,17 +395,17 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         logger.info('Enabling PXE boot on NIC %s', pxe_nic)
         for nic in all_nics:
             if nic == pxe_nic:
-                self.config_changes[pxe_nic] = {'LegacyBootProto': 'PXE'}
+                self.dell_config_changes[pxe_nic] = {'LegacyBootProto': 'PXE'}
             else:
-                self.config_changes[nic] = {'LegacyBootProto': 'NONE'}
+                self.dell_config_changes[nic] = {'LegacyBootProto': 'NONE'}
 
         # Set SetBootOrderEn to disk, primary NIC
         new_order = ['HardDisk.List.1-1', pxe_nic]
         # SetBootOrderEn defaults to comma-separated, but some hosts might differ
         separator = ', ' if ', ' in config.components['BIOS.Setup.1-1']['SetBootOrderEn'] else ','
-        self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = separator.join(new_order)
+        self.dell_config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = separator.join(new_order)
         # BiosBootSeq defaults to comma-space-separated, but some hosts might differ
         # Use a default if the host is in UEFI mode and dosn't have the setting at all.
         bios_boot_seq = config.components['BIOS.Setup.1-1'].get('BiosBootSeq', ', ')
         separator = ',' if ',' in bios_boot_seq and ', ' not in bios_boot_seq else ', '
-        self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_order)
+        self.dell_config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_order)
