@@ -3,12 +3,13 @@ import logging
 
 from pprint import pformat
 from time import sleep
+from typing import Union
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
-from spicerack.dhcp import DHCPConfMgmt
+from spicerack.dhcp import DHCPConfMac, DHCPConfMgmt
+from spicerack.netbox import MANAGEMENT_IFACE_NAME
 from spicerack.redfish import ChassisResetPolicy, DellSCPPowerStatePolicy, DellSCPRebootPolicy, RedfishError
-from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
-
+from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, get_secret, ensure_shell_is_durable
 from cookbooks.sre.network import configure_switch_interfaces
 
 DNS_ADDRESS = '10.3.0.1'
@@ -25,7 +26,7 @@ OLD_SERIAL_MODELS = (
 )
 DELL_VENDOR_SLUG = 'dell'
 SUPERMICRO_VENDOR_SLUG = 'supermicro'
-SUPPORTED_VENDORS = [DELL_VENDOR_SLUG]
+SUPPORTED_VENDORS = [DELL_VENDOR_SLUG, SUPERMICRO_VENDOR_SLUG]
 # Hostname prefixes that usually need --enable-virtualization
 VIRT_PREFIXES = ('ganeti', 'cloudvirt')
 logger = logging.getLogger(__name__)
@@ -112,6 +113,15 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 f'Host {self.args.host} manufacturer is {vendor}. '
                 f'The only supported ones are {SUPPORTED_VENDORS}.')
 
+        if self.vendor == SUPERMICRO_VENDOR_SLUG:
+            ask_confirmation(
+                "The host's vendor is Supermicro, we have limited support "
+                "for it. Please check the following Phabricator task for more info: "
+                "https://phabricator.wikimedia.org/T365372. Please also report "
+                "in there any anomaly/doubt/etc.. so that SRE Infrastructure "
+                "Foundations will be aware. Thanks!"
+            )
+
         if self.netbox_server.status == 'active' and (not self.args.no_dhcp or not self.args.no_users):
             raise RuntimeError(
                 f'Host {self.args.host} has active status in Netbox but --no-dhcp and --no-users were not set.')
@@ -120,29 +130,61 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             password = ''  # nosec
         else:
             if self.vendor == DELL_VENDOR_SLUG:
+                bmc_username = "root"
                 password = DELL_DEFAULT
+            if self.vendor == SUPERMICRO_VENDOR_SLUG:
+                # The Supermicro vendor ships its servers with a unique BMC admin
+                # password, that is displayed in the server's label:
+                # https://www.supermicro.com/en/support/BMC_Unique_Password
+                # To keep it simple, for the moment we just ask the password
+                # to the admin/operator running the cookbook.
+                # The correspondent user is "ADMIN".
+                bmc_username = "ADMIN"
+                logger.info(
+                    "Supermicro sets a unique BMC ADMIN password for every server, "
+                    "usually printed in the server's label or collected in "
+                    "a spreadsheet."
+                    "====== IMPORTANT =====:\n"
+                    "If this is the first time ever that the host "
+                    "is provisioned, please retrieve the password and insert it "
+                    "so the cookbook can change it to ours.\n"
+                    "If this is not the first time, and the ADMIN password "
+                    "has already been changed to the standard root one, "
+                    "please insert that instead.")
+                password = get_secret("BMC ADMIN Password")
 
-        self.redfish = spicerack.redfish(self.args.host, password=password)
+        self.redfish = spicerack.redfish(
+            self.args.host, username=bmc_username, password=password)
 
         if self.args.host.startswith(VIRT_PREFIXES) and not self.args.enable_virtualization:
             ask_confirmation("Virtualization not enabled but this host might need it, continue?")
 
         # DHCP automation
         self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
-        self.dhcp_config = DHCPConfMgmt(
-            datacenter=self.netbox_data['site']['slug'],
-            serial=self.netbox_data['serial'],
-            manufacturer=self.netbox_data['device_type']['manufacturer']['slug'],
-            fqdn=self.fqdn,
-            ipv4=self.redfish.interface.ip,
-        )
+        if self.vendor == SUPERMICRO_VENDOR_SLUG:
+            logger.info("Using the BMC's MAC address for the DHCP config.")
+            self.dhcp_config: Union[DHCPConfMac, DHCPConfMgmt] = DHCPConfMac(
+                hostname=self.fqdn,
+                ipv4=self.redfish.interface.ip,
+                mac=self.netbox.api.dcim.interfaces.get(device=self.args.host, name=MANAGEMENT_IFACE_NAME).mac_address,
+                ttys=0,
+                distro="",
+            )
+        else:
+            self.dhcp_config = DHCPConfMgmt(
+                datacenter=self.netbox_data['site']['slug'],
+                serial=self.netbox_data['serial'],
+                manufacturer=self.netbox_data['device_type']['manufacturer']['slug'],
+                fqdn=self.fqdn,
+                ipv4=self.redfish.interface.ip,
+            )
         self._dhcp_active = False
 
         if self.netbox_server.status in ('active', 'staged'):
-            self.reboot_policy = DellSCPRebootPolicy.GRACEFUL
+            self.dell_reboot_policy = DellSCPRebootPolicy.GRACEFUL
             self.chassis_reset_policy = ChassisResetPolicy.GRACEFUL_RESTART
         else:
-            self.reboot_policy = DellSCPRebootPolicy.FORCED
+            self.dell_reboot_policy = DellSCPRebootPolicy.FORCED
             self.chassis_reset_policy = ChassisResetPolicy.FORCE_RESTART
 
         self.mgmt_password = spicerack.management_password
@@ -185,6 +227,30 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             }
         }
 
+        self.supermicro_mgmt_network_changes = {
+            "HostName": self.args.host,
+            "FQDN": self.fqdn,
+            "IPv4StaticAddresses": [{
+                "Address": str(self.redfish.interface.ip),
+                "Gateway": str(next(self.redfish.interface.network.hosts())),
+                "SubnetMask": str(self.redfish.interface.netmask)
+            }],
+            "StaticNameServers": [DNS_ADDRESS],
+            "StatelessAddressAutoConfig": {
+                'IPv6AutoConfigEnabled': False
+            }
+        }
+
+        self.supermicro_bios_changes = {
+            "Attributes": {
+                "BootModeSelect": "Legacy",
+                "ConsoleRedirection": True,
+                "IntelVirtualizationTechnology": "Disable",
+                "QuietBoot": False,
+                "SerialPort2Attribute": "COM",
+            }
+        }
+
         # Testing that the management password is correct connecting to the first physical cumin host
         cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
         try:
@@ -198,7 +264,12 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
     @property
     def runtime_description(self):
         """Runtime description for the IRC/SAL logging."""
-        return f'for host {self.netbox_server.mgmt_fqdn} with reboot policy {self.reboot_policy.name}'
+        descr = (
+            f'for host {self.netbox_server.mgmt_fqdn} with chassis set policy '
+            f'{self.chassis_reset_policy.name}')
+        if self.vendor == DELL_VENDOR_SLUG:
+            descr += f'and with Dell SCP reboot policy {self.dell_reboot_policy.name}'
+        return descr
 
     @property
     def lock_args(self):
@@ -218,20 +289,17 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             try:
                 self.redfish.check_connection()
             except RedfishError as e:
-                raise RuntimeError(
-                    f"Unable to connect to the Redfish API of {self.args.host}. "
-                    f"Follow {self.dell_platform_doc_link}"
-                ) from e
+                error_msg = f"Unable to connect to the Redfish API of {self.args.host}. "
+                if self.vendor == DELL_VENDOR_SLUG:
+                    error_msg += f"Follow {self.dell_platform_doc_link}"
+                raise RuntimeError(error_msg) from e
 
         confirm_on_failure(check_connection)
 
-        if self.vendor == DELL_VENDOR_SLUG:
-            has_hw_raid = self._detect_dell_hw_raid()
-        elif self.vendor == SUPERMICRO_VENDOR_SLUG:
-            has_hw_raid = self._detect_supermicro_hw_raid()
-        else:
-            has_hw_raid = False
-        if has_hw_raid:
+        if self.vendor == SUPERMICRO_VENDOR_SLUG:
+            self._config_supermicro_host()
+
+        if self._detect_hw_raid():
             action = ask_input(
                 'Detected Hardware RAID. Please configure the RAID '
                 f'at this point (the password is still {self.vendor} default one). '
@@ -265,6 +333,21 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         if self.args.no_users:
             logger.info('Skipping root user password change')
         else:
+            if self.vendor == SUPERMICRO_VENDOR_SLUG:
+                try:
+                    self.redfish.find_account("root")
+                except RedfishError as e:
+                    logger.info(
+                        "The root user on the BMC has not been created yet. "
+                        "More info: %s", e)
+                    logger.info(
+                        'Creating the root user on the BMC.')
+                    self.redfish.add_account('root', self.mgmt_password)
+                logger.info(
+                    "Updating the ADMIN user's password on the BMC.")
+                self.redfish.change_user_password('ADMIN', self.mgmt_password)
+            logger.info(
+                "Updating the root user's password on the BMC.")
             self.redfish.change_user_password('root', self.mgmt_password)
 
         sleep(10)  # Trying to avoid a race condition that seems to make IPMI fail right after changing the password
@@ -276,15 +359,14 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             logger.info('Rolling back DHCP setup')
             self.dhcp.remove_configuration(self.dhcp_config)
 
-    def _detect_supermicro_hw_raid(self):
-        """Get if a hardware raid configuration is set for a Supermicro host."""
-        return False
-
-    def _detect_dell_hw_raid(self):
-        """Get if a hardware raid configuration is set for a Dell host."""
+    def _detect_hw_raid(self):
+        """Get if a hardware raid configuration is set for a Dell/Supermicro host."""
         try:
-            storage = self.redfish.request('get', '/redfish/v1/Systems/System.Embedded.1/Storage/').json()
+            storage = self.redfish.request('get', self.redfish.storage_manager).json()
             has_raid = False
+            # TODO: The assumption is that both Dell's and Supermicro's
+            # "Members" field have the same format. We still don't have examples
+            # to check, so this needs to be revisited.
             for storage_member in storage['Members']:
                 if storage_member['@odata.id'].split('/')[-1].startswith('RAID'):
                     has_raid = True
@@ -298,6 +380,31 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         """Get the current BIOS/iDRAC configuration."""
         self.redfish.check_connection()
         return self.redfish.scp_dump(allow_new_attributes=True)
+
+    def _config_supermicro_host(self):
+        """Provision the BIOS and BMC settings."""
+        # We could add a patch method/utility in Spicerack to DRY code,
+        # this is only a stub/idea to visualize the approach.
+        try:
+            self.redfish.request(
+                'PATCH',
+                '/redfish/v1/Systems/1/Bios',
+                json=self.supermicro_bios_changes
+            )
+            self.redfish.request(
+                'PATCH',
+                '/redfish/v1/Managers/1/EthernetInterfaces/1',
+                json=self.supermicro_mgmt_network_changes
+            )
+            # TODO: Replace this logic with something more flexible and
+            # reusable.
+            logger.info(
+                'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
+            )
+            self.redfish.chassis_reset(self.chassis_reset_policy)
+            sleep(180)
+        except RedfishError as e:
+            logger.error("Error while configuring BIOS or mgmt interface: %s", e)
 
     def _config_dell_host(self):
         """Provision the BIOS and iDRAC settings."""
@@ -321,7 +428,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         else:
             power_state = DellSCPPowerStatePolicy.ON
 
-        response = self.redfish.scp_push(config, reboot=self.reboot_policy, preview=False, power_state=power_state)
+        response = self.redfish.scp_push(config, reboot=self.dell_reboot_policy, preview=False, power_state=power_state)
         logger.debug('SCP import results:\n%s', pformat(response))
 
         logger.info('Checking if all the changes were applied successfully')
@@ -371,10 +478,10 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         if nics_failed:
             pick = False
             if len(nics_with_link) == 1:
-                response = ask_input(f'Detected link on NIC {nics_with_link[0]} but failed to detect link for some '
-                                     f'NICs: {nics_failed}.\nDo you want to "continue" with NIC {nics_with_link[0]} '
-                                     'or "pick" a different one?',
-                                     ['continue', 'pick'])
+                response = ask_input(
+                    f'Detected link on NIC {nics_with_link[0]} but failed to detect link '
+                    f'for some NICs: {nics_failed}.\nDo you want to "continue" with NIC '
+                    f'{nics_with_link[0]} or "pick" a different one?', ['continue', 'pick'])
                 if response == 'continue':
                     pxe_nic = nics_with_link[0]
                 else:
