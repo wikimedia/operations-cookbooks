@@ -28,6 +28,7 @@ cluster, one at a time per taint-group, waiting 35 seconds before rebooting.
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from math import ceil
+from cumin import NodeSet
 
 from kubernetes.client.models import V1Taint
 from spicerack import Spicerack
@@ -65,6 +66,13 @@ class RollRebootK8sNodes(SREBatchBase):
     def argument_parser(self) -> ArgumentParser:
         """Parse arguments"""
         parser = super().argument_parser()
+
+        parser.add_argument(
+            '--exclude',
+            help='List of hosts that should not be rebooted, in NodeSet notation',
+            default=''
+        )
+
         return parser
 
     def get_runner(self, args: Namespace) -> "RollRebootK8sNodesRunner":
@@ -103,6 +111,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         )
         # Dictionary containing KubernetesNode instances for all hosts
         self._all_k8s_nodes: dict[str, KubernetesNode] = {}
+        self.exclude = args.exclude
         super().__init__(args, spicerack)
         # _first_batch is used to detect the fist batch run in each host_group
         self._first_batch = True
@@ -154,10 +163,19 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
 
     def _hosts(self) -> list[RemoteHosts]:
         all_hosts = super()._hosts()[0]
+        to_exclude = NodeSet(self.exclude)
+        if len(to_exclude) > 0:
+            self.logger.info(
+                "Excluding %s nodes: %s",
+                len(to_exclude),
+                to_exclude
+            )
+
+        working_hosts = all_hosts.hosts - to_exclude
 
         # All host names grouped by their taints
         taint_groups = defaultdict(list)
-        for node_name in all_hosts.hosts:
+        for node_name in working_hosts:
             try:
                 k8s_node = self.k8s_cli.get_node(node_name)
                 # Error out if a node is cordoned as the cookbook would unconditionally uncordon it later
@@ -181,7 +199,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
 
         self.logger.info(
             "Got %s nodes in %s taint-group(s) %s",
-            len(all_hosts),
+            len(working_hosts),
             len(taint_groups),
             [len(g) for g in taint_groups.values()],
         )
