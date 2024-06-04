@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from logging import getLogger
 from math import ceil
-from time import sleep
+import time
 from typing import Optional, Union
 
 from cumin import nodeset, NodeSet, nodeset_fromlist
@@ -273,8 +273,9 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         if self._spicerack.dry_run:
             self.logger.info("Would have slept for %s seconds", seconds)
         else:
-            self.logger.info("Sleeping for %s seconds", seconds)
-            sleep(seconds)
+            self.logger.info("Sleeping for %s seconds (until %s)", seconds,
+                             time.strftime("%Y-%m-%dT%H:%M:%S%z", time.gmtime(time.time() + seconds)))
+            time.sleep(seconds)
 
     def _restart_daemons_action(self, hosts: RemoteHosts, reason: Reason) -> None:
         """Restart daemons on a set of hosts with downtime
