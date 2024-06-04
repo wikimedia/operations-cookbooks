@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import pathlib
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,7 @@ from os import getpid
 from time import sleep
 from typing import Optional
 
+import transferpy.transfer
 from spicerack import RemoteHosts, Reason, Remote, Netbox, Kafka, ConftoolEntity, AlertingHosts, PuppetHosts
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.kafka import ConsumerDefinition
@@ -77,21 +79,21 @@ WCQS_OPTIONS = {
 RELOAD_PROFILES = {
     'wikidata_full': ReloadProfile(
         dumps_source=DumpsSource.HDFS,
-        source_folders=['/srv/wdqs/dumps_from_hdfs'],
+        source_folders=['/srv/dump/dumps_from_hdfs'],
         chunk_format='wikidata_full.%04d.nt.gz',
         mutation_topic=MUTATION_TOPICS['wikidata_full'],
         **WDQS_OPTIONS
     ),
     'wikidata_main': ReloadProfile(
         dumps_source=DumpsSource.HDFS,
-        source_folders=['/srv/wdqs/dumps_from_hdfs'],
+        source_folders=['/srv/dump/dumps_from_hdfs'],
         chunk_format='wikidata_main.%04d.nt.gz',
         mutation_topic=MUTATION_TOPICS['wikidata_main'],
         **WDQS_OPTIONS
     ),
     'scholarly_articles': ReloadProfile(
         dumps_source=DumpsSource.HDFS,
-        source_folders=['/srv/wdqs/dumps_from_hdfs'],
+        source_folders=['/srv/dump/dumps_from_hdfs'],
         chunk_format='scholarly_articles.%04d.nt.gz',
         mutation_topic=MUTATION_TOPICS['scholarly_articles'],
         **WDQS_OPTIONS
@@ -156,7 +158,7 @@ class DataReload(CookbookBase):
         parser.add_argument("--kerberos-user", default=DEFAULT_ANALYTICS_KERB_USER,
                             help='Kerberos user to use when connecting to HDFS')
         parser.add_argument("--stat-local-folder", default=DEFAULT_STAT_TMP_FOLDER)
-        parser.add_argument("--position-kafka-offsets", default=True,
+        parser.add_argument("--no-position-kafka-offsets", default=False,
                             help='Do not attempt to position kafka offsets, '
                                  'only useful for hosts that have the updater disabled.')
         return parser
@@ -183,21 +185,23 @@ class DataReload(CookbookBase):
             if len(reload_profile.source_folders) > 1:
                 raise ValueError("Only one data_folder expected when loading from HDFS")
 
-            if args.from_hdfs is None:
+            if args.from_hdfs is None or args.from_hdfs == '':
                 raise ValueError("--from-hdfs must be specified when using a profile "
                                  "that sources it data from HDFS")
+
             prep_command = HdfsCopy(
                 stat_host=DataReload._query_single_host(remote, args.stat_host),
                 kerberos_user=args.kerberos_user,
-                hdfs_path=args.from_hdfs,
-                hdfs_local_path=args.stat_local_folder,
+                # We must have a trailing / for it to work properly
+                hdfs_path=args.from_hdfs if args.from_hdfs[-1] == '/' else args.from_hdfs + '/',
+                hdfs_local_path=pathlib.Path(args.stat_local_folder),
                 query_service_host=remote_host,
-                query_service_data_path=reload_profile.source_folders[0])
+                query_service_data_path=pathlib.Path(reload_profile.source_folders[0]))
         else:
             raise ValueError("Unsupported type of source")
 
         postload: Runnable
-        if args.position_kafka_offsets:
+        if not args.no_position_kafka_offsets:
             postload = UpdaterRestart(
                 netbox=self.spicerack.netbox(),
                 kafka=self.spicerack.kafka(),
@@ -280,6 +284,10 @@ class DataReloadRunner(CookbookRunnerBase):
                 f"-d {dump_path} "
                 f"-f '{self.reload_profile.chunk_format}'")
 
+    @staticmethod
+    def _stop_service_if_active(service: str) -> str:
+        return f"if /usr/bin/systemctl is-active -q {service}; then /usr/bin/systemctl stop {service}; fi"
+
     def _reload_wikibase(self) -> None:
         """Execute commands on host to reload wikidata/commons data."""
         logger.info('Prepare to load wikidata data for blazegraph')
@@ -288,10 +296,10 @@ class DataReloadRunner(CookbookRunnerBase):
             #  and use CookbookRunnerBase.rollback to restore the system
             self.query_service_host.run_sync(
                 f'rm -fv {self.reload_profile.data_loaded_flag}',
-                f'systemctl stop {self.reload_profile.updater_service}',
-                f'systemctl stop {self.reload_profile.blazegraph_service}',
+                DataReloadRunner._stop_service_if_active(self.reload_profile.updater_service),
+                DataReloadRunner._stop_service_if_active(self.reload_profile.blazegraph_service),
                 f'rm -fv {self.reload_profile.journal_path}',
-                f'systemctl start {self.reload_profile.blazegraph_service}',
+                f'/usr/bin/systemctl start {self.reload_profile.blazegraph_service}',
             )
         # wait for blazegraph to start
         # TODO: sleeping is far from ideal, consider using another technique (ping some blazegraph API?)
@@ -338,7 +346,7 @@ class UpdaterRestart(Runnable):
         validate_dump_age(timestamp, 'after_reload')
         topic_offsets = {self.mutation_topic: int(timestamp.timestamp() * 1000)}
         self.kafka.set_consumer_position_by_timestamp(consumer_definition, topic_offsets)
-        self.query_service_host.run_sync(f'systemctl start {self.updater_service}')
+        self.query_service_host.run_sync(f'/usr/bin/systemctl start {self.updater_service}')
         logger.info('Data reload for blazegraph is complete. Waiting for updater to catch up '
                     'on %s@%s', hostname, site)
         watch = StopWatch()
@@ -354,7 +362,7 @@ class UpdaterRestart(Runnable):
                "curl -f -s --data-urlencode query@- http://localhost/sparql?format=json | "
                "jq -r .results.bindings[0].dumpdate.value")
         (_, msg_output) = next(self.query_service_host.run_sync(cmd))
-        timestamp = msg_output.message()
+        timestamp = msg_output.message().decode()
         logger.info('[extract_kafka_timestamp_from_sparql] found %s', timestamp)
         return parse_iso_dt(timestamp)
 
@@ -366,9 +374,9 @@ class HdfsCopy(Runnable):
                  stat_host: RemoteHosts,
                  kerberos_user: str,
                  hdfs_path: str,
-                 hdfs_local_path: str,
+                 hdfs_local_path: pathlib.Path,
                  query_service_host: RemoteHosts,
-                 query_service_data_path: str):
+                 query_service_data_path: pathlib.Path):
         """Create the runner"""
         self.stat_host = stat_host
         self.kerberos_user = kerberos_user
@@ -376,9 +384,10 @@ class HdfsCopy(Runnable):
         self.hdfs_local_path = hdfs_local_path
         self.query_service_host = query_service_host
         self.query_service_data_path = query_service_data_path
+        self.query_service_target_parent_dir = self.query_service_data_path.parent
 
     def _check_free_space(self,
-                          path: str,
+                          path: pathlib.Path,
                           additional_size: int,
                           threshold: float) -> None:
         """Check that enough free space is available
@@ -392,7 +401,7 @@ class HdfsCopy(Runnable):
         """
         cmd = f"set -o pipefail; df --output=size,used -B1 '{path}' | tail -1"
         (_, msg_output) = next(self.stat_host.run_sync(cmd))
-        (size, used) = [int(s) for s in msg_output.message().strip().split(" ", 2)]
+        (size, used) = [int(s) for s in re.split(r'\s+', msg_output.message().decode().strip(), 1)]
         if ((size - (additional_size + used)) / size) < threshold:
             raise RuntimeError("Not enough space left on device to continue.")
 
@@ -405,9 +414,9 @@ class HdfsCopy(Runnable):
                f'hdfs dfs -du -s "{self.hdfs_path}"')
         (_, msg_output) = next(self.stat_host.run_sync(cmd))
         lines = msg_output.lines()
-        return int(re.sub(r"^(\d+)\s+.*$", next(lines), r"\1"))
+        return int(re.sub(r"^(\d+)\s+.*$", r"\1", next(lines).decode()))
 
-    def _extract_from_hdfs(self, local_path: str) -> None:
+    def _extract_from_hdfs(self, local_path: pathlib.Path) -> None:
         """Download the dump from HDFS and store it locally.
 
         @param local_path: the local path to download to
@@ -415,30 +424,62 @@ class HdfsCopy(Runnable):
         size = self._get_dump_size_from_hdfs()
         self._check_free_space(local_path, size, .25)
         self.stat_host.run_sync(f'sudo -u {self.kerberos_user} kerberos-run-command {self.kerberos_user} '
-                                f'hdfs-rsync --delete --exclude "_*" "{self.hdfs_path}" "{local_path}"')
+                                f'hdfs-rsync --delete --exclude "_*" "{self.hdfs_path}" file:"{local_path}"')
 
-    def _cleanup_hdfs_temp_path(self, folder: str) -> None:
+    def _cleanup_hdfs_temp_path(self, folder: pathlib.Path) -> None:
         """Cleanup gz files in stat_host:folder and remove the folder.
 
         @param folder: the folder to cleanup
         """
-        self.stat_host.run_sync(f"find {folder} -maxdepth 1 -type f -name '*.gz' | xargs rm",
-                                f"rmdir {folder}")
+        self.stat_host.run_sync(f"find {folder} -maxdepth 1 -type f -name '*.gz' | xargs rm -v ",
+                                f"rmdir {folder}",
+                                f"rmdir {folder.parent}")
 
-    def _prepare_hdfs_local_path(self) -> None:
-        """Prepare the local path that will hold the temp path reveiving the content from HDFS"""
-        self.stat_host.run_sync(f"mkdir -p {self.hdfs_local_path}",
-                                f"chown {self.kerberos_user} {self.hdfs_local_path}")
+    def _prepare_hdfs_local_path(self, run_id: str) -> pathlib.Path:
+        """Prepare the local path that will hold the temp path receiving the content from HDFS"""
+        target_basename = self.query_service_data_path.name
+        # include the basename of the target folder, reason is that Transferer will want
+        # to create that target folder on the dest host
+        full_dir = self.hdfs_local_path / run_id / target_basename
+        self.stat_host.run_sync(f"mkdir -p {full_dir}",
+                                f"chown -R {self.kerberos_user} {self.hdfs_local_path}")
+        return full_dir
 
-    def _transfer_dump(self, source_folder: str) -> None:
+    def _prepare_wdqs_target_path(self) -> None:
+        """Prepare the target folder on the wdqs host."""
+        # Cleanup the target folder and make sure that the parent exists
+        # Transferer should take care of creating the target folder
+        self.query_service_host.run_sync(f"rm -rf {self.query_service_data_path}",
+                                         f"mkdir -p {self.query_service_target_parent_dir}",
+                                         f"test -d {self.query_service_target_parent_dir}")
+
+    def _transfer_dump(self, source_folder: pathlib.Path) -> None:
         """Transfer dump files from source_host:source_folder to dest_host:target_folder.
 
         @param source_folder: the source folder on the source host
         @return:
         """
-        transfer = Transferer(self.stat_host, source_folder,
-                              [self.query_service_host], self.query_service_data_path)
-        transfer.run()
+        # The following might only ever be for a single host,
+        # but I suppose let's avoid hardcoding that expectation
+        qs_hosts = list(self.query_service_host.hosts)
+        qs_dirs = [str(self.query_service_target_parent_dir)] * len(qs_hosts)
+
+        # Read transferpy config from /etc/transferpy/transferpy.conf,
+        # which is present on cumin hosts.
+        tp_opts = dict(transferpy.transfer.parse_configurations(transferpy.transfer.CONFIG_FILE))
+        # this also handles string->bool conversion where necessary
+        tp_opts = transferpy.transfer.assign_default_options(tp_opts)
+        tp_opts['verbose'] = True
+        transfer = Transferer(str(self.stat_host.hosts), str(source_folder), qs_hosts, qs_dirs, options=tp_opts)
+        ret = transfer.run()
+        # ret is an array of error codes that can be 0 (success) or <> 0 (errors)
+        # it might have 1 entry for global errors or one entry per target host
+        # we just want to fail, we don't care about what exactly failed (cumin logs should be used for that)
+        if sum(map(abs, ret)) > 0:
+            raise RuntimeError(f"Failed to transfer dumps from {str(self.stat_host.hosts)}:{source_folder}")
+
+    def _chown_data_path(self) -> None:
+        self.query_service_host.run_sync(f"chown blazegraph.blazegraph -R {self.query_service_target_parent_dir}")
 
     @property
     def runtime_description(self) -> str:
@@ -449,22 +490,27 @@ class HdfsCopy(Runnable):
         """Transfer the dump from HDFS to the query service node."""
         logger.info("Creating %s:%s and setting %s as owner",
                     self.stat_host, self.hdfs_local_path, self.kerberos_user)
-        self._prepare_hdfs_local_path()
+        tmpdir = self._prepare_hdfs_local_path(f"reload.{getpid()}.{int(datetime.now().timestamp())}")
 
-        tmpdir = f"{self.hdfs_local_path}/reload.{getpid()}.{int(datetime.now().timestamp())}"
+        try:
+            logger.info("Extracting dumps from hdfs %s to %s:%s",
+                        self.hdfs_path, self.stat_host, tmpdir)
+            self._extract_from_hdfs(tmpdir)
 
-        logger.info("Extracting dumps from hdfs %s to %s:%s",
-                    self.hdfs_path, self.stat_host, tmpdir)
-        self._extract_from_hdfs(tmpdir)
+            logger.info("Cleaning/creating target data %s:%s",
+                        self.query_service_host, self.query_service_data_path)
+            self._prepare_wdqs_target_path()
+            logger.info("Copying dumps from %s:%s to %s:%s",
+                        self.stat_host, tmpdir, self.query_service_host, self.query_service_data_path)
+            self._transfer_dump(tmpdir)
 
-        logger.info("Copying dumps from %s:%s to "
-                    "%s:%s",
-                    self.stat_host, tmpdir, self.query_service_host, self.query_service_data_path)
-        self._transfer_dump(tmpdir)
-
-        logger.info("Cleaning up %s:%s",
-                    self.stat_host, tmpdir)
-        self._cleanup_hdfs_temp_path(tmpdir)
+            logger.info("Giving ownership to blazegraph to %s:%s",
+                        self.query_service_host, self.query_service_data_path)
+            self._chown_data_path()
+        finally:
+            logger.info("Cleaning up %s:%s",
+                        self.stat_host, tmpdir)
+            self._cleanup_hdfs_temp_path(tmpdir)
 
 
 @dataclass
@@ -548,7 +594,8 @@ class MungeFromNFS(Runnable):
 
 def validate_dump_age(dump_date: datetime, check_time: str = "before_reload") -> None:
     """Given a timestamp, confirm that it fits requirements. Err/exit if not."""
-    right_now_date = datetime.now()
+    # right_now_date must be "offset (timezone) aware" since our dump_date is
+    right_now_date = datetime.now(timezone.utc).astimezone()
     current_age = (right_now_date - dump_date).days
     if check_time == "before_reload":
         max_age = DAYS_KAFKA_RETAINED - DAYS_IT_TAKES_TO_RELOAD
