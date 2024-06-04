@@ -33,9 +33,9 @@ from kubernetes.client.models import V1Taint
 from spicerack import Spicerack
 from spicerack.k8s import Kubernetes, KubernetesApiError, KubernetesNode
 from spicerack.remote import RemoteHosts
-from wmflib.constants import CORE_DATACENTERS
 
 from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
+from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES
 
 
 def flatten_taints(taints: list[V1Taint]) -> str:
@@ -65,13 +65,6 @@ class RollRebootK8sNodes(SREBatchBase):
     def argument_parser(self) -> ArgumentParser:
         """Parse arguments"""
         parser = super().argument_parser()
-
-        parser.add_argument(
-            "--group",
-            "-g",
-            help="Cluster group (as in hiera kubernetes_cluster_groups) of the cluster to restart",
-        )
-
         return parser
 
     def get_runner(self, args: Namespace) -> "RollRebootK8sNodesRunner":
@@ -95,9 +88,17 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Initialize the runner."""
         # Init k8s_client early, as it is used in _hosts() which will be called by super().__init__
+        for _, metadata in ALLOWED_CUMIN_ALIASES.items():
+            if metadata["workers"] == args.alias:
+                k8s_metadata = metadata
+                break
+        else:
+            raise RuntimeError(
+                f"Cannot find the alias {args.alias} among any k8s workers alias: "
+                f"{self.allowed_aliases}")
         self.k8s_cli = Kubernetes(
-            group=args.group,
-            cluster=self._kubernetes_cluster_name(args.alias),
+            group=k8s_metadata["k8s-group"],
+            cluster=k8s_metadata["k8s-cluster"],
             dry_run=spicerack.dry_run,
         )
         # Dictionary containing KubernetesNode instances for all hosts
@@ -107,26 +108,6 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         self._first_batch = True
         # _host_group_idx stores the index of the host group currently in progress
         self._host_group_idx = 0
-
-    def _kubernetes_cluster_name(self, alias: str) -> str:
-        """Return the name of the kubernetes cluster used for credentials files (in /etc/kubernetes)
-
-        Unfortunately, clusters are named differently in cumin aliases/conftool and hiera kubernetes_cluster_groups
-        and the cluster group (main/wikikube and ml-serve) is not part of the kubernetes credential files.
-        Also, transition from group name "main" to "wikikube" is not completed.
-        """
-        datacenter = alias.rsplit("-", 1)[1]
-        if alias.startswith("wikikube-worker"):
-            return datacenter
-        if alias.startswith("wikikube-staging-worker"):
-            return f"staging-{datacenter}"
-        if alias.startswith("ml-serve"):
-            return f"ml-serve-{datacenter}"
-        if alias.startswith("ml-staging"):
-            return "ml-staging-codfw"
-        if alias.startswith("dse-k8s"):
-            return "dse-k8s-eqiad"
-        raise RuntimeError("Cannot figure out the Kubernetes cluster name.")
 
     def _k8s_node_action(self, node_name: str, action: str) -> None:
         """Call the function action on a KubernetesNode instance for a given node_name"""
@@ -161,18 +142,15 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
     @property
     def allowed_aliases(self) -> list:
         """Return a list of allowed aliases for this cookbook"""
-        # Clusters not having corresponding aliases for both CORE_DATACENTERS
-        aliases = ["dse-k8s-worker", "ml-staging-worker"]
-        for alias in ["wikikube-worker", "wikikube-staging-worker", "ml-serve-worker"]:
-            aliases.extend(f"{alias}-{dc}" for dc in CORE_DATACENTERS)
-        return aliases
+        return [metadata["workers"] for _, metadata in ALLOWED_CUMIN_ALIASES.items()]
 
     @property
     def allowed_aliases_query(self) -> str:
         """Override the parent property to optimize the query."""
         # The following query must include all hosts matching all the allowed_aliases
-        return ('A:wikikube-worker or A:wikikube-staging-worker '
-                'or A:ml-serve-worker or A:dse-k8s-worker or A:ml-staging-worker')
+        allowed_aliases = [
+            f'A:{metadata["workers"]}' for _, metadata in ALLOWED_CUMIN_ALIASES.items()]
+        return " ".join(allowed_aliases)
 
     def _hosts(self) -> list[RemoteHosts]:
         all_hosts = super()._hosts()[0]
