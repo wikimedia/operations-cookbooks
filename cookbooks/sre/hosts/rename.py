@@ -3,6 +3,8 @@ import logging
 
 from pprint import pformat
 
+from packaging import version
+
 from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -68,6 +70,9 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         self.alerting_host = spicerack.alerting_hosts([self.old_name])
         self.redfish = spicerack.redfish(self.old_name)
         self.redfish.check_connection()
+        if self.redfish.firmware_version < version.Version('4'):
+            raise RuntimeError(f'iDRAC version ({self.redfish.firmware_version}) is too low. '
+                               'Please upgrade iDRAC first.')
         self.spicerack = spicerack
 
         self.actions = spicerack.actions
