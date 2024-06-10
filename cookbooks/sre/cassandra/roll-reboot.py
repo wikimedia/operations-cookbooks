@@ -27,10 +27,11 @@ class CassandraRebootRunner(SREBatchRunnerBase):
     @property
     def allowed_aliases(self):
         """Required by SREBatchRunnerBase"""
-        return ['ml-cache', 'ml-cache-eqiad', 'ml-cache-codfw',
-                'cassandra-dev']
+        return ['aqs', 'aqs-codfw', 'aqs-eqiad', 'cassandra-dev', 'ml-cache',
+                'ml-cache-eqiad', 'ml-cache-codfw', 'restbase',
+                'restbase-codfw', 'restbase-eqiad', 'sessionstore']
 
     @property
     def allowed_aliases_query(self) -> str:
         """Override the parent property to optimize the query."""
-        return 'A:cassandra-dev or A:ml-cache'
+        return 'P{P:Cassandra}'
