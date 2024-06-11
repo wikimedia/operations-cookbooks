@@ -10,12 +10,12 @@ class Batch(SREBatchBase):
 
     Example usage:
         cookbook sre.cdn.roll-reboot \
-            --alias 'A:cp-text_ulsfo' \
+            --alias 'cp-text_ulsfo' \
             --reason 'Kernel update' \
             --task-id T123456
 
         cookbook sre.cdn.roll-reboot \
-            --alias 'A:cp-text_ulsfo' \
+            --alias 'cp-text_ulsfo' \
             --reason 'Kernel update' \
             --task-id T123456 \
             --grace-sleep 1200
