@@ -140,9 +140,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.requests = spicerack.requests_session(__name__, timeout=(5.0, 30.0))
         self.virtual: bool = self.netbox_server.virtual
 
-        print(f'Starting reimage on {self.host}. You can check progress via serial console '
-              f'or by running `install-console {self.fqdn}` on any cumin host')
-
         try:
             self.remote_host = self.remote.query(self.fqdn)
             if self.args.new:
@@ -623,6 +620,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
     def run(self):  # pylint: disable=too-many-statements,too-many-branches
         """Execute the reimage."""
+        print(f'Starting reimage on {self.host}. You can check progress via serial console '
+              f'or by running `install-console {self.fqdn}` on any cumin host')
+
         if self.phabricator is not None:
             self.phabricator.task_comment(
                 self.args.task_id,
