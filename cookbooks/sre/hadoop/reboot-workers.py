@@ -137,7 +137,7 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
                 'may potentially be rebooted at the same time. Please check the list of hosts ({}) '
                 'before proceeding: {}'.format(self.reboot_batch_size, len(hadoop_workers), hadoop_workers))
 
-            worker_hostnames_n_slices = math.floor(len(hadoop_workers.hosts) / self.reboot_batch_size)
+            worker_hostnames_n_slices = math.ceil(len(hadoop_workers.hosts) / self.reboot_batch_size)
             logger.info('Rebooting Hadoop workers')
             for hadoop_workers_batch in hadoop_workers.split(worker_hostnames_n_slices):
                 logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
@@ -151,7 +151,7 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
                     self.cluster_cumin_alias + ' and not ' + self.hdfs_jn_cumin_alias)
 
                 # Split the workers into batches of hostnames
-                worker_hostnames_n_slices = math.floor(len(hadoop_workers_no_journal.hosts) / self.reboot_batch_size)
+                worker_hostnames_n_slices = math.ceil(len(hadoop_workers_no_journal.hosts) / self.reboot_batch_size)
 
                 logger.info('Rebooting Hadoop workers NOT running a HDFS Journalnode')
                 for hadoop_workers_batch in hadoop_workers_no_journal.split(worker_hostnames_n_slices):
