@@ -82,7 +82,6 @@ class MigrateHostsRunner(CookbookRunnerBase):
 
             hieradata/hosts/{host}.yaml
                 profile::puppet::agent::force_puppet7: true
-                acmechief_host: acmechief2002.codfw.wmnet
 
             Press continue when the change is merged
             """
