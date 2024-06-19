@@ -62,8 +62,8 @@ class DeployRunner(CookbookRunnerBase):
 
         if args.user:
             if self.project not in args.user:
-                ask_confirmation('The -u/--user provided "{args.user}" does not seem related to the project name '
-                                 '"{self.project}". Are you sure you want to continue using the user "{args.user}"?')
+                ask_confirmation(f'The -u/--user provided "{args.user}" does not seem related to the project name '
+                                 f'"{self.project}". Are you sure you want to continue using the user "{args.user}"?')
             self.user = args.user
         else:
             self.user = f'deploy-{self.project}'
