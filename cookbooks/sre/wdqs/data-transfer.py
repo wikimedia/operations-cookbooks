@@ -37,6 +37,24 @@ BLAZEGRAPH_INSTANCES = {
         'files': ['/srv/wdqs/wikidata.jnl'],
         'valid_on': 'wdqs',
     },
+    'wikidata_full': {
+        'services': ['wdqs-updater', 'wdqs-blazegraph'],
+        'data_path': '/srv/wdqs',
+        'files': ['/srv/wdqs/wikidata.jnl'],
+        'valid_on': 'wdqs',
+    },
+    'wikidata_main': {
+        'services': ['wdqs-updater', 'wdqs-blazegraph'],
+        'data_path': '/srv/wdqs',
+        'files': ['/srv/wdqs/wikidata.jnl'],
+        'valid_on': 'wdqs',
+    },
+    'scholarly_articles': {
+        'services': ['wdqs-updater', 'wdqs-blazegraph'],
+        'data_path': '/srv/wdqs',
+        'files': ['/srv/wdqs/wikidata.jnl'],
+        'valid_on': 'wdqs',
+    },
     'commons': {
         'services': ['wcqs-updater', 'wcqs-blazegraph'],
         'data_path': '/srv/query_service',
