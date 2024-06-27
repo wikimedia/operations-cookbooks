@@ -33,7 +33,7 @@ def configure_switch_interfaces(remote: Remote, netbox: Netbox, netbox_data: dic
     # Tackle interfaces one at a time
     for nb_device_interface in nb_device_interfaces:
 
-        nb_switch_interface = nb_device_interface.connected_endpoint
+        nb_switch_interface = nb_device_interface.connected_endpoints[0]
         # Get the switch FQDN (VC or not VC)
         vc = nb_switch_interface.device.virtual_chassis
         if vc:

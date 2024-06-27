@@ -92,15 +92,15 @@ class DebugRunner(CookbookRunnerBase):
         nb_interface = self.netbox.api.dcim.interfaces.get(netbox_id)
         if not nb_interface:
             raise RuntimeError(f"No Netbox interface with ID {netbox_id}")
-        if nb_interface.connected_endpoint_type == 'dcim.interface':
-            connected_int = nb_interface.connected_endpoint
+        if nb_interface.connected_endpoints_type == 'dcim.interface':
+            connected_int = nb_interface.connected_endpoints[0]
         message = f'Interface {nb_interface.device}:{nb_interface.name}'
         logger.info('%s', message)
         if nb_interface.device.device_type.manufacturer.slug != 'juniper':
             logger.info('Not a Juniper device, skipping')
             return connected_int
         self.task_comment.append(f'\n---\n**{message}**')
-        if nb_interface.connected_endpoint and not nb_interface.connected_endpoint_reachable:
+        if nb_interface.connected_endpoints and not nb_interface.connected_endpoints_reachable:
             message = '⚠️ Endpoint unreachable according to Netbox, check the path and cables status'
             logger.error('%s', message)
             self.task_comment.append(f'{message}')
@@ -136,7 +136,7 @@ class DebugRunner(CookbookRunnerBase):
         for termination_side in ('termination_a', 'termination_z'):
             try:
                 termination = getattr(nb_circuit, termination_side)
-                if termination.link_peer_type == 'dcim.interface':
-                    self.debug_interface(termination.link_peer.id)
+                if termination.link_peers_type == 'dcim.interface':
+                    self.debug_interface(termination.link_peers[0].id)
             except AttributeError:
                 pass

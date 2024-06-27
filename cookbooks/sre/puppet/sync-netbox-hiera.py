@@ -26,14 +26,14 @@ from spicerack.reposync import RepoSyncNoChangeError
 NETWORK_ROLES = ("cloudsw", "scs", "asw", "cr", "mr", "msw", "pfw", "pdu")
 
 NETWORK_DEVICE_LIST_GQL = """
-query ($role: [String], $status: [String]) {
-    device_list(role: $role, status: $status) {
+query ($role: [String!], $status: [String!]) {
+    device_list(filters: {role: $role, status: $status}) {
         name
         virtual_chassis {
             name
             master { name }
         }
-        device_role { slug }
+        role { slug }
         device_type {
             slug
             manufacturer { slug }
@@ -52,8 +52,8 @@ query ($role: [String], $status: [String]) {
 }
 """
 DEVICE_LIST_GQL = """
-query ($role: [String], $status: [String]) {
-    device_list(role: $role, status: $status) {
+query ($role: [String!], $status: [String!]) {
+    device_list(filters: {role: $role, status: $status}) {
         name
         status
         site { slug }
@@ -68,8 +68,8 @@ query ($role: [String], $status: [String]) {
 }
 """
 VM_LIST_GQL = """
-query ($status: [String]) {
-    virtual_machine_list(status: $status) {
+query ($status: [String!]) {
+    virtual_machine_list(filters: {status: $status}) {
         name
         status
         tenant { name }
@@ -103,8 +103,8 @@ query {
 }
 """
 PREFIX_LIST = """
-query ($status: [String]) {
-  prefix_list(status: $status) {
+query ($status: [String!]) {
+  prefix_list(filters: {status: $status}) {
     site { slug }
     tenant { slug }
     role { slug }
@@ -273,13 +273,13 @@ class NetboxHieraRunner(CookbookRunnerBase):
                 'primary_fqdn': device['primary_ip4']['dns_name'],
                 'manufacturer': device['device_type']['manufacturer']['slug'],
                 'site': device['site']['slug'],
-                'role': device['device_role']['slug'],
+                'role': device['role']['slug'],
                 'ipv4': device['primary_ip4']['address'].split('/')[0],
             }
 
             if (
                 device['device_type']['slug'] == 'mx480'
-                and device['device_role']['slug'] == 'cr'
+                and device['role']['slug'] == 'cr'
             ):
                 data['alarms'] = True
             if device.get('primary_ip6') is not None:

@@ -353,13 +353,13 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         """Instantiate a DHCP configuration to be used for the reimage."""
         netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
         netbox_iface = netbox_host.primary_ip.assigned_object
-        switch_iface = netbox_iface.connected_endpoint
+        switch_iface = netbox_iface.connected_endpoints[0]
         if netbox_iface.type.value == 'bridge':
             # We need to get the physical port that belongs to the bridge instead
             bridge_members = self.netbox.api.dcim.interfaces.filter(device=netbox_host.name, bridge_id=netbox_iface.id)
-            connected_ifaces = [iface for iface in bridge_members if iface.connected_endpoint is not None]
+            connected_ifaces = [iface for iface in bridge_members if iface.connected_endpoints]
             if len(connected_ifaces) == 1:
-                switch_iface = connected_ifaces[0].connected_endpoint
+                switch_iface = connected_ifaces[0].connected_endpoints[0]
         if switch_iface is None:
             raise RuntimeError(f'Error finding primary interface connected switch port for {self.host}. Netbox '
                                'model of server connections is invalid.')

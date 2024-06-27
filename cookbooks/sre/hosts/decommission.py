@@ -67,11 +67,11 @@ def update_netbox(netbox, netbox_data, keep_mgmt_dns, dry_run):
             continue
 
         # If the interface is connected to another interface (and not a circuit, etc)
-        if interface.connected_endpoint and interface.connected_endpoint_type == 'dcim.interface':
-            remote_interface = netbox.api.dcim.interfaces.get(interface.connected_endpoint.id)
-            if remote_interface.device.device_role.slug not in ('asw', 'cloudsw'):
+        if interface.connected_endpoints and interface.connected_endpoints_type == 'dcim.interface':
+            remote_interface = netbox.api.dcim.interfaces.get(interface.connected_endpoints[0].id)
+            if remote_interface.device.role.slug not in ('asw', 'cloudsw'):
                 logger.debug('Skipping interface %s, is connected to %s (%s), that is not a switch',
-                             interface.name, remote_interface.device.name, remote_interface.device.device_role.name)
+                             interface.name, remote_interface.device.name, remote_interface.device.role.name)
                 continue
 
             # Disable the remote side and reset any potential vlan config

@@ -66,7 +66,7 @@ class TlsRunner(CookbookRunnerBase):
         self.netbox_device = self.netbox.api.dcim.devices.get(name=self.device)
         if not self.netbox_device:
             raise RuntimeError(f'{self.device}: device not in Netbox.')
-        if self.netbox_device.device_role.slug not in NETWORK_ROLES:
+        if self.netbox_device.role.slug not in NETWORK_ROLES:
             raise RuntimeError(f'{self.device}: invalid role, must be one of {NETWORK_ROLES}.')
         try:
             self.device_fqdn = self.netbox_device.primary_ip.dns_name

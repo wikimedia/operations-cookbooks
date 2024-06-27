@@ -45,7 +45,7 @@ class ProvisionRunner(CookbookRunnerBase):
 
         self.netbox = spicerack.netbox(read_write=True)
         self.netbox_device = self._get_netbox_device()
-        if self.netbox_device.device_role.slug not in PROVISION_ALLOWED_ROLES:
+        if self.netbox_device.role.slug not in PROVISION_ALLOWED_ROLES:
             raise RuntimeError(f'Device {self.device} has role {self.netbox_device.role.slug}, expected one of '
                                f'{PROVISION_ALLOWED_ROLES}')
 

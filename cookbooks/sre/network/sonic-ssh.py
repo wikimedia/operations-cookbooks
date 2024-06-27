@@ -56,7 +56,7 @@ class SonicSshRunner(CookbookRunnerBase):
         self.netbox_device = self.netbox.api.dcim.devices.get(name=self.device)
         if not self.netbox_device:
             raise RuntimeError(f'{self.device}: device not found in Netbox')
-        if self.netbox_device.device_role.slug != 'asw' or self.netbox_device.device_type.manufacturer.slug != "dell":
+        if self.netbox_device.role.slug != 'asw' or self.netbox_device.device_type.manufacturer.slug != "dell":
             raise RuntimeError(f'{self.device}: invalid role or manufacturer (MUST be asw and dell)')
         try:
             self.device_fqdn = self.netbox_device.primary_ip.dns_name
