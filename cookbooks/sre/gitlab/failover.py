@@ -9,7 +9,10 @@ from urllib.parse import urlparse
 from spicerack.remote import RemoteHosts
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation, get_secret, confirm_on_failure
 from cookbooks.sre import CookbookBase, CookbookRunnerBase, PHABRICATOR_BOT_CONFIG_FILE
-from cookbooks.sre.gitlab import get_gitlab_url, get_disk_usage_for_path, pause_runners, unpause_runners
+from cookbooks.sre.gitlab import (
+    get_gitlab_url, get_disk_usage_for_path, lock_backups_on_host,
+    pause_runners, unlock_backups_on_host, unpause_runners
+)
 
 BACKUP_DIRECTORY = '/srv/gitlab-backup'
 GITLAB_CTL = "/usr/bin/gitlab-ctl"
@@ -168,7 +171,7 @@ class FailoverRunner(CookbookRunnerBase):
         )
 
         self.switch_from_host.run_sync("gitlab-ctl deploy-page down", print_progress_bars=False, is_safe=False)
-        self.unlock_backups_on_host(self.switch_from_host)
+        unlock_backups_on_host(self.switch_from_host, BACKUP_DIRECTORY)
         self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
 
         self.switch_from_host.run_sync("systemctl start ssh-gitlab", print_progress_bars=False)
@@ -234,14 +237,6 @@ class FailoverRunner(CookbookRunnerBase):
         if get_disk_usage_for_path(host, BACKUP_DIRECTORY) > DISK_HIGH_THRESHOLD:
             raise RuntimeError(f"Not enough disk space in {BACKUP_DIRECTORY}")
 
-    def unlock_backups_on_host(self, host) -> None:
-        """Clears lockfile on a given host to allow backup/restores to run"""
-        host.run_sync(f"{BACKUP_DIRECTORY}/gitlab-backup.sh unlock")
-
-    def lock_backups_on_host(self, host) -> None:
-        """Places lockfile on a given host to prevent backup/restores from running"""
-        host.run_sync(f"{BACKUP_DIRECTORY}/gitlab-backup.sh lock")
-
     def make_host_read_only(self, host) -> None:
         """Makes Gitlab on the switch_from host read-only
 
@@ -264,7 +259,7 @@ class FailoverRunner(CookbookRunnerBase):
         logger.info("*** THIS IS SLOW. IT WILL TAKE 30-45 MINUTES ***")
 
         logger.info("Locking backups on destination host %s", self.switch_to_host)
-        self.lock_backups_on_host(self.switch_to_host)
+        lock_backups_on_host(self.switch_to_host, BACKUP_DIRECTORY)
         self.switch_from_host.run_sync(
             f"{BACKUP_DIRECTORY}/gitlab-backup.sh failover",
             print_progress_bars=False
@@ -277,7 +272,7 @@ class FailoverRunner(CookbookRunnerBase):
             "Locking backups on source host %s to prevent restore cron",
             self.switch_from_host,
         )
-        self.lock_backups_on_host(self.switch_from_host)
+        lock_backups_on_host(self.switch_from_host, BACKUP_DIRECTORY)
 
         return 'failover_gitlab_backup.tar'
 
@@ -301,7 +296,7 @@ class FailoverRunner(CookbookRunnerBase):
             self.switch_to_host,
         )
 
-        self.unlock_backups_on_host(self.switch_to_host)
+        unlock_backups_on_host(self.switch_to_host, BACKUP_DIRECTORY)
         self.switch_to_host.run_sync(f"{GITLAB_RESTORE_PATH}/gitlab-restore.sh -F", print_progress_bars=False)
 
     def check_for_correct_dns(self) -> None:

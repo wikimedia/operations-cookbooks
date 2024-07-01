@@ -69,3 +69,13 @@ def unpause_runners(paused_runners, dry_run=True):
             runner.paused = False
             runner.save()
         logger.info('Unpaused %s runner', runner.id)
+
+
+def unlock_backups_on_host(host: RemoteHosts, path: str) -> None:
+    """Clears lockfile on a given host to allow backup/restores to run"""
+    host.run_sync(f"{path}/gitlab-backup.sh unlock")
+
+
+def lock_backups_on_host(host: RemoteHosts, path: str) -> None:
+    """Places lockfile on a given host to prevent backup/restores from running"""
+    host.run_sync(f"{path}/gitlab-backup.sh lock")

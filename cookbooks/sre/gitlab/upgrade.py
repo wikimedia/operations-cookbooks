@@ -11,10 +11,13 @@ from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-from cookbooks.sre.gitlab import get_gitlab_url, get_disk_usage_for_path, pause_runners, unpause_runners
+from cookbooks.sre.gitlab import (
+    get_gitlab_url, get_disk_usage_for_path, lock_backups_on_host,
+    pause_runners, unlock_backups_on_host, unpause_runners
+)
 
 
-BACKUP_PATH = "/srv/gitlab-backup"
+BACKUP_DIRECTORY = "/srv/gitlab-backup"
 BACKUP_LOCK_FILE = "/opt/gitlab/embedded/service/gitlab-rails/tmp/backup_restore.pid"
 DISK_HIGH_THRESHOLD = 70
 
@@ -141,6 +144,9 @@ class UpgradeRunner(CookbookRunnerBase):
         self.fail_for_background_migrations()
         self.fail_for_running_backup()
 
+        # Lock all backups and restores to ensure they do not interrupt the upgrade
+        lock_backups_on_host(self.remote_host, BACKUP_DIRECTORY)
+
         if not self.skip_replica_backups and not self.skip_confirm_prompt:
             self.spicerack.irc_logger.info(
                 f"{self.spicerack.username}: The backup on {self.host} is complete, ready to proceed with upgrade."
@@ -161,6 +167,9 @@ class UpgradeRunner(CookbookRunnerBase):
                 self.task_id,
                 f'Cookbook {__name__} started by {self.admin_reason.owner} {self.runtime_description} completed '
                 f'successfully {self.runtime_description}')
+
+        # Unlock backup and restore again
+        unlock_backups_on_host(self.remote_host, BACKUP_DIRECTORY)
 
     def check_gitlab_version(self):
         """Compare current GitLab version with target version.
@@ -187,8 +196,8 @@ class UpgradeRunner(CookbookRunnerBase):
 
     def fail_for_disk_space(self):
         """Available disk space must be below DISK_HIGH_THRESHOLD."""
-        if get_disk_usage_for_path(self.remote_host, BACKUP_PATH) > DISK_HIGH_THRESHOLD:
-            raise RuntimeError(f"Not enough disk space in {BACKUP_PATH}")
+        if get_disk_usage_for_path(self.remote_host, BACKUP_DIRECTORY) > DISK_HIGH_THRESHOLD:
+            raise RuntimeError(f"Not enough disk space in {BACKUP_DIRECTORY}")
 
     def check_can_skip_backup(self):
         """Check that we aren't running on the "production" host (i.e., gitlab.wm.o)"""
@@ -199,13 +208,13 @@ class UpgradeRunner(CookbookRunnerBase):
     def create_data_backup(self):
         """Create data backup"""
         logger.info('Schedule full data backup')
-        self.remote_host.run_sync(f"{BACKUP_PATH}/gitlab-backup.sh full")
+        self.remote_host.run_sync(f"{BACKUP_DIRECTORY}/gitlab-backup.sh full")
         logger.info('Full data backup complete')
 
     def create_config_backup(self):
         """Create config backup"""
         logger.info('Schedule config backup')
-        self.remote_host.run_sync(f"{BACKUP_PATH}/gitlab-backup.sh config")
+        self.remote_host.run_sync(f"{BACKUP_DIRECTORY}/gitlab-backup.sh config")
         logger.info('Config backup complete')
 
     def preload_debian_package(self):
