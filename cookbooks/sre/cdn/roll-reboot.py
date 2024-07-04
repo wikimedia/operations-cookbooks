@@ -36,6 +36,15 @@ class Runner(SRELBBatchRunnerBase):
 
     depool_sleep = 60
 
+    def post_action(self, hosts) -> None:
+        """Run this function after performing the action on the batch of hosts.
+
+        We want to keep track of the progress of this cookbook, so we log to
+        SAL once a host is rebooted.
+        """
+        self._spicerack.sal_logger.info('%s finished rebooting %s', __name__, hosts.hosts)
+        super().post_action(hosts)
+
     @property
     def allowed_aliases(self) -> list:
         """Required by SREBatchRunnerBase"""
