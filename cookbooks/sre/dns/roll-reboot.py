@@ -50,6 +50,23 @@ class DNSBoxRebootRunner(SRELBBatchRunnerBase):
     depool_sleep = 60
     repool_sleep = 60
 
+    def pre_action(self, hosts) -> None:
+        """Run this function _before_ performing the action on the batch of hosts.
+
+        We want to be notified when a DNS host is going down for maintenance.
+        """
+        self._spicerack.sal_logger.info('%s begin reboot of %s', __name__, hosts.hosts)
+        super().pre_action(hosts)
+
+    def post_action(self, hosts) -> None:
+        """Run this function _after_ performing the action on the batch of hosts.
+
+        We want to keep track of the progress of this cookbook, so we log to
+        SAL once a host is rebooted.
+        """
+        self._spicerack.sal_logger.info('%s finished rebooting %s', __name__, hosts.hosts)
+        super().post_action(hosts)
+
     @property
     def allowed_aliases(self) -> list:
         """Required by RebootRunnerBase"""
