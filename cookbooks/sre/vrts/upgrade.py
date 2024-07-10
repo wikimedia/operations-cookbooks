@@ -19,7 +19,7 @@ class Upgrade(CookbookBase):
     """Upgrade VRTS hosts to a new version
 
     Usage example:
-        cookbook sre.vrts.ugprade --host vrts1001 --version 6.5.6 -t T12345
+        cookbook sre.vrts.ugprade --version 6.5.6 -r "Latest LTS Version" -t T12345 vrts1001
     """
 
     def argument_parser(self):
