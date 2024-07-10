@@ -312,7 +312,8 @@ class DataReloadRunner(CookbookRunnerBase):
             *[self._load_data_command(path) for path in self.reload_profile.source_folders]
         )
 
-        self.query_service_host.run_sync(f'touch {self.reload_profile.data_loaded_flag}')
+        logger.info('Setting contents of %s to %s', self.reload_profile.data_loaded_flag, self.profile_name)
+        self.query_service_host.run_sync(f'echo {self.profile_name} > {self.reload_profile.data_loaded_flag}')
 
         logger.info('Loaded dumps in %s', watch.elapsed())
         self.postload_step.run()

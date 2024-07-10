@@ -167,7 +167,7 @@ class DataTransferRunner(CookbookRunnerBase):
         tp_opts['verbose'] = True
         tp_opts['encrypt'] = self.encrypt
         logger.debug("Creating transfer object with args: %s %s %s %s", path, self.r_source, files, self.r_dest)
-        # wdqs-categories has 2 files, so we need a loop.
+
         for file in files:
             Transferer(str(self.r_source), file, [str(self.r_dest)], [path], tp_opts).run()
 
@@ -195,8 +195,9 @@ class DataTransferRunner(CookbookRunnerBase):
         elif lvs_strategy == "dest-only":
             action_func('dest', dest)
 
-        logger.info('sleeping for 120s')  # TODO poll instead of sleep
-        sleep(120)
+        if lvs_strategy != "neither":
+            logger.info('sleeping for 120s')  # TODO poll instead of sleep
+            sleep(120)
 
     def run_for_instance(self, bg_instance_name, instance):
         """Required by Spicerack API."""
@@ -209,6 +210,10 @@ class DataTransferRunner(CookbookRunnerBase):
 
         services = cast(list, instance['services'])
         files = instance['files']
+        if bg_instance_name != 'categories':
+            data_loaded_flag_filepath = instance['data_path'] + '/data_loaded'
+            files.append(data_loaded_flag_filepath)
+        logger.info("Decided on ultimately transferring the following files: %s", files)
 
         stop_services_cmd = " && ".join(["systemctl stop " + service for service in services])
         services.reverse()
@@ -237,8 +242,8 @@ class DataTransferRunner(CookbookRunnerBase):
 
                 if bg_instance_name not in ('commons'):
                     logger.info('Touching "data_loaded" file to show that data load is completed.')
-                    self.r_dest.run_sync('touch {data_path}/data_loaded'.format(
-                        data_path=data_path))
+                    self.r_dest.run_sync('echo {blazegraph_instance} > {data_path}/data_loaded'.format(
+                        blazegraph_instance=self.blazegraph_instance, data_path=data_path))
 
                 if bg_instance_name == 'categories':
                     logger.info('Reloading nginx to load new categories mapping.')
