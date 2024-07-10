@@ -42,7 +42,6 @@ class Upgrade(CookbookBase):
         )
         parser.add_argument(
             "host",
-            required=True,
             help="Short hostname of the VRTS host to upgrade e.g. vrts1001",
         )
         return parser
