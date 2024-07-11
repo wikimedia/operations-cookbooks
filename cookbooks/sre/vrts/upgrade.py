@@ -91,7 +91,7 @@ class UpgradeRunner(CookbookRunnerBase):
         if self.phabricator is not None:
             self.phabricator.task_comment(
                 self.task_id,
-                f"Cookbook {__name__} started by {self.admin_reason.owner} executed with errors",
+                f"Cookbook {__name__} started by {self.admin_reason.owner} executed with errors"
                 f"{self.runtime_description}\n",
             )
 
@@ -117,12 +117,12 @@ class UpgradeRunner(CookbookRunnerBase):
         """Download VRTS"""
         logger.info("Downloading VRTS")
         current_version = get_current_version(self.remote_host)
-        if current_version < version.parse(self.target_version):
+        if version.parse(self.target_version) < current_version:
             raise RuntimeError("Version must be greater than current version")
         self.remote_host.run_sync(
             f"runuser -u {VRTS_USER} -- "
-            f"source {ENV_FILE_PATH};"
-            "/usr/bin/curl -L {DOWNLOAD_URL}/znuny-{self.target_version}.tar.gz -o /tmp/znuny-{self.target_version}"
+            f"source {ENV_FILE_PATH}; "
+            f"/usr/bin/curl -L {DOWNLOAD_URL}/znuny-{self.target_version}.tar.gz -o /tmp/znuny-{self.target_version}"
         )
 
     def extract_vrts(self):
