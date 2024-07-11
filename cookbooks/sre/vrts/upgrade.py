@@ -58,6 +58,7 @@ class UpgradeRunner(CookbookRunnerBase):
         """Initiliaze the provision runner."""
         ensure_shell_is_durable()
         self.host = args.host
+        self.proxy = spicerack.http_proxy
         self.remote_host = spicerack.remote().query(f"{args.host}.*")
         if len(self.remote_host) != 1:
             raise RuntimeError(
@@ -74,7 +75,7 @@ class UpgradeRunner(CookbookRunnerBase):
         else:
             self.phabricator = None
 
-        self.message = f"on VRTS host {self.remote_host}"
+        self.message = f" on VRTS host {self.remote_host}"
 
     @property
     def runtime_description(self):
@@ -91,7 +92,7 @@ class UpgradeRunner(CookbookRunnerBase):
         if self.phabricator is not None:
             self.phabricator.task_comment(
                 self.task_id,
-                f"Cookbook {__name__} started by {self.admin_reason.owner} executed with errors"
+                f"Cookbook {__name__} started by {self.admin_reason.owner} executed with errors "
                 f"{self.runtime_description}\n",
             )
 
@@ -121,7 +122,7 @@ class UpgradeRunner(CookbookRunnerBase):
             raise RuntimeError("Version must be greater than current version")
         self.remote_host.run_sync(
             f"runuser -u {VRTS_USER} -- "
-            f"source {ENV_FILE_PATH}; "
+            f"http_proxy={self.proxy} HTTPS_PROXY={self.proxy} "
             f"/usr/bin/curl -L {DOWNLOAD_URL}/znuny-{self.target_version}.tar.gz -o /tmp/znuny-{self.target_version}"
         )
 
@@ -147,20 +148,22 @@ class UpgradeRunner(CookbookRunnerBase):
         logger.info("Copying configuration files")
         self.remote_host.run_sync(
             f"cp /opt/otrs/Kernel/Config.pm /opt/znuny-{self.target_version}/Kernel",
-            f"cp /opt/otrs/var/log/TicketCounter.log /opt/znuny-{self.target_version}/var/log"
+            f"cp /opt/otrs/var/log/TicketCounter.log /opt/znuny-{self.target_version}/var/log",
         )
 
     def symlink(self):
         """Create symbolic link pointing to new version"""
         logger.info("Symlinking to new version")
-        self.remote_host.run_sync(f"ln -sfnv /opt/znuny-{self.target_version} /opt/otrs")
+        self.remote_host.run_sync(
+            f"ln -sfnv /opt/znuny-{self.target_version} /opt/otrs"
+        )
 
     def configure_install(self):
         """Configure installation"""
         self.remote_host.run_sync(
             "/opt/otrs/bin/otrs.SetPermissions.pl --web-group=www-data",
             f"runuser -u {VRTS_USER} -- /opt/otrs/bin/otrs.Console.pl Maint::Config::Rebuild",
-            f"runuser -u {VRTS_USER} -- /opt/otrs/bin/otrs.Console.pl Maint::Cache::Delete"
+            f"runuser -u {VRTS_USER} -- /opt/otrs/bin/otrs.Console.pl Maint::Cache::Delete",
         )
         # self.remote_host.run_sync(
         #     "/opt/otrs/bin/otrs.Console.pl Admin::Package::ReinstallAll",
