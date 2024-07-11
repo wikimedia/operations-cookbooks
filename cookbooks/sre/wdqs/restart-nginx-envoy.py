@@ -28,8 +28,8 @@ class RestartNginxRunner(SREBatchRunnerBase):
     @property
     def allowed_aliases(self):
         """Required by SREBatchRunnerBase"""
-        return ['wcqs-public', 'wdqs-all', 'wdqs-main', 'wdqs-internal',
-                'wdqs-public', 'wdqs-test']
+        return ['wcqs-public', 'wdqs-all', 'wdqs-internal',
+                'wdqs-public', 'wdqs-main', 'wdqs-scholarly', 'wdqs-test']
 
     @property
     def restart_daemons(self):

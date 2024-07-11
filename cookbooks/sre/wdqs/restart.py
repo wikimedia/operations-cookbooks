@@ -2,7 +2,6 @@
 
 Usage example:
     cookbook sre.wdqs.restart --query wdqs100* --reason upgrades --task-id T12345
-
 """
 
 import argparse
