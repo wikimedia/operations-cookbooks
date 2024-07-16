@@ -169,7 +169,7 @@ class TlsRunner(CookbookRunnerBase):
         logger.debug("cfssl called with data: %s", data_in)
         command = (f"cfssl {operation} -config /etc/cfssl/client-cfssl.conf "
                    f"-tls-remote-ca {self.puppet_conf['localcacert']} "
-                   f"-mutual-tls-client-cert {self.puppet_conf['hostcert']} "
+                   f"-mutual-tls-client-cert /etc/cfssl/mutual_tls_client_cert.pem "
                    f"-mutual-tls-client-key {self.puppet_conf['hostprivkey']} "
                    "-label network_devices  -")
         try:
