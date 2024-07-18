@@ -121,9 +121,9 @@ class UpgradeRunner(CookbookRunnerBase):
         if version.parse(self.target_version) < current_version:
             raise RuntimeError("Version must be greater than current version")
         self.remote_host.run_sync(
-            f"runuser -l {VRTS_USER} "
-            f"-c 'export http_proxy={self.proxy}; HTTPS_PROXY={self.proxy}; "
-            f"/usr/bin/curl -L {DOWNLOAD_URL}/znuny-{self.target_version}.tar.gz -o /tmp/znuny-{self.target_version}'"
+            f"runuser -u {VRTS_USER} -- "
+            f"/usr/bin/curl -x {self.proxy} -L {DOWNLOAD_URL}/znuny-{self.target_version}.tar.gz "
+            f"-o /tmp/znuny-{self.target_version}"
         )
 
     def extract_vrts(self):
