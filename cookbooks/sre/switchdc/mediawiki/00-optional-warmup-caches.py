@@ -5,6 +5,7 @@ import logging
 
 from wmflib.interactive import ask_confirmation
 
+from cookbooks.sre.hosts import DEPLOYMENT_HOST
 from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args, MEDIAWIKI_RO_SERVICES
 
 
@@ -36,26 +37,26 @@ def run(args, spicerack):
         ask_confirmation(f'Are you sure to warmup caches in {datacenter}?')
 
     warmup_dir = '/var/lib/mediawiki-cache-warmup'
-    # urls-cluster is only running against appservers since is for shared resources behind the
-    # servers themselves
-    warmups = ["{dir}/warmup.py {dir}/urls-cluster.txt spread appservers.svc.{dc}.wmnet".format(
-        dir=warmup_dir, dc=datacenter)]
-    for cluster in ["appserver", "api_appserver"]:
-        # urls-server runs against both appserver and API clusters since it's for each individual server
-        warmups.append("{dir}/warmup.py {dir}/urls-server.txt clone {cluster} {dc}".format(
-            dir=warmup_dir, dc=datacenter, cluster=cluster))
+    # urls-cluster.txt contains requests that are useful for warming up shared resources (e.g., memcache), so it only
+    # needs run against a single service. urls-server.txt, in contrast, contains requests for warming local resources
+    # (e.g., APCu), and is thus run against mw-web and both API services.
+    warmups = [f"{warmup_dir}/warmup.py {warmup_dir}/urls-cluster.txt spread mw-web.svc.{datacenter}.wmnet:4450"]
+    warmups.extend(
+        f"{warmup_dir}/warmup.py {warmup_dir}/urls-server.txt clone {datacenter} {namespace}"
+        for namespace in ["mw-web", "mw-api-ext", "mw-api-int"]
+    )
 
-    maintenance_host = spicerack.mediawiki().get_maintenance_host(datacenter)
-    # It takes multiple executions of the warmup script to fully warm up the appserver caches. The second run is faster
-    # than the first, and so on. Empirically, we consider the caches to be fully warmed up when this speedup disappears;
-    # that is, when the execution time converges, and each attempt takes about as long as the one before.
+    deployment_host = spicerack.remote().query(spicerack.dns().resolve_cname(DEPLOYMENT_HOST))
+    # It takes multiple executions of the warmup script to fully warm up the caches. The second run is faster than the
+    # first, and so on. Empirically, we consider the caches to be fully warmed up when this speedup disappears; that is,
+    # when the execution time converges, and each attempt takes about as long as the one before.
     logger.info('Running warmup script in %s.', datacenter)
     logger.info('The script will re-run until execution time converges.')
     last_duration = datetime.timedelta.max
     for i in itertools.count(1):
         logger.info('Running warmup script, take %d', i)
         start_time = datetime.datetime.utcnow()
-        maintenance_host.run_sync(*warmups)
+        deployment_host.run_sync(*warmups)
         duration = datetime.datetime.utcnow() - start_time
         logger.info('Warmup completed in %s', duration)
         # After we've done a minimum number of iterations, we stop looping as soon as the warmup script takes more
