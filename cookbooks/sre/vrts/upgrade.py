@@ -114,6 +114,9 @@ class UpgradeRunner(CookbookRunnerBase):
             self.start_services()
             self.cleanup()
 
+        # Run Puppet
+        self.puppet_host.run()
+
     def download_vrts(self):
         """Download VRTS"""
         logger.info("Downloading VRTS")
@@ -123,7 +126,7 @@ class UpgradeRunner(CookbookRunnerBase):
         self.remote_host.run_sync(
             f"runuser -u {VRTS_USER} -- "
             f"/usr/bin/curl -x {self.proxy} -L {DOWNLOAD_URL}/znuny-{self.target_version}.tar.gz "
-            f"-o /tmp/znuny-{self.target_version}"
+            f"-o /tmp/znuny-{self.target_version}.tar.gz"
         )
 
     def extract_vrts(self):
