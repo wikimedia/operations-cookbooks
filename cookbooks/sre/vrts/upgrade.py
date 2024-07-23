@@ -151,7 +151,6 @@ class UpgradeRunner(CookbookRunnerBase):
         logger.info("Copying configuration files")
         self.remote_host.run_sync(
             f"cp /opt/otrs/Kernel/Config.pm /opt/znuny-{self.target_version}/Kernel",
-            f"cp /opt/otrs/var/log/TicketCounter.log /opt/znuny-{self.target_version}/var/log",
         )
 
     def symlink(self):
