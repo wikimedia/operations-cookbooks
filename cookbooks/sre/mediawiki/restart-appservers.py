@@ -20,8 +20,6 @@ from wmflib.constants import CORE_DATACENTERS
 
 # TODO: get this from a config file maybe?
 CLUSTERS = {
-    'appserver': 'mw',
-    'api_appserver': 'mw-api',
     'jobrunner': 'jobrunner'}
 
 # LVS pools that are affected by the service we're restarting.
