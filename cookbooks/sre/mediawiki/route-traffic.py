@@ -7,6 +7,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack import Spicerack
 from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import ask_confirmation
+from cookbooks.sre.switchdc.mediawiki import MEDIAWIKI_RO_SERVICES
 
 
 class RouteMediaWikiTraffic(CookbookBase):
@@ -38,14 +39,12 @@ class RouteMediaWikiTraffic(CookbookBase):
 class RouteMediaWikiTrafficRunner(CookbookRunnerBase):
     """Executor for the routing change."""
 
-    MEDIAWIKI_SERVICES = ("api-ro", "appservers-ro")
-
     def __init__(self, args: argparse.Namespace, spicerack: Spicerack):
         """Initialize the class with the current state."""
         self.all = args.what == "all"
         self.spicerack = spicerack
         self.primary_dc = spicerack.mediawiki().get_master_datacenter()
-        self.discovery_records = spicerack.discovery(*self.MEDIAWIKI_SERVICES)
+        self.discovery_records = spicerack.discovery(*MEDIAWIKI_RO_SERVICES)
         self.initial_state = self.discovery_records.active_datacenters
 
     @property
@@ -78,7 +77,9 @@ class RouteMediaWikiTrafficRunner(CookbookRunnerBase):
     def rollback(self):
         """In case of error in the procedure, rollback to the previous state."""
         current_state = self.discovery_records.active_datacenters
-        print("There have been errors running the cookbook. This is the current situation:")
+        print(
+            "There have been errors running the cookbook. This is the current situation:"
+        )
         for svc in current_state:
             print(f"## {svc}.discovery.wmnet")
             for dc in CORE_DATACENTERS:
@@ -92,7 +93,9 @@ class RouteMediaWikiTrafficRunner(CookbookRunnerBase):
                     print(f"\t{dc}: depooled {old_st}")
             print("---")
 
-        ask_confirmation("Do you whish to rollback to the state before the cookbook ran?")
+        ask_confirmation(
+            "Do you whish to rollback to the state before the cookbook ran?"
+        )
         # first repool datacenters that have been depooled
         for svc, dcs in self.initial_state.items():
             disc = self.spicerack.discovery(svc)
