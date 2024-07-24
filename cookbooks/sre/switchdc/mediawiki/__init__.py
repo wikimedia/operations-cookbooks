@@ -17,8 +17,6 @@ DEFAULT_READ_ONLY_REASON = (
     "in a few minutes."
 )
 MEDIAWIKI_SERVICES = (
-    "api-rw",
-    "appservers-rw",
     "jobrunner",
     "mwdebug",
     "mw-web",
@@ -32,8 +30,6 @@ MEDIAWIKI_SERVICES = (
 )
 # Read-only mediawiki services that are active-active by default and won't be touched by this switchover.
 MEDIAWIKI_RO_SERVICES = (
-    "api-ro",
-    "appservers-ro",
     "mw-web-ro",
     "mw-api-ext-ro",
     "mw-api-int-ro",
