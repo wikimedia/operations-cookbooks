@@ -356,7 +356,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         """Run this function before performing the action on the batch of hosts
 
         By default this function will run:
-            self._run_scripts(hosts, self.pre_scripts)
+            self._run_scripts(self.pre_scripts, hosts)
 
         Arguments:
             hosts (`RemoteHosts`): a list of functions to run

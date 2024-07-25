@@ -50,7 +50,13 @@ class UpdateExtrasRunner(SREBatchRunnerBase):
     @property
     def pre_scripts(self):
         """Update the extras repository."""
-        return ['git -C /srv/deployment/netbox-extras pull --ff-only']
+        return [
+            # Sync the netbox-extra repository to pickup validators and other tools/scripts
+            'git -C /srv/deployment/netbox-extras pull --ff-only',
+            # Sync the netbox-extra netbox syncdatasource to pickup scripts and reports
+            'runuser -u www-data /srv/deployment/netbox/venv/bin/python3'
+            ' /srv/deployment/netbox/deploy/src/netbox/manage.py syncdatasource "Netbox extra"'
+        ]
 
     def pre_action(self, hosts: RemoteHosts):
         """Check to see what has changed before updating.
