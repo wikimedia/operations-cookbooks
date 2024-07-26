@@ -205,7 +205,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         else:
             self.mgmt_fqdn = self.netbox_server.mgmt_fqdn
             self.ipmi: Ipmi = self.spicerack.ipmi(self.mgmt_fqdn)
-            self.dhcp_config = self._get_dhcp_config_opt82()
+            self.dhcp_config = self._get_dhcp_config_opt82(force_tftp=self.args.force_dhcp_tftp)
 
         self._validate()
 
@@ -374,9 +374,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         # "Failed to load ldlinux.c32" before getting to Debian Install.
         # More info: https://phabricator.wikimedia.org/T363576#9997915
         if force_tftp:
+            logger.info('Force pxelinux.0 and TFTP only for DHCP settings.')
             dhcp_filename = f"/srv/tftpboot/{self.args.os}-installer/pxelinux.0"
             dhcp_options = {
-                "pxelinux.pathprefix": "/srv/tftpboot/bookworm-installer/"
+                "pxelinux.pathprefix": f"/srv/tftpboot/{self.args.os}-installer/"
             }
         else:
             dhcp_filename = ""
