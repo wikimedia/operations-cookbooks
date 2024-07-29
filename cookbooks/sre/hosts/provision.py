@@ -147,20 +147,8 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             "Platform-specific_documentation/Dell_Documentation#Troubleshooting_2"
         )
 
-        # Testing that the management password is correct connecting to the first physical cumin host
-        cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
-        try:
-            spicerack.redfish(cumin_host).check_connection()
-        except RedfishError:
-            raise RuntimeError(
-                f'The management password provided seems incorrect, it does not work on {cumin_host}.') from None
-
-        ask_confirmation(f'Are you sure to proceed to apply BIOS/iDRAC settings {self.runtime_description}?')
-
-    @property
-    def dell_config_changes(self):
-        """Return BIOS/iDRAC/etc.. settings for Dell hosts."""
-        return {
+        # BIOS/iDRAC/etc.. settings for Dell hosts.
+        self.dell_config_changes = {
             'BIOS.Setup.1-1': {
                 'BootMode': 'Bios',
                 'CpuInterconnectBusLinkPower': 'Enabled',
@@ -191,6 +179,16 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 'ServerPwr.1#PSRapidOn': 'Disabled',
             }
         }
+
+        # Testing that the management password is correct connecting to the first physical cumin host
+        cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
+        try:
+            spicerack.redfish(cumin_host).check_connection()
+        except RedfishError:
+            raise RuntimeError(
+                f'The management password provided seems incorrect, it does not work on {cumin_host}.') from None
+
+        ask_confirmation(f'Are you sure to proceed to apply BIOS/iDRAC settings {self.runtime_description}?')
 
     @property
     def runtime_description(self):
