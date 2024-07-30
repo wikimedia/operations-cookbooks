@@ -6,12 +6,14 @@ then process each taint group in the following way:
 For batches of nodes in the Kubernetes cluster it will:
 - Cordon all hosts
 - Drain all hosts
+- Set their pooled status to inactive
 - Set Icinga/Alertmanager downtime for all hosts in the batch to reboot
 - Reboot
 - Wait for hosts to come back online
 - If reboot: Wait for the first puppet run
 - Wait for Icinga optimal status
 - Uncordon all hosts
+- Set their pooled status to yes
 - Remove the Icinga/Alertmanager downtime
 
 After the first batch has been processed, it will try to avoid re-scheduling of
@@ -25,6 +27,7 @@ Usage example:
 This command will cause a rolling reboot of the nodes in the Kubernetes-staging
 cluster, one at a time per taint-group, waiting 35 seconds before rebooting.
 """
+
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from math import ceil
@@ -92,6 +95,8 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
     # Seconds to sleep before the repool.
     # As this happens prior to uncordoning, we can rely on grace_sleep and don't wait for repool.
     repool_sleep = 0
+    # Set pooled=inactive to avoid scap docker_pull failing on the rebooting nodes
+    depool_status = "inactive"
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Initialize the runner."""
