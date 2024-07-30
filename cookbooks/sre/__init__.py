@@ -1,4 +1,5 @@
 """SRE Cookbooks"""
+
 from abc import abstractmethod, ABCMeta
 from argparse import ArgumentParser, ArgumentTypeError, Namespace, SUPPRESS
 from collections import defaultdict
@@ -459,6 +460,7 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
     depool_threshold = 1
     depool_sleep = 5
     repool_sleep = 5
+    depool_status = "no"
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Initialize the runner."""
@@ -503,9 +505,18 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         if depool_services:
             kwargs["service"] = depool_services
 
+        if self.depool_status not in ("no", "inactive"):
+            raise ValueError(
+                f"depool_status must be either 'no' or 'inactive' not {self.depool_status}"
+            )
+
         try:
             with self._confctl.change_and_revert(
-                "pooled", "yes", "no", name="|".join(hosts.hosts.striter()), **kwargs
+                "pooled",
+                "yes",
+                self.depool_status,
+                name="|".join(hosts.hosts.striter()),
+                **kwargs,
             ):
                 self.wait_for_depool()
                 super().action(hosts)
