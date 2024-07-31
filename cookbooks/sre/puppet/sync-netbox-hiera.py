@@ -83,9 +83,7 @@ query ($status: [String!]) {
 """
 MGMT_LIST_GQL = """
 query {
-    interface_list(
-        mgmt_only: true,
-    ) {
+    interface_list(filters: {mgmt_only: true}) {
         name
         ip_addresses {
             dns_name
