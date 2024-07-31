@@ -27,7 +27,7 @@ class RollUpgradeATS(SREBatchBase):
     # Reboot/Restart doesn't wipe the cache, so a high grace sleep isn't
     # necessary
     grace_sleep = 300
-    batch_max = 2
+    batch_max = 1
     valid_actions = ("upgrade",)
 
     def argument_parser(self):
@@ -69,9 +69,14 @@ class RollUpgradeATSRunner(SRELBBatchRunnerBase):
         return aliases
 
     @property
+    def allowed_aliases_query(self) -> str:
+        """Override the parent property to optimize the query."""
+        return 'A:cp'  # This query must include all hosts matching all the allowed_aliases
+
+    @property
     def runtime_description(self) -> str:
         """Override the default runtime description"""
-        return f"Rolling upgrade/restart of Apache Traffic Server on {self._query()}"
+        return f"Rolling upgrade/restart of Apache Traffic Server on {self._query()} for {self._args.version}"
 
     @property
     def restart_daemons(self) -> list:
