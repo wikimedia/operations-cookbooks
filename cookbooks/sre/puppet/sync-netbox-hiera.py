@@ -334,7 +334,8 @@ class NetboxHieraRunner(CookbookRunnerBase):
         for host in hosts['virtual_machine_list']:
             # TODO: i think we should be able to filter this stuff out via the
             # GraphQL query directly
-            if host['status'] not in ['ACTIVE', 'FAILED']:
+            # TODO: check if the 'if' block below is useless as we filter the status in the query
+            if host['status'] not in ['active', 'failed']:
                 continue
             if host['tenant'] is not None:
                 continue
