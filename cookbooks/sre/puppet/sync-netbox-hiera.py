@@ -368,7 +368,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
             device = host['device']
             if device['tenant'] is not None:
                 continue
-            if device['status'] in ['OFFLINE', 'PLANNED', 'DECOMMISSIONING', 'FAILED']:
+            if device['status'] in ['offline', 'planned', 'decommissioning', 'failed']:
                 continue
 
             data = {
