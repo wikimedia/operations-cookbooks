@@ -162,7 +162,11 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 f'Expected 1 host for query {self.fqdn} but got {len(self.remote_host)}: {self.remote_host}')
 
         if args.puppet_version is None and args.new:
-            args.puppet_version = int(ask_input("Select puppet version to install with", ('5', '7')))
+            if args.os in ('buster', 'bullseye'):
+                args.puppet_version = int(ask_input("Select puppet version to install with", ('5', '7')))
+            else:
+                logger.info('Puppet 7 auto-selected on >= Bookworm')
+                args.puppet_version = 7
 
         if args.puppet_version == 7 and args.os == 'buster':
             raise RuntimeError('Puppet 7 is not supported on buster you must first upgrade the os.')
