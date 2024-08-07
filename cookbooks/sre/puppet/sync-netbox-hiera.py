@@ -96,7 +96,6 @@ query {
                 name
                 location { slug }
             }
-            role { slug }
         }
     }
 }
@@ -375,7 +374,6 @@ class NetboxHieraRunner(CookbookRunnerBase):
             data = {
                 'row': device['rack']['location']['slug'],
                 'rack': device['rack']['name'],
-                'role': device['role']['slug'],
                 'site': device['site']['slug'],
             }
 
