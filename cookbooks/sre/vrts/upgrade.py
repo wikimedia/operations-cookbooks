@@ -4,7 +4,7 @@ import logging
 
 from packaging import version
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
-from wmflib.interactive import ensure_shell_is_durable
+from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.vrts import get_current_version
 
@@ -103,6 +103,11 @@ class UpgradeRunner(CookbookRunnerBase):
                 self.task_id,
                 f"Cookbook {__name__} was started by {self.admin_reason.owner} {self.runtime_description}",
             )
+
+        ask_confirmation(
+            f"This will upgrade VRTS on {self.host} from {self.current_version} to {self.target_version}. "
+            "Kindly confirm that this is what you intend to do."
+        )
 
         with self.puppet_host.disabled(self.admin_reason):
             self.download_vrts()
