@@ -2,6 +2,7 @@
 
 import logging
 from datetime import timedelta
+import re
 from packaging import version
 
 import gitlab
@@ -20,6 +21,7 @@ from cookbooks.sre.gitlab import (
 BACKUP_DIRECTORY = "/srv/gitlab-backup"
 BACKUP_LOCK_FILE = "/opt/gitlab/embedded/service/gitlab-rails/tmp/backup_restore.pid"
 DISK_HIGH_THRESHOLD = 70
+DOWNTIME_DURATION = 200  # in minutes
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,7 @@ class Upgrade(CookbookBase):
 class UpgradeRunner(CookbookRunnerBase):
     """Upgrade a GitLab host to a new version."""
 
+    # pylint: disable=too-many-instance-attributes
     def __init__(self, args, spicerack):
         """Initiliaze the provision runner."""
         ensure_shell_is_durable()
@@ -76,10 +79,14 @@ class UpgradeRunner(CookbookRunnerBase):
         if len(self.remote_host) != 1:
             raise RuntimeError(f"Found the following hosts: {self.remote_host} for query {args.host}."
                                "Query must return 1 host.")
+        self.url = get_gitlab_url(self.remote_host)
+
         self.alerting_hosts = spicerack.alerting_hosts(self.remote_host.hosts)
+        self.service_alerting_hosts = spicerack.alertmanager_hosts(
+            [re.sub(r'^https://|/$', '', self.url)], verbatim_hosts=True)
+
         self.task_id = args.task_id
         self.admin_reason = spicerack.admin_reason(args.reason)
-        self.url = get_gitlab_url(self.remote_host)
         self.target_version = args.version
         self.skip_confirm_prompt = args.skip_confirm_prompt
 
@@ -157,10 +164,12 @@ class UpgradeRunner(CookbookRunnerBase):
             )
 
         paused_runners = pause_runners(self.token, self.url, dry_run=self.spicerack.dry_run)
-        with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=180)):
-            self.install_debian_package()
-            unpause_runners(paused_runners, dry_run=self.spicerack.dry_run)
-            broadcastmessage.delete()
+        with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=DOWNTIME_DURATION)):
+            # Also create a downtime for the service name (like gitlab.wikimedia.org)
+            with self.service_alerting_hosts.downtime(self.admin_reason, duration=timedelta(minutes=DOWNTIME_DURATION)):
+                self.install_debian_package()
+                unpause_runners(paused_runners, dry_run=self.spicerack.dry_run)
+                broadcastmessage.delete()
 
         if self.phabricator is not None:
             self.phabricator.task_comment(
