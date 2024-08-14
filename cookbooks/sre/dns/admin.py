@@ -75,7 +75,7 @@ class DNSAdminRunner(CookbookRunnerBase):
     def run(self):
         """Perform administrative DNS action on the given DC/service."""
         # Before we proceed, print the current admin_state as seen by confctl.
-        self._print_summary()
+        self._print_summary("=> CURRENT STATE:")
 
         if self.args.action == "show":
             return
@@ -92,7 +92,10 @@ class DNSAdminRunner(CookbookRunnerBase):
         else:
             self.confctl.update({"pooled": self.pooled_state}, name=self.args.site)
 
-    def _print_summary(self):
+        self._print_summary("=> APPLIED STATE:")
+
+    def _print_summary(self, msg):
+        print(msg)
         for service in SERVICES:
             service_site_status = [s.name for s in self.confctl.get(geodns=service) if s.pooled == "no"]
             depooled_sites = ", ".join(service_site_status)
