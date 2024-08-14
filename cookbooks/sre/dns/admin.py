@@ -18,7 +18,7 @@ class DNSAdmin(CookbookBase):
         cookbook sre.dns.admin depool eqiad # [depools eqiad for everything]
         cookbook sre.dns.admin pool magru   # [pools magru for everything]
         cookbook sre.dns.admin --service upload-addrs -- depool codfw      # [depool codfw for upload-addrs]
-        cookbook sre.dns.admin depool magru --service text-addrs text-next # [depool esams for text*]
+        cookbook sre.dns.admin depool esams --service text-addrs text-next # [depool esams for text*]
     """
 
     def argument_parser(self):
