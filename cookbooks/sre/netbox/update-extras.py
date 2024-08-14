@@ -51,11 +51,11 @@ class UpdateExtrasRunner(SREBatchRunnerBase):
     def pre_scripts(self):
         """Update the extras repository."""
         return [
-            # Sync the netbox-extra repository to pickup validators and other tools/scripts
+            # Sync the netbox-extras repository to pickup validators and other tools/scripts
             'git -C /srv/deployment/netbox-extras pull --ff-only',
-            # Sync the netbox-extra netbox syncdatasource to pickup scripts and reports
+            # Sync the netbox-extras netbox syncdatasource to pickup scripts and reports
             'runuser -u www-data /srv/deployment/netbox/venv/bin/python3'
-            ' /srv/deployment/netbox/deploy/src/netbox/manage.py syncdatasource "Netbox extra"'
+            ' /srv/deployment/netbox/deploy/src/netbox/manage.py syncdatasource "Netbox extras"'
         ]
 
     def pre_action(self, hosts: RemoteHosts):
