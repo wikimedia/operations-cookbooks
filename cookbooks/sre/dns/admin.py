@@ -4,6 +4,8 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.constants import ALL_DATACENTERS
 from wmflib.interactive import ask_confirmation
 
+SERVICES = ["text-addrs", "text-next", "upload-addrs", "ncredir-addrs"]
+
 
 class DNSAdmin(CookbookBase):
     """Cookbook for GeoDNS pool/depool of a site.
@@ -13,25 +15,26 @@ class DNSAdmin(CookbookBase):
     manually specified via --service.
 
     Usage examples:
-        cookbook sre.dns.admin pool eqiad # [depools eqiad for everything]
-        cookbook sre.dns.admin depool magru
-        cookbook sre.dns.admin --service upload-addrs depool codfw # [depool codfw for upload-addrs]
+        cookbook sre.dns.admin depool eqiad # [depools eqiad for everything]
+        cookbook sre.dns.admin pool magru   # [pools magru for everything]
+        cookbook sre.dns.admin --service upload-addrs -- depool codfw      # [depool codfw for upload-addrs]
+        cookbook sre.dns.admin depool magru --service text-addrs text-next # [depool esams for text*]
     """
 
     def argument_parser(self):
         """As specified by the Spicerack API."""
         parser = super().argument_parser()
-        parser.add_argument("action", choices=("pool", "depool"),
-                            help="The kind of action to perform (pool or depool).")
-        parser.add_argument("site", choices=ALL_DATACENTERS,
+        parser.add_argument("action", choices=("pool", "depool", "show"),
+                            help="The kind of action to perform (pool, depool, or show).")
+        parser.add_argument("site", choices=ALL_DATACENTERS, nargs="?",
                             help="The site/DC on which to perform the action on.")
-        parser.add_argument("-s", "--service", choices=("text-addrs", "text-next", "upload-addrs", "ncredir-addrs"),
+        parser.add_argument("-s", "--service", choices=SERVICES, nargs="*",
                             help="The service in the site/DC on which the action should be performed.")
         parser.add_argument("-r", "--reason",
                             help="An optional reason for the action.")
         parser.add_argument("-t", "--task-id",
                             help="An optional Phabricator task ID to log the action.")
-        parser.add_argument("-f", "--force", action='store_true',
+        parser.add_argument("-f", "--force", action="store_true",
                             help="If passed, do not prompt for any actions (default: prompt)")
         return parser
 
@@ -56,15 +59,13 @@ class DNSAdminRunner(CookbookRunnerBase):
         self.pooled_state = "yes" if self.args.action == "pool" else "no"
         self.reason = self.args.reason if self.args.reason is not None else "no reason specified"
         self.task_id = self.args.task_id if self.args.task_id is not None else "no task ID specified"
+        self.service = "|".join(self.args.service) if self.args.service is not None else self.args.service
 
         self.action_string = (
-            f"{self.args.action} site {self.args.site} for service: {self.args.service}"
-            if self.args.service is not None
+            f"{self.args.action} site {self.args.site} for service: {self.service}"
+            if self.service is not None
             else f"{self.args.action} site {self.args.site}"
         )
-
-        if not self.args.force:
-            ask_confirmation(self.action_string)
 
     @property
     def runtime_description(self):
@@ -73,7 +74,29 @@ class DNSAdminRunner(CookbookRunnerBase):
 
     def run(self):
         """Perform administrative DNS action on the given DC/service."""
-        if self.args.service is not None:
-            self.confctl.update({"pooled": self.pooled_state}, geodns=self.args.service, name=self.args.site)
+        # Before we proceed, print the current admin_state as seen by confctl.
+        self._print_summary()
+
+        if self.args.action == "show":
+            return
+
+        # We need a site for anything else other than "show" above.
+        if self.args.site is None:
+            raise RuntimeError(f"A site for {self.args.action} was not passed.")
+
+        if not self.args.force:
+            ask_confirmation(f"You are now about to: {self.action_string}")
+
+        if self.service is not None:
+            self.confctl.update({"pooled": self.pooled_state}, geodns=self.service, name=self.args.site)
         else:
             self.confctl.update({"pooled": self.pooled_state}, name=self.args.site)
+
+    def _print_summary(self):
+        for service in SERVICES:
+            service_site_status = [s.name for s in self.confctl.get(geodns=service) if s.pooled == "no"]
+            depooled_sites = ", ".join(service_site_status)
+            if not depooled_sites:
+                print(f"{service}: pooled at all sites")
+            else:
+                print(f"{service}: depooled in {depooled_sites}")
