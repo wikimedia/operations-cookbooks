@@ -67,6 +67,12 @@ class DNSAdminRunner(CookbookRunnerBase):
             else f"{self.args.action} site {self.args.site}"
         )
 
+        # Before we proceed, print the current admin_state as seen by confctl.
+        self._print_summary("=> CURRENT STATE:")
+
+        if self.args.action == "show":
+            raise RuntimeError("show action called; outputting current admin_state. No changes were made.")
+
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the DNS action."""
@@ -74,12 +80,6 @@ class DNSAdminRunner(CookbookRunnerBase):
 
     def run(self):
         """Perform administrative DNS action on the given DC/service."""
-        # Before we proceed, print the current admin_state as seen by confctl.
-        self._print_summary("=> CURRENT STATE:")
-
-        if self.args.action == "show":
-            return
-
         # We need a site for anything else other than "show" above.
         if self.args.site is None:
             raise RuntimeError(f"A site for {self.args.action} was not passed.")
