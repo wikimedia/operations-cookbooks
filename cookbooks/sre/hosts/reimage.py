@@ -22,7 +22,7 @@ from spicerack.ganeti import Ganeti, GanetiRAPI, GntInstance
 from spicerack.icinga import IcingaError
 from spicerack.ipmi import Ipmi
 from spicerack.puppet import PuppetMaster, PuppetServer
-from spicerack.remote import RemoteError, RemoteExecutionError
+from spicerack.remote import RemoteError, RemoteExecutionError, RemoteCheckError
 from wmflib.interactive import AbortError, ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -258,7 +258,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self._repool()
 
         self.host_actions.failure('**The reimage failed, see the cookbook logs for the details,'
-                                  f'You can also try typing "install-console" {self.fqdn} to get a root shell'
+                                  f'You can also try typing "sudo install-console {self.fqdn}" to get a root shell'
                                   'but depending on the failure this may not work.**')
         logger.error('Reimage executed with errors:\n%s\n', self.actions)
         if self.phabricator is not None:
@@ -447,10 +447,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.ipmi.check_bootparams()
             self.host_actions.success('Checked BIOS boot parameters are back to normal')
 
-        self.remote_installer.wait_reboot_since(di_reboot_time, print_progress_bars=False)
         try:
+            self.remote_installer.wait_reboot_since(di_reboot_time, print_progress_bars=False)
             self.remote_installer.run_sync(f'! {env_command}', print_output=False, print_progress_bars=False)
-        except RemoteExecutionError:
+        except (RemoteCheckError, RemoteExecutionError):
             ask_confirmation('Unable to verify that the host rebooted into the new OS, it might still be in the '
                              f'Debian installer, please verify manually with: sudo install-console {self.fqdn}')
 
