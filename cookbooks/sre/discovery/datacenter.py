@@ -69,7 +69,7 @@ class DiscoveryRecord:
         # As authdns hosts could be depooled and under maintenance but still receiving confd updates and hence
         # generating the error files, attempt to delete them best-effort, just logging in case of failure.
         try:
-            authdns.run_sync(f"rm -fv /var/run/confd-template/.discovery-{self.name}.state*.err")
+            authdns.run_sync(f"rm -fv /var/run/confd-template/_var_lib_gdnsd_discovery-{self.name}.state.err")
         except RemoteExecutionError:
             logger.warning(
                 "Confd templates error files not properly cleared, check the output above for failures. "

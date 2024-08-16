@@ -24,7 +24,7 @@ def run(args, spicerack):
     dnsdisc_records.update_ttl(300)
 
     logger.info('Removing stale confd files generated when switching discovery records')
-    command = 'rm -fv /var/run/confd-template/.discovery-{{{records}}}.state*.err'.format(
+    command = 'rm -fv /var/run/confd-template/_var_lib_gdnsd_discovery-{{{records}}}.state.err'.format(
         records=','.join(MEDIAWIKI_SERVICES))
 
     # As authdns hosts could be depooled and under maintenance but still receiving confd updates and hence
