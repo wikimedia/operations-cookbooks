@@ -35,12 +35,7 @@ def run(args, spicerack):
 
     # Verify that the IP of the records matches the expected one
     for record in MEDIAWIKI_SERVICES:
-        # Converting the name of the discovery -rw into the LVS svc record name. We also
-        # strip -php, because parsoid-php has a conftool entry but not a DNS record of its own.
-        # Read-only services will NOT be depooled. That should be handled with the
-        # sre.mediawiki.route-traffic cookbook instead.
-        name = record.replace('-rw', '').replace('-php', '')
-        dnsdisc_records.check_record(record, '{name}.svc.{dc_to}.wmnet'.format(name=name, dc_to=args.dc_to))
+        dnsdisc_records.check_record(record, '{name}.svc.{dc_to}.wmnet'.format(name=record, dc_to=args.dc_to))
 
     # Sleep remaining time up to DNS_SHORT_TTL to let the set_master_datacenter to propagate
     remaining = DNS_SHORT_TTL - (time.time() - start)

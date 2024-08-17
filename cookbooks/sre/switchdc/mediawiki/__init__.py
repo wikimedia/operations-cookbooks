@@ -25,7 +25,6 @@ MEDIAWIKI_SERVICES = (
     "mw-jobrunner",
     "mw-parsoid",
     "mw-wikifunctions",
-    "parsoid-php",
     "videoscaler",
 )
 # Read-only mediawiki services that are active-active by default and won't be touched by this switchover.
