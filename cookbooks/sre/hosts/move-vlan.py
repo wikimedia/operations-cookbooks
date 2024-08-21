@@ -15,8 +15,8 @@ from cookbooks.sre.hosts import (
     DEPLOYMENT_HOST,
     MEDIAWIKI_CONFIG_REPO_PATH,
     KERBEROS_KADMIN_CUMIN_ALIAS,
-    PUPPET_REPO_PATH,
-    PUPPET_PRIVATE_REPO_PATH,
+    PUPPETSERVER_REPO_PATH,
+    PUPPETSERVER_PRIVATE_REPO_PATH,
     DEPLOYMENT_CHARTS_REPO_PATH,
     AUTHDNS_REPO_PATH
 )
@@ -82,7 +82,7 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         self.netbox_data = self.netbox_server.as_dict()
         self.netbox_host = self.netbox.api.dcim.devices.get(self.netbox_data['id'])
         self.alerting_hosts = self.spicerack.alerting_hosts([self.args.host])
-        self.puppet_master = self.spicerack.puppet_master().master_host
+        self.puppet_server = self.spicerack.puppet_server().server_host
         self.kerberos_kadmin = self.remote.query(KERBEROS_KADMIN_CUMIN_ALIAS)
         self.deployment_host = self.remote.query(self.dns.resolve_cname(DEPLOYMENT_HOST))
         self.authdns_hosts = spicerack.authdns_active_hosts
@@ -126,13 +126,19 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
             return False
 
         # Does it have hardcoded IPs (v4 or v6) in any repositories ?
-        found_pattern = check_patterns_in_repo((
-            GitRepoPath(remote_host=self.puppet_master, path=PUPPET_REPO_PATH, pathspec=':!manifests/site.pp'),
-            GitRepoPath(remote_host=self.puppet_master, path=PUPPET_PRIVATE_REPO_PATH),
-            GitRepoPath(remote_host=self.deployment_host, path=MEDIAWIKI_CONFIG_REPO_PATH),
-            GitRepoPath(remote_host=self.deployment_host, path=DEPLOYMENT_CHARTS_REPO_PATH),
-            GitRepoPath(remote_host=self.authdns_hosts, path=AUTHDNS_REPO_PATH),
-        ), self.patterns, interactive=False)
+        found_pattern = check_patterns_in_repo(
+            (
+                GitRepoPath(
+                    remote_host=self.puppet_server, path=PUPPETSERVER_REPO_PATH, pathspec=":!manifests/site.pp"
+                ),
+                GitRepoPath(remote_host=self.puppet_server, path=PUPPETSERVER_PRIVATE_REPO_PATH),
+                GitRepoPath(remote_host=self.deployment_host, path=MEDIAWIKI_CONFIG_REPO_PATH),
+                GitRepoPath(remote_host=self.deployment_host, path=DEPLOYMENT_CHARTS_REPO_PATH),
+                GitRepoPath(remote_host=self.authdns_hosts, path=AUTHDNS_REPO_PATH),
+            ),
+            self.patterns,
+            interactive=False,
+        )
         if found_pattern:
             # not retuning False as it's informational and not a blocker
             logger.info('Hardcoded IPs found in the repos, manual additions will be needed during the migration.')
