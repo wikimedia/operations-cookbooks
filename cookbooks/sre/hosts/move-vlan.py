@@ -66,7 +66,7 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
     @property
     def runtime_description(self):
         """Runtime description for the IRC/SAL logging."""
-        return f'for host {self.netbox_server}'
+        return f'for host {self.netbox_server.name}'
 
     def __init__(self, args, spicerack):
         """Initiliaze the move vlan runner."""
