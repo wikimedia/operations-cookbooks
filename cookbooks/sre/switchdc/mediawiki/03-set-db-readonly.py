@@ -1,31 +1,33 @@
-"""Set the old-site core DB masters in read-only mode and check replication"""
+"""Set the old-site core DB primaries in read-only mode and check replication."""
+
 import logging
 
-from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args
+from cookbooks.sre.switchdc.mediawiki import MediaWikiSwitchDCBase, MediaWikiSwitchDCRunnerBase
 
-
-__title__ = __doc__
 logger = logging.getLogger(__name__)
 
 
-def argument_parser():
-    """As specified by Spicerack API."""
-    return argument_parser_base(__name__, __title__)
+class SetDBReadOnlyRunner(MediaWikiSwitchDCRunnerBase):
+    """A runner to set the old-site core DB primaries in read-only."""
+
+    def run(self):
+        """Required by Spicerack API."""
+        logger.info('Setting in read-only mode all the core DB primaries in %s and verify those in %s',
+                    self.dc_from, self.dc_to)
+        mysql = self.spicerack.mysql_legacy()
+        if self.live_test:
+            logger.info('Skip verifying core DB primaries in %s are in read-only mode', self.dc_to)
+        else:
+            mysql.verify_core_masters_readonly(self.dc_to, True)
+
+        mysql.set_core_masters_readonly(self.dc_from)
+
+        logger.info('Check that all core primaries in %s are in sync with the core primaries in %s.',
+                    self.dc_to, self.dc_from)
+        mysql.check_core_masters_in_sync(self.dc_from, self.dc_to)
 
 
-def run(args, spicerack):
-    """Required by Spicerack API."""
-    post_process_args(args)
+class SetDBReadOnly(MediaWikiSwitchDCBase):
+    """Set the old-site core DB primaries in read-only mode and check replication."""
 
-    logger.info('Setting in read-only mode all the core DB masters in %s and verify those in %s',
-                args.dc_from, args.dc_to)
-    mysql = spicerack.mysql_legacy()
-    if args.live_test:
-        logger.info('Skip verifying core DB masters in %s are in read-only mode', args.dc_to)
-    else:
-        mysql.verify_core_masters_readonly(args.dc_to, True)
-
-    mysql.set_core_masters_readonly(args.dc_from)
-
-    logger.info('Check that all core masters in %s are in sync with the core masters in %s.', args.dc_to, args.dc_from)
-    mysql.check_core_masters_in_sync(args.dc_from, args.dc_to)
+    runner_class = SetDBReadOnlyRunner

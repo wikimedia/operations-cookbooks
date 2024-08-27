@@ -1,27 +1,29 @@
-"""Start MediaWiki maintenance jobs"""
+"""Start MediaWiki maintenance jobs."""
+
 import logging
 
-from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args, PUPPET_REASON
+from cookbooks.sre.switchdc.mediawiki import PUPPET_REASON, MediaWikiSwitchDCBase, MediaWikiSwitchDCRunnerBase
 
-
-__title__ = __doc__
 logger = logging.getLogger(__name__)
 
 
-def argument_parser():
-    """As specified by Spicerack API."""
-    return argument_parser_base(__name__, __title__)
+class StartMaintenanceJobsRunner(MediaWikiSwitchDCRunnerBase):
+    """A runner to start MediaWiki maintenance jobs."""
+
+    def run(self):
+        """Required by Spicerack API."""
+        logger.info('Starting MediaWiki maintenance jobs in %s', self.dc_to)
+
+        mw_maintenance = self.spicerack.remote().query('A:mw-maintenance')
+        mw_maintenance.run_sync('run-puppet-agent --enable "{message}"'.format(message=PUPPET_REASON))
+
+        mediawiki = self.spicerack.mediawiki()
+        # Verify timers are enabled in both DCs
+        mediawiki.check_periodic_jobs_enabled(self.dc_to)
+        mediawiki.check_periodic_jobs_enabled(self.dc_from)
 
 
-def run(args, spicerack):
-    """Required by Spicerack API."""
-    post_process_args(args)
-    logger.info('Starting MediaWiki maintenance jobs in %s', args.dc_to)
+class StartMaintenanceJobs(MediaWikiSwitchDCBase):
+    """Start MediaWiki maintenance jobs."""
 
-    mw_maintenance = spicerack.remote().query('A:mw-maintenance')
-    mw_maintenance.run_sync('run-puppet-agent --enable "{message}"'.format(message=PUPPET_REASON))
-
-    mediawiki = spicerack.mediawiki()
-    # Verify timers are enabled in both DCs
-    mediawiki.check_periodic_jobs_enabled(args.dc_to)
-    mediawiki.check_periodic_jobs_enabled(args.dc_from)
+    runner_class = StartMaintenanceJobsRunner

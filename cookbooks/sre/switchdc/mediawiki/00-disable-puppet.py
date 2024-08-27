@@ -1,22 +1,23 @@
-"""Disable Puppet on maintenance hosts so that it doesn't restart stopped jobs"""
+"""Disable Puppet on maintenance hosts so that it doesn't restart stopped jobs."""
+
 import logging
 
-from cookbooks.sre.switchdc.mediawiki import argument_parser_base, post_process_args, PUPPET_REASON
+from cookbooks.sre.switchdc.mediawiki import PUPPET_REASON, MediaWikiSwitchDCBase, MediaWikiSwitchDCRunnerBase
 
-
-__title__ = __doc__
 logger = logging.getLogger(__name__)
 
 
-def argument_parser():
-    """As specified by Spicerack API."""
-    return argument_parser_base(__name__, __title__)
+class DisablePuppetRunner(MediaWikiSwitchDCRunnerBase):
+    """Runner to disable puppet on maintenance hosts."""
+
+    def run(self):
+        """Required by Spicerack API."""
+        remote = self.spicerack.remote()
+        logger.info('Disabling Puppet on MediaWiki maintenance hosts in %s and %s', self.dc_from, self.dc_to)
+        remote.query('A:mw-maintenance').run_sync('disable-puppet "{message}"'.format(message=PUPPET_REASON))
 
 
-def run(args, spicerack):
-    """Required by Spicerack API."""
-    post_process_args(args)
-    remote = spicerack.remote()
+class DisablePuppet(MediaWikiSwitchDCBase):
+    """Disable Puppet on maintenance hosts so that it doesn't restart stopped jobs."""
 
-    logger.info('Disabling Puppet on MediaWiki maintenance hosts in %s and %s', args.dc_from, args.dc_to)
-    remote.query('A:mw-maintenance').run_sync('disable-puppet "{message}"'.format(message=PUPPET_REASON))
+    runner_class = DisablePuppetRunner
