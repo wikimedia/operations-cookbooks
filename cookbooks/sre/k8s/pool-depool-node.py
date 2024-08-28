@@ -1,8 +1,10 @@
 """Change pooled status of a node in a Kubernetes cluster"""
 
 import logging
+import re
 
 from argparse import ArgumentParser, Namespace
+from datetime import timedelta
 from typing import Optional
 
 from spicerack import Spicerack
@@ -10,6 +12,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.k8s import Kubernetes
 from spicerack.remote import RemoteError, RemoteHosts
 from wmflib import phabricator
+from wmflib.decorators import retry
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES
@@ -70,12 +73,13 @@ class PoolDepoolSingleHostRunner(CookbookRunnerBase):
         self.args = args
         self.spicerack = spicerack
         self.phabricator: Optional[phabricator.Phabricator] = None
-        self.remote_host: Optional[RemoteHosts] = None
 
         for _, metadata in ALLOWED_CUMIN_ALIASES.items():
             logger.debug("Checking for host %s in %s", args.host, metadata["workers"])
             try:
-                self.remote_host = spicerack.remote().query(f"P{{{args.host}}} and A:{metadata['workers']}")
+                self.remote_host: RemoteHosts = spicerack.remote().query(
+                    f"P{{{args.host}}} and A:{metadata['workers']}"
+                )
             except RemoteError:
                 continue
 
@@ -85,7 +89,7 @@ class PoolDepoolSingleHostRunner(CookbookRunnerBase):
             if len(self.remote_host) > 1:
                 raise RuntimeError("Only a single server can be pooled or depooled")
 
-        if self.remote_host is None:
+        if len(self.remote_host) == 0:
             raise RuntimeError(
                 f"Cannot find the host {args.host} among any k8s workers alias " f"{ALLOWED_CUMIN_ALIASES.keys()}"
             )
@@ -104,12 +108,18 @@ class PoolDepoolSingleHostRunner(CookbookRunnerBase):
 
         self.confctl = self.spicerack.confctl("node")
 
+        self.netbox_server = self.spicerack.netbox_server(self.host.split(".")[0], read_write=False)
+
+        # Administrative setup
+        self.actions = self.spicerack.actions
+        self.host_actions = self.actions[self.remote_host]
         self.reason = self.spicerack.admin_reason(f"{args.action} {self.host}" if not args.reason else args.reason)
 
         if args.task_id is not None:
-            self.phabricator = phabricator.create_phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+            self.phabricator = self.spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
             self.task_id = args.task_id
-            self.message = f"{args.action} host {self.host} by {self.reason.owner} with reason: {args.reason}\n"
+            message = f"{args.action} host {self.host} by {self.reason.owner} with reason: {args.reason}\n"
+            self.post_to_phab(message)
         else:
             self.phabricator = None
 
@@ -123,6 +133,51 @@ class PoolDepoolSingleHostRunner(CookbookRunnerBase):
         """Make the cookbook lock per-host."""
         return LockArgs(suffix=str(self.host).split(".", 1)[0], concurrency=1, ttl=600)
 
+    def post_to_phab(self, message: Optional[str] = None) -> None:
+        """Comment on the phabricator task"""
+        if self.phabricator is not None:
+            if message is None:
+                message = (
+                    f"Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} completed:\n"
+                    f"{self.actions}\n"
+                )
+            self.phabricator.task_comment(self.args.task_id, message)
+
+    @retry(  # pylint: disable=no-value-for-parameter
+        tries=10,
+        delay=timedelta(seconds=5),
+        backoff_mode="constant",
+        failure_message="calicoctl node status not Established",
+        exceptions=(RuntimeError,),
+    )
+    def check_calicoctl_node_status(self):
+        """Check calicoctl node status"""
+        logger.info("Getting vlan info from netbox")
+        vlan = self.netbox_server.access_vlan
+        session_count = 0
+        # Old-topology vlans only identify the row, not the rack
+        # e.g private1-a-eqiad
+        if re.match(r"private1-\w-(eqiad|codfw)", vlan):
+            logger.info("Old vlan %s, need 4 Established BGP sessions", vlan)
+            session_count = 4
+        # New-topology vlans identify the row and the rack
+        # e.g private1-a1-eqiad
+        elif re.match(r"private1-\w{2}-(eqiad|codfw)", vlan):
+            logger.info("New vlan %s, need 2 Established BGP sessions", vlan)
+            session_count = 2
+        else:
+            raise RuntimeError("Unknown vlan")
+
+        logger.info("Waiting for calicoctl node status to be Established for both interfaces")
+        results = self.remote_host.run_sync("calicoctl node status", is_safe=True)
+        established_count = 0
+        for _, output in results:
+            for line in output.lines():
+                if "Established" in line.decode():
+                    established_count += 1
+        if established_count != session_count:
+            raise RuntimeError()
+
     def run(self):
         """Uncordon and pool or cordon, drain, and depool the host"""
         logger.debug("Looking for confctl objects for host %s", self.host)
@@ -131,15 +186,23 @@ class PoolDepoolSingleHostRunner(CookbookRunnerBase):
             raise RuntimeError(f"No kubesvc confctl objects found for host {self.host}")
 
         if self.args.action == "pool":
+            logger.info("Checking calicoctl node status")
+            self.check_calicoctl_node_status()
             logger.info("Pooling %s in %s", self.host, self.k8s_workers)
             self.confctl.update_objects({"pooled": "yes", "weight": 10}, confctl_services)
             self.k8s_node.uncordon()
+            self.host_actions.success(f"Host {self.host} pooled in {self.k8s_workers}")
+            logger.info("%s completed:\n%s\n", __name__, self.actions)
+            self.post_to_phab()
         elif self.args.action == "depool":
             self.k8s_node.cordon()
             logger.info("Draining %s", self.host)
             self.k8s_node.drain()
             logger.info("Depooling %s from %s", self.host, self.k8s_workers)
             self.confctl.update_objects({"pooled": "inactive"}, confctl_services)
+            self.host_actions.success(f"Host {self.host} depooled from {self.k8s_workers}")
+            logger.info("%s completed:\n%s\n", __name__, self.actions)
+            self.post_to_phab()
         elif self.args.action == "check":
             for service in confctl_services:
                 logger.info(
