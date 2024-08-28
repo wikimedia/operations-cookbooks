@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 class SwitchMediaWikiRunner(MediaWikiSwitchDCRunnerBase):
     """A runner to switch MediaWiki active datacenter."""
 
-    def run(self):
-        """Required by Spicerack API."""
+    def action(self):
+        """Required by base class API."""
         logger.info('Switch MediaWiki active datacenter to %s', self.dc_to)
 
         dnsdisc_records = self.spicerack.discovery(*MEDIAWIKI_SERVICES)

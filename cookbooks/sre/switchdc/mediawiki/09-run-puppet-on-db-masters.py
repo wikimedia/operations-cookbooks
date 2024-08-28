@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 class RunPuppetOnDBPrimariesRunner(MediaWikiSwitchDCRunnerBase):
     """A runner to run puppet on all core DB primaries and remove downtimes."""
 
-    def run(self):
-        """Required by Spicerack API."""
+    def action(self):
+        """Required by base class API."""
         mysql = self.spicerack.mysql_legacy()
         hosts = mysql.get_core_dbs(replication_role="master")
         icinga_hosts = self.spicerack.icinga_hosts(nodeset(str(hosts)))

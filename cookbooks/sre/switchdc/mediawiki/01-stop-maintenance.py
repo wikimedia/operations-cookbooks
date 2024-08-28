@@ -16,8 +16,8 @@ NAMESPACE = 'mw-script'
 class StopMaintenanceJobsRunner(MediaWikiSwitchDCRunnerBase):
     """A runner to stop MediaWiki maintenance jobs."""
 
-    def run(self):
-        """Required by Spicerack API."""
+    def action(self):
+        """Required by base class API."""
         datacenters = [self.dc_from]
         if self.live_test:
             logger.info("Skipping disable of maintenance jobs in %s (active DC)", self.dc_to)

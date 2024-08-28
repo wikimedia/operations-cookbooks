@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 class SetReadWriteRunner(MediaWikiSwitchDCRunnerBase):
     """A runner to set MediaWiki in read-write mode."""
 
-    def run(self):
-        """Required by Spicerack API."""
+    def action(self):
+        """Required by base class API."""
         mediawiki = self.spicerack.mediawiki()
         prefix = ''
         if self.live_test:

@@ -6,11 +6,15 @@ ensure that the list of services is accurate and up to date.
 
 import argparse
 
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
+from datetime import datetime
+from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.constants import CORE_DATACENTERS
+
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 
 __title__ = __doc__
@@ -71,7 +75,10 @@ class MediaWikiSwitchDCBase(CookbookBase, metaclass=ABCMeta):
                 "that will disrupt DC_TO if they were run."
             ),
         )
-        # TODO: Add a task ID.
+        parser.add_argument(
+            "--task-id",
+            help="Optional Phabricator task ID to update and reference in administrative reasons.",
+        )
         parser.add_argument(
             "dc_from",
             metavar="DC_FROM",
@@ -94,7 +101,8 @@ class MediaWikiSwitchDCBase(CookbookBase, metaclass=ABCMeta):
 class MediaWikiSwitchDCRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
     """A common CookbookRunnerBase class for MediaWiki switchover cookbooks.
 
-    As per the Spicerack CookbookRunnerBase API, subclasses must implement at least the run method.
+    Subclasses must implement at least the action method. See the Spicerack CookbookRunnerBase API for additional
+    optional methods.
     """
 
     # Switchover cookbooks should run exclusively and the longest-running cookbook should complete in ~ 5m.
@@ -108,12 +116,42 @@ class MediaWikiSwitchDCRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
         self.ro_reason = args.ro_reason
         self.live_test = args.live_test
+        self.task_id = args.task_id
         self.dc_to = args.dc_to
         self.dc_from = args.dc_from
 
         self.spicerack = spicerack
+        self.reason = self.spicerack.admin_reason(
+            "MediaWiki DC switchover" + (" live test" if self.live_test else ""), task_id=self.task_id
+        )
+        self.phabricator = None if self.task_id is None else self.spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
     @property
     def runtime_description(self) -> str:
         """Runtime description for logging purposes (e.g., SAL)."""
         return f"for datacenter switchover from {self.dc_from} to {self.dc_to}"
+
+    def update_task(self, message: str):
+        """If provided with a task ID, update the task with a comment including the provided message."""
+        if self.phabricator is None:
+            return
+        self.phabricator.task_comment(
+            self.task_id,
+            f"{self.reason.owner} - Cookbook {self.__module__} {self.runtime_description} - {message}"
+        )
+
+    @abstractmethod
+    def action(self) -> Optional[int]:
+        """Action to be implemented by subclasses, equivalent to CookbookRunnerBase.run."""
+
+    def run(self) -> Optional[int]:
+        """Required by Spicerack API."""
+        outcome = "**FAILURE**"
+        start_time = datetime.now()
+        try:
+            ret = self.action()
+            if ret is None or ret == 0:
+                outcome = "SUCCESS"
+        finally:
+            self.update_task(f"finished with status: {outcome} elapsed time: {datetime.now() - start_time}")
+        return ret

@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 class SetDBReadOnlyRunner(MediaWikiSwitchDCRunnerBase):
     """A runner to set the old-site core DB primaries in read-only."""
 
-    def run(self):
-        """Required by Spicerack API."""
+    def action(self):
+        """Required by base class API."""
         logger.info('Setting in read-only mode all the core DB primaries in %s and verify those in %s',
                     self.dc_from, self.dc_to)
         mysql = self.spicerack.mysql_legacy()

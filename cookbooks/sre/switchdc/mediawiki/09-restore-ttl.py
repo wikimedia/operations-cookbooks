@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 class RestoreDiscoveryTTLsRunner(MediaWikiSwitchDCRunnerBase):
     """A runner to restore DNS Discovery record TTLs."""
 
-    def run(self):
-        """Required by Spicerack API."""
+    def action(self):
+        """Required by base class API."""
         logger.info('Restoring DNS Discovery TTL to 300 for records: %s', MEDIAWIKI_SERVICES)
         dnsdisc_records = self.spicerack.discovery(*MEDIAWIKI_SERVICES)
         dnsdisc_records.update_ttl(300)

@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 class SetReadOnlyRunner(MediaWikiSwitchDCRunnerBase):
     """A runner to set MediaWiki in read-only mode."""
 
-    def run(self):
-        """Required by Spicerack API."""
+    def action(self):
+        """Required by base class API."""
         logger.info('Set MediaWiki in read-only in %s and %s', self.dc_from, self.dc_to)
 
         if self.live_test:

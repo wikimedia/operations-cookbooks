@@ -28,8 +28,8 @@ env_vars = ('HELM_CACHE_HOME="/var/cache/helm"',
 class RestartJobRunnersRunner(MediaWikiSwitchDCRunnerBase):
     """A runner to restart pods in mw-jobrunner and envoy on jobrunner hosts in DC_FROM."""
 
-    def run(self):
-        """Required by Spicerack API."""
+    def action(self):
+        """Required by base class API."""
         deployment_cname = self.spicerack.dns().resolve_cname(DEPLOYMENT_HOST)
         logger.info('Restarting envoy on jobrunners in %s', self.dc_from)
         self.spicerack.remote().query(f"A:mw-jobrunner-{self.dc_from}").run_sync('systemctl restart envoyproxy')

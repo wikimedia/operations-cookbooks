@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 class StartMaintenanceJobsRunner(MediaWikiSwitchDCRunnerBase):
     """A runner to start MediaWiki maintenance jobs."""
 
-    def run(self):
-        """Required by Spicerack API."""
+    def action(self):
+        """Required by base class API."""
         logger.info('Starting MediaWiki maintenance jobs in %s', self.dc_to)
 
         mw_maintenance = self.spicerack.remote().query('A:mw-maintenance')

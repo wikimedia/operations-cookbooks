@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 class WarmupCachesRunner(MediaWikiSwitchDCRunnerBase):
     """Runner to warmup MediaWiki caches."""
 
-    def run(self):
-        """Required by Spicerack API."""
+    def action(self):
+        """Required by base class API."""
         if self.live_test:
             logger.info('Inverting DC to perform the warmup in %s (passive DC)', self.dc_from)
             datacenter = self.dc_from
