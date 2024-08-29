@@ -2,7 +2,7 @@
 
 import logging
 
-from cookbooks.sre.switchdc.mediawiki import PUPPET_REASON, MediaWikiSwitchDCBase, MediaWikiSwitchDCRunnerBase
+from cookbooks.sre.switchdc.mediawiki import MediaWikiSwitchDCBase, MediaWikiSwitchDCRunnerBase
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ class StartMaintenanceJobsRunner(MediaWikiSwitchDCRunnerBase):
         logger.info('Starting MediaWiki maintenance jobs in %s', self.dc_to)
 
         mw_maintenance = self.spicerack.remote().query('A:mw-maintenance')
-        mw_maintenance.run_sync('run-puppet-agent --enable "{message}"'.format(message=PUPPET_REASON))
+        mw_maintenance.run_sync(f'run-puppet-agent --enable "{self.reason}"')
 
         mediawiki = self.spicerack.mediawiki()
         # Verify timers are enabled in both DCs

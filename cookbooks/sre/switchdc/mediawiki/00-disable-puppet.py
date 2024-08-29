@@ -2,7 +2,7 @@
 
 import logging
 
-from cookbooks.sre.switchdc.mediawiki import PUPPET_REASON, MediaWikiSwitchDCBase, MediaWikiSwitchDCRunnerBase
+from cookbooks.sre.switchdc.mediawiki import MediaWikiSwitchDCBase, MediaWikiSwitchDCRunnerBase
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ class DisablePuppetRunner(MediaWikiSwitchDCRunnerBase):
         """Required by base class API."""
         remote = self.spicerack.remote()
         logger.info('Disabling Puppet on MediaWiki maintenance hosts in %s and %s', self.dc_from, self.dc_to)
-        remote.query('A:mw-maintenance').run_sync('disable-puppet "{message}"'.format(message=PUPPET_REASON))
+        remote.query('A:mw-maintenance').run_sync(f'disable-puppet "{self.reason}"')
 
 
 class DisablePuppet(MediaWikiSwitchDCBase):
