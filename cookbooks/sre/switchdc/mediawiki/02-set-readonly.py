@@ -23,7 +23,9 @@ class SetReadOnlyRunner(MediaWikiSwitchDCRunnerBase):
             prefix = ''
 
         mediawiki = self.spicerack.mediawiki()
-        self.spicerack.sal_logger.info('%sMediaWiki read-only period starts at: %s', prefix, datetime.utcnow())
+        message = f'{prefix}MediaWiki read-only period starts at: {datetime.utcnow()}'
+        self.spicerack.sal_logger.info(message)
+        self.update_task(message)
         for dc in (self.dc_to, self.dc_from):
             if self.live_test and dc is self.dc_to:
                 logger.info('Skip setting MediaWiki read-only in %s', dc)

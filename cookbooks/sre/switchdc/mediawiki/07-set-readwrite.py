@@ -23,7 +23,9 @@ class SetReadWriteRunner(MediaWikiSwitchDCRunnerBase):
             logger.info('Set MediaWiki in read-write in %s', dc)
             mediawiki.set_readwrite(dc)
 
-        self.spicerack.sal_logger.info('%sMediaWiki read-only period ends at: %s', prefix, datetime.utcnow())
+        message = f'{prefix}MediaWiki read-only period ends at: {datetime.utcnow()}'
+        self.spicerack.sal_logger.info(message)
+        self.update_task(message)
 
 
 class SetReadWrite(MediaWikiSwitchDCBase):
