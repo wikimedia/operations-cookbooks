@@ -45,6 +45,12 @@ class RenumberSingleHost(CookbookBase):
         parser = super().argument_parser()
         parser.add_argument("-t", "--task-id", help="An optional task ID to post a message to (i.e. T12345).")
         parser.add_argument(
+            "-R",
+            "--renamed",
+            action="store_true",
+            help="Adds appropriate switches to reimage cookbook, sets BGP in netbox",
+        )
+        parser.add_argument(
             "host", help="A single host to be renumbered (specified in Cumin query syntax)"
         )
 
@@ -97,13 +103,15 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
 
         # Get switch names from netbox
         self.switches_to_update: list[str] = []
-        netbox = self.spicerack.netbox(read_write=False)
+        netbox = self.spicerack.netbox(read_write=True)
         netbox_server = spicerack.netbox_server(self.host_short, read_write=False)
         netbox_data = netbox_server.as_dict()
-        netbox_host = netbox.api.dcim.devices.get(netbox_data["id"])
-        self.switches_to_update.append(f"cr*{netbox_host.site.slug}*")
+        self.netbox_host = netbox.api.dcim.devices.get(netbox_data["id"])
+        self.switches_to_update.append(f"cr*{self.netbox_host.site.slug}*")
         logger.debug("Switches to update: %s", self.switches_to_update)
-        self.switches_to_update.append(f"{netbox_host.primary_ip4.assigned_object.connected_endpoints[0].device.name}*")
+        self.switches_to_update.append(
+            f"{self.netbox_host.primary_ip4.assigned_object.connected_endpoints[0].device.name}*"
+        )
         logger.debug("Switches to update: %s", self.switches_to_update)
 
         # Administrative setup
@@ -185,6 +193,8 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         action_str = f"Reimaging node {self.host}"
         logger.info(action_str)
         reimage_args = ["--move-vlan", "--os", "bullseye"]
+        if self.args.renamed:
+            reimage_args.extend(["--new", "--puppet", "7"])
         if self.phabricator:
             reimage_args.extend(["--task-id", self.task_id])
         reimage_args.append(self.host_short)
@@ -222,14 +232,30 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             logger.error(action_str)
             raise
 
+    def netbox_commit(self):
+        """Change device setting for BGP in Netbox"""
+        logger.info("Setting BGP to true in Netbox")
+        try:
+            self.netbox_host.custom_fields["bgp"] = True
+            self.netbox_host.save()
+            self.host_actions.success("Successfully set BGP to true in Netbox")
+        except Exception:
+            action_str = "Failed to commit BGP change to Netbox"
+            self.host_actions.failure(f"**{action_str}**")
+            logger.error(action_str)
+            raise
+
     def run(self):
         """Perform the renumbering and vlan switch"""
-        try:
-            self.depool()
-        except Exception:
-            logger.info("%s failed:\n%s\n", __name__, self.actions)
-            self.post_to_phab()
-            raise
+        if self.args.renamed:
+            logger.info("Skip depooling for renamed hosts, it should have been done already on the old name")
+        else:
+            try:
+                self.depool()
+            except Exception:
+                logger.info("%s failed:\n%s\n", __name__, self.actions)
+                self.post_to_phab()
+                raise
 
         try:
             self.reimage()
@@ -238,12 +264,21 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             self.post_to_phab()
             raise
 
+        if self.args.renamed:
+            try:
+                self.netbox_commit()
+            except Exception:
+                logger.info("%s failed:\n%s\n", __name__, self.actions)
+                self.post_to_phab()
+                raise
+
         try:
             self.prompt_homer()
         except Exception:
             logger.info("%s failed:\n%s\n", __name__, self.actions)
             self.post_to_phab()
             raise
+
         logger.info("Sleep 60s before pooling to allow BGP to Establish")
         sleep(60)
         try:
