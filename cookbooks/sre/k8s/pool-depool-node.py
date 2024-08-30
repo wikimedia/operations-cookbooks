@@ -75,10 +75,10 @@ class PoolDepoolSingleHostRunner(CookbookRunnerBase):
         self.phabricator: Optional[phabricator.Phabricator] = None
 
         for _, metadata in ALLOWED_CUMIN_ALIASES.items():
-            logger.debug("Checking for host %s in %s", args.host, metadata["workers"])
+            logger.debug("Checking for host %s in %s or %s", args.host, metadata["workers"], metadata["control-plane"])
             try:
                 self.remote_host: RemoteHosts = spicerack.remote().query(
-                    f"P{{{args.host}}} and A:{metadata['workers']}"
+                    f"P{{{args.host}}} and (A:{metadata['workers']} or A:{metadata['control-plane']})"
                 )
             except RemoteError:
                 continue
@@ -94,17 +94,17 @@ class PoolDepoolSingleHostRunner(CookbookRunnerBase):
                 f"Cannot find the host {args.host} among any k8s workers alias " f"{ALLOWED_CUMIN_ALIASES.keys()}"
             )
 
-        logger.debug("Found host %s in %s", args.host, k8s_metadata["workers"])
         self.host = args.host
-        self.k8s_workers = k8s_metadata["workers"]
+        self.k8s_cluster = k8s_metadata["k8s-cluster"]
+        logger.debug("Found host %s in %s", args.host, self.k8s_cluster)
         self.k8s_cli = Kubernetes(
             group=k8s_metadata["k8s-group"],
-            cluster=k8s_metadata["k8s-cluster"],
+            cluster=self.k8s_cluster,
             dry_run=spicerack.dry_run,
         )
 
         self.k8s_node = self.k8s_cli.get_node(self.host)
-        logger.debug("Found node %s in %s", self.host, self.k8s_workers)
+        logger.debug("Found node %s in %s", self.host, self.k8s_cluster)
 
         self.confctl = self.spicerack.confctl("node")
 
@@ -181,39 +181,40 @@ class PoolDepoolSingleHostRunner(CookbookRunnerBase):
     def run(self):
         """Uncordon and pool or cordon, drain, and depool the host"""
         logger.debug("Looking for confctl objects for host %s", self.host)
-        confctl_services = self.confctl.filter_objects({}, name=self.host, service="kubesvc")
+        confctl_services = self.confctl.filter_objects({}, name=self.host, service="kubesvc|kubemaster")
         if not confctl_services:
-            raise RuntimeError(f"No kubesvc confctl objects found for host {self.host}")
+            raise RuntimeError(f"No kubesvc or kubemaster confctl objects found for host {self.host}")
 
         if self.args.action == "pool":
             logger.info("Checking calicoctl node status")
             self.check_calicoctl_node_status()
-            logger.info("Pooling %s in %s", self.host, self.k8s_workers)
+            logger.info("Pooling %s in %s", self.host, self.k8s_cluster)
             self.confctl.update_objects({"pooled": "yes", "weight": 10}, confctl_services)
             self.k8s_node.uncordon()
-            self.host_actions.success(f"Host {self.host} pooled in {self.k8s_workers}")
+            self.host_actions.success(f"Host {self.host} pooled in {self.k8s_cluster}")
             logger.info("%s completed:\n%s\n", __name__, self.actions)
             self.post_to_phab()
         elif self.args.action == "depool":
             self.k8s_node.cordon()
             logger.info("Draining %s", self.host)
             self.k8s_node.drain()
-            logger.info("Depooling %s from %s", self.host, self.k8s_workers)
+            logger.info("Depooling %s from %s", self.host, self.k8s_cluster)
             self.confctl.update_objects({"pooled": "inactive"}, confctl_services)
-            self.host_actions.success(f"Host {self.host} depooled from {self.k8s_workers}")
+            self.host_actions.success(f"Host {self.host} depooled from {self.k8s_cluster}")
             logger.info("%s completed:\n%s\n", __name__, self.actions)
             self.post_to_phab()
         elif self.args.action == "check":
             for service in confctl_services:
                 logger.info(
-                    "%s confctl status: %s",
+                    "%s confctl status: %s=%s",
                     service.name,
+                    service.tags["service"],
                     "pooled" if getattr(service, "pooled") == "yes" else getattr(service, "pooled"),
                 )
 
             logger.info(
                 "%s kubernetes status in %s: %s",
                 self.host,
-                self.k8s_workers,
+                self.k8s_cluster,
                 "schedulable" if self.k8s_node.is_schedulable() else "unschedulable",
             )
