@@ -69,42 +69,30 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         if "wikikube-worker" not in args.host:
             raise RuntimeError("Only wikikube-worker nodes can be renumbered")
 
-        # Find the host and its k8s metadata
-        for _, metadata in ALLOWED_CUMIN_ALIASES.items():
-            logger.debug("Checking for host %s in %s", args.host, metadata["workers"])
-            try:
-                self.remote_host = spicerack.remote().query(f"P{{{args.host}}} and A:{metadata['workers']}")
-            except RemoteError:
-                continue
+        self.remote_host = None
 
-            if len(self.remote_host) == 1:
-                k8s_metadata = metadata
-                break
-            if len(self.remote_host) > 1:
-                raise RuntimeError("Only a single server can be renumbered")
+        if args.renamed:
+            # The host won't exist in puppet yet, so use the Direct backend
+            self.remote_host = self.spicerack.remote().query(f"D{{{args.host}}}")
+        else:
+            self.setup_k8s_remote_host()
+
+        if self.remote_host and len(self.remote_host) > 1:
+            raise RuntimeError("Only a single server can be renumbered")
 
         if self.remote_host is None:
             raise RuntimeError(
-                f"Cannot find the host {args.host} among any k8s workers alias {ALLOWED_CUMIN_ALIASES.keys()}"
+                (f"Cannot find the host {args.host} among any k8s workers alias "
+                 f"{','.join(ALLOWED_CUMIN_ALIASES.keys())}, and rename has not been specified")
             )
-
-        logger.debug("Found host %s in %s", args.host, k8s_metadata["workers"])
 
         self.host = self.remote_host.hosts[0]
         self.host_short = self.host.split(".")[0]
-        self.k8s_cli = Kubernetes(
-            group=k8s_metadata["k8s-group"],
-            cluster=k8s_metadata["k8s-cluster"],
-            dry_run=spicerack.dry_run,
-        )
-
-        self.k8s_node = self.k8s_cli.get_node(self.host)
-        logger.debug("Found node %s in %s", self.host, k8s_metadata["workers"])
 
         # Get switch names from netbox
         self.switches_to_update: list[str] = []
         netbox = self.spicerack.netbox(read_write=True)
-        netbox_server = spicerack.netbox_server(self.host_short, read_write=False)
+        netbox_server = self.spicerack.netbox_server(self.host_short, read_write=False)
         netbox_data = netbox_server.as_dict()
         self.netbox_host = netbox.api.dcim.devices.get(netbox_data["id"])
         self.switches_to_update.append(f"cr*{self.netbox_host.site.slug}*")
@@ -146,6 +134,29 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
                     f"{self.actions}\n"
                 )
             self.phabricator.task_comment(self.args.task_id, message)
+
+    def setup_k8s_remote_host(self):
+        """Pull Kubernetes metadata information"""
+        # Find the host and its k8s metadata
+        for _, metadata in ALLOWED_CUMIN_ALIASES.items():
+            logger.debug("Checking for host %s in %s", self.args.host, metadata["workers"])
+            try:
+                self.remote_host = self.spicerack.remote().query(f"P{{{self.args.host}}} and A:{metadata['workers']}")
+            except RemoteError:
+                continue
+
+            if len(self.remote_host) == 1:
+                k8s_metadata = metadata
+                break
+
+        self.k8s_cli = Kubernetes(
+            group=k8s_metadata["k8s-group"],
+            cluster=k8s_metadata["k8s-cluster"],
+            dry_run=self.spicerack.dry_run,
+        )
+
+        self.k8s_node = self.k8s_cli.get_node(self.host)
+        logger.debug("Found node %s in %s", self.host, k8s_metadata["workers"])
 
     def depool(self):
         """Depool the node"""
@@ -267,6 +278,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         if self.args.renamed:
             try:
                 self.netbox_commit()
+                self.setup_k8s_remote_host()
             except Exception:
                 logger.info("%s failed:\n%s\n", __name__, self.actions)
                 self.post_to_phab()
