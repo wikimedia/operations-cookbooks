@@ -13,6 +13,10 @@ from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 logger = logging.getLogger(__name__)
 
+DELL_VENDOR_SLUG = 'dell'
+SUPERMICRO_VENDOR_SLUG = 'supermicro'
+SUPPORTED_VENDORS = [DELL_VENDOR_SLUG, SUPERMICRO_VENDOR_SLUG]
+
 
 class Rename(CookbookBase):
     """Rename a physical host through a re-image.
@@ -70,9 +74,13 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         self.alerting_host = spicerack.alerting_hosts([self.old_name])
         self.redfish = spicerack.redfish(self.old_name)
         self.redfish.check_connection()
-        if self.redfish.firmware_version < version.Version('4'):
+        self.vendor = self.netbox_server.as_dict()['device_type']['manufacturer']['slug']
+        if self.vendor not in SUPPORTED_VENDORS:
+            raise RuntimeError(f"Vendor {self.vendor} not supported!")
+        if self.vendor == DELL_VENDOR_SLUG and self.redfish.firmware_version < version.Version('4'):
             raise RuntimeError(f'iDRAC version ({self.redfish.firmware_version}) is too low. '
                                'Please upgrade iDRAC first.')
+        self.bmc_eth_interface_name = '1' if self.vendor == 'supermicro' else 'NIC.1'
         self.spicerack = spicerack
 
         self.actions = spicerack.actions
@@ -83,7 +91,7 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         self.dns_propagated = False
         self.netbox_name_changed = False
         self.switch_description_changed = False
-        self.idrac_name_updated = False
+        self.bmc_hostname_updated = False
 
         if self.task_id is not None:
             self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
@@ -106,12 +114,12 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         self.netbox_name_changed = True
 
         response = self.redfish.request('patch',
-                                        f'{self.redfish.oob_manager}/EthernetInterfaces/NIC.1',
+                                        f'{self.redfish.oob_manager}/EthernetInterfaces/{self.bmc_eth_interface_name}',
                                         json={'HostName': self.new_name}).json()
         logger.debug('Redfish response:\n%s', pformat(response))
 
-        self.idrac_name_updated = True
-        self.host_actions.success('✔️ IDRAC updated')
+        self.bmc_hostname_updated = True
+        self.host_actions.success('✔️ BMC Hostname updated')
 
         self.propagate_dns()
         confirm_on_failure(self.run_raise, 'sre.network.configure-switch-interfaces', [self.new_name])
@@ -168,12 +176,13 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
             confirm_on_failure(self.run_raise, 'sre.network.configure-switch-interfaces', [self.old_name])
         if self.dns_propagated:
             self.propagate_dns(rollback=True)
-        if self.idrac_name_updated:
-            response = self.redfish.request('patch',
-                                            f'{self.redfish.oob_manager}/EthernetInterfaces/NIC.1',
-                                            json={'HostName': self.old_name}).json()
+        if self.bmc_hostname_updated:
+            response = self.redfish.request(
+                'patch',
+                f'{self.redfish.oob_manager}/EthernetInterfaces/{self.bmc_eth_interface_name}',
+                json={'HostName': self.old_name}).json()
             logger.debug('Redfish response:\n%s', pformat(response))
-            self.host_actions.success('✔️ iDRAC rolled back')
+            self.host_actions.success('✔️ BMC Hostname rolled back')
 
         self.host_actions.warning('⚠️//Renaming failed but rollback succedded//⚠️ '
                                   'Please check the logs for the reason and follow up with I/F if needed.')
