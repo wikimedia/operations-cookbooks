@@ -1,7 +1,6 @@
 """Change vlan and IP of a node in a Kubernetes cluster"""
 
 import logging
-
 from argparse import ArgumentParser, Namespace
 from time import sleep
 from typing import Optional
@@ -14,6 +13,7 @@ from wmflib import phabricator
 from wmflib.interactive import ask_confirmation
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+from cookbooks.sre.hosts import OS_VERSIONS
 from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,8 @@ class RenumberSingleHost(CookbookBase):
             action="store_true",
             help="Adds appropriate switches to reimage cookbook, sets BGP in netbox",
         )
+        parser.add_argument("--os", choices=OS_VERSIONS, required=True, default="bullseye",
+                            help="the Debian version to install. Mandatory parameter. One of %(choices)s.")
         parser.add_argument(
             "host", help="A single host to be renumbered (specified in Cumin query syntax)"
         )
@@ -203,7 +205,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         """Reimage the node and move vlan"""
         action_str = f"Reimaging node {self.host}"
         logger.info(action_str)
-        reimage_args = ["--move-vlan", "--os", "bullseye"]
+        reimage_args = ["--move-vlan", "--os", self.args.os]
         if self.args.renamed:
             reimage_args.extend(["--new", "--puppet", "7"])
         if self.phabricator:
