@@ -88,8 +88,7 @@ class PoolDepoolSingleHostRunner(CookbookRunnerBase):
                 break
             if len(self.remote_host) > 1:
                 raise RuntimeError("Only a single server can be pooled or depooled")
-
-        if len(self.remote_host) == 0:
+        else:
             raise RuntimeError(
                 f"Cannot find the host {args.host} among any k8s workers alias " f"{ALLOWED_CUMIN_ALIASES.keys()}"
             )
