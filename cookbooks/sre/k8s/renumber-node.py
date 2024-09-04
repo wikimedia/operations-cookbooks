@@ -72,24 +72,20 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             raise RuntimeError("Only wikikube-worker nodes can be renumbered")
 
         self.remote_host = None
+        self.host = None
+
+        if len(self.args.host.split(".", 1)) < 2 and self.args.host.split(".", 1)[1] not in (
+            "eqiad.wmnet",
+            "codfw.wmnet",
+            "eqiad.wmnet.",
+            "codfw.wmnet.",
+        ):
+            raise RuntimeError(f"Invalid FQDN {self.args.host}")
 
         if args.renamed:
-            # The host won't exist in puppet yet, so use the Direct backend
-            self.remote_host = self.spicerack.remote().query(f"D{{{args.host}}}")
+            self.setup_direct_backend_host()
         else:
             self.setup_k8s_remote_host()
-
-        if self.remote_host and len(self.remote_host) > 1:
-            raise RuntimeError("Only a single server can be renumbered")
-
-        if self.remote_host is None:
-            raise RuntimeError(
-                (f"Cannot find the host {args.host} among any k8s workers alias "
-                 f"{','.join(ALLOWED_CUMIN_ALIASES.keys())}, and rename has not been specified")
-            )
-
-        self.host = self.remote_host.hosts[0]
-        self.host_short = self.host.split(".")[0]
 
         # Get switch names from netbox
         self.switches_to_update: list[str] = []
@@ -137,6 +133,28 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
                 )
             self.phabricator.task_comment(self.args.task_id, message)
 
+    def check_remote_host(self) -> None:
+        """Check if the host exists, and is unique"""
+        if self.remote_host is None:
+            if self.args.renamed:
+                raise RuntimeError(f"Cannot find the host {self.args.host} in direct backend")
+            raise RuntimeError(
+                (
+                    f"Cannot find the host {self.args.host} among any k8s workers alias "
+                    f"{','.join(ALLOWED_CUMIN_ALIASES.keys())}, and rename has not been specified"
+                )
+            )
+        if len(self.remote_host) > 1:
+            raise RuntimeError(f"Found multiple hosts for {self.args.host} in backend")
+
+    def setup_direct_backend_host(self) -> None:
+        """Set up host with direct backend for rename"""
+        # The host won't exist in puppet yet, so use the Direct backend
+        self.remote_host = self.spicerack.remote().query(f"D{{{self.args.host}}}")
+        self.check_remote_host()
+        self.host = self.remote_host.hosts[0]
+        self.host_short = self.host.split(".")[0]
+
     def setup_k8s_remote_host(self):
         """Pull Kubernetes metadata information"""
         # Find the host and its k8s metadata
@@ -147,18 +165,21 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             except RemoteError:
                 continue
 
-            if len(self.remote_host) == 1:
-                k8s_metadata = metadata
-                break
+            self.check_remote_host()
+            k8s_metadata = metadata
+            self.k8s_cli = Kubernetes(
+                group=k8s_metadata["k8s-group"],
+                cluster=k8s_metadata["k8s-cluster"],
+                dry_run=self.spicerack.dry_run,
+            )
+            # Set up host only when called early for a no-rename run
+            if self.host is None:
+                self.host = self.remote_host.hosts[0]
+                self.host_short = self.host.split(".")[0]
+            self.k8s_node = self.k8s_cli.get_node(self.host)
+            logger.debug("Found node %s in %s", self.host, k8s_metadata["workers"])
 
-        self.k8s_cli = Kubernetes(
-            group=k8s_metadata["k8s-group"],
-            cluster=k8s_metadata["k8s-cluster"],
-            dry_run=self.spicerack.dry_run,
-        )
-
-        self.k8s_node = self.k8s_cli.get_node(self.host)
-        logger.debug("Found node %s in %s", self.host, k8s_metadata["workers"])
+            break
 
     def depool(self):
         """Depool the node"""
@@ -170,7 +191,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
                 "--reason",
                 f"'Triggered by {__name__}: {self.reason.reason}'",
                 "depool",
-                self.host,
+                str(self.host),
             ],
         )
         if cookbook_retcode == 0:
@@ -189,7 +210,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         logger.info(action_str)
         cookbook_retcode = self.spicerack.run_cookbook(
             "sre.k8s.pool-depool-node",
-            ["--reason", f"'Triggered by {__name__}: {self.reason.reason}'", "pool", self.host],
+            ["--reason", f"'Triggered by {__name__}: {self.reason.reason}'", "pool", str(self.host)],
         )
         if cookbook_retcode == 0:
             action_str = f"Pooled and uncordoned node {self.host}"
