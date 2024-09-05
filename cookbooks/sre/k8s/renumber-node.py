@@ -9,7 +9,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.k8s import Kubernetes
 from spicerack.remote import RemoteError
 from wmflib import phabricator
-from wmflib.interactive import ask_confirmation
+from wmflib.interactive import ask_confirmation, confirm_on_failure
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
@@ -277,6 +277,16 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             self.host_actions.failure("**Failed to run puppet agent on deployment servers**")
             raise
 
+    def run_puppet_agent_registry(self):
+        """Run puppet agent on the registry servers"""
+        logger.info("Running puppet agent on A:docker-registry")
+        registry_hosts = self.spicerack.remote().query("A:docker-registry")
+        try:
+            registry_hosts.run_async("run-puppet-agent")
+        except Exception:
+            self.host_actions.failure("**Failed to run puppet agent on registry servers**")
+            raise
+
     def rollback(self) -> None:
         """Does nothing but log and post to phabricator on error as rollback isn't supported"""
         logger.error("%s failed:\n%s\n", __name__, self.actions)
@@ -296,7 +306,8 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             self.setup_k8s_remote_host()
 
         self.prompt_homer()
-        self.run_puppet_agent_deploy()
+        confirm_on_failure(self.run_puppet_agent_deploy)
+        confirm_on_failure(self.run_puppet_agent_registry)
         self.pool()
         logger.info("%s completed:\n%s\n", __name__, self.actions)
         self.post_to_phab()
