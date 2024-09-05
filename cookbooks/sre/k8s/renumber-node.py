@@ -73,7 +73,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         self.remote_host = None
         self.host = None
 
-        if len(self.args.host.split(".", 1)) < 2 and self.args.host.split(".", 1)[1] not in (
+        if len(self.args.host.split(".", 1)) < 2 or self.args.host.split(".", 1)[1] not in (
             "eqiad.wmnet",
             "codfw.wmnet",
             "eqiad.wmnet.",
@@ -194,14 +194,12 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             ],
         )
         if cookbook_retcode == 0:
-            action_str = f"Successfully cordoned node {self.host}"
-            logger.info(action_str)
-            self.host_actions.success(action_str)
+            self.host_actions.success(f"Successfully cordoned node {self.host}")
         else:
-            action_str = f"Failed to cordon node {self.host}"
-            self.host_actions.failure(f"**{action_str}**, sre.k8s.pool-depool-node returned {cookbook_retcode}")
-            logger.error(action_str)
-            raise RuntimeError(action_str)
+            self.host_actions.failure(
+                f"**Failed to cordon node {self.host}**, sre.k8s.pool-depool-node returned {cookbook_retcode}"
+            )
+            raise RuntimeError(f"sre.k8s.pool-depool-node returned {cookbook_retcode}")
 
     def pool(self):
         """Repool the node"""
@@ -212,19 +210,16 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             ["--reason", f"'Triggered by {__name__}: {self.reason.reason}'", "pool", str(self.host)],
         )
         if cookbook_retcode == 0:
-            action_str = f"Pooled and uncordoned node {self.host}"
-            logger.info(action_str)
-            self.host_actions.success(action_str)
+            self.host_actions.success(f"Pooled and uncordoned node {self.host}")
         else:
-            action_str = f"Failed to pool and uncordon node {self.host}"
-            self.host_actions.failure(f"**{action_str}**, sre.k8s.pool-depool-node returned {cookbook_retcode}")
-            logger.error(action_str)
-            raise RuntimeError(action_str)
+            self.host_actions.failure(
+                f"**Failed to pool and uncordon node {self.host}**, "
+                f"sre.k8s.pool-depool-node returned {cookbook_retcode}"
+            )
+            raise RuntimeError(f"Failed to pool and uncordon node {self.host}")
 
     def reimage(self):
         """Reimage the node and move vlan"""
-        action_str = f"Reimaging node {self.host}"
-        logger.info(action_str)
         reimage_args = ["--move-vlan", "--os", self.args.os]
         if self.args.renamed:
             reimage_args.extend(["--new", "--puppet", "7"])
@@ -234,14 +229,12 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         logger.info("Running sre.hosts.reimage %s", " ".join(reimage_args))
         cookbook_retcode = self.spicerack.run_cookbook("sre.hosts.reimage", reimage_args)
         if cookbook_retcode == 0:
-            action_str = f"Successfully reimaged node {self.host}"
-            logger.info(action_str)
-            self.host_actions.success(action_str)
+            self.host_actions.success(f"Successfully reimaged node {self.host}")
         else:
-            action_str = f"Failed to reimage node {self.host}"
-            self.host_actions.failure(f"**{action_str}**, sre.hosts.reimage returned {cookbook_retcode}")
-            logger.error(action_str)
-            raise RuntimeError(action_str)
+            self.host_actions.failure(
+                f"**Failed to reimage node {self.host}**, sre.hosts.reimage returned {cookbook_retcode}"
+            )
+            raise RuntimeError(f"Failed to reimage node {self.host}")
 
     def prompt_homer(self):
         """Prompt user to run homer to update BGP configuration"""
@@ -260,9 +253,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         try:
             ask_confirmation(f"Running homer on {','.join(tor_switches)} is mandatory before pooling, continue?")
         except Exception:
-            action_str = "Failed to confirm homer commands"
-            self.host_actions.failure(f"**{action_str}**")
-            logger.error(action_str)
+            self.host_actions.failure("**Failed to confirm homer commands**")
             raise
 
     def netbox_commit(self):
@@ -273,9 +264,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             self.netbox_host.save()
             self.host_actions.success("Successfully set BGP to true in Netbox")
         except Exception:
-            action_str = "Failed to commit BGP change to Netbox"
-            self.host_actions.failure(f"**{action_str}**")
-            logger.error(action_str)
+            self.host_actions.failure("**Failed to commit BGP change to Netbox**")
             raise
 
     def run_puppet_agent_deploy(self):
@@ -285,60 +274,30 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         try:
             deploy_hosts.run_async("run-puppet-agent")
         except Exception:
-            action_str = "Failed to run puppet agent on deployment servers"
-            self.host_actions.failure(f"**{action_str}**")
-            logger.error(action_str)
+            self.host_actions.failure("**Failed to run puppet agent on deployment servers**")
             raise
+
+    def rollback(self) -> None:
+        """Does nothing but log and post to phabricator on error as rollback isn't supported"""
+        logger.error("%s failed:\n%s\n", __name__, self.actions)
+        self.post_to_phab()
 
     def run(self):
         """Perform the renumbering and vlan switch"""
         if self.args.renamed:
             logger.info("Skip depooling for renamed hosts, it should have been done already on the old name")
         else:
-            try:
-                self.depool()
-            except Exception:
-                logger.info("%s failed:\n%s\n", __name__, self.actions)
-                self.post_to_phab()
-                raise
+            self.depool()
 
-        try:
-            self.reimage()
-        except Exception:
-            logger.info("%s failed:\n%s\n", __name__, self.actions)
-            self.post_to_phab()
-            raise
+        self.reimage()
 
         if self.args.renamed:
-            try:
-                self.netbox_commit()
-                self.setup_k8s_remote_host()
-            except Exception:
-                logger.info("%s failed:\n%s\n", __name__, self.actions)
-                self.post_to_phab()
-                raise
+            self.netbox_commit()
+            self.setup_k8s_remote_host()
 
-        try:
-            self.prompt_homer()
-        except Exception:
-            logger.error("%s failed:\n%s\n", __name__, self.actions)
-            self.post_to_phab()
-            raise
-
-        try:
-            self.run_puppet_agent_deploy()
-        except Exception:
-            logger.info("%s failed:\n%s\n", __name__, self.actions)
-            self.post_to_phab()
-            raise
-
-        try:
-            self.pool()
-        except Exception:
-            logger.info("%s failed:\n%s\n", __name__, self.actions)
-            self.post_to_phab()
-            raise
-
+        self.prompt_homer()
+        self.run_puppet_agent_deploy()
+        self.pool()
         logger.info("%s completed:\n%s\n", __name__, self.actions)
         self.post_to_phab()
         if self.host_actions.has_failures:
