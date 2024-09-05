@@ -2,7 +2,6 @@
 
 import logging
 from argparse import ArgumentParser, Namespace
-from time import sleep
 from typing import Optional
 
 from spicerack import Spicerack
@@ -245,16 +244,16 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             raise RuntimeError(action_str)
 
     def prompt_homer(self):
-        """Prompt user to run homer on the core-router and on the leaf switch to update BGP configuration"""
+        """Prompt user to run homer to update BGP configuration"""
         tor_switches = [switch for switch in self.switches_to_update if "cr" not in switch]
         logger.info("Please run the following homer commands")
-        logger.info("Don't forget to !log on #wikimedia-operations")
         logger.info("----------------------------------------------------")
         for switch in self.switches_to_update:
             if switch in tor_switches:
                 logger.info("# Before continuing")
             else:
                 logger.info("# Long, can be run in parallel while finishing the cookbook")
+            logger.info("!log homer %s commit '%s'", switch, self.task_id)
             logger.info("homer %s commit '%s'", switch, self.task_id)
         logger.info("----------------------------------------------------")
 
@@ -275,6 +274,18 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             self.host_actions.success("Successfully set BGP to true in Netbox")
         except Exception:
             action_str = "Failed to commit BGP change to Netbox"
+            self.host_actions.failure(f"**{action_str}**")
+            logger.error(action_str)
+            raise
+
+    def run_puppet_agent_deploy(self):
+        """Run puppet agent on the deployment servers"""
+        logger.info("Running puppet agent on A:deployment-servers")
+        deploy_hosts = self.spicerack.remote().query("A:deployment-servers")
+        try:
+            deploy_hosts.run_async("run-puppet-agent")
+        except Exception:
+            action_str = "Failed to run puppet agent on deployment servers"
             self.host_actions.failure(f"**{action_str}**")
             logger.error(action_str)
             raise
@@ -310,12 +321,17 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         try:
             self.prompt_homer()
         except Exception:
+            logger.error("%s failed:\n%s\n", __name__, self.actions)
+            self.post_to_phab()
+            raise
+
+        try:
+            self.run_puppet_agent_deploy()
+        except Exception:
             logger.info("%s failed:\n%s\n", __name__, self.actions)
             self.post_to_phab()
             raise
 
-        logger.info("Sleep 60s before pooling to allow BGP to Establish")
-        sleep(60)
         try:
             self.pool()
         except Exception:
