@@ -67,8 +67,8 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.phabricator: Optional[phabricator.Phabricator] = None
 
-        if "wikikube-worker" not in args.host:
-            raise RuntimeError("Only wikikube-worker nodes can be renumbered")
+        if "wikikube-worker" not in args.host and "kubestage" not in args.host:
+            raise RuntimeError("Only wikikube-worker/kubestage nodes can be renumbered")
 
         self.remote_host = None
         self.host = None
