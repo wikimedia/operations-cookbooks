@@ -1,8 +1,10 @@
 """Restart all Kafka broker daemons in a cluster."""
+
 import logging
-from argparse import Namespace
+from argparse import ArgumentParser, Namespace
 from datetime import timedelta
 
+from cumin import NodeSet
 from spicerack import Spicerack
 from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError, RemoteHosts
@@ -50,6 +52,21 @@ class RollRestartRebootBrokers(SREBatchBase):
     grace_sleep = 300  # By default, wait 5 min between brokers
     min_grace_sleep = 120  # Don't allow going under 2 minutes between 2 broker restarts
 
+    def argument_parser(self) -> ArgumentParser:
+        """Parse arguments"""
+        parser = super().argument_parser()
+        parser.add_argument(
+            "--no-election",
+            action="store_true",
+            help="Do not run preferred-replica-election after restart",
+        )
+        parser.add_argument(
+            "--exclude",
+            help="List of hosts that should be excluded, in NodeSet notation",
+            default="",
+        )
+        return parser
+
     def get_runner(self, args):
         """As specified by Spicerack API."""
         return RollingActionBrokersRunner(args, self.spicerack)
@@ -84,6 +101,17 @@ class RollingActionBrokersRunner(SREBatchRunnerBase):
         """Property to return a list of daemons to restart"""
         return ["kafka.service"]
 
+    def _hosts(self) -> list[RemoteHosts]:
+        all_hosts = super()._hosts()[0]
+        to_exclude = NodeSet(self._args.exclude)
+        remote_query = str(all_hosts.hosts - to_exclude)
+        if len(to_exclude) > 0:
+            ask_confirmation(
+                f"{self._args.action} will be executed for the following hosts: {remote_query}"
+            )
+
+        return [self._spicerack.remote().query(remote_query)]
+
     @retry(
         tries=30,
         delay=timedelta(seconds=30),
@@ -114,9 +142,13 @@ class RollingActionBrokersRunner(SREBatchRunnerBase):
     @property
     def post_scripts(self) -> list:
         """Retry until the broker is fully back in sync"""
-        return [
+        scripts = [
             "systemctl is-active --quiet kafka.service",
             # exits with status 1 if the current broker isn't in sync
             "/usr/local/bin/kafka-broker-in-sync",
-            "source /etc/profile.d/kafka.sh; kafka preferred-replica-election",
         ]
+        if not self._args.no_election:
+            scripts.append(
+                "source /etc/profile.d/kafka.sh; kafka preferred-replica-election"
+            )
+        return scripts
