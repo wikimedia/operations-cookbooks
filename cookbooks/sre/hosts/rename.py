@@ -67,6 +67,8 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         self.task_id = args.task_id
         self.netbox_server = spicerack.netbox_server(self.old_name, read_write=True)
         self.old_fqdn = self.netbox_server.fqdn
+        self.remote_host = spicerack.remote().query(self.old_fqdn)
+        self.puppet = spicerack.puppet(self.remote_host)
         self.puppet_master = spicerack.puppet_master()
         self.puppet_server = spicerack.puppet_server()
         self.debmonitor = spicerack.debmonitor()
@@ -109,6 +111,10 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         """Run the cookbook."""
         self.alerting_host.downtime(self.reason)
         self.host_actions.success('✔️ Downtimed host on Icinga/Alertmanager')
+        self.puppet.disable(self.reason)
+        self.host_actions.success('✔️ Disabled puppet')
+        self.remote_host.run_sync('systemctl mask debmonitor-client.timer')
+        self.host_actions.success('✔️ Disabled debmonitor-client timer')
         self.netbox_server.name = self.new_name
         self.host_actions.success('✔️ Netbox updated')
         self.netbox_name_changed = True
@@ -185,5 +191,6 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
             self.host_actions.success('✔️ BMC Hostname rolled back')
 
         self.host_actions.warning('⚠️//Renaming failed but rollback succedded//⚠️ '
-                                  'Please check the logs for the reason and follow up with I/F if needed.')
+                                  'Please check the logs for the reason and follow up with I/F if needed.'
+                                  'Neither puppet nor alerting were re-enabled.')
         self._phab_dump()
