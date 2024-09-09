@@ -245,10 +245,11 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         self.supermicro_bios_changes = {
             "Attributes": {
                 "BootModeSelect": "Legacy",
-                "ConsoleRedirection": True,
-                "IntelVirtualizationTechnology": "Disable",
+                "ConsoleRedirection": False,
+                "SerialPort2Attribute": "SOL",
+                "IntelVirtualizationTechnology": "Enable" if self.args.enable_virtualization else "Disable",
                 "QuietBoot": False,
-                "SerialPort2Attribute": "COM",
+                "LegacySerialRedirectionPort": "COM1",
             }
         }
 
