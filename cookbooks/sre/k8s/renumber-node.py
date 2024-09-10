@@ -272,7 +272,8 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         logger.info("Running puppet agent on A:deployment-servers")
         deploy_hosts = self.spicerack.remote().query("A:deployment-servers")
         try:
-            deploy_hosts.run_async("run-puppet-agent")
+            self.spicerack.puppet(deploy_hosts).run()
+            self.host_actions.success("Successfully ran puppet agent on deployment servers")
         except Exception:
             self.host_actions.failure("**Failed to run puppet agent on deployment servers**")
             raise
@@ -282,7 +283,8 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         logger.info("Running puppet agent on A:docker-registry")
         registry_hosts = self.spicerack.remote().query("A:docker-registry")
         try:
-            registry_hosts.run_async("run-puppet-agent")
+            self.spicerack.puppet(registry_hosts).run()
+            self.host_actions.success("Successfully ran puppet agent on registry servers")
         except Exception:
             self.host_actions.failure("**Failed to run puppet agent on registry servers**")
             raise
