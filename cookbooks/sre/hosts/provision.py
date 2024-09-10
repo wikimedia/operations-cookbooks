@@ -127,6 +127,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 f'Host {self.args.host} has active status in Netbox but --no-dhcp and --no-users were not set.')
 
         if self.args.no_users:
+            bmc_username = "root"
             password = ''  # nosec
         else:
             if self.vendor == DELL_VENDOR_SLUG:
