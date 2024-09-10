@@ -112,7 +112,8 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         self.alerting_host.downtime(self.reason)
         self.host_actions.success('✔️ Downtimed host on Icinga/Alertmanager')
         self.puppet.disable(self.reason)
-        self.host_actions.success('✔️ Disabled puppet')
+        self.remote_host.run_sync('systemctl mask puppet-agent-timer.service')
+        self.host_actions.success('✔️ Disabled puppet and its timer')
         self.remote_host.run_sync('systemctl mask debmonitor-client.timer')
         self.host_actions.success('✔️ Disabled debmonitor-client timer')
         self.netbox_server.name = self.new_name
