@@ -2,6 +2,8 @@
 
 import logging
 
+from spicerack.mysql_legacy import MysqlLegacyError
+
 from cookbooks.sre.switchdc.mediawiki import MediaWikiSwitchDCBase, MediaWikiSwitchDCRunnerBase
 
 logger = logging.getLogger(__name__)
@@ -24,7 +26,17 @@ class SetDBReadOnlyRunner(MediaWikiSwitchDCRunnerBase):
 
         logger.info('Check that all core primaries in %s are in sync with the core primaries in %s.',
                     self.dc_to, self.dc_from)
-        mysql.check_core_masters_in_sync(self.dc_from, self.dc_to)
+        try:
+            mysql.check_core_masters_in_sync(self.dc_from, self.dc_to)
+        except MysqlLegacyError as e:
+            if self.live_test:
+                logger.warning(
+                    'Check failed while in live-test mode (%s). This is expected if circular replication is not '
+                    '(yet) configured.',
+                    e,
+                )
+            else:
+                raise
 
 
 class SetDBReadOnly(MediaWikiSwitchDCBase):
