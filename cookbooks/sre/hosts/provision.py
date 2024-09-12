@@ -444,32 +444,22 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
         logger.info('All changes were applied successfully')
 
-    def _config_dell_pxe(self, config):  # pylint: disable=too-many-branches
-        """Configure PXE boot on the correct NIC automatically or ask the user if unable to detect it.
-
-        Example keys names::
-
-            ['NIC.Embedded.1-1-1', 'NIC.Embedded.2-1-1']
-            ['NIC.Embedded.1-1-1', 'NIC.Embedded.2-1-1', 'NIC.Slot.2-1-1', 'NIC.Slot.2-2-1']
-            ['NIC.Embedded.1-1-1', 'NIC.Embedded.2-1-1', 'NIC.Mezzanine.1-1-1', 'NIC.Mezzanine.1-2-1']
-            ['NIC.Embedded.1-1-1', 'NIC.Embedded.2-1-1', 'NIC.Slot.3-1-1', 'NIC.Slot.3-2-1']
-            #     10Gb NIC1                 10Gb NIC2             1Gb NIC1                 1Gb NIC 2
-            ['NIC.Integrated.1-1-1', 'NIC.Integrated.1-2-1', 'NIC.Integrated.1-3-1', 'NIC.Integrated.1-4-1']
+    def _get_pxe_nic(self, nics):
+        """Select the NIC to use for PXE booting.
 
         Arguments:
-            config (spicerack.redfish.RedfishDellSCP): the configuration to modify.
+            nics (list of str): The list of NIC names reported by Redfish.
+
+        Returns:
+            pxe_nic (str): The NIC name to use for PXE.
 
         """
-        all_nics = sorted(key for key in config.components.keys() if key.startswith('NIC.'))
         nics_with_link = []
         nics_failed = []
-        if not all_nics:
-            raise RuntimeError('Unable to find any NIC.')
-
-        for nic in all_nics:
+        for nic in nics:
             try:
                 nic_json = self.redfish.request(
-                    'GET', f'/redfish/v1/Systems/System.Embedded.1/EthernetInterfaces/{nic}').json()
+                    'GET', f'{self.redfish.system_manager}/EthernetInterfaces/{nic}').json()
                 if nic_json.get('LinkStatus', '') == 'LinkUp':
                     nics_with_link.append(nic)
             except RedfishError as e:
@@ -491,7 +481,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
             if len(nics_with_link) != 1 or pick:
                 pxe_nic = ask_input(
-                    f'Unable to auto-detect NIC with link. Pick the one to set PXE on:\n{all_nics}', all_nics)
+                    f'Unable to auto-detect NIC with link. Pick the one to set PXE on:\n{nics}', nics)
 
         if not pxe_nic:
             if len(nics_with_link) == 1:
@@ -502,8 +492,30 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                     nics_with_link)
             else:
                 pxe_nic = ask_input(
-                    f'Unable to auto-detect NIC with link. Pick the one to set PXE on:\n{all_nics}', all_nics)
+                    f'Unable to auto-detect NIC with link. Pick the one to set PXE on:\n{nics}', nics)
 
+        return pxe_nic
+
+    def _config_dell_pxe(self, config):
+        """Configure PXE boot on the correct NIC automatically or ask the user if unable to detect it.
+
+        Example keys names for DELL:
+
+            ['NIC.Embedded.1-1-1', 'NIC.Embedded.2-1-1']
+            ['NIC.Embedded.1-1-1', 'NIC.Embedded.2-1-1', 'NIC.Slot.2-1-1', 'NIC.Slot.2-2-1']
+            ['NIC.Embedded.1-1-1', 'NIC.Embedded.2-1-1', 'NIC.Mezzanine.1-1-1', 'NIC.Mezzanine.1-2-1']
+            ['NIC.Embedded.1-1-1', 'NIC.Embedded.2-1-1', 'NIC.Slot.3-1-1', 'NIC.Slot.3-2-1']
+            #     10Gb NIC1                 10Gb NIC2             1Gb NIC1                 1Gb NIC 2
+            ['NIC.Integrated.1-1-1', 'NIC.Integrated.1-2-1', 'NIC.Integrated.1-3-1', 'NIC.Integrated.1-4-1']
+
+        Arguments:
+            config (spicerack.redfish.RedfishDellSCP): the configuration to modify.
+
+        """
+        all_nics = sorted(key for key in config.components.keys() if key.startswith('NIC.'))
+        if not all_nics:
+            raise RuntimeError('Unable to find any NIC.')
+        pxe_nic = self._get_pxe_nic(all_nics)
         logger.info('Enabling PXE boot on NIC %s', pxe_nic)
         for nic in all_nics:
             if nic == pxe_nic:
