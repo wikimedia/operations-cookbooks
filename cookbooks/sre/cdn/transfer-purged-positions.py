@@ -18,7 +18,6 @@ from wmflib.constants import ALL_DATACENTERS, CORE_DATACENTERS
 from wmflib.interactive import confirm_on_failure
 
 from spicerack import Spicerack
-from spicerack.kafka import ConsumerDefinition
 from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
 
 
@@ -32,7 +31,6 @@ class TransferPurgedOffsets(SREBatchBase):
 
         cookbook sre.cdn.transfer-purged-positions \
             --alias cp-text_codfw \
-            --dc-from eqiad \
             --dc-to codfw \
             --reason 'move purged back to codfw' \
             --puppet-reason 'TXXXXXX'
@@ -51,13 +49,6 @@ class TransferPurgedOffsets(SREBatchBase):
             type=str,
             required=True,
             help="Puppet reason. Must match puppet disable reason used by Cumin"
-        )
-        parser.add_argument(
-            "--dc-from",
-            type=str,
-            required=True,
-            choices=CORE_DATACENTERS,
-            help="Name of the current datacenter used by the consumers. One of %(choices)s.",
         )
         parser.add_argument(
             "--dc-to",
@@ -82,8 +73,11 @@ class TransferPurgedOffsetsRunner(SRELBBatchRunnerBase):
         """We need to override this in order to use the args.puppet_reason"""
         super().__init__(args, spicerack)
         self._puppet_reason = spicerack.admin_reason(reason=args.puppet_reason)
-        self._dc_from = args.dc_from
         self._dc_to = args.dc_to
+        spicerack_remote = spicerack.remote()
+        kafka_hosts = spicerack_remote.query(f"A:kafka-main-{self._dc_to}")
+        # use a single host from the kafka-main cluster
+        self.kafka_host = spicerack_remote.query(kafka_hosts.hosts[0])
 
     @property
     def allowed_aliases(self):
@@ -103,10 +97,9 @@ class TransferPurgedOffsetsRunner(SRELBBatchRunnerBase):
         """The actual transfer consumer position / run puppet logic resides here."""
         # we are safe here cause batch_max = 1
         hostname = hosts.hosts[0].split('.')[0]
-        src = ConsumerDefinition(self._dc_from, 'main', hostname)
-        dst = ConsumerDefinition(self._dc_to, 'main', hostname)
-        kafka = self._spicerack.kafka()
-        kafka.transfer_consumer_position(["resource-purge"], src, dst)
+        cmd = f"kafka-consumer-groups --bootstrap-server localhost:9092 --group {hostname} --reset-offsets " \
+            "--to-latest --all-topics --execute"
+        confirm_on_failure(self.kafka_host.run_sync, cmd)
 
         puppet = self._spicerack.puppet(hosts)
         confirm_on_failure(puppet.run, enable_reason=self._puppet_reason)
