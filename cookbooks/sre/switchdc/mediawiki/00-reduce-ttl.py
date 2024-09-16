@@ -3,6 +3,8 @@
 import logging
 import time
 
+from datetime import datetime, timedelta, timezone
+
 from cookbooks.sre.switchdc.mediawiki import (
     DNS_SHORT_TTL,
     MEDIAWIKI_SERVICES,
@@ -22,7 +24,9 @@ class ReduceDiscoveryTTLsRunner(MediaWikiSwitchDCRunnerBase):
         discovery = self.spicerack.discovery(*MEDIAWIKI_SERVICES)
         old_ttl_sec = max(record.ttl for record in discovery.resolve())
         discovery.update_ttl(DNS_SHORT_TTL)
-        logger.info('Sleeping for the old TTL (%d seconds) to allow the old records to expire...', old_ttl_sec)
+        until = datetime.now(timezone.utc) + timedelta(seconds=old_ttl_sec)
+        logger.info('Sleeping for the old TTL of %d seconds (until %s) to allow the old records to expire...',
+                    old_ttl_sec, until.timetz().isoformat('seconds'))
         time.sleep(old_ttl_sec)
 
 
