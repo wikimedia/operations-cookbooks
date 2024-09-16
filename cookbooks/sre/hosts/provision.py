@@ -385,9 +385,13 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
     def _config_supermicro_host(self):
         """Provision the BIOS and BMC settings."""
-        # We could add a patch method/utility in Spicerack to DRY code,
-        # this is only a stub/idea to visualize the approach.
         try:
+            # Note: It seems that Supermicro's BIOS settings assume
+            # PXE via EFI configs, so we force 'Legacy' in all BIOS settings
+            # having 'EFI' has value. It should be enough to force PXE via IPMI,
+            # without setting any specific boot order.
+            # More info: https://phabricator.wikimedia.org/T365372#10148864
+            self._config_supermicro_pxe_bios_settings()
             self.redfish.request(
                 'PATCH',
                 '/redfish/v1/Systems/1/Bios',
@@ -405,6 +409,27 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             )
             self.redfish.chassis_reset(self.chassis_reset_policy)
             sleep(180)
+        except RedfishError as e:
+            logger.error("Error while configuring BIOS or mgmt interface: %s", e)
+
+    def _config_supermicro_pxe_bios_settings(self):
+        """Set BIOS settings from EFI to Legacy, including riser's PCIe settings.
+
+        Look for all BIOS settings with a value containing 'EFI' and set them
+        to Legacy. This is needed to allow NIC ports to PXE correctly in our
+        environment. Set also all options starting with "RSC_" to Legacy as well,
+        since the nomenclature is used for PCIe riser NICs.
+        """
+        try:
+            bios_settings = self.redfish.request(
+                'GET',
+                '/redfish/v1/Systems/1/Bios',
+            ).json()
+            for (key, value) in bios_settings["Attributes"].items():
+                if "EFI" == str(value) or key.startswith("RSC_"):
+                    logger.info(
+                        "BIOS: Setting %s to Legacy.", key)
+                    self.supermicro_bios_changes["Attributes"][key] = "Legacy"
         except RedfishError as e:
             logger.error("Error while configuring BIOS or mgmt interface: %s", e)
 
