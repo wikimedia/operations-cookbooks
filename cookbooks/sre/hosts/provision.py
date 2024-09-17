@@ -10,6 +10,11 @@ from spicerack.dhcp import DHCPConfMac, DHCPConfMgmt
 from spicerack.netbox import MANAGEMENT_IFACE_NAME
 from spicerack.redfish import ChassisResetPolicy, DellSCPPowerStatePolicy, DellSCPRebootPolicy, RedfishError
 from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, get_secret, ensure_shell_is_durable
+from cookbooks.sre.hosts import (
+    SUPERMICRO_VENDOR_SLUG,
+    DELL_VENDOR_SLUG,
+    SUPPORTED_VENDORS
+)
 from cookbooks.sre.network import configure_switch_interfaces
 
 DNS_ADDRESS = '10.3.0.1'
@@ -24,9 +29,7 @@ OLD_SERIAL_MODELS = (
     'poweredge r740xd',
     'poweredge r740xd2',
 )
-DELL_VENDOR_SLUG = 'dell'
-SUPERMICRO_VENDOR_SLUG = 'supermicro'
-SUPPORTED_VENDORS = [DELL_VENDOR_SLUG, SUPERMICRO_VENDOR_SLUG]
+
 # Hostname prefixes that usually need --enable-virtualization
 VIRT_PREFIXES = ('ganeti', 'cloudvirt')
 logger = logging.getLogger(__name__)

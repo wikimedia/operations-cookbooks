@@ -26,8 +26,10 @@ from spicerack.remote import RemoteError, RemoteExecutionError, RemoteCheckError
 from wmflib.interactive import AbortError, ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-from cookbooks.sre.hosts import OS_VERSIONS
-
+from cookbooks.sre.hosts import (
+    OS_VERSIONS,
+    SUPERMICRO_VENDOR_SLUG
+)
 
 logger = logging.getLogger(__name__)
 
@@ -377,7 +379,11 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         # This is a workaround to avoid PXE booting issues, like
         # "Failed to load ldlinux.c32" before getting to Debian Install.
         # More info: https://phabricator.wikimedia.org/T363576#9997915
-        if force_tftp:
+        # We also got confirmation from Supermicro/Broadcom that they
+        # don't support lpxelinux.0, so for this vendor we force the TFTP flag
+        # even if it wasn't set.
+        if force_tftp or \
+                self.netbox_data['device_type']['manufacturer']['slug'] == SUPERMICRO_VENDOR_SLUG:
             logger.info('Force pxelinux.0 and TFTP only for DHCP settings.')
             dhcp_filename = f"/srv/tftpboot/{self.args.os}-installer/pxelinux.0"
             dhcp_options = {

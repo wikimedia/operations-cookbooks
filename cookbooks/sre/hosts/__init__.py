@@ -31,6 +31,11 @@ AUTHDNS_REPO_PATH = '/srv/authdns/git'
 # Supported Debian OS versions
 OS_VERSIONS = ('buster', 'bullseye', 'bookworm')
 
+# Vendor slugs
+DELL_VENDOR_SLUG = 'dell'
+SUPERMICRO_VENDOR_SLUG = 'supermicro'
+SUPPORTED_VENDORS = [DELL_VENDOR_SLUG, SUPERMICRO_VENDOR_SLUG]
+
 
 @dataclass(frozen=True)
 class GitRepoPath:
