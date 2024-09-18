@@ -1,10 +1,12 @@
 """Cookbook for GeoDNS pool/depool of a site."""
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from wmflib.constants import ALL_DATACENTERS
+from wmflib.constants import ALL_DATACENTERS, US_DATACENTERS
 from wmflib.interactive import ask_confirmation
 
-SERVICES = ["text-addrs", "text-next", "upload-addrs", "ncredir-addrs"]
+SERVICES = ("text-addrs", "text-next", "upload-addrs", "ncredir-addrs")
+
+DEPOOL_THRESHOLD = .5
 
 
 class DNSAdmin(CookbookBase):
@@ -36,6 +38,8 @@ class DNSAdmin(CookbookBase):
                             help="An optional Phabricator task ID to log the action.")
         parser.add_argument("-f", "--force", action="store_true",
                             help="If passed, do not prompt for any actions (default: prompt)")
+        parser.add_argument("--emergency-depool-policy", action="store_true",
+                            help="If passed, override the depool threshold and ignore all depool safety checks")
         return parser
 
     def get_runner(self, args):
@@ -72,6 +76,53 @@ class DNSAdminRunner(CookbookRunnerBase):
 
         if self.args.action == "show":
             raise RuntimeError("show action called; outputting current admin_state. No changes were made.")
+
+        # Safety checks before we actually call run() depool. These are skipped
+        # further down if the override flag is passed.
+        if self.args.action == "depool":
+            self.safety_checks()
+
+    def safety_checks(self):
+        """Checks to perform before depooling a site/resources."""
+        # Show the below without performing any checks because it was passed
+        # after all and we need user confirmation, even if the changes won't
+        # actually meet the thresholds.
+        if self.args.emergency_depool_policy:
+            print("WARNING: Emergency depool policy was set. Overriding any depool policy thresholds.\n"
+                  "We will NOT stop executing the cookbook for any failing safety check. May the packets be with you.")
+            ask_confirmation("I understand fully what I am doing and wish to continue.")
+
+        # If --services was passed, use that otherwise use all SERVICES (equal to a full site).
+        services_to_check = self.args.service if self.args.service is not None else SERVICES
+        for service in services_to_check:
+            # Simulate what happens when an actual action is performed.
+            simulate_depool = [s.name for s in self.confctl.get(geodns=service) if s.pooled == "no"]
+            # Maybe the given site is already depooled, in which case, ignore.
+            if self.args.site not in simulate_depool:
+                simulate_depool.append(self.args.site)
+
+            depool_policy_msg = "\nYou can override this with --emergency-depool-policy BUT IT IS NOT RECOMMENDED."
+            depool_continue_msg = "\nContinuing because --emergency-depool-policy was passed."
+
+            # Check 1.
+            # Do not allow depool beyond a certain threshold.
+            if len(simulate_depool) / len(ALL_DATACENTERS) > DEPOOL_THRESHOLD:
+                if not self.args.emergency_depool_policy:
+                    raise RuntimeError(f"Cannot depool {service} for {self.args.site}.\n"
+                                       f"Depool threshold exceeded as {service} "
+                                       f"is already depooled for {len(simulate_depool)} sites."
+                                       f"{depool_policy_msg}")
+                print(f"Depool of {service} would have failed as depool threshold was exceeded."
+                      f"{depool_continue_msg}")
+
+            # Check 2.
+            # Do not allow all US sites to be depooled.
+            if set(US_DATACENTERS).issubset(simulate_depool):
+                if not self.args.emergency_depool_policy:
+                    raise RuntimeError(f"Cannot depool all US data centers {', '.join(US_DATACENTERS)} for {service}."
+                                       f"{depool_policy_msg}")
+                print("Depool would have failed as all US sites will be depooled."
+                      f"{depool_continue_msg}")
 
     @property
     def runtime_description(self):
