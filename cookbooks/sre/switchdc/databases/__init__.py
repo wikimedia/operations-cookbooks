@@ -36,7 +36,7 @@ class DatabaseRunnerBase(CookbookRunnerBase):
         self.reason = spicerack.admin_reason(
             f"Databases pre/post steps for DC Switchover {self.dc_from} -> {self.dc_to}",
             task_id=self.task_id)
-        self.phab_prefix = f"{__name__} {self.runtime_description} started by {self.reason.owner}"
+        self.phab_prefix = f"{self.__module__} {self.runtime_description} started by {self.reason.owner}"
 
     @property
     def runtime_description(self):
