@@ -71,7 +71,7 @@ class PrepareSection:
         confirm_on_failure(self.disable_gtid)
         confirm_on_failure(self.master_to_stop_replication)
         master_to_position = confirm_on_failure(self.wait_master_to_position)
-        confirm_on_failure(self.enable_cross_replication, master_to_position)
+        confirm_on_failure(self.enable_circular_replication, master_to_position)
         confirm_on_failure(self.master_to_restart_replication)
 
     def validate(self) -> None:
@@ -141,22 +141,23 @@ class PrepareSection:
         self.actions.success(f"Disabled GTID on MASTER_TO {self.master_to.host}")
 
     def master_to_stop_replication(self) -> None:
-        """Stop the replication and pt-heartbeat on MASTER_TO to prepare to enable replication from MASTER_FROM."""
-        self.master_to.stop_slave()
-        self.actions.success(f"MASTER_TO {self.master_to.host} STOP SLAVE.")
-        logger.info("Sleeping for 10 seconds to make sure all pending events/transactions/writes are caught up")
-        sleep(10)  # TODO: use a better mechanism instead of a blind sleep
+        """Stop pt-heartbeat and the replication on MASTER_TO to prepare it to enable replication from MASTER_FROM."""
         self.master_to.host.run_sync("/bin/systemctl stop pt-heartbeat-wikimedia.service")
         self.actions.success(f"MASTER_TO {self.master_to.host} stopped pt-heartbeat.")
+        self.master_to.stop_slave()
+        self.actions.success(f"MASTER_TO {self.master_to.host} STOP SLAVE.")
 
     def wait_master_to_position(self) -> dict[str, str]:
         """Waits until the MASTER_TO master position is stable and return it."""
-        logger.info("[%s] Checking if MASTER_TO %s master position is stable", self.section, self.master_to.host)
+        logger.info(
+            "[%s] Checking if MASTER_TO %s master position is stable over time", self.section, self.master_to.host)
         stable = 0
         current = self.master_to.show_master_status()
-        logger.debug("[%s] MASTER_TO %s master position is: %s", self.section, self.master_to.host, current)
-        for i in range(1, 11):
-            sleep(3)  # TBD which value to use
+        logger.info("[%s] MASTER_TO %s master position is: %s", self.section, self.master_to.host, current)
+        attempts = 2 if self.dry_run else 11
+        for i in range(1, attempts):
+            logger.info("Sleeping 3 seconds")
+            sleep(3)
             new = self.master_to.show_master_status()
             if new == current:
                 stable += 1
@@ -164,12 +165,12 @@ class PrepareSection:
                 stable = 0  # Reset the counter
 
             current = new
-            logger.debug("[%s] (%d/10) MASTER_TO %s master position is: %s",
-                         self.section, i, self.master_to.host, current)
+            logger.info("[%s] (%d/%d) MASTER_TO %s master position is: %s",
+                        self.section, i, attempts - 1, self.master_to.host, current)
 
-        if stable > 5:  # TBD which value to use
-            self.actions.success(f"MASTER_TO {self.master_to.host} MASTER STATUS is stable: {current}")
-            return current
+            if stable >= 2:  # It means we got 3 consecutive readings that are the same with 3s sleep in between them
+                self.actions.success(f"MASTER_TO {self.master_to.host} MASTER STATUS is stable over time: {current}")
+                return current
 
         if self.dry_run:
             self.actions.success(f"MASTER_TO {self.master_to.host} Ignoring MASTER STATUS is not stable in DRY-RUN")
@@ -179,8 +180,8 @@ class PrepareSection:
         self.actions.failure(f"**{message}**")
         raise RuntimeError(message)
 
-    def enable_cross_replication(self, master_to_position: dict[str, str]) -> None:
-        """Changes the master on MASTER_FROM to replicate from MASTER_TO and enable cross replication."""
+    def enable_circular_replication(self, master_to_position: dict[str, str]) -> None:
+        """Changes the master on MASTER_FROM to replicate from MASTER_TO and enable circular replication."""
         repl_info = ReplicationInfo(
             primary=str(self.master_to.host),
             binlog=master_to_position["File"],
