@@ -13,7 +13,6 @@ from spicerack.decorators import retry
 from spicerack.icinga import IcingaError
 from spicerack.netbox import MANAGEMENT_IFACE_NAME, NetboxError
 from spicerack.ipmi import IpmiError
-from spicerack.puppet import get_puppet_ca_hostname
 from spicerack.remote import NodeSet, RemoteError, RemoteExecutionError
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -25,8 +24,8 @@ from cookbooks.sre.hosts import (
     DEPLOYMENT_HOST,
     MEDIAWIKI_CONFIG_REPO_PATH,
     KERBEROS_KADMIN_CUMIN_ALIAS,
-    PUPPET_REPO_PATH,
-    PUPPET_PRIVATE_REPO_PATH,
+    PUPPETSERVER_REPO_PATH,
+    PUPPETSERVER_PRIVATE_REPO_PATH,
     COMMON_STEPS_KEY,
     DEPLOYMENT_CHARTS_REPO_PATH,
     AUTHDNS_REPO_PATH,
@@ -233,7 +232,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.task_id = args.task_id
         self.keep_mgmt_dns = args.keep_mgmt_dns
-        self.puppet_master = self.remote.query(get_puppet_ca_hostname())
+        self.puppet_server = spicerack.puppet_server().server_host
         self.kerberos_kadmin = self.remote.query(KERBEROS_KADMIN_CUMIN_ALIAS)
         self.deployment_host = self.remote.query(self.dns.resolve_cname(DEPLOYMENT_HOST))
         self.patterns = get_grep_patterns(self.dns, self.decom_hosts)
@@ -382,8 +381,8 @@ class DecommissionHostRunner(CookbookRunnerBase):
         has_failures = False
         # Check for references in the Puppet and mediawiki-config repositories.
         check_patterns_in_repo((
-            GitRepoPath(remote_host=self.puppet_master, path=PUPPET_REPO_PATH, pathspec=':!manifests/site.pp'),
-            GitRepoPath(remote_host=self.puppet_master, path=PUPPET_PRIVATE_REPO_PATH),
+            GitRepoPath(remote_host=self.puppet_server, path=PUPPETSERVER_REPO_PATH, pathspec=':!manifests/site.pp'),
+            GitRepoPath(remote_host=self.puppet_server, path=PUPPETSERVER_PRIVATE_REPO_PATH),
             GitRepoPath(remote_host=self.deployment_host, path=MEDIAWIKI_CONFIG_REPO_PATH),
             GitRepoPath(remote_host=self.deployment_host, path=DEPLOYMENT_CHARTS_REPO_PATH),
             GitRepoPath(remote_host=self.authdns_hosts, path=AUTHDNS_REPO_PATH),
