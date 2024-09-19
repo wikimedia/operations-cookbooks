@@ -36,7 +36,7 @@ class DatabaseRunnerBase(CookbookRunnerBase):
         self.reason = spicerack.admin_reason(
             f"Databases pre/post steps for DC Switchover {self.dc_from} -> {self.dc_to}",
             task_id=self.task_id)
-        self.phab_prefix = f"{self.__module__} {self.runtime_description} started by {self.reason.owner}"
+        self.phab_prefix = f"{self.__module__} {self.runtime_description}"
 
     @property
     def runtime_description(self):
@@ -45,11 +45,12 @@ class DatabaseRunnerBase(CookbookRunnerBase):
 
     def rollback(self):
         """Save the current actions to Phabricator."""
-        self.phabricator.task_comment(self.task_id, f"{self.phab_prefix} executed with errors:\n{self.actions}")
+        self.phabricator.task_comment(
+            self.task_id, f"{self.phab_prefix} executed by {self.reason.owner} with errors:\n{self.actions}")
 
     def run(self):
         """As required by Spicerack API."""
-        self.phabricator.task_comment(self.task_id, self.phab_prefix)
+        self.phabricator.task_comment(self.task_id, f"{self.phab_prefix} started by {self.reason.owner}")
 
         for section in CORE_SECTIONS:
             logger.info("==> Performing steps for section %s", section)
@@ -66,12 +67,21 @@ class DatabaseRunnerBase(CookbookRunnerBase):
             ask_confirmation(f"Ready to run on section {section}, ok to proceed?")
             try:
                 self.run_on_section(section, master_from, master_to)
+                self.phabricator.task_comment(
+                    self.task_id,
+                    f"{self.phab_prefix} run successfully on section {section}:\n{self.actions[section]}",
+                )
             except AbortError:
                 self.actions[section].failure("**Execution for this section was manually aborted**")
+                self.phabricator.task_comment(
+                    self.task_id,
+                    f"{self.phab_prefix} was aborted for section {section}:\n{self.actions[section]}",
+                )
                 ask_confirmation(f"Run on section {section} was manually aborted. "
                                  "Continue with the remaining sections or abort completely?")
 
-        self.phabricator.task_comment(self.task_id, f"{self.phab_prefix} completed:\n{self.actions}")
+        self.phabricator.task_comment(
+            self.task_id, f"{self.phab_prefix} executed by {self.reason.owner} completed.")
 
     @abstractmethod
     def run_on_section(self, section: str, master_from: Instance, master_to: Instance):
