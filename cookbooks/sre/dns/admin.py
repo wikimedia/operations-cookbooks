@@ -60,7 +60,7 @@ class DNSAdminRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.confctl = spicerack.confctl("geodns")
 
-        self.pooled_state = self.args.action == "pool"
+        self.pooled_state = "yes" if self.args.action == "pool" else "no"
         self.reason = self.args.reason if self.args.reason is not None else "no reason specified"
         self.task_id = self.args.task_id if self.args.task_id is not None else "no task ID specified"
         self.service = "|".join(self.args.service) if self.args.service is not None else self.args.service
