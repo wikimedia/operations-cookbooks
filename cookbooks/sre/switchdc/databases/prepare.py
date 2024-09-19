@@ -73,6 +73,7 @@ class PrepareSection:
         master_to_position = confirm_on_failure(self.wait_master_to_position)
         confirm_on_failure(self.enable_circular_replication, master_to_position)
         confirm_on_failure(self.master_to_restart_replication)
+        confirm_on_failure(self.master_from_check_replication)
 
     def validate(self) -> None:
         """Validate that the given hosts are indeed the two masters for that section."""
@@ -251,9 +252,34 @@ class PrepareSection:
             "Last_SQL_Errno": "0",
         }
         status = self.master_to.show_slave_status()
-        self._validate_slave_status(f"MASTER_FROM {self.master_from.host}", status, expected)
+        self._validate_slave_status(f"MASTER_TO {self.master_to.host}", status, expected)
         self.actions.success(
             f"MASTER_TO {self.master_to.host} replication from MASTER_FROM {self.master_from.host} verified")
+
+    def master_from_check_replication(self) -> None:
+        """Check the replication on MASTER_FROM."""
+        if self.dry_run:  # SHOW SLAVE STATUS would fail without replication set
+            self.actions.success(
+                f"MASTER_FROM {self.master_from.host} skipping replication from MASTER_TO "
+                f"{self.master_to.host} verification after pt-heartbeat"
+            )
+            return
+
+        expected = {
+            "Master_Host": str(self.master_to.host),
+            "Master_User": self.user,
+            "Master_Port": "3306",
+            "Slave_IO_Running": "Yes",
+            "Slave_SQL_Running": "Yes",
+            "Last_IO_Errno": "0",
+            "Last_SQL_Errno": "0",
+        }
+        status = self.master_from.show_slave_status()
+        self._validate_slave_status(f"MASTER_FROM {self.master_from.host}", status, expected)
+        self.actions.success(
+            f"MASTER_FROM {self.master_from.host} replication from MASTER_TO {self.master_to.host} verified after "
+            "pt-heartbeat"
+        )
 
     def _validate_slave_status(self, prefix: str, status: dict[str, str], expected: dict[str, str]):
         """Ensure that SHOW SLAVE STATUS provided keys have the expected values."""
