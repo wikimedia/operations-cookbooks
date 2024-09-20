@@ -108,7 +108,12 @@ class TlsRunner(CookbookRunnerBase):
         if self.need_initial_setup(cert):
             new_cert_bundle = self.generate_new_cert()
         elif self.need_cert_refresh(cert):
-            new_cert_bundle['cert'] = self.refresh_cert()
+            new_cert = self.refresh_cert()
+            if new_cert:  # If we can refresh the cert from the CSR
+                new_cert_bundle['cert'] = new_cert
+            else:  # If we can't (eg. CSR missing), then start over
+                logger.info("%s: Missing CSR on the device, generating a new one.", self.device)
+                new_cert_bundle = self.generate_new_cert()
 
         if new_cert_bundle:
             logger.info("%s: ⚙️ Deploy needed.", self.device)
@@ -156,6 +161,10 @@ class TlsRunner(CookbookRunnerBase):
         """Check a certificate and return if it needs to be renewed"""
         if not cert_x509:
             return True
+        if datetime.datetime.now() > cert_x509.not_valid_after:
+            logger.info("%s: 🕔 Certificate expired. refresh needed.",
+                        self.device)
+            return True
         if datetime.datetime.now() + RENEW_EXPIRATION_DELTA > cert_x509.not_valid_after:
             logger.info("%s: 🕔 Certificate expires in less than %s. refresh needed.",
                         self.device, RENEW_EXPIRATION_DELTA)
@@ -190,10 +199,11 @@ class TlsRunner(CookbookRunnerBase):
                                })
         return self._cfssl_command('gencert', csr_json)
 
-    def refresh_cert(self, csr: Optional[str] = None) -> str:
+    def refresh_cert(self) -> str:
         """Generate a new cert from an existing CSR."""
-        if not csr:
-            csr = self.fetch_csr()
+        csr = self.fetch_csr()
+        if not csr:  # If empty string
+            return csr  # return it for further processing
         return self._cfssl_command('sign', csr)['cert']
 
     def fetch_csr(self) -> str:
@@ -211,6 +221,8 @@ class TlsRunner(CookbookRunnerBase):
         result_parsed = parse_results(results_raw)
         logger.debug("Content of the device's stored CSR: %s.", result_parsed)
         if isinstance(result_parsed, str):
+            if 'error:' in result_parsed:
+                return ''
             return result_parsed
         raise RuntimeError(f'{self.device}: Invalid data returned when trying to fetch CSR.')
 
