@@ -38,6 +38,7 @@ EXCLUDED_SERVICES = {
     "k8s-ingress-aux": "no cluster in codfw",
     "k8s-ingress-ml-staging": "no cluster in eqiad",
     "k8s-ingress-dse": "no cluster in codfw",
+    "kibana7": "T375544: requires manual switching (backup / restore)",
 }
 
 
