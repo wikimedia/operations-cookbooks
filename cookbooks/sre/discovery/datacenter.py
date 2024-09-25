@@ -39,6 +39,7 @@ EXCLUDED_SERVICES = {
     "k8s-ingress-ml-staging": "no cluster in eqiad",
     "k8s-ingress-dse": "no cluster in codfw",
     "kibana7": "T375544: requires manual switching (backup / restore)",
+    "kartotherian-ssl": "T370962, T357547: Capacity issues serving single-DC - revisit when migrated to k8s (T216826)",
 }
 
 
