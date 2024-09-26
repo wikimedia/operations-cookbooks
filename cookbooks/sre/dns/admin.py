@@ -1,7 +1,7 @@
 """Cookbook for GeoDNS pool/depool of a site."""
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from wmflib.constants import ALL_DATACENTERS, US_DATACENTERS
+from wmflib.constants import ALL_DATACENTERS, DATACENTER_NUMBERING_PREFIX, US_DATACENTERS
 from wmflib.interactive import ask_confirmation
 
 SERVICES = ("text-addrs", "text-next", "upload-addrs", "ncredir-addrs")
@@ -149,7 +149,7 @@ class DNSAdminRunner(CookbookRunnerBase):
         print(msg)
         for service in SERVICES:
             service_site_status = [s.name for s in self.confctl.get(geodns=service) if s.pooled == "no"]
-            depooled_sites = ", ".join(service_site_status)
+            depooled_sites = ", ".join(sorted(service_site_status, key=lambda num: DATACENTER_NUMBERING_PREFIX[num]))
             if not depooled_sites:
                 print(f"{service}: pooled at all sites")
             else:
