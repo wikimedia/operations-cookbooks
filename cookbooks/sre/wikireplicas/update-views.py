@@ -28,7 +28,10 @@ class UpdateWikireplicaViews(CookbookBase):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument(
-            "--filter", help="Filter options for maintain-views (e.g. --filter=\"--table globaluser\")"
+            "--table", help="Only update the specified table (e.g. --table globaluser)"
+        )
+        parser.add_argument(
+            "--database", help="Only update the specified database (e.g. --database centralauth)"
         )
         parser.add_argument(
             "-t", "--task-id", help="Phabricator task ID (e.g. T123456) to log to"
@@ -56,7 +59,8 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
         self.username = spicerack.username
         self.actions = spicerack.actions
 
-        self.filter = args.filter
+        self.table = args.table
+        self.database = args.database
         self.task_id = args.task_id
 
         self.phabricator: Optional[Phabricator] = None
@@ -103,8 +107,19 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
     def _run_maintain_views_on_host(self, remote_hosts: RemoteHosts):
         host_actions = self.actions[str(remote_hosts)]
 
+        maintain_views_options = "--replace-all --auto-depool"
+
+        if self.database:
+            maintain_views_options += f" --databases {self.database}"
+        else:
+            maintain_views_options += " --all-databases"
+
+        if self.table:
+            maintain_views_options += f" --table {self.table}"
+
         try:
-            command = f"maintain-views --all-databases --replace-all --auto-depool {self.filter}"
+
+            command = f"maintain-views {maintain_views_options}"
             remote_hosts.run_sync(command)
             host_actions.success(f"Ran '{command}'")
         except RemoteExecutionError:
