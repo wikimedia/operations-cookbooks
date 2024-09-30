@@ -1,17 +1,18 @@
 """Upgrade a kubernetes cluster to a new version."""
+
 import logging
 from argparse import ArgumentParser, Namespace
 from datetime import timedelta
 from typing import Optional, Union
 
+from cumin import nodeset
 from spicerack import Spicerack
 from spicerack.alerting import AlertingHosts
 from spicerack.alertmanager import Alertmanager
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteHosts
-from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
-
-from cumin import nodeset
+from wmflib.interactive import (ask_confirmation, confirm_on_failure,
+                                ensure_shell_is_durable)
 
 from cookbooks.sre.hosts import OS_VERSIONS
 from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES, PROMETHEUS_MATCHERS
@@ -49,57 +50,68 @@ class UpgradeK8sCluster(CookbookBase):
     def argument_parser(self) -> ArgumentParser:
         """Parse the command line arguments."""
         parser = super().argument_parser()
-        parser.add_argument('--reason', required=True, help='Admin reason')
+        parser.add_argument("--reason", required=True, help="Admin reason")
         parser.add_argument(
-            '--k8s-cluster', required=True,
-            help='K8s cluster to use for downtimes, sanity checks and Cumin aliases',
-            choices=ALLOWED_CUMIN_ALIASES.keys())
-        parser.add_argument(
-            '--etcd-query', required=False,
-            help=(
-                'Optional Cumin query to use a subset of the etcd nodes '
-                '(You need to use the Cumin global grammar, see '
-                'https://wikitech.wikimedia.org/wiki/Cumin#Global_grammar_host_selection)'
-            )
-        )
-        parser.add_argument(
-            '--control-plane-query', required=False,
-            help=(
-                'Optional Cumin query to use a subset of the control plane nodes '
-                '(You need to use the Cumin global grammar, see '
-                'https://wikitech.wikimedia.org/wiki/Cumin#Global_grammar_host_selection)'
-            )
-        )
-        parser.add_argument(
-            '--workers-query', required=False,
-            help=(
-                'Optional Cumin query to use a subset of the worker nodes '
-                '(You need to use the Cumin global grammar, see '
-                'https://wikitech.wikimedia.org/wiki/Cumin#Global_grammar_host_selection)'
-            )
-        )
-        parser.add_argument(
-            '--os',
+            "--k8s-cluster",
             required=True,
-            help='Debian OS codename to use for the reimages',
-            choices=OS_VERSIONS)
+            help="K8s cluster to use for downtimes, sanity checks and Cumin aliases",
+            choices=ALLOWED_CUMIN_ALIASES.keys(),
+        )
+        parser.add_argument(
+            "--etcd-query",
+            required=False,
+            help=(
+                "Optional Cumin query to use a subset of the etcd nodes "
+                "(You need to use the Cumin global grammar, see "
+                "https://wikitech.wikimedia.org/wiki/Cumin#Global_grammar_host_selection)"
+            ),
+        )
+        parser.add_argument(
+            "--control-plane-query",
+            required=False,
+            help=(
+                "Optional Cumin query to use a subset of the control plane nodes "
+                "(You need to use the Cumin global grammar, see "
+                "https://wikitech.wikimedia.org/wiki/Cumin#Global_grammar_host_selection)"
+            ),
+        )
+        parser.add_argument(
+            "--workers-query",
+            required=False,
+            help=(
+                "Optional Cumin query to use a subset of the worker nodes "
+                "(You need to use the Cumin global grammar, see "
+                "https://wikitech.wikimedia.org/wiki/Cumin#Global_grammar_host_selection)"
+            ),
+        )
+        parser.add_argument(
+            "--os",
+            required=True,
+            help="Debian OS codename to use for the reimages",
+            choices=OS_VERSIONS,
+        )
         etcd_group = parser.add_mutually_exclusive_group()
         etcd_group.add_argument(
-            '--etcd-wipe-only',
-            help='Wipe data on etcd without reimage',
-            action='store_true', default=False)
+            "--etcd-wipe-only",
+            help="Wipe data on etcd without reimage",
+            action="store_true",
+            default=False,
+        )
         etcd_group.add_argument(
-            '--skip-etcd',
-            help='Skip etcd nodes',
-            action='store_true', default=False)
+            "--skip-etcd", help="Skip etcd nodes", action="store_true", default=False
+        )
         parser.add_argument(
-            '--skip-control-plane',
-            help='Skip control plane nodes',
-            action='store_true', default=False)
+            "--skip-control-plane",
+            help="Skip control plane nodes",
+            action="store_true",
+            default=False,
+        )
         parser.add_argument(
-            '--skip-workers',
-            help='Skip worker nodes',
-            action='store_true', default=False)
+            "--skip-workers",
+            help="Skip worker nodes",
+            action="store_true",
+            default=False,
+        )
 
         return parser
 
@@ -121,15 +133,21 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
         self.spicerack_remote = self.spicerack.remote()
 
         if not self.args.skip_etcd:
-            self.etcd_nodes: Optional[RemoteHosts] = self.spicerack_remote.query(self.etcd_query)
+            self.etcd_nodes: Optional[RemoteHosts] = self.spicerack_remote.query(
+                self.etcd_query
+            )
         else:
             self.etcd_nodes = None
         if not self.args.skip_control_plane:
-            self.control_plane_nodes: Optional[RemoteHosts] = self.spicerack_remote.query(self.control_plane_query)
+            self.control_plane_nodes: Optional[RemoteHosts] = (
+                self.spicerack_remote.query(self.control_plane_query)
+            )
         else:
             self.control_plane_nodes = None
         if not self.args.skip_workers:
-            self.worker_nodes: Optional[RemoteHosts] = self.spicerack_remote.query(self.workers_query)
+            self.worker_nodes: Optional[RemoteHosts] = self.spicerack_remote.query(
+                self.workers_query
+            )
         else:
             self.worker_nodes = None
 
@@ -165,16 +183,15 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
         components = [
             ("etcd", self.etcd_nodes),
             ("control-plane", self.control_plane_nodes),
-            ("workers", self.worker_nodes)
+            ("workers", self.worker_nodes),
         ]
         for name, remote in components:
             if remote:
-                logger.info(
-                    "Downtime and disable puppet for %s", name
-                )
+                logger.info("Downtime and disable puppet for %s", name)
                 alerts = self.spicerack.alerting_hosts(remote.hosts)
                 downtime_id = alerts.downtime(
-                    self.admin_reason, duration=timedelta(minutes=120 * total_hosts))
+                    self.admin_reason, duration=timedelta(minutes=120 * total_hosts)
+                )
                 puppet = self.spicerack.puppet(remote)
                 puppet.disable(self.admin_reason)
                 self.downtimes.append((alerts, downtime_id))
@@ -188,15 +205,17 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
     def _check_etcd_cluster_status(self):
         logger.info(
             "Checking member list on every node to see if the view "
-            "of the cluster is consistent...")
+            "of the cluster is consistent..."
+        )
         confirm_on_failure(
             self.etcd_nodes.run_sync,  # type: ignore[union-attr]
-            "ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 member list"
+            "ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 member list",
         )
         ask_confirmation(
             "You should see a consistent response for all nodes in the above "
             "output. Please continue if everything looks good, otherwise "
-            "check manually on the nodes before proceeding.")
+            "check manually on the nodes before proceeding."
+        )
 
     @property
     def runtime_description(self):
@@ -224,8 +243,10 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
         # to reduce the noise as much as possible.
         all_prom_cluster_alerts = self.spicerack.alertmanager()
         all_prom_cluster_alerts_id = all_prom_cluster_alerts.downtime(
-            self.admin_reason, matchers=PROMETHEUS_MATCHERS[self.k8s_cluster],
-            duration=timedelta(minutes=120 * len(affected_nodes)))
+            self.admin_reason,
+            matchers=PROMETHEUS_MATCHERS[self.k8s_cluster],
+            duration=timedelta(minutes=120 * len(affected_nodes)),
+        )
         self.downtimes.append((all_prom_cluster_alerts, all_prom_cluster_alerts_id))
 
         if self.control_plane_nodes:
@@ -251,21 +272,19 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
             self._check_etcd_cluster_status()
             # Get one etcd node and run the command only on it.
             etcd_node = next(self.etcd_nodes.split(len(self.etcd_nodes)))
-            ask_confirmation(
-                f"Going to wipe the etcd v2/v3 endpoints on {etcd_node}.")
+            ask_confirmation(f"Going to wipe the etcd v2/v3 endpoints on {etcd_node}.")
             # v2 API
             confirm_on_failure(
                 etcd_node.run_sync,
-                'etcdctl -C https://$(hostname -f):2379 rm -r /calico'
+                "etcdctl -C https://$(hostname -f):2379 rm -r /calico",
             )
             # v3 API
             confirm_on_failure(
                 etcd_node.run_sync,
-                'ETCDCTL_API=3 etcdctl --endpoints https://$(hostname -f):2379 del "" --from-key=true'
+                'ETCDCTL_API=3 etcdctl --endpoints https://$(hostname -f):2379 del "" --from-key=true',
             )
 
-        logger.info(
-            "All cluster components stopped or wiped!")
+        logger.info("All cluster components stopped or wiped!")
 
         ask_confirmation(
             "You may need to merge a puppet change to upgrade the K8s version, "
@@ -276,12 +295,13 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
             if not self.args.etcd_wipe_only:
                 ask_confirmation(
                     f"The etcd hosts to reimage are {self.etcd_nodes.hosts}. \n"
-                    "Does the list look good? ")
+                    "Does the list look good? "
+                )
                 for host in self.etcd_nodes.hosts:
                     # We assume that they are all Ganeti nodes
                     return_code = self.spicerack.run_cookbook(
                         "sre.ganeti.reimage",
-                        ["--no-downtime", "--os", self.args.os, host.split(".")[0]]
+                        ["--no-downtime", "--os", self.args.os, host.split(".")[0]],
                     )
                     if return_code:
                         ask_confirmation(
@@ -301,12 +321,13 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
             ask_confirmation(
                 f"The control plane hosts to reimage are {self.control_plane_nodes.hosts}. \n"
                 "Does the list look good? Please note: we assume that they are "
-                "Ganeti node, abort if it is not the case.")
+                "Ganeti node, abort if it is not the case."
+            )
             for host in self.control_plane_nodes.hosts:
                 # We assume that they are all Ganeti nodes.
                 return_code = self.spicerack.run_cookbook(
                     "sre.ganeti.reimage",
-                    ["--no-downtime", "--os", self.args.os, host.split(".")[0]]
+                    ["--no-downtime", "--os", self.args.os, host.split(".")[0]],
                 )
                 if return_code:
                     ask_confirmation(
@@ -314,27 +335,31 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                         "failed and you'd need to check. Do you want to "
                         "continue anyway?"
                     )
-            logger.info("Control plane nodes reimaged! "
-                        "Checking on every node to see if the view of the cluster is "
-                        "consistent...")
+            logger.info(
+                "Control plane nodes reimaged! "
+                "Checking on every node to see if the view of the cluster is "
+                "consistent..."
+            )
             confirm_on_failure(
                 self.control_plane_nodes.run_sync,
-                "/usr/bin/kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info"
+                "/usr/bin/kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info",
             )
             ask_confirmation(
                 "You should see a consistent response for all nodes in the above "
                 "output. Please continue if everything looks good, otherwise "
-                "check manually on the nodes before proceeding.")
+                "check manually on the nodes before proceeding."
+            )
 
         if self.worker_nodes:
             ask_confirmation(
                 f"The worker hosts to reimage are {self.worker_nodes.hosts}. \n"
-                "Does the list look good?")
+                "Does the list look good?"
+            )
             for host in self.worker_nodes.hosts:
                 hostname = host.split(".")[0]
                 return_code = self.spicerack.run_cookbook(
                     "sre.hosts.reimage",
-                    ["--no-downtime", "--os", self.args.os, hostname]
+                    ["--no-downtime", "--os", self.args.os, hostname],
                 )
                 if return_code:
                     ask_confirmation(
