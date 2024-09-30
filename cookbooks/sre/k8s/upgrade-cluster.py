@@ -11,8 +11,11 @@ from spicerack.alerting import AlertingHosts
 from spicerack.alertmanager import Alertmanager
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteHosts
-from wmflib.interactive import (ask_confirmation, confirm_on_failure,
-                                ensure_shell_is_durable)
+from wmflib.interactive import (
+    ask_confirmation,
+    confirm_on_failure,
+    ensure_shell_is_durable,
+)
 
 from cookbooks.sre.hosts import OS_VERSIONS
 from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES, PROMETHEUS_MATCHERS
@@ -272,12 +275,7 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
             self._check_etcd_cluster_status()
             # Get one etcd node and run the command only on it.
             etcd_node = next(self.etcd_nodes.split(len(self.etcd_nodes)))
-            ask_confirmation(f"Going to wipe the etcd v2/v3 endpoints on {etcd_node}.")
-            # v2 API
-            confirm_on_failure(
-                etcd_node.run_sync,
-                "etcdctl -C https://$(hostname -f):2379 rm -r /calico",
-            )
+            ask_confirmation(f"Going to wipe the etcd v3 endpoints on {etcd_node}.")
             # v3 API
             confirm_on_failure(
                 etcd_node.run_sync,
@@ -298,10 +296,21 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                     "Does the list look good? "
                 )
                 for host in self.etcd_nodes.hosts:
-                    # We assume that they are all Ganeti nodes
+                    # Skip etcd nodes that are also control plane nodes (stacked control planes)
+                    # and reimage those in the next step.
+                    if self.control_plane_nodes and (
+                        host in self.control_plane_nodes.hosts
+                    ):
+                        logger.info(
+                            "Skipping etcd reimage for %s since it is a stacked control plane "
+                            "(will reimage in the next step)",
+                            host,
+                        )
+                        continue
+                    hostname = host.split(".")[0]
                     return_code = self.spicerack.run_cookbook(
-                        "sre.ganeti.reimage",
-                        ["--no-downtime", "--os", self.args.os, host.split(".")[0]],
+                        "sre.hosts.reimage",
+                        ["--force", "--no-downtime", "--os", self.args.os, hostname],
                     )
                     if return_code:
                         ask_confirmation(
@@ -320,14 +329,13 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
         if self.control_plane_nodes:
             ask_confirmation(
                 f"The control plane hosts to reimage are {self.control_plane_nodes.hosts}. \n"
-                "Does the list look good? Please note: we assume that they are "
-                "Ganeti node, abort if it is not the case."
+                "Does the list look good?"
             )
             for host in self.control_plane_nodes.hosts:
-                # We assume that they are all Ganeti nodes.
+                hostname = host.split(".")[0]
                 return_code = self.spicerack.run_cookbook(
-                    "sre.ganeti.reimage",
-                    ["--no-downtime", "--os", self.args.os, host.split(".")[0]],
+                    "sre.hosts.reimage",
+                    ["--force", "--no-downtime", "--os", self.args.os, hostname],
                 )
                 if return_code:
                     ask_confirmation(
@@ -359,7 +367,7 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                 hostname = host.split(".")[0]
                 return_code = self.spicerack.run_cookbook(
                     "sre.hosts.reimage",
-                    ["--no-downtime", "--os", self.args.os, hostname],
+                    ["--force", "--no-downtime", "--os", self.args.os, hostname],
                 )
                 if return_code:
                     ask_confirmation(
