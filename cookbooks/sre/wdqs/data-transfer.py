@@ -241,7 +241,7 @@ class DataTransferRunner(CookbookRunnerBase):
                     self.r_dest.run_sync('chown blazegraph: "{file}"'.format(file=file))
 
                 if bg_instance_name not in ('commons'):
-                    logger.info(f'Setting file {data_path}/data_loaded to {self.blazegraph_instance}')
+                    logger.info('Setting file %s/data_loaded to %s', data_path, self.blazegraph_instance)
                     self.r_dest.run_sync('echo {blazegraph_instance} > {data_path}/data_loaded'.format(
                         blazegraph_instance=self.blazegraph_instance, data_path=data_path))
 
