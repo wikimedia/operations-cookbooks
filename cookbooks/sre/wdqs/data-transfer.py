@@ -90,6 +90,8 @@ class DataTransfer(CookbookBase):
         parser.add_argument('--lvs-strategy', required=True, help='which hosts to depool/repool', choices=LVS_STRATEGY)
         parser.add_argument('--encrypt', action='store_true', help='Enable encryption on transfer')
         parser.add_argument('--force', action='store_true', help='Delete files on target before transfer')
+        parser.add_argument('--no-check-graph-type', action='store_true', help="Don't check hosts have same graph type"
+                            " (use this for initial host setup)")
 
         return parser
 
@@ -124,6 +126,7 @@ class DataTransferRunner(CookbookRunnerBase):
         self.lvs_strategy = args.lvs_strategy
         self.encrypt = args.encrypt
         self.force = args.force
+        self.no_check_graph_type = args.no_check_graph_type
 
         self.prometheus = spicerack.prometheus()
         self.kafka = spicerack.kafka()
@@ -199,6 +202,16 @@ class DataTransferRunner(CookbookRunnerBase):
             logger.info('sleeping for 120s')  # TODO poll instead of sleep
             sleep(120)
 
+    @staticmethod
+    def get_graph_type_from_host(remote_host, data_loaded_flag_filepath):
+        """Given a remote_host and string representing data loaded filepath, return graph type as string"""
+        graph_type_output = remote_host.run_sync(f'cat {data_loaded_flag_filepath}')
+        for _, output in graph_type_output:
+            graph_type = output.message().decode().splitlines()[0]  # TODO: try catch or something maybe
+            logger.info('found graph_type of %s', graph_type)
+            return graph_type
+        raise ValueError("Failed to extract graph_type")
+
     def run_for_instance(self, bg_instance_name, instance):
         """Required by Spicerack API."""
         host_kind = check_hosts_are_valid(self.remote_hosts, self.remote)
@@ -206,12 +219,21 @@ class DataTransferRunner(CookbookRunnerBase):
             raise ValueError('Instance (valid_on:{}) is not valid for selected hosts ({})'.format(
                 instance['valid_on'], host_kind))
 
+        # Check graph type on source and dest
+        data_loaded_flag_filepath = instance['data_path'] + '/data_loaded'
+        if not self.no_check_graph_type:
+            source_graph_type = DataTransferRunner.get_graph_type_from_host(self.r_source, data_loaded_flag_filepath)
+            dest_graph_type = DataTransferRunner.get_graph_type_from_host(self.r_dest, data_loaded_flag_filepath)
+            if source_graph_type != dest_graph_type:
+                raise ValueError("source host {} has graph type of {} but dest host {} has graph type of {}, aborting"
+                                 .format(self.r_source, source_graph_type, self.r_dest, dest_graph_type))
+            logger.info('Both hosts have graph type of %s, proceeding', source_graph_type)
+
         alerting_hosts = self.alerting_hosts(self.remote_hosts.hosts)
 
         services = cast(list, instance['services'])
         files = instance['files']
         if bg_instance_name != 'categories':
-            data_loaded_flag_filepath = instance['data_path'] + '/data_loaded'
             files.append(data_loaded_flag_filepath)
         logger.info("Decided on ultimately transferring the following files: %s", files)
 
