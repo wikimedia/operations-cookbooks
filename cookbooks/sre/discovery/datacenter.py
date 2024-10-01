@@ -40,6 +40,7 @@ EXCLUDED_SERVICES = {
     "k8s-ingress-dse": "no cluster in codfw",
     "kibana7": "T375544: requires manual switching (backup / restore)",
     "kartotherian-ssl": "T370962, T357547: Capacity issues serving single-DC - revisit when migrated to k8s (T216826)",
+    "swift-https": "T370962: Capacity issues serving single-DC - revisit with a validated capacity model (T376516)",
 }
 
 
