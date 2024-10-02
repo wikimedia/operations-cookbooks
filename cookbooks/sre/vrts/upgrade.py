@@ -37,7 +37,7 @@ class Upgrade(CookbookBase):
         parser.add_argument(
             "--task-id",
             "-t",
-            required=True,
+            required=False,
             help="An task ID that contains details of the new version and to refer to in the downtime message",
         )
         parser.add_argument(
