@@ -27,7 +27,14 @@ class UpdateWikireplicaViews(CookbookBase):
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
-        parser.add_argument(
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument(
+            "--clean",
+            action="store_true",
+            help="Drop views that are no longer present in the yaml file. "
+            "This option is not compatible with --table."
+        )
+        group.add_argument(
             "--table", help="Only update the specified table (e.g. --table globaluser)"
         )
         parser.add_argument(
@@ -59,6 +66,7 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
         self.username = spicerack.username
         self.actions = spicerack.actions
 
+        self.clean = args.clean
         self.table = args.table
         self.database = args.database
         self.task_id = args.task_id
@@ -109,6 +117,9 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
 
         maintain_views_options = "--replace-all --auto-depool"
 
+        if self.clean:
+            maintain_views_options += " --clean"
+
         if self.database:
             maintain_views_options += f" --databases {self.database}"
         else:
@@ -118,7 +129,6 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
             maintain_views_options += f" --table {self.table}"
 
         try:
-
             command = f"maintain-views {maintain_views_options}"
             remote_hosts.run_sync(command)
             host_actions.success(f"Ran '{command}'")
