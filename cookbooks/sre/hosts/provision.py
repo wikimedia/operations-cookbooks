@@ -85,6 +85,7 @@ class Provision(CookbookBase):
                   "management passwords also for the first connection"))
         parser.add_argument('--enable-virtualization', action='store_true',
                             help='Keep virtualization capabilities on. They are turned off if not speficied.')
+        parser.add_argument('--uefi', action='store_true', help='Set boot mode to UEFI and HTTP')
         parser.add_argument('host', help='Short hostname of the host to provision, not FQDN')
 
         return parser
@@ -202,7 +203,7 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         # More info: https://phabricator.wikimedia.org/T365372#10213162
         self.bios_changes = {
             "Attributes": {
-                "BootModeSelect": "Legacy",
+                "BootModeSelect": 'UEFI' if self.args.uefi else 'Legacy',
                 "ConsoleRedirection": False,
                 "QuietBoot": False,
                 "LegacySerialRedirectionPort": "COM1",
@@ -437,9 +438,24 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         environment. Set also all options starting with "RSC_" to Legacy as well,
         since the nomenclature is used for PCIe riser NICs.
         """
-        for (key, value) in bios_attributes.items():
-            if "EFI" == str(value) or key.startswith("RSC_"):
-                self.bios_changes["Attributes"][key] = "Legacy"
+        if self.args.uefi:
+            old_value = "Legacy"
+            new_value = "EFI"
+            self.bios_changes["Attributes"]['IPv4HTTPSupport'] = 'Enabled'
+            self.bios_changes["Attributes"]['IPv4PXESupport'] = 'Disabled'
+            self.bios_changes["Attributes"]['IPv6HTTPSupport'] = 'Disabled'
+            self.bios_changes["Attributes"]['IPv6PXESupport'] = 'Disabled'
+        else:
+            old_value = "EFI"
+            new_value = "Legacy"
+            self.bios_changes["Attributes"]['IPv4HTTPSupport'] = 'Disabled'
+            self.bios_changes["Attributes"]['IPv4PXESupport'] = 'Enabled'
+            self.bios_changes["Attributes"]['IPv6HTTPSupport'] = 'Disabled'
+            self.bios_changes["Attributes"]['IPv6PXESupport'] = 'Disabled'
+
+        for key, value in bios_attributes.items():
+            if old_value == str(value) or key.startswith("RSC_"):
+                self.bios_changes["Attributes"][key] = new_value
 
 
 class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
@@ -495,7 +511,7 @@ class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-insta
         # BIOS/iDRAC/etc.. settings for Dell hosts.
         self.config_changes = {
             'BIOS.Setup.1-1': {
-                'BootMode': 'Bios',
+                'BootMode': 'Uefi' if self.args.uefi else 'Bios',
                 'CpuInterconnectBusLinkPower': 'Enabled',
                 'EnergyPerformanceBias': 'BalancedPerformance',
                 'PcieAspmL1': 'Enabled',
@@ -644,6 +660,13 @@ class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-insta
             self.config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedir'
             self.config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Com2'
 
+        if self.args.uefi:
+            self.config_changes['BIOS.Setup.1-1']['HttpDev1EnDis'] = 'Enabled'
+            self.config_changes['BIOS.Setup.1-1']['HttpDev1DhcpEnDis'] = 'Enabled'
+            self.config_changes['BIOS.Setup.1-1']['HttpDev1DnsDhcpEnDis'] = 'Enabled'
+            self.config_changes['BIOS.Setup.1-1']['HttpDev1Protocol'] = 'IPv4'
+            self.config_changes['BIOS.Setup.1-1']['HttpDev1VlanEnDis'] = 'Disabled'
+
         self._config_pxe(config)
         was_changed = config.update(self.config_changes)
         if not was_changed:
@@ -722,7 +745,7 @@ class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-insta
         return pxe_nic
 
     def _config_pxe(self, config):
-        """Configure PXE boot on the correct NIC automatically or ask the user if unable to detect it.
+        """Configure PXE or UEFI HTTP boot on the correct NIC automatically or ask the user if unable to detect it.
 
         Example keys names for DELL:
 
@@ -741,20 +764,36 @@ class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-insta
         if not all_nics:
             raise RuntimeError('Unable to find any NIC.')
         pxe_nic = self._get_pxe_nic(all_nics)
-        logger.info('Enabling PXE boot on NIC %s', pxe_nic)
-        for nic in all_nics:
-            if nic == pxe_nic:
-                self.config_changes[pxe_nic] = {'LegacyBootProto': 'PXE'}
-            else:
-                self.config_changes[nic] = {'LegacyBootProto': 'NONE'}
+        if self.args.uefi:
+            logger.info('Enabling UEFI HTTP boot on NIC %s', pxe_nic)
+            self.config_changes['BIOS.Setup.1-1']['HttpDev1Interface'] = pxe_nic
+        else:
+            logger.info('Enabling PXE boot on NIC %s', pxe_nic)
+            for nic in all_nics:
+                if nic == pxe_nic:
+                    self.config_changes[pxe_nic] = {'LegacyBootProto': 'PXE'}
+                else:
+                    self.config_changes[nic] = {'LegacyBootProto': 'NONE'}
 
         # Set SetBootOrderEn to disk, primary NIC
-        new_order = ['HardDisk.List.1-1', pxe_nic]
+        if self.args.uefi:
+            # TODO to be verified
+            # Uefi have a dedicated/virtual NIC (HttpDevice), which match HttpDev1Interface
+            # As well as a different disk name
+            new_order = ['Disk.SATAEmbedded.A-1', 'NIC.HttpDevice.1-1']
+        else:
+            new_order = ['HardDisk.List.1-1', pxe_nic]
         # SetBootOrderEn defaults to comma-separated, but some hosts might differ
         separator = ', ' if ', ' in config.components['BIOS.Setup.1-1']['SetBootOrderEn'] else ','
         self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = separator.join(new_order)
-        # BiosBootSeq defaults to comma-space-separated, but some hosts might differ
-        # Use a default if the host is in UEFI mode and dosn't have the setting at all.
-        bios_boot_seq = config.components['BIOS.Setup.1-1'].get('BiosBootSeq', ', ')
-        separator = ',' if ',' in bios_boot_seq and ', ' not in bios_boot_seq else ', '
-        self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_order)
+        if self.args.uefi:
+            uefi_boot_seq = config.components['BIOS.Setup.1-1'].get('UefiBootSeq', ', ')
+            # on my test host UefiBootSeq have a space after the coma while SetBootOrderEn doesn't
+            separator = ',' if ',' in uefi_boot_seq and ', ' not in uefi_boot_seq else ', '
+            self.config_changes['BIOS.Setup.1-1']['UefiBootSeq'] = separator.join(new_order)
+        else:
+            # BiosBootSeq defaults to comma-space-separated, but some hosts might differ
+            # Use a default if the host is in UEFI mode and dosn't have the setting at all.
+            bios_boot_seq = config.components['BIOS.Setup.1-1'].get('BiosBootSeq', ', ')
+            separator = ',' if ',' in bios_boot_seq and ', ' not in bios_boot_seq else ', '
+            self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_order)
