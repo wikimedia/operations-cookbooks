@@ -22,6 +22,7 @@ from spicerack.ganeti import Ganeti, GanetiRAPI, GntInstance
 from spicerack.icinga import IcingaError
 from spicerack.ipmi import Ipmi
 from spicerack.puppet import PuppetMaster, PuppetServer
+from spicerack.redfish import ChassisResetPolicy
 from spicerack.remote import RemoteError, RemoteExecutionError, RemoteCheckError
 from wmflib.interactive import AbortError, ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
 
@@ -222,7 +223,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.dhcp_config = self._get_dhcp_config_mac()
         else:
             self.mgmt_fqdn = self.netbox_server.mgmt_fqdn
-            self.ipmi: Ipmi = self.spicerack.ipmi(self.mgmt_fqdn)
+            self.redfish = spicerack.redfish(self.host)
+            self.is_uefi = self.redfish.is_uefi
+            if not self.is_uefi:
+                self.ipmi: Ipmi = self.spicerack.ipmi(self.mgmt_fqdn)
             self.dhcp_config = self._get_dhcp_config_opt82(force_tftp=self.args.force_dhcp_tftp)
 
         self._validate()
@@ -391,22 +395,51 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             else switch_iface.device.name
         )
 
-        # This is a workaround to avoid PXE booting issues, like
-        # "Failed to load ldlinux.c32" before getting to Debian Install.
-        # More info: https://phabricator.wikimedia.org/T363576#9997915
-        # We also got confirmation from Supermicro/Broadcom that they
-        # don't support lpxelinux.0, so for this vendor we force the TFTP flag
-        # even if it wasn't set.
-        if force_tftp or \
-                self.netbox_data['device_type']['manufacturer']['slug'] == SUPERMICRO_VENDOR_SLUG:
-            logger.info('Force pxelinux.0 and TFTP only for DHCP settings.')
-            dhcp_filename = f"/srv/tftpboot/{self.args.os}-installer/pxelinux.0"
+        if self.is_uefi:
+            # After the iPXE boot loader is fetched via UEFI HTTP Boot, iPXE
+            # tries to fetch autoexec.ipxe from the base directory of the boot
+            # loader URL. However, on some Dell servers iPXE is not able to
+            # obtain the domain name server, though this works on Supermicro
+            # servers and via Grub. Consequently, iPXE is not able to resolve
+            # the boot URL and pull down autoexec.ipxe. As a workaround, use
+            # the IP:
+            # - iPXE bug report: https://github.com/ipxe/ipxe/issues/1316
+            # - Failed: Dell R440 Bios version: 2.22.1, purchased 2019-04-01
+            # - Succeeded: Dell R450 Bios version: 1.15.2, purchased 2023-04-10
+            # We could re-evaluate this hack as old hardware ages out of the
+            # fleet.
+            apt_ip = self.dns.resolve_ipv4('apt.wikimedia.org')[0]
+            dhcp_filename = f'http://{apt_ip}/efiboot/snponly.efi'
             dhcp_options = {
-                "pxelinux.pathprefix": f"/srv/tftpboot/{self.args.os}-installer/"
+                # HACK: root-path is used by ipxe to construct the installer URL
+                # we could in the future have ipxe query the os version via some
+                # other method.
+                'root-path': f'{self.args.os}-installer',
+                'vendor-class-identifier': 'HTTPClient',
             }
+            # Prevent the debian-installer from receiving the filename in our
+            # DHCP offer as the debian-installer will try to load any URL as a
+            # preseed config
+            dhcp_filename_exclude_vendor = "d-i"
         else:
-            dhcp_filename = ""
-            dhcp_options = {}
+            # This is a workaround to avoid PXE booting issues, like
+            # "Failed to load ldlinux.c32" before getting to Debian Install.
+            # More info: https://phabricator.wikimedia.org/T363576#9997915
+            # We also got confirmation from Supermicro/Broadcom that they
+            # don't support lpxelinux.0, so for this vendor we force the TFTP flag
+            # even if it wasn't set.
+            if force_tftp or \
+                    self.netbox_data['device_type']['manufacturer']['slug'] == SUPERMICRO_VENDOR_SLUG:
+                logger.info('Force pxelinux.0 and TFTP only for DHCP settings.')
+                dhcp_filename = f"/srv/tftpboot/{self.args.os}-installer/pxelinux.0"
+                dhcp_options = {
+                    "pxelinux.pathprefix": f"/srv/tftpboot/{self.args.os}-installer/"
+                }
+            else:
+                dhcp_filename = ""
+                dhcp_options = {}
+            dhcp_filename_exclude_vendor = ""
+
         return DHCPConfOpt82(
             hostname=self.host,
             ipv4=ipaddress.IPv4Interface(netbox_host.primary_ip4).ip,
@@ -418,6 +451,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             media_type=self.args.pxe_media,
             dhcp_options=dhcp_options,
             dhcp_filename=dhcp_filename,
+            dhcp_filename_exclude_vendor=dhcp_filename_exclude_vendor,
         )
 
     def _install_os(self):
@@ -433,12 +467,18 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.ganeti_instance.startup()
             self.host_actions.success('Host rebooted via gnt-instance')
         else:
-            # Prepare a physical host for reboot and PXE boot
+            # Prepare a physical host for reboot and PXE or UEFI HTTP boot
             # for reimaging.
-            self.ipmi.force_pxe()
-            self.host_actions.success('Forced PXE for next reboot')
-            self.ipmi.reboot()
-            self.host_actions.success('Host rebooted via IPMI')
+            if self.is_uefi:
+                self.redfish.force_http_boot_once()
+                self.host_actions.success('Forced UEFI HTTP Boot for next reboot')
+                self.redfish.chassis_reset(ChassisResetPolicy.FORCE_RESTART)
+                self.host_actions.success('Host rebooted via Redfish')
+            else:
+                self.ipmi.force_pxe()
+                self.host_actions.success('Forced PXE for next reboot')
+                self.ipmi.reboot()
+                self.host_actions.success('Host rebooted via IPMI')
 
         self.remote_installer.wait_reboot_since(pxe_reboot_time, print_progress_bars=False)
         time.sleep(30)  # Avoid race conditions, the host is in the d-i, need to wait anyway
@@ -464,9 +504,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.ganeti_instance.set_boot_media('disk')
             self.host_actions.success('Set boot media to disk')
         else:
-            self.ipmi.remove_boot_override()
-            self.ipmi.check_bootparams()
-            self.host_actions.success('Checked BIOS boot parameters are back to normal')
+            if not self.is_uefi:
+                self.ipmi.remove_boot_override()
+                self.ipmi.check_bootparams()
+                self.host_actions.success('Checked BIOS boot parameters are back to normal')
 
         try:
             self.remote_installer.wait_reboot_since(di_reboot_time, print_progress_bars=False)
