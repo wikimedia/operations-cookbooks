@@ -242,6 +242,9 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             "StaticNameServers": [DNS_ADDRESS],
             "StatelessAddressAutoConfig": {
                 'IPv6AutoConfigEnabled': False
+            },
+            'DHCPv4': {
+                'DHCPEnabled': False,
             }
         }
 
