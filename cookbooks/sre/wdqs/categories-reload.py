@@ -8,7 +8,7 @@ from time import sleep
 from spicerack import RemoteHosts, Reason, PuppetHosts, ConftoolEntity, AlertingHosts
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 
-from cookbooks.sre.wdqs import check_hosts_are_valid, StopWatch, is_behind_lvs
+from cookbooks.sre.wdqs import StopWatch, is_behind_lvs
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,6 @@ class CategoryReload(CookbookBase):
         """Get category reload cookbook runner."""
         remote = self.spicerack.remote()
         remote_host = remote.query(args.host)
-        check_hosts_are_valid(remote_host, remote)
 
         if len(remote_host) != 1:
             raise ValueError(f"Only one host is needed. Not {len(remote_host)}({remote_host})")
