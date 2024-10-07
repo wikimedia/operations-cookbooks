@@ -556,7 +556,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
     def _cached_select_firmwarefile(self, *args, **kargs):
         return self._select_firmwarefile(*args, **kargs)
 
-    def _update(
+    def _update(  # pylint: disable=too-many-arguments
         self,
         redfish_host: Redfish,
         netbox_host: NetboxServer,

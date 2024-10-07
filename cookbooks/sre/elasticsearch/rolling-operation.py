@@ -124,16 +124,25 @@ class RollingOperation(CookbookBase):
             raise RuntimeError("Please specify a valid operation.")
 
         return RollingOperationRunner(
-            self.spicerack, args.task_id, elasticsearch_clusters, clustergroup,
-            reason, start_datetime, nodes_per_run, with_lvs, wait_for_green,
-            allow_yellow, operation)
+            spicerack=self.spicerack,
+            task_id=args.task_id,
+            elasticsearch_clusters=elasticsearch_clusters,
+            clustergroup=clustergroup,
+            reason=reason,
+            start_datetime=start_datetime,
+            nodes_per_run=nodes_per_run,
+            with_lvs=with_lvs,
+            wait_for_green=wait_for_green,
+            allow_yellow=allow_yellow,
+            operation=operation,
+        )
 
 
 class RollingOperationRunner(CookbookRunnerBase):
     """Apply rolling operation to cluster."""
 
     # pylint: disable=too-many-arguments
-    def __init__(self, spicerack, task_id, elasticsearch_clusters, clustergroup, reason, start_datetime,
+    def __init__(self, *, spicerack, task_id, elasticsearch_clusters, clustergroup, reason, start_datetime,
                  nodes_per_run, with_lvs, wait_for_green, allow_yellow, operation):
         """Create rolling operation for cluster."""
         self.spicerack = spicerack

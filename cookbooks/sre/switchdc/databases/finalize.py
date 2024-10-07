@@ -29,7 +29,7 @@ class FinalizeRunner(DatabaseRunnerBase):
 class FinalizeSection:
     """Perform all the finalization steps on a single section."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         *,
         section: str,

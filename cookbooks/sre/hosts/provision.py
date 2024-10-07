@@ -136,7 +136,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             if self.vendor == DELL_VENDOR_SLUG:
                 bmc_username = "root"
                 password = DELL_DEFAULT
-            if self.vendor == SUPERMICRO_VENDOR_SLUG:
+            elif self.vendor == SUPERMICRO_VENDOR_SLUG:
                 # The Supermicro vendor ships its servers with a unique BMC admin
                 # password, that is displayed in the server's label:
                 # https://www.supermicro.com/en/support/BMC_Unique_Password
@@ -156,6 +156,8 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                     "has already been changed to the standard root one, "
                     "please insert that instead.")
                 password = get_secret("BMC ADMIN Password")
+            else:
+                raise RuntimeError(f"Unsupported vendor {self.vendor}")
 
         self.redfish = spicerack.redfish(
             self.args.host, username=bmc_username, password=password)

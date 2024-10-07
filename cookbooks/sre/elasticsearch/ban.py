@@ -38,15 +38,22 @@ class BanNode(CookbookBase):
         elasticsearch_clusters = self.spicerack.elasticsearch_clusters(args.clustergroup, CORE_DATACENTERS)
         reason = self.spicerack.admin_reason(args.admin_reason, task_id=args.task_id)
         # TODO: Validate host selection
-        return BanNodeRunner(self.spicerack, elasticsearch_clusters, clustergroup,
-                             args.action, args.hosts, args.row, reason)
+        return BanNodeRunner(
+            spicerack=self.spicerack,
+            elasticsearch_clusters=elasticsearch_clusters,
+            clustergroup=clustergroup,
+            action=args.action,
+            hosts=args.hosts,
+            row=args.row,
+            reason=reason,
+        )
 
 
 class BanNodeRunner(CookbookRunnerBase):
     """Ban Elastic nodes from cluster using cluster settings API."""
 
     # pylint: disable=too-many-arguments
-    def __init__(self, spicerack, elasticsearch_clusters, clustergroup, action, hosts, row, reason):
+    def __init__(self, *, spicerack, elasticsearch_clusters, clustergroup, action, hosts, row, reason):
         """Initialize the BanNode Runner."""
         self.spicerack = spicerack
         self.elasticsearch_clusters = elasticsearch_clusters

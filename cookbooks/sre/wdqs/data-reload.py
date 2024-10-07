@@ -214,23 +214,25 @@ class DataReload(CookbookBase):
             postload = Runnable()
 
         return DataReloadRunner(
-            puppet=self.spicerack.puppet(remote_host),
-            confctl=self.spicerack.confctl('node'),
             alerting_host=self.spicerack.alerting_hosts(remote_host.hosts),
+            confctl=self.spicerack.confctl('node'),
+            puppet=self.spicerack.puppet(remote_host),
             query_service_host=remote_host,
             preparation_step=prep_command,
+            postload_step=postload,
             reload_profile=reload_profile,
             profile_name=args.reload_data,
             no_depool=args.no_depool,
             reason=self.spicerack.admin_reason(args.reason, task_id=args.task_id),
             downtime=args.downtime,
-            postload_step=postload)
+        )
 
 
 class DataReloadRunner(CookbookRunnerBase):
     """The data reload cookbook runner used by the cookbook."""
 
     def __init__(self,  # pylint: disable=too-many-arguments
+                 *,
                  alerting_host: AlertingHosts,
                  confctl: ConftoolEntity,
                  puppet: PuppetHosts,
@@ -323,6 +325,7 @@ class UpdaterRestart(Runnable):
     """Position kafka offsets, restart the updater and wait"""
 
     def __init__(self,  # pylint: disable=too-many-arguments
+                 *,
                  netbox: Netbox,
                  kafka: Kafka,
                  query_service_host: RemoteHosts,
@@ -372,6 +375,7 @@ class HdfsCopy(Runnable):
     """Class doing a copy from HDFS to a query service host using a stat host a intermediary"""
 
     def __init__(self,  # pylint: disable=too-many-arguments
+                 *,
                  stat_host: RemoteHosts,
                  kerberos_user: str,
                  hdfs_path: str,

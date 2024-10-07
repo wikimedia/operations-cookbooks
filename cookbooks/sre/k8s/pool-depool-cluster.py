@@ -95,6 +95,8 @@ class PoolDepoolClusterRunner(CookbookRunnerBase):
             conftool_cluster = "kubernetes-staging"
         elif self.args.cluster in ("codfw", "eqiad"):
             conftool_cluster = "kubernetes"
+        else:
+            raise RuntimeError(f"Unsupported cluster {self.args.cluster}")
 
         for service in self.spicerack.service_catalog():
             try:

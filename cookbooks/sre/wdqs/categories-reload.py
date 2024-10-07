@@ -52,13 +52,16 @@ class CategoryReload(CookbookBase):
             alerting_host=self.spicerack.alerting_hosts(remote_host.hosts),
             reason=self.spicerack.admin_reason(args.reason, task_id=args.task_id),
             downtime=args.downtime,
-            no_depool=args.no_depool)
+            no_depool=args.no_depool
+        )
 
 
 class CategoryReloadRunner(CookbookRunnerBase):
     """Category reload runner"""
 
-    def __init__(self, remote_host: RemoteHosts,  # pylint: disable=too-many-arguments
+    def __init__(self,  # pylint: disable=too-many-arguments
+                 *,
+                 remote_host: RemoteHosts,
                  puppet: PuppetHosts,
                  confctl: ConftoolEntity,
                  alerting_host: AlertingHosts,
