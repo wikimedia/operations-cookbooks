@@ -94,7 +94,7 @@ class Provision(CookbookBase):
 class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
     """As required by Spicerack API."""
 
-    def __init__(self, args, spicerack):
+    def __init__(self, args, spicerack):  # pylint: disable=too-many-statements
         """Initiliaze the provision runner."""
         ensure_shell_is_durable()
         self.args = args
@@ -115,15 +115,6 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             raise RuntimeError(
                 f'Host {self.args.host} manufacturer is {vendor}. '
                 f'The only supported ones are {SUPPORTED_VENDORS}.')
-
-        if self.vendor == SUPERMICRO_VENDOR_SLUG:
-            ask_confirmation(
-                "The host's vendor is Supermicro, we have limited support "
-                "for it. Please check the following Phabricator task for more info: "
-                "https://phabricator.wikimedia.org/T365372. Please also report "
-                "in there any anomaly/doubt/etc.. so that SRE Infrastructure "
-                "Foundations will be aware. Thanks!"
-            )
 
         if self.netbox_server.status == 'active' and (not self.args.no_dhcp or not self.args.no_users):
             raise RuntimeError(
@@ -161,6 +152,17 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
         self.redfish = spicerack.redfish(
             self.args.host, username=bmc_username, password=password)
+
+        if self.vendor == SUPERMICRO_VENDOR_SLUG:
+            try:
+                bios_settings = self.redfish.request(
+                    'GET',
+                    '/redfish/v1/Systems/1/Bios',
+                ).json()
+                self.supermicro_bios_attributes = bios_settings["Attributes"]
+            except RedfishError as e:
+                raise RuntimeError(
+                    'Critical error when retrieving BIOS settings from the BMC.') from e
 
         if self.args.host.startswith(VIRT_PREFIXES) and not self.args.enable_virtualization:
             ask_confirmation("Virtualization not enabled but this host might need it, continue?")
@@ -400,11 +402,21 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             # without setting any specific boot order.
             # More info: https://phabricator.wikimedia.org/T365372#10148864
             self._config_supermicro_pxe_bios_settings()
-            self.redfish.request(
-                'PATCH',
-                '/redfish/v1/Systems/1/Bios',
-                json=self.supermicro_bios_changes
-            )
+            should_patch = self._found_diffs_supermicro_bios_attributes()
+            if should_patch:
+                logger.info(
+                    "Found differences between our desired status and the current "
+                    "one, applying new BIOS settings (a reboot will be performed).")
+                self.redfish.request(
+                    'PATCH',
+                    '/redfish/v1/Systems/1/Bios',
+                    json=self.supermicro_bios_changes
+                )
+            else:
+                logger.info(
+                    "No BIOS settings applied since the config is already good.")
+
+            logger.info("Applying Network changes to the BMC.")
             self.redfish.request(
                 'PATCH',
                 '/redfish/v1/Managers/1/EthernetInterfaces/1',
@@ -412,13 +424,31 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             )
             # TODO: Replace this logic with something more flexible and
             # reusable.
-            logger.info(
-                'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
-            )
-            self.redfish.chassis_reset(self.chassis_reset_policy)
-            sleep(180)
+            if should_patch:
+                logger.info(
+                    'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
+                )
+                self.redfish.chassis_reset(self.chassis_reset_policy)
+                sleep(180)
         except RedfishError as e:
             logger.error("Error while configuring BIOS or mgmt interface: %s", e)
+
+    def _found_diffs_supermicro_bios_attributes(self):
+        """Diff the Supermicro's BIOS settings/attributes with our ideal config."""
+        found_diffs = False
+        for key, value in self.supermicro_bios_changes["Attributes"].items():
+            try:
+                if not self.supermicro_bios_attributes[key] == value:
+                    logger.info(
+                        "BIOS: %s is set to %s, while we want %s",
+                        key, self.supermicro_bios_attributes[key], value
+                    )
+                    found_diffs = True
+            except KeyError:
+                logger.info(
+                    "BIOS: %s is not present in the current settings.", key)
+                found_diffs = True
+        return found_diffs
 
     def _config_supermicro_pxe_bios_settings(self):
         """Set BIOS settings from EFI to Legacy, including riser's PCIe settings.
@@ -428,18 +458,11 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         environment. Set also all options starting with "RSC_" to Legacy as well,
         since the nomenclature is used for PCIe riser NICs.
         """
-        try:
-            bios_settings = self.redfish.request(
-                'GET',
-                '/redfish/v1/Systems/1/Bios',
-            ).json()
-            for (key, value) in bios_settings["Attributes"].items():
-                if "EFI" == str(value) or key.startswith("RSC_"):
-                    logger.info(
-                        "BIOS: Setting %s to Legacy.", key)
-                    self.supermicro_bios_changes["Attributes"][key] = "Legacy"
-        except RedfishError as e:
-            logger.error("Error while configuring BIOS or mgmt interface: %s", e)
+        for (key, value) in self.supermicro_bios_attributes.items():
+            if "EFI" == str(value) or key.startswith("RSC_"):
+                logger.info(
+                    "BIOS: Setting %s to Legacy.", key)
+                self.supermicro_bios_changes["Attributes"][key] = "Legacy"
 
     def _config_dell_host(self):
         """Provision the BIOS and iDRAC settings."""
