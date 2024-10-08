@@ -112,7 +112,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         self.verbose = spicerack.verbose
         if self.netbox_server.virtual:
             raise RuntimeError(f'Host {self.args.host} is a virtual machine. VMs are not supported.')
-        self.device_model_slug = self.netbox_data['device_type']["model"]["slug"]
+        self.device_model_slug = self.netbox_data['device_type']['slug']
         self.vendor = self.netbox_data['device_type']['manufacturer']['slug']
         if self.vendor not in SUPPORTED_VENDORS:
             vendor = self.netbox_data['device_type']['manufacturer']['name']
