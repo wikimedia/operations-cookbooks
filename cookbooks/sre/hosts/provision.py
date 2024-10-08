@@ -30,6 +30,10 @@ OLD_SERIAL_MODELS = (
     'poweredge r740xd2',
 )
 
+SUPERMICRO_AMD_DEVICE_SLUGS = (
+    'as-2014s-tr',
+)
+
 # Hostname prefixes that usually need --enable-virtualization
 VIRT_PREFIXES = ('ganeti', 'cloudvirt')
 logger = logging.getLogger(__name__)
@@ -94,7 +98,7 @@ class Provision(CookbookBase):
 class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
     """As required by Spicerack API."""
 
-    def __init__(self, args, spicerack):  # pylint: disable=too-many-statements
+    def __init__(self, args, spicerack):  # pylint: disable=too-many-statements, too-many-branches
         """Initiliaze the provision runner."""
         ensure_shell_is_durable()
         self.args = args
@@ -108,7 +112,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         self.verbose = spicerack.verbose
         if self.netbox_server.virtual:
             raise RuntimeError(f'Host {self.args.host} is a virtual machine. VMs are not supported.')
-
+        self.device_model_slug = self.netbox_data['device_type']["model"]["slug"]
         self.vendor = self.netbox_data['device_type']['manufacturer']['slug']
         if self.vendor not in SUPPORTED_VENDORS:
             vendor = self.netbox_data['device_type']['manufacturer']['name']
@@ -256,12 +260,19 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             "Attributes": {
                 "BootModeSelect": "Legacy",
                 "ConsoleRedirection": False,
-                "SerialPort2Attribute": "SOL",
-                "IntelVirtualizationTechnology": "Enable" if self.args.enable_virtualization else "Disable",
                 "QuietBoot": False,
                 "LegacySerialRedirectionPort": "COM1",
             }
         }
+
+        # Some Supermicro BIOS settings differ on servers with AMD CPUs.
+        if self.vendor == SUPERMICRO_VENDOR_SLUG:
+            virt_flag = "Enable" if self.args.enable_virtualization else "Disable"
+            if self.device_model_slug not in SUPERMICRO_AMD_DEVICE_SLUGS:
+                self.supermicro_bios_changes["Attributes"]["SerialPort2Attribute"] = "SOL"
+                self.supermicro_bios_changes["Attributes"]["IntelVirtualizationTechnology"] = virt_flag
+            else:
+                self.supermicro_bios_changes["Attributes"]["SVMMode"] = virt_flag
 
         # Testing that the management password is correct connecting to the first physical cumin host
         cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
