@@ -26,6 +26,7 @@ DEFAULT_READ_ONLY_REASON = (
 MEDIAWIKI_SERVICES = (
     "jobrunner",
     "mwdebug",
+    "mwdebug-next",
     "mw-web",
     "mw-api-ext",
     "mw-api-int",
