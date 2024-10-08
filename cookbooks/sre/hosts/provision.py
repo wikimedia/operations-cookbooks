@@ -157,17 +157,6 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         self.redfish = spicerack.redfish(
             self.args.host, username=bmc_username, password=password)
 
-        if self.vendor == SUPERMICRO_VENDOR_SLUG:
-            try:
-                bios_settings = self.redfish.request(
-                    'GET',
-                    '/redfish/v1/Systems/1/Bios',
-                ).json()
-                self.supermicro_bios_attributes = bios_settings["Attributes"]
-            except RedfishError as e:
-                raise RuntimeError(
-                    'Critical error when retrieving BIOS settings from the BMC.') from e
-
         if self.args.host.startswith(VIRT_PREFIXES) and not self.args.enable_virtualization:
             ask_confirmation("Virtualization not enabled but this host might need it, continue?")
 
@@ -256,6 +245,13 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             }
         }
 
+        # From various tests it seems that the value of BootModeSelect
+        # (EFI/Legacy) varies the allowed values of other BIOS options as well.
+        # The idea is to patch these settings in a first round, wait for them
+        # to be picked up and then do another round of patch settings (to allow
+        # proper values to be selected).
+        # Please do not add any EFI/Boot/etc.. related setting in here.
+        # More info: https://phabricator.wikimedia.org/T365372#10213162
         self.supermicro_bios_changes = {
             "Attributes": {
                 "BootModeSelect": "Legacy",
@@ -405,25 +401,67 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         self.redfish.check_connection()
         return self.redfish.scp_dump(allow_new_attributes=True)
 
+    def _get_supermicro_bios_settings(self):
+        try:
+            logger.info("Retrieving updated BIOS settings...")
+            bios_settings = self.redfish.request(
+                'GET',
+                '/redfish/v1/Systems/1/Bios',
+            ).json()
+            return bios_settings["Attributes"]
+        except RedfishError as e:
+            logger.error("Error while retrieving BIOS settings: %s", e)
+            return {}
+
+    def _patch_supermicro_bios_settings(self):
+        try:
+            logger.info("Applying BIOS settings...")
+            self.redfish.request(
+                'PATCH',
+                '/redfish/v1/Systems/1/Bios',
+                json=self.supermicro_bios_changes
+            )
+        except RedfishError as e:
+            logger.error("Error while configuring BIOS settings: %s", e)
+
+    def _reboot_supermicro_chassis(self):
+        logger.info(
+            'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
+        )
+        self.redfish.chassis_reset(self.chassis_reset_policy)
+        sleep(180)
+
     def _config_supermicro_host(self):
         """Provision the BIOS and BMC settings."""
         try:
+            logging.info("Retrieving BIOS settings (first round).")
+            supermicro_bios_attributes = self._get_supermicro_bios_settings()
+            logging.info("Setting up BootMode and basic BIOS settings.")
+            should_patch = self._found_diffs_supermicro_bios_attributes(supermicro_bios_attributes)
+            if should_patch:
+                logger.info(
+                    "Found differences between our desired status and the current "
+                    "one, applying new BIOS settings (a reboot will be performed).")
+                self._patch_supermicro_bios_settings()
+                self._reboot_supermicro_chassis()
+            else:
+                logger.info(
+                    "No BIOS settings applied since the config is already good.")
+
+            logging.info("Retrieving BIOS settings (second round).")
+            supermicro_bios_attributes = self._get_supermicro_bios_settings()
             # Note: It seems that Supermicro's BIOS settings assume
             # PXE via EFI configs, so we force 'Legacy' in all BIOS settings
             # having 'EFI' has value. It should be enough to force PXE via IPMI,
             # without setting any specific boot order.
             # More info: https://phabricator.wikimedia.org/T365372#10148864
-            self._config_supermicro_pxe_bios_settings()
-            should_patch = self._found_diffs_supermicro_bios_attributes()
+            self._config_supermicro_pxe_bios_settings(supermicro_bios_attributes)
+            should_patch = self._found_diffs_supermicro_bios_attributes(supermicro_bios_attributes)
             if should_patch:
                 logger.info(
                     "Found differences between our desired status and the current "
                     "one, applying new BIOS settings (a reboot will be performed).")
-                self.redfish.request(
-                    'PATCH',
-                    '/redfish/v1/Systems/1/Bios',
-                    json=self.supermicro_bios_changes
-                )
+                self._patch_supermicro_bios_settings()
             else:
                 logger.info(
                     "No BIOS settings applied since the config is already good.")
@@ -434,26 +472,22 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 '/redfish/v1/Managers/1/EthernetInterfaces/1',
                 json=self.supermicro_mgmt_network_changes
             )
-            # TODO: Replace this logic with something more flexible and
-            # reusable.
+            # As precaution we reboot after the BMC network settings are applied,
+            # even if not strictly needed.
             if should_patch:
-                logger.info(
-                    'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
-                )
-                self.redfish.chassis_reset(self.chassis_reset_policy)
-                sleep(180)
+                self._reboot_supermicro_chassis()
         except RedfishError as e:
             logger.error("Error while configuring BIOS or mgmt interface: %s", e)
 
-    def _found_diffs_supermicro_bios_attributes(self):
+    def _found_diffs_supermicro_bios_attributes(self, bios_attributes: dict):
         """Diff the Supermicro's BIOS settings/attributes with our ideal config."""
         found_diffs = False
         for key, value in self.supermicro_bios_changes["Attributes"].items():
             try:
-                if not self.supermicro_bios_attributes[key] == value:
+                if not bios_attributes[key] == value:
                     logger.info(
                         "BIOS: %s is set to %s, while we want %s",
-                        key, self.supermicro_bios_attributes[key], value
+                        key, bios_attributes[key], value
                     )
                     found_diffs = True
             except KeyError:
@@ -462,7 +496,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 found_diffs = True
         return found_diffs
 
-    def _config_supermicro_pxe_bios_settings(self):
+    def _config_supermicro_pxe_bios_settings(self, bios_attributes: dict):
         """Set BIOS settings from EFI to Legacy, including riser's PCIe settings.
 
         Look for all BIOS settings with a value containing 'EFI' and set them
@@ -470,10 +504,8 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         environment. Set also all options starting with "RSC_" to Legacy as well,
         since the nomenclature is used for PCIe riser NICs.
         """
-        for (key, value) in self.supermicro_bios_attributes.items():
+        for (key, value) in bios_attributes.items():
             if "EFI" == str(value) or key.startswith("RSC_"):
-                logger.info(
-                    "BIOS: Setting %s to Legacy.", key)
                 self.supermicro_bios_changes["Attributes"][key] = "Legacy"
 
     def _config_dell_host(self):
