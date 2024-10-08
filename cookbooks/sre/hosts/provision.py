@@ -267,12 +267,13 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
         # Some Supermicro BIOS settings differ on servers with AMD CPUs.
         if self.vendor == SUPERMICRO_VENDOR_SLUG:
-            virt_flag = "Enable" if self.args.enable_virtualization else "Disable"
+            intel_virt_flag = "Enable" if self.args.enable_virtualization else "Disable"
+            amd_virt_flag = "Enabled" if self.args.enable_virtualization else "Disabled"
             if self.device_model_slug not in SUPERMICRO_AMD_DEVICE_SLUGS:
                 self.supermicro_bios_changes["Attributes"]["SerialPort2Attribute"] = "SOL"
-                self.supermicro_bios_changes["Attributes"]["IntelVirtualizationTechnology"] = virt_flag
+                self.supermicro_bios_changes["Attributes"]["IntelVirtualizationTechnology"] = intel_virt_flag
             else:
-                self.supermicro_bios_changes["Attributes"]["SVMMode"] = virt_flag
+                self.supermicro_bios_changes["Attributes"]["SVMMode"] = amd_virt_flag
 
         # Testing that the management password is correct connecting to the first physical cumin host
         cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
