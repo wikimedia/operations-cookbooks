@@ -434,6 +434,14 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
     def _config_supermicro_host(self):
         """Provision the BIOS and BMC settings."""
         try:
+            logging.info("Retrieving the BMC's firmware version.")
+            bmc_response = self.redfish.request("get", "/redfish/v1/UpdateService/FirmwareInventory/BMC").json()
+            logging.info("BMC firmware release date: %s", bmc_response['ReleaseDate'])
+            if bmc_response['ReleaseDate'].startswith('2022-'):
+                ask_confirmation(
+                    "The BMC firmware was released in 2022 and it may not support "
+                    "all the settings that we need. Please consider upgrading firmware "
+                    "first. See https://phabricator.wikimedia.org/T371416 for more info.")
             logging.info("Retrieving BIOS settings (first round).")
             supermicro_bios_attributes = self._get_supermicro_bios_settings()
             logging.info("Setting up BootMode and basic BIOS settings.")
