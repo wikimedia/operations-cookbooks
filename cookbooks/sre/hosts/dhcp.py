@@ -24,6 +24,9 @@ class Dhcp(CookbookBase):
             '--pxe-media', default='installer',
             help=('Specify a different media suffix to use in the PXE settings of the DHCP configuration. To be used '
                   'when a specific installer is needed that is available as tftpboot/$OS-$PXE_MEDIA/.'))
+        parser.add_argument(
+            '--force-dhcp-tftp', action='store_true',
+            help="Force DHCP settings to TFTP only (without HTTP), as workaround for T363576.")
         parser.add_argument('host', help='Short hostname of the host for which to set the DHCP config, not FQDN')
 
         return parser
@@ -85,6 +88,21 @@ class DhcpRunner(CookbookRunnerBase):
             else switch_iface.device.name
         )
 
+        # This is a workaround to avoid PXE booting issues, like
+        # "Failed to load ldlinux.c32" before getting to Debian Install.
+        # More info: https://phabricator.wikimedia.org/T363576#9997915
+        # We also got confirmation from Supermicro/Broadcom that they
+        # don't support lpxelinux.0, so for this vendor we force the TFTP flag
+        # even if it wasn't set.
+        if self.args.force_dhcp_tftp:
+            dhcp_filename = f"/srv/tftpboot/{self.args.os}-installer/pxelinux.0"
+            dhcp_options = {
+                "pxelinux.pathprefix": f"/srv/tftpboot/{self.args.os}-installer/"
+            }
+        else:
+            dhcp_filename = ""
+            dhcp_options = {}
+
         return DHCPConfOpt82(
             hostname=self.host,
             ipv4=ipaddress.IPv4Interface(netbox_host.primary_ip4).ip,
@@ -94,6 +112,8 @@ class DhcpRunner(CookbookRunnerBase):
             ttys=1,
             distro=self.args.os,
             media_type=self.args.pxe_media,
+            dhcp_options=dhcp_options,
+            dhcp_filename=dhcp_filename,
         )
 
     def run(self):
