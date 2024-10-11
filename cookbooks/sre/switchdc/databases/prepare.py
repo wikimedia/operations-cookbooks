@@ -3,7 +3,7 @@ import logging
 from datetime import timedelta
 from time import sleep
 
-from spicerack.mysql_legacy import Instance, MasterUseGTID, ReplicationInfo
+from spicerack.mysql_legacy import Instance, MasterUseGTID, MysqlLegacyError, ReplicationInfo
 from wmflib.actions import Actions
 from wmflib.config import load_yaml_config
 from wmflib.interactive import confirm_on_failure
@@ -110,6 +110,25 @@ class PrepareSection:
                            f"got {replica['Host']} instead")
                 self.actions.failure(f"**{message}**")
                 raise RuntimeError(message)
+
+        logger.info("[%s] Checking binlog format is the same in both MASTER_TO %s and MASTER_FROM %s",
+                    self.section, from_host, to_host)
+        binlog_query = "SELECT @@GLOBAL.binlog_format AS binlog_format"
+        try:
+            binlog_from = self.master_from.run_vertical_query(binlog_query, is_safe=True)[0]["binlog_format"]
+        except MysqlLegacyError:
+            binlog_from = "UNDEFINED"
+
+        try:
+            binlog_to = self.master_to.run_vertical_query(binlog_query, is_safe=True)[0]["binlog_format"]
+        except MysqlLegacyError:
+            binlog_to = "UNDEFINED"
+
+        if binlog_from != binlog_to:
+            message = (f"Binlog format mistmatch between MASTER_FROM {from_host} {binlog_from} "
+                       f"and MASTER_TO {to_host} {binlog_to}.")
+            self.actions.failure(f"**{message}**")
+            raise RuntimeError(message)
 
         self.actions.success(f"Validated replication topology for section {self.section} between MASTER_FROM "
                              f"{from_host} and MASTER_TO {to_host}")
