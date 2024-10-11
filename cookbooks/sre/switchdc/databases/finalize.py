@@ -164,7 +164,7 @@ class FinalizeSection:
 class Finalize(DatabaseCookbookBase):
     """Perform all the Database related finalization steps after the switch datacenter.
 
-    Actions performed for each core sections (sX, x1, RW esX):
+    By default actions are performed for each core sections (sX, x1, RW esX):
         * Enable replication on the master of the primary datacenter replicating from the master of the secondary
           datacenter.
         * Enable GTID on the master of the old primary datacenter, now secondary.
