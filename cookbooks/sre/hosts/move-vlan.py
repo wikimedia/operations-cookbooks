@@ -18,14 +18,8 @@ from cookbooks.sre.hosts import (
     PUPPETSERVER_REPO_PATH,
     PUPPETSERVER_PRIVATE_REPO_PATH,
     DEPLOYMENT_CHARTS_REPO_PATH,
-    AUTHDNS_REPO_PATH
-)
-
-SOURCE_VLANS = (
-    'public1-a-codfw',
-    'private1-a-codfw',
-    'public1-b-codfw',
-    'private1-b-codfw',
+    AUTHDNS_REPO_PATH,
+    LEGACY_VLANS
 )
 
 logger = logging.getLogger(__name__)
@@ -116,7 +110,7 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         if self.netbox_server.virtual:
             logger.info('This is only for physical servers, nothing to do. 👍')
             return False
-        if self.pre_config['vlan'] not in SOURCE_VLANS:
+        if self.pre_config['vlan'] not in LEGACY_VLANS:
             logger.info('Server not in a vlan requiring a migration, nothing to do. 👍')
             return False
 

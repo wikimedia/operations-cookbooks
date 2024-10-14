@@ -28,7 +28,8 @@ from wmflib.interactive import AbortError, ask_confirmation, ask_input, confirm_
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import (
     OS_VERSIONS,
-    SUPERMICRO_VENDOR_SLUG
+    SUPERMICRO_VENDOR_SLUG,
+    LEGACY_VLANS
 )
 
 logger = logging.getLogger(__name__)
@@ -113,7 +114,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
     """As required by Spicerack API."""
 
     def __init__(self, args, spicerack):  # pylint: disable=too-many-statements
-        """Initiliaze the reimage runner."""
+        """Initialize the reimage runner."""
         ensure_shell_is_durable()
         self.args = args
         self.host = self.args.host
@@ -172,6 +173,11 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         if args.puppet_version == 7 and args.os == 'buster':
             raise RuntimeError('Puppet 7 is not supported on buster you must first upgrade the os.')
+
+        if self.netbox_server.access_vlan in LEGACY_VLANS and not self.virtual and not self.args.move_vlan:
+            ask_confirmation('Physical host on legacy vlan/IP, please consider re-imaging it using --move-vlan.\n'
+                             'More info: https://wikitech.wikimedia.org/wiki/Vlan_migration\n'
+                             'Continue to ignore.')
 
         # The same as self.remote_host but using the SSH key valid only during installation before the first Puppet run
         self.remote_installer = spicerack.remote(installer=True).query(self.fqdn)

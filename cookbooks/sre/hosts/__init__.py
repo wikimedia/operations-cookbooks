@@ -34,6 +34,14 @@ DELL_VENDOR_SLUG = 'dell'
 SUPERMICRO_VENDOR_SLUG = 'supermicro'
 SUPPORTED_VENDORS = [DELL_VENDOR_SLUG, SUPERMICRO_VENDOR_SLUG]
 
+# For per rack vlan migration
+LEGACY_VLANS = (
+    'private1-a-codfw',
+    'private1-b-codfw',
+    'private1-c-codfw',
+    'private1-d-codfw'
+)
+
 
 @dataclass(frozen=True)
 class GitRepoPath:
