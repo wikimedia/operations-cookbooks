@@ -13,7 +13,6 @@ from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, 
 from cookbooks.sre.hosts import (
     SUPERMICRO_VENDOR_SLUG,
     DELL_VENDOR_SLUG,
-    SUPPORTED_VENDORS
 )
 from cookbooks.sre.network import configure_switch_interfaces
 
@@ -92,10 +91,29 @@ class Provision(CookbookBase):
 
     def get_runner(self, args):
         """As required by Spicerack API."""
-        return ProvisionRunner(args, self.spicerack)
+        netbox_server = self.spicerack.netbox_server(args.host)
+        netbox_data = netbox_server.as_dict()
+        if netbox_server.virtual:
+            raise RuntimeError(f'Host {args.host} is a virtual machine. VMs are not supported.')
+
+        # Sanity checks before proceeding with any Runner
+        if netbox_server.status == 'active' and (not args.no_dhcp or not args.no_users):
+            raise RuntimeError(
+                f'Host {args.host} has active status in Netbox but --no-dhcp and --no-users were not set.')
+        if args.host.startswith(VIRT_PREFIXES) and not args.enable_virtualization:
+            ask_confirmation("Virtualization not enabled but this host might need it, continue?")
+
+        # The Runner to instantiate is vendor-specific to ease the customizations
+        # and management of different vendors via Redfish.
+        vendor = netbox_data['device_type']['manufacturer']['slug']
+        if vendor == SUPERMICRO_VENDOR_SLUG:
+            return SupermicroProvisionRunner(args, self.spicerack)
+        if vendor == DELL_VENDOR_SLUG:
+            return DellProvisionRunner(args, self.spicerack)
+        raise RuntimeError(f"The vendor {vendor} is currently not supported.")
 
 
-class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
+class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
     """As required by Spicerack API."""
 
     def __init__(self, args, spicerack):  # pylint: disable=too-many-statements, too-many-branches
@@ -110,93 +128,376 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         self.ipmi = spicerack.ipmi(self.fqdn)
         self.remote = spicerack.remote()
         self.verbose = spicerack.verbose
-        if self.netbox_server.virtual:
-            raise RuntimeError(f'Host {self.args.host} is a virtual machine. VMs are not supported.')
         self.device_model_slug = self.netbox_data['device_type']['slug']
-        self.vendor = self.netbox_data['device_type']['manufacturer']['slug']
-        if self.vendor not in SUPPORTED_VENDORS:
-            vendor = self.netbox_data['device_type']['manufacturer']['name']
-            raise RuntimeError(
-                f'Host {self.args.host} manufacturer is {vendor}. '
-                f'The only supported ones are {SUPPORTED_VENDORS}.')
-
-        if self.netbox_server.status == 'active' and (not self.args.no_dhcp or not self.args.no_users):
-            raise RuntimeError(
-                f'Host {self.args.host} has active status in Netbox but --no-dhcp and --no-users were not set.')
 
         if self.args.no_users:
             bmc_username = "root"
             password = ''  # nosec
         else:
-            if self.vendor == DELL_VENDOR_SLUG:
-                bmc_username = "root"
-                password = DELL_DEFAULT
-            elif self.vendor == SUPERMICRO_VENDOR_SLUG:
-                # The Supermicro vendor ships its servers with a unique BMC admin
-                # password, that is displayed in the server's label:
-                # https://www.supermicro.com/en/support/BMC_Unique_Password
-                # To keep it simple, for the moment we just ask the password
-                # to the admin/operator running the cookbook.
-                # The correspondent user is "ADMIN".
-                bmc_username = "ADMIN"
-                logger.info(
-                    "Supermicro sets a unique BMC ADMIN password for every server, "
-                    "usually printed in the server's label or collected in "
-                    "a spreadsheet."
-                    "====== IMPORTANT =====:\n"
-                    "If this is the first time ever that the host "
-                    "is provisioned, please retrieve the password and insert it "
-                    "so the cookbook can change it to ours.\n"
-                    "If this is not the first time, and the ADMIN password "
-                    "has already been changed to the standard root one, "
-                    "please insert that instead.")
-                password = get_secret("BMC ADMIN Password")
-            else:
-                raise RuntimeError(f"Unsupported vendor {self.vendor}")
+            # The Supermicro vendor ships its servers with a unique BMC admin
+            # password, that is displayed in the server's label:
+            # https://www.supermicro.com/en/support/BMC_Unique_Password
+            # To keep it simple, for the moment we just ask the password
+            # to the admin/operator running the cookbook.
+            # The correspondent user is "ADMIN".
+            bmc_username = "ADMIN"
+            logger.info(
+                "Supermicro sets a unique BMC ADMIN password for every server, "
+                "usually printed in the server's label or collected in "
+                "a spreadsheet."
+                "====== IMPORTANT =====:\n"
+                "If this is the first time ever that the host "
+                "is provisioned, please retrieve the password and insert it "
+                "so the cookbook can change it to ours.\n"
+                "If this is not the first time, and the ADMIN password "
+                "has already been changed to the standard root one, "
+                "please insert that instead.")
+            password = get_secret("BMC ADMIN Password")
 
         self.redfish = spicerack.redfish(
             self.args.host, username=bmc_username, password=password)
 
-        if self.args.host.startswith(VIRT_PREFIXES) and not self.args.enable_virtualization:
-            ask_confirmation("Virtualization not enabled but this host might need it, continue?")
-
         # DHCP automation
         self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
-        if self.vendor == SUPERMICRO_VENDOR_SLUG:
-            logger.info("Using the BMC's MAC address for the DHCP config.")
-            self.dhcp_config: Union[DHCPConfMac, DHCPConfMgmt] = DHCPConfMac(
-                hostname=self.fqdn,
-                ipv4=self.redfish.interface.ip,
-                mac=self.netbox.api.dcim.interfaces.get(device=self.args.host, name=MANAGEMENT_IFACE_NAME).mac_address,
-                ttys=0,
-                distro="",
-            )
-        else:
-            self.dhcp_config = DHCPConfMgmt(
-                datacenter=self.netbox_data['site']['slug'],
-                serial=self.netbox_data['serial'],
-                manufacturer=self.netbox_data['device_type']['manufacturer']['slug'],
-                fqdn=self.fqdn,
-                ipv4=self.redfish.interface.ip,
-            )
+        logger.info("Using the BMC's MAC address for the DHCP config.")
+        self.dhcp_config: Union[DHCPConfMac, DHCPConfMgmt] = DHCPConfMac(
+            hostname=self.fqdn,
+            ipv4=self.redfish.interface.ip,
+            mac=self.netbox.api.dcim.interfaces.get(device=self.args.host, name=MANAGEMENT_IFACE_NAME).mac_address,
+            ttys=0,
+            distro="",
+        )
         self._dhcp_active = False
 
         if self.netbox_server.status in ('active', 'staged'):
-            self.dell_reboot_policy = DellSCPRebootPolicy.GRACEFUL
             self.chassis_reset_policy = ChassisResetPolicy.GRACEFUL_RESTART
         else:
-            self.dell_reboot_policy = DellSCPRebootPolicy.FORCED
             self.chassis_reset_policy = ChassisResetPolicy.FORCE_RESTART
 
         self.mgmt_password = spicerack.management_password
 
-        self.dell_platform_doc_link = (
+        self.mgmt_network_changes = {
+            "HostName": self.args.host,
+            "FQDN": self.fqdn,
+            "IPv4StaticAddresses": [{
+                "Address": str(self.redfish.interface.ip),
+                "Gateway": str(next(self.redfish.interface.network.hosts())),
+                "SubnetMask": str(self.redfish.interface.netmask)
+            }],
+            "StaticNameServers": [DNS_ADDRESS],
+            "StatelessAddressAutoConfig": {
+                'IPv6AutoConfigEnabled': False
+            },
+            'DHCPv4': {
+                'DHCPEnabled': False,
+            }
+        }
+
+        # From various tests it seems that the value of BootModeSelect
+        # (EFI/Legacy) varies the allowed values of other BIOS options as well.
+        # The idea is to patch these settings in a first round, wait for them
+        # to be picked up and then do another round of patch settings (to allow
+        # proper values to be selected).
+        # Please do not add any EFI/Boot/etc.. related setting in here.
+        # More info: https://phabricator.wikimedia.org/T365372#10213162
+        self.bios_changes = {
+            "Attributes": {
+                "BootModeSelect": "Legacy",
+                "ConsoleRedirection": False,
+                "QuietBoot": False,
+                "LegacySerialRedirectionPort": "COM1",
+            }
+        }
+
+        # Some Supermicro BIOS settings differ on servers with AMD CPUs.
+        intel_virt_flag = "Enable" if self.args.enable_virtualization else "Disable"
+        amd_virt_flag = "Enabled" if self.args.enable_virtualization else "Disabled"
+        if self.device_model_slug not in SUPERMICRO_AMD_DEVICE_SLUGS:
+            self.bios_changes["Attributes"]["SerialPort2Attribute"] = "SOL"
+            self.bios_changes["Attributes"]["IntelVirtualizationTechnology"] = intel_virt_flag
+        else:
+            self.bios_changes["Attributes"]["SVMMode"] = amd_virt_flag
+
+        # Testing that the management password is correct connecting to the first physical cumin host
+        cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
+        try:
+            spicerack.redfish(cumin_host).check_connection()
+        except RedfishError:
+            raise RuntimeError(
+                f'The management password provided seems incorrect, it does not work on {cumin_host}.') from None
+
+        ask_confirmation(f'Are you sure to proceed to apply BIOS/iDRAC settings {self.runtime_description}?')
+
+    @property
+    def runtime_description(self):
+        """Runtime description for the IRC/SAL logging."""
+        descr = (
+            f'for host {self.netbox_server.mgmt_fqdn} with chassis set policy '
+            f'{self.chassis_reset_policy.name}')
+        return descr
+
+    @property
+    def lock_args(self):
+        """Make the cookbook lock per-host."""
+        return LockArgs(suffix=self.args.host, concurrency=1, ttl=1800)
+
+    def run(self):
+        """Run the cookbook."""
+        if not self.args.no_switch:
+            configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
+
+        if not self.args.no_dhcp:
+            self.dhcp.push_configuration(self.dhcp_config)
+            self._dhcp_active = True
+
+        def check_connection():
+            try:
+                self.redfish.check_connection()
+            except RedfishError as e:
+                error_msg = f"Unable to connect to the Redfish API of {self.args.host}. "
+                raise RuntimeError(error_msg) from e
+
+        confirm_on_failure(check_connection)
+
+        self._config_host()
+
+        if self._detect_hw_raid():
+            action = ask_input(
+                'Detected Hardware RAID. Please configure the RAID '
+                'at this point (the password is still the default one). '
+                'Once done select "modified" if the RAID was modified '
+                'or "untouched" if it was not touched. '
+                'If the RAID was modified the host will be rebooted to '
+                'make sure the changes are applied.',
+                ('untouched', 'modified')
+            )
+
+            if action == 'modified':
+                logger.info(
+                    'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
+                )
+                self.redfish.chassis_reset(self.chassis_reset_policy)
+                # TODO: replace the sleep with auto-detection of the completiono of the RAID job.
+                sleep(180)
+
+        if not self.args.no_dhcp:
+            self.dhcp.remove_configuration(self.dhcp_config)
+            self._dhcp_active = False
+
+        self.redfish.check_connection()
+        if self.args.no_users:
+            logger.info('Skipping root user password change')
+        else:
+            try:
+                self.redfish.find_account("root")
+            except RedfishError as e:
+                logger.info(
+                    "The root user on the BMC has not been created yet. "
+                    "More info: %s", e)
+                logger.info(
+                    'Creating the root user on the BMC.')
+                self.redfish.add_account('root', self.mgmt_password)
+            logger.info(
+                "Updating the ADMIN user's password on the BMC.")
+            self.redfish.change_user_password('ADMIN', self.mgmt_password)
+            logger.info(
+                "Updating the root user's password on the BMC.")
+            self.redfish.change_user_password('root', self.mgmt_password)
+
+        sleep(10)  # Trying to avoid a race condition that seems to make IPMI fail right after changing the password
+        self.ipmi.check_connection()
+
+    def rollback(self):
+        """Rollback the DHCP setup if present."""
+        if self._dhcp_active:
+            logger.info('Rolling back DHCP setup')
+            self.dhcp.remove_configuration(self.dhcp_config)
+
+    def _detect_hw_raid(self):
+        """Get if a hardware raid configuration is set for a Dell/Supermicro host."""
+        try:
+            storage = self.redfish.request('get', self.redfish.storage_manager).json()
+            has_raid = False
+            # TODO: The assumption is that both Dell's and Supermicro's
+            # "Members" field have the same format. We still don't have examples
+            # to check, so this needs to be revisited.
+            for storage_member in storage['Members']:
+                if storage_member['@odata.id'].split('/')[-1].startswith('RAID'):
+                    has_raid = True
+                    break
+        except Exception:  # pylint: disable=broad-except
+            logger.warning('Unable to detect if there is Hardware RAID on the host, ASSUMING IT HAS RAID.')
+            has_raid = True
+        return has_raid
+
+    def _get_bios_settings(self):
+        try:
+            logger.info("Retrieving updated BIOS settings...")
+            bios_settings = self.redfish.request(
+                'GET',
+                '/redfish/v1/Systems/1/Bios',
+            ).json()
+            return bios_settings["Attributes"]
+        except RedfishError as e:
+            logger.error("Error while retrieving BIOS settings: %s", e)
+            return {}
+
+    def _patch_bios_settings(self):
+        try:
+            logger.info("Applying BIOS settings...")
+            self.redfish.request(
+                'PATCH',
+                '/redfish/v1/Systems/1/Bios',
+                json=self.bios_changes
+            )
+        except RedfishError as e:
+            logger.error("Error while configuring BIOS settings: %s", e)
+
+    def _reboot_chassis(self):
+        logger.info(
+            'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
+        )
+        self.redfish.chassis_reset(self.chassis_reset_policy)
+        sleep(180)
+
+    def _config_host(self):
+        """Provision the BIOS and BMC settings."""
+        try:
+            logging.info("Retrieving the BMC's firmware version.")
+            bmc_response = self.redfish.request("get", "/redfish/v1/UpdateService/FirmwareInventory/BMC").json()
+            logging.info("BMC firmware release date: %s", bmc_response['ReleaseDate'])
+            if bmc_response['ReleaseDate'].startswith('2022-'):
+                ask_confirmation(
+                    "The BMC firmware was released in 2022 and it may not support "
+                    "all the settings that we need. Please consider upgrading firmware "
+                    "first. See https://phabricator.wikimedia.org/T371416 for more info.")
+            logging.info("Retrieving BIOS settings (first round).")
+            bios_attributes = self._get_bios_settings()
+            logging.info("Setting up BootMode and basic BIOS settings.")
+            should_patch = self._found_diffs_bios_attributes(bios_attributes)
+            if should_patch:
+                logger.info(
+                    "Found differences between our desired status and the current "
+                    "one, applying new BIOS settings (a reboot will be performed).")
+                self._patch_bios_settings()
+                self._reboot_chassis()
+            else:
+                logger.info(
+                    "No BIOS settings applied since the config is already good.")
+
+            logging.info("Retrieving BIOS settings (second round).")
+            bios_attributes = self._get_bios_settings()
+            # Note: It seems that Supermicro's BIOS settings assume
+            # PXE via EFI configs, so we force 'Legacy' in all BIOS settings
+            # having 'EFI' has value. It should be enough to force PXE via IPMI,
+            # without setting any specific boot order.
+            # More info: https://phabricator.wikimedia.org/T365372#10148864
+            self._config_pxe_bios_settings(bios_attributes)
+            should_patch = self._found_diffs_bios_attributes(bios_attributes)
+            if should_patch:
+                logger.info(
+                    "Found differences between our desired status and the current "
+                    "one, applying new BIOS settings (a reboot will be performed).")
+                self._patch_bios_settings()
+            else:
+                logger.info(
+                    "No BIOS settings applied since the config is already good.")
+
+            logger.info("Applying Network changes to the BMC.")
+            self.redfish.request(
+                'PATCH',
+                '/redfish/v1/Managers/1/EthernetInterfaces/1',
+                json=self.mgmt_network_changes
+            )
+            # As precaution we reboot after the BMC network settings are applied,
+            # even if not strictly needed.
+            if should_patch:
+                self._reboot_chassis()
+        except RedfishError as e:
+            logger.error("Error while configuring BIOS or mgmt interface: %s", e)
+
+    def _found_diffs_bios_attributes(self, bios_attributes: dict):
+        """Diff the Supermicro's BIOS settings/attributes with our ideal config."""
+        found_diffs = False
+        for key, value in self.bios_changes["Attributes"].items():
+            try:
+                if not bios_attributes[key] == value:
+                    logger.info(
+                        "BIOS: %s is set to %s, while we want %s",
+                        key, bios_attributes[key], value
+                    )
+                    found_diffs = True
+            except KeyError:
+                logger.info(
+                    "BIOS: %s is not present in the current settings.", key)
+                found_diffs = True
+        return found_diffs
+
+    def _config_pxe_bios_settings(self, bios_attributes: dict):
+        """Set BIOS settings from EFI to Legacy, including riser's PCIe settings.
+
+        Look for all BIOS settings with a value containing 'EFI' and set them
+        to Legacy. This is needed to allow NIC ports to PXE correctly in our
+        environment. Set also all options starting with "RSC_" to Legacy as well,
+        since the nomenclature is used for PCIe riser NICs.
+        """
+        for (key, value) in bios_attributes.items():
+            if "EFI" == str(value) or key.startswith("RSC_"):
+                self.bios_changes["Attributes"][key] = "Legacy"
+
+
+class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
+    """As required by Spicerack API."""
+
+    def __init__(self, args, spicerack):  # pylint: disable=too-many-statements, too-many-branches
+        """Initiliaze the provision runner."""
+        ensure_shell_is_durable()
+        self.args = args
+
+        self.netbox = spicerack.netbox()
+        self.netbox_server = spicerack.netbox_server(self.args.host)
+        self.netbox_data = self.netbox_server.as_dict()
+        self.fqdn = self.netbox_server.mgmt_fqdn
+        self.ipmi = spicerack.ipmi(self.fqdn)
+        self.remote = spicerack.remote()
+        self.verbose = spicerack.verbose
+        self.device_model_slug = self.netbox_data['device_type']['slug']
+
+        if self.args.no_users:
+            password = ''  # nosec
+        else:
+            password = DELL_DEFAULT
+
+        self.redfish = spicerack.redfish(
+            self.args.host, username='root', password=password)
+
+        # DHCP automation
+        self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
+        self.dhcp_config = DHCPConfMgmt(
+            datacenter=self.netbox_data['site']['slug'],
+            serial=self.netbox_data['serial'],
+            manufacturer=self.netbox_data['device_type']['manufacturer']['slug'],
+            fqdn=self.fqdn,
+            ipv4=self.redfish.interface.ip,
+        )
+        self._dhcp_active = False
+
+        if self.netbox_server.status in ('active', 'staged'):
+            self.reboot_policy = DellSCPRebootPolicy.GRACEFUL
+            self.chassis_reset_policy = ChassisResetPolicy.GRACEFUL_RESTART
+        else:
+            self.reboot_policy = DellSCPRebootPolicy.FORCED
+            self.chassis_reset_policy = ChassisResetPolicy.FORCE_RESTART
+
+        self.mgmt_password = spicerack.management_password
+
+        self.platform_doc_link = (
             "https://wikitech.wikimedia.org/wiki/SRE/Dc-operations/"
             "Platform-specific_documentation/Dell_Documentation#Troubleshooting_2"
         )
 
         # BIOS/iDRAC/etc.. settings for Dell hosts.
-        self.dell_config_changes = {
+        self.config_changes = {
             'BIOS.Setup.1-1': {
                 'BootMode': 'Bios',
                 'CpuInterconnectBusLinkPower': 'Enabled',
@@ -228,49 +529,6 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             }
         }
 
-        self.supermicro_mgmt_network_changes = {
-            "HostName": self.args.host,
-            "FQDN": self.fqdn,
-            "IPv4StaticAddresses": [{
-                "Address": str(self.redfish.interface.ip),
-                "Gateway": str(next(self.redfish.interface.network.hosts())),
-                "SubnetMask": str(self.redfish.interface.netmask)
-            }],
-            "StaticNameServers": [DNS_ADDRESS],
-            "StatelessAddressAutoConfig": {
-                'IPv6AutoConfigEnabled': False
-            },
-            'DHCPv4': {
-                'DHCPEnabled': False,
-            }
-        }
-
-        # From various tests it seems that the value of BootModeSelect
-        # (EFI/Legacy) varies the allowed values of other BIOS options as well.
-        # The idea is to patch these settings in a first round, wait for them
-        # to be picked up and then do another round of patch settings (to allow
-        # proper values to be selected).
-        # Please do not add any EFI/Boot/etc.. related setting in here.
-        # More info: https://phabricator.wikimedia.org/T365372#10213162
-        self.supermicro_bios_changes = {
-            "Attributes": {
-                "BootModeSelect": "Legacy",
-                "ConsoleRedirection": False,
-                "QuietBoot": False,
-                "LegacySerialRedirectionPort": "COM1",
-            }
-        }
-
-        # Some Supermicro BIOS settings differ on servers with AMD CPUs.
-        if self.vendor == SUPERMICRO_VENDOR_SLUG:
-            intel_virt_flag = "Enable" if self.args.enable_virtualization else "Disable"
-            amd_virt_flag = "Enabled" if self.args.enable_virtualization else "Disabled"
-            if self.device_model_slug not in SUPERMICRO_AMD_DEVICE_SLUGS:
-                self.supermicro_bios_changes["Attributes"]["SerialPort2Attribute"] = "SOL"
-                self.supermicro_bios_changes["Attributes"]["IntelVirtualizationTechnology"] = intel_virt_flag
-            else:
-                self.supermicro_bios_changes["Attributes"]["SVMMode"] = amd_virt_flag
-
         # Testing that the management password is correct connecting to the first physical cumin host
         cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
         try:
@@ -284,12 +542,9 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
     @property
     def runtime_description(self):
         """Runtime description for the IRC/SAL logging."""
-        descr = (
+        return (
             f'for host {self.netbox_server.mgmt_fqdn} with chassis set policy '
-            f'{self.chassis_reset_policy.name}')
-        if self.vendor == DELL_VENDOR_SLUG:
-            descr += f'and with Dell SCP reboot policy {self.dell_reboot_policy.name}'
-        return descr
+            f'{self.chassis_reset_policy.name} and with Dell SCP reboot policy ' f'{self.reboot_policy.name}')
 
     @property
     def lock_args(self):
@@ -309,20 +564,18 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             try:
                 self.redfish.check_connection()
             except RedfishError as e:
-                error_msg = f"Unable to connect to the Redfish API of {self.args.host}. "
-                if self.vendor == DELL_VENDOR_SLUG:
-                    error_msg += f"Follow {self.dell_platform_doc_link}"
+                error_msg = (
+                    f"Unable to connect to the Redfish API of {self.args.host}. "
+                    f"Follow {self.platform_doc_link}"
+                )
                 raise RuntimeError(error_msg) from e
 
         confirm_on_failure(check_connection)
 
-        if self.vendor == SUPERMICRO_VENDOR_SLUG:
-            self._config_supermicro_host()
-
         if self._detect_hw_raid():
             action = ask_input(
                 'Detected Hardware RAID. Please configure the RAID '
-                f'at this point (the password is still {self.vendor} default one). '
+                'at this point (the password is still the default one). '
                 'Once done select "modified" if the RAID was modified '
                 'or "untouched" if it was not touched. '
                 'If the RAID was modified the host will be rebooted to '
@@ -338,12 +591,11 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
                 # TODO: replace the sleep with auto-detection of the completiono of the RAID job.
                 sleep(180)
 
-        if self.vendor == DELL_VENDOR_SLUG:
-            try:
-                self._config_dell_host()
-            except Exception:  # pylint: disable=broad-except
-                logger.warning('First attempt to load the new configuration failed, auto-retrying once')
-                confirm_on_failure(self._config_dell_host)
+        try:
+            self._config_host()
+        except Exception:  # pylint: disable=broad-except
+            logger.warning('First attempt to load the new configuration failed, auto-retrying once')
+            confirm_on_failure(self._config_host)
 
         if not self.args.no_dhcp:
             self.dhcp.remove_configuration(self.dhcp_config)
@@ -353,19 +605,6 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         if self.args.no_users:
             logger.info('Skipping root user password change')
         else:
-            if self.vendor == SUPERMICRO_VENDOR_SLUG:
-                try:
-                    self.redfish.find_account("root")
-                except RedfishError as e:
-                    logger.info(
-                        "The root user on the BMC has not been created yet. "
-                        "More info: %s", e)
-                    logger.info(
-                        'Creating the root user on the BMC.')
-                    self.redfish.add_account('root', self.mgmt_password)
-                logger.info(
-                    "Updating the ADMIN user's password on the BMC.")
-                self.redfish.change_user_password('ADMIN', self.mgmt_password)
             logger.info(
                 "Updating the root user's password on the BMC.")
             self.redfish.change_user_password('root', self.mgmt_password)
@@ -396,139 +635,24 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
             has_raid = True
         return has_raid
 
-    def _get_dell_config(self):
+    def _get_config(self):
         """Get the current BIOS/iDRAC configuration."""
         self.redfish.check_connection()
         return self.redfish.scp_dump(allow_new_attributes=True)
 
-    def _get_supermicro_bios_settings(self):
-        try:
-            logger.info("Retrieving updated BIOS settings...")
-            bios_settings = self.redfish.request(
-                'GET',
-                '/redfish/v1/Systems/1/Bios',
-            ).json()
-            return bios_settings["Attributes"]
-        except RedfishError as e:
-            logger.error("Error while retrieving BIOS settings: %s", e)
-            return {}
-
-    def _patch_supermicro_bios_settings(self):
-        try:
-            logger.info("Applying BIOS settings...")
-            self.redfish.request(
-                'PATCH',
-                '/redfish/v1/Systems/1/Bios',
-                json=self.supermicro_bios_changes
-            )
-        except RedfishError as e:
-            logger.error("Error while configuring BIOS settings: %s", e)
-
-    def _reboot_supermicro_chassis(self):
-        logger.info(
-            'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
-        )
-        self.redfish.chassis_reset(self.chassis_reset_policy)
-        sleep(180)
-
-    def _config_supermicro_host(self):
-        """Provision the BIOS and BMC settings."""
-        try:
-            logging.info("Retrieving the BMC's firmware version.")
-            bmc_response = self.redfish.request("get", "/redfish/v1/UpdateService/FirmwareInventory/BMC").json()
-            logging.info("BMC firmware release date: %s", bmc_response['ReleaseDate'])
-            if bmc_response['ReleaseDate'].startswith('2022-'):
-                ask_confirmation(
-                    "The BMC firmware was released in 2022 and it may not support "
-                    "all the settings that we need. Please consider upgrading firmware "
-                    "first. See https://phabricator.wikimedia.org/T371416 for more info.")
-            logging.info("Retrieving BIOS settings (first round).")
-            supermicro_bios_attributes = self._get_supermicro_bios_settings()
-            logging.info("Setting up BootMode and basic BIOS settings.")
-            should_patch = self._found_diffs_supermicro_bios_attributes(supermicro_bios_attributes)
-            if should_patch:
-                logger.info(
-                    "Found differences between our desired status and the current "
-                    "one, applying new BIOS settings (a reboot will be performed).")
-                self._patch_supermicro_bios_settings()
-                self._reboot_supermicro_chassis()
-            else:
-                logger.info(
-                    "No BIOS settings applied since the config is already good.")
-
-            logging.info("Retrieving BIOS settings (second round).")
-            supermicro_bios_attributes = self._get_supermicro_bios_settings()
-            # Note: It seems that Supermicro's BIOS settings assume
-            # PXE via EFI configs, so we force 'Legacy' in all BIOS settings
-            # having 'EFI' has value. It should be enough to force PXE via IPMI,
-            # without setting any specific boot order.
-            # More info: https://phabricator.wikimedia.org/T365372#10148864
-            self._config_supermicro_pxe_bios_settings(supermicro_bios_attributes)
-            should_patch = self._found_diffs_supermicro_bios_attributes(supermicro_bios_attributes)
-            if should_patch:
-                logger.info(
-                    "Found differences between our desired status and the current "
-                    "one, applying new BIOS settings (a reboot will be performed).")
-                self._patch_supermicro_bios_settings()
-            else:
-                logger.info(
-                    "No BIOS settings applied since the config is already good.")
-
-            logger.info("Applying Network changes to the BMC.")
-            self.redfish.request(
-                'PATCH',
-                '/redfish/v1/Managers/1/EthernetInterfaces/1',
-                json=self.supermicro_mgmt_network_changes
-            )
-            # As precaution we reboot after the BMC network settings are applied,
-            # even if not strictly needed.
-            if should_patch:
-                self._reboot_supermicro_chassis()
-        except RedfishError as e:
-            logger.error("Error while configuring BIOS or mgmt interface: %s", e)
-
-    def _found_diffs_supermicro_bios_attributes(self, bios_attributes: dict):
-        """Diff the Supermicro's BIOS settings/attributes with our ideal config."""
-        found_diffs = False
-        for key, value in self.supermicro_bios_changes["Attributes"].items():
-            try:
-                if not bios_attributes[key] == value:
-                    logger.info(
-                        "BIOS: %s is set to %s, while we want %s",
-                        key, bios_attributes[key], value
-                    )
-                    found_diffs = True
-            except KeyError:
-                logger.info(
-                    "BIOS: %s is not present in the current settings.", key)
-                found_diffs = True
-        return found_diffs
-
-    def _config_supermicro_pxe_bios_settings(self, bios_attributes: dict):
-        """Set BIOS settings from EFI to Legacy, including riser's PCIe settings.
-
-        Look for all BIOS settings with a value containing 'EFI' and set them
-        to Legacy. This is needed to allow NIC ports to PXE correctly in our
-        environment. Set also all options starting with "RSC_" to Legacy as well,
-        since the nomenclature is used for PCIe riser NICs.
-        """
-        for (key, value) in bios_attributes.items():
-            if "EFI" == str(value) or key.startswith("RSC_"):
-                self.supermicro_bios_changes["Attributes"][key] = "Legacy"
-
-    def _config_dell_host(self):
+    def _config_host(self):
         """Provision the BIOS and iDRAC settings."""
-        config = self._get_dell_config()
+        config = self._get_config()
         if config.model.lower() in OLD_SERIAL_MODELS:
-            self.dell_config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedirCom2'
-            self.dell_config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Serial1Com1Serial2Com2'
-            self.dell_config_changes['BIOS.Setup.1-1']['InternalUsb'] = 'Off'
+            self.config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedirCom2'
+            self.config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Serial1Com1Serial2Com2'
+            self.config_changes['BIOS.Setup.1-1']['InternalUsb'] = 'Off'
         else:
-            self.dell_config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedir'
-            self.dell_config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Com2'
+            self.config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedir'
+            self.config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Com2'
 
-        self._config_dell_pxe(config)
-        was_changed = config.update(self.dell_config_changes)
+        self._config_pxe(config)
+        was_changed = config.update(self.config_changes)
         if not was_changed:
             logger.warning('Skipping update of BIOS/iDRAC, all settings have already the correct values')
             return
@@ -538,12 +662,12 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         else:
             power_state = DellSCPPowerStatePolicy.ON
 
-        response = self.redfish.scp_push(config, reboot=self.dell_reboot_policy, preview=False, power_state=power_state)
+        response = self.redfish.scp_push(config, reboot=self.reboot_policy, preview=False, power_state=power_state)
         logger.debug('SCP import results:\n%s', pformat(response))
 
         logger.info('Checking if all the changes were applied successfully')
-        config = self._get_dell_config()
-        was_changed = config.update(self.dell_config_changes)
+        config = self._get_config()
+        was_changed = config.update(self.config_changes)
         if was_changed:
             raise RuntimeError(
                 'Not all changes were applied successfully, see the ones '
@@ -604,7 +728,7 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
 
         return pxe_nic
 
-    def _config_dell_pxe(self, config):
+    def _config_pxe(self, config):
         """Configure PXE boot on the correct NIC automatically or ask the user if unable to detect it.
 
         Example keys names for DELL:
@@ -627,17 +751,17 @@ class ProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-
         logger.info('Enabling PXE boot on NIC %s', pxe_nic)
         for nic in all_nics:
             if nic == pxe_nic:
-                self.dell_config_changes[pxe_nic] = {'LegacyBootProto': 'PXE'}
+                self.config_changes[pxe_nic] = {'LegacyBootProto': 'PXE'}
             else:
-                self.dell_config_changes[nic] = {'LegacyBootProto': 'NONE'}
+                self.config_changes[nic] = {'LegacyBootProto': 'NONE'}
 
         # Set SetBootOrderEn to disk, primary NIC
         new_order = ['HardDisk.List.1-1', pxe_nic]
         # SetBootOrderEn defaults to comma-separated, but some hosts might differ
         separator = ', ' if ', ' in config.components['BIOS.Setup.1-1']['SetBootOrderEn'] else ','
-        self.dell_config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = separator.join(new_order)
+        self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = separator.join(new_order)
         # BiosBootSeq defaults to comma-space-separated, but some hosts might differ
         # Use a default if the host is in UEFI mode and dosn't have the setting at all.
         bios_boot_seq = config.components['BIOS.Setup.1-1'].get('BiosBootSeq', ', ')
         separator = ',' if ',' in bios_boot_seq and ', ' not in bios_boot_seq else ', '
-        self.dell_config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_order)
+        self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_order)
