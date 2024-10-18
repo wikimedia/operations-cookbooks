@@ -478,7 +478,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         for _, output in result:
             distro = output.message().decode()
 
-        if distro != self.args.os:
+        if distro != self.args.os and not self.spicerack.dry_run:
             message = f'New OS is {distro} but {self.args.os} was requested'
             self.host_actions.failure(message)
             raise RuntimeError(message)
