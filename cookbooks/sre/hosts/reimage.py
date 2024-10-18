@@ -99,6 +99,9 @@ class Reimage(CookbookBase):
         parser.add_argument(
             '--force-dhcp-tftp', action='store_true',
             help="Force DHCP settings to TFTP only (without HTTP), as workaround for T363576.")
+        parser.add_argument(
+            '--force', action='store_true',
+            help="Skip the first confirmation prompt and don't ask to --move-vlan.")
 
         return parser
 
@@ -113,7 +116,7 @@ class Reimage(CookbookBase):
 class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
     """As required by Spicerack API."""
 
-    def __init__(self, args, spicerack):  # pylint: disable=too-many-statements
+    def __init__(self, args, spicerack):  # pylint: disable=too-many-statements,too-many-branches
         """Initialize the reimage runner."""
         ensure_shell_is_durable()
         self.args = args
@@ -126,7 +129,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.netbox_server = spicerack.netbox_server(self.host, read_write=True)
         self.netbox_data = self.netbox_server.as_dict()
 
-        ask_confirmation(f'ATTENTION: Destructive action for {self.host}. Proceed?')
+        if not self.args.force:
+            ask_confirmation(f'ATTENTION: Destructive action for {self.host}. Proceed?')
         # Shortcut variables
         self.fqdn = self.netbox_server.fqdn
         self.output_filename = self._get_output_filename(spicerack.username)
@@ -174,7 +178,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if args.puppet_version == 7 and args.os == 'buster':
             raise RuntimeError('Puppet 7 is not supported on buster you must first upgrade the os.')
 
-        if not self.virtual and not self.args.move_vlan and self.netbox_server.access_vlan in LEGACY_VLANS:
+        if not self.args.force and not self.virtual and not self.args.move_vlan and \
+                self.netbox_server.access_vlan in LEGACY_VLANS:
             ask_confirmation('Physical host on legacy vlan/IP, please consider re-imaging it using --move-vlan.\n'
                              'More info: https://wikitech.wikimedia.org/wiki/Vlan_migration\n'
                              'Continue to ignore.')
