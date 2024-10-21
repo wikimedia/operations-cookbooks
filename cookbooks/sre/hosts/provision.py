@@ -414,7 +414,8 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             if should_patch:
                 self._reboot_chassis()
         except RedfishError as e:
-            logger.error("Error while configuring BIOS or mgmt interface: %s", e)
+            raise RuntimeError(
+                f"Error while configuring BIOS or mgmt interface: {e}") from e
 
     def _found_diffs_bios_attributes(self, bios_attributes: dict):
         """Diff the Supermicro's BIOS settings/attributes with our ideal config."""
