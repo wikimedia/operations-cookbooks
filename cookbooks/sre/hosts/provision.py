@@ -314,15 +314,12 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             self.dhcp.remove_configuration(self.dhcp_config)
 
     def _detect_hw_raid(self):
-        """Get if a hardware raid configuration is set for a Dell/Supermicro host."""
+        """Get if a hardware raid configuration is set for a Supermicro host."""
         try:
             storage = self.redfish.request('get', self.redfish.storage_manager).json()
             has_raid = False
-            # TODO: The assumption is that both Dell's and Supermicro's
-            # "Members" field have the same format. We still don't have examples
-            # to check, so this needs to be revisited.
             for storage_member in storage['Members']:
-                if storage_member['@odata.id'].split('/')[-1].startswith('RAID'):
+                if storage_member['@odata.id'].split('/')[-1].startswith('HA-RAID'):
                     has_raid = True
                     break
         except Exception:  # pylint: disable=broad-except
@@ -620,13 +617,10 @@ class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-insta
             self.dhcp.remove_configuration(self.dhcp_config)
 
     def _detect_hw_raid(self):
-        """Get if a hardware raid configuration is set for a Dell/Supermicro host."""
+        """Get if a hardware raid configuration is set for a Dell host."""
         try:
             storage = self.redfish.request('get', self.redfish.storage_manager).json()
             has_raid = False
-            # TODO: The assumption is that both Dell's and Supermicro's
-            # "Members" field have the same format. We still don't have examples
-            # to check, so this needs to be revisited.
             for storage_member in storage['Members']:
                 if storage_member['@odata.id'].split('/')[-1].startswith('RAID'):
                     has_raid = True
