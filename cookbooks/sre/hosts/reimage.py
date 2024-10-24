@@ -270,8 +270,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if self.rollback_depool:
             self._repool()
 
-        self.host_actions.failure('**The reimage failed, see the cookbook logs for the details,'
-                                  f'You can also try typing "sudo install-console {self.fqdn}" to get a root shell'
+        self.host_actions.failure('**The reimage failed, see the cookbook logs for the details. '
+                                  f'You can also try typing "sudo install-console {self.fqdn}" to get a root shell, '
                                   'but depending on the failure this may not work.**')
         logger.error('Reimage executed with errors:\n%s\n', self.actions)
         if self.phabricator is not None:
