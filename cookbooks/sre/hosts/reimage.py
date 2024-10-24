@@ -149,6 +149,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.spicerack: Spicerack = spicerack
         self.requests = spicerack.requests_session(__name__, timeout=(5.0, 30.0))
         self.virtual: bool = self.netbox_server.virtual
+        self.populate_puppetdb_attempted = False
 
         try:
             self.remote_host = self.remote.query(self.fqdn)
@@ -269,6 +270,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self._unmask_units()
         if self.rollback_depool:
             self._repool()
+        if self.populate_puppetdb_attempted:
+            logger.info("Attempt to clear Puppetdb's state.")
+            self.puppet_server.delete(self.fqdn)
 
         self.host_actions.failure('**The reimage failed, see the cookbook logs for the details. '
                                   f'You can also try typing "sudo install-console {self.fqdn}" to get a root shell, '
@@ -487,6 +491,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
     def _populate_puppetdb(self):
         """Run Puppet in noop mode to populate the exported resources in PuppetDB to downtime it on Icinga."""
+        self.populate_puppetdb_attempted = True
         self.remote_installer.run_sync(Command('puppet agent -t --noop &> /dev/null', ok_codes=[]),
                                        print_progress_bars=False)
         self.host_actions.success('Run Puppet in NOOP mode to populate exported resources in PuppetDB')
