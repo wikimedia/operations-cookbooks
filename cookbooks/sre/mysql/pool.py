@@ -204,8 +204,14 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
     def check_diff(self, diff):
         """Ensure that the diff has only the expected change in it."""
-        # Count the diff lines unrelated to the current change, ignoring the control lines (+++, ---, @@)
-        dirty = sum(1 for d in diff[3:] if self.args.instance not in d and (d.startswith('-') or d.startswith('+')))
-        if dirty:
-            logger.error("The current diff has spurious changes, aborting:\n%s", pformat(diff))
+        # Count the diff lines unrelated to the current change
+        count = 0
+        for line in diff:
+            if line.startswith(" ") or line.startswith("---") or line.startswith("+++") or line.startswith("@@"):
+                continue  # ignore control lines and context linex
+            if self.args.instance not in line:
+                count += 1
+
+        if count:
+            logger.error("The current diff has %d spurious changes, aborting:\n%s", count, pformat(diff))
             raise RuntimeError("Unable to proceed due to spurious changes in the diff")
