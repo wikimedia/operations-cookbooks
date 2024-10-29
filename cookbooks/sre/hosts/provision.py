@@ -352,10 +352,10 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
 
     def _reboot_chassis(self):
         logger.info(
-            'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
+            'Rebooting the host with policy %s and waiting for 5 minutes', self.chassis_reset_policy
         )
         self.redfish.chassis_reset(self.chassis_reset_policy)
-        sleep(180)
+        sleep(300)
 
     def _config_host(self):
         """Provision the BIOS and BMC settings."""
