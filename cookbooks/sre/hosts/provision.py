@@ -340,15 +340,12 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             return {}
 
     def _patch_bios_settings(self):
-        try:
-            logger.info("Applying BIOS settings...")
-            self.redfish.request(
-                'PATCH',
-                '/redfish/v1/Systems/1/Bios',
-                json=self.bios_changes
-            )
-        except RedfishError as e:
-            logger.error("Error while configuring BIOS settings: %s", e)
+        logger.info("Applying BIOS settings...")
+        self.redfish.request(
+            'PATCH',
+            '/redfish/v1/Systems/1/Bios',
+            json=self.bios_changes
+        )
 
     def _reboot_chassis(self):
         logger.info(
@@ -425,10 +422,11 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
                         key, bios_attributes[key], value
                     )
                     found_diffs = True
-            except KeyError:
+            except KeyError as e:
                 logger.info(
                     "BIOS: %s is not present in the current settings.", key)
-                found_diffs = True
+                raise RuntimeError(
+                    f"Error while checking BIOS attribute {key}") from e
         return found_diffs
 
     def _config_pxe_bios_settings(self, bios_attributes: dict):
