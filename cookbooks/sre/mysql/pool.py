@@ -3,18 +3,124 @@
 from datetime import datetime, timedelta
 from pprint import pformat
 from time import sleep
-from typing import Generator
+from typing import Dict, Generator, Tuple
 import logging
 
 from conftool.extensions.dbconfig.action import ActionResult
+from conftool.extensions.dbconfig.entities import Instance as DBCInst
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.decorators import retry
+from spicerack import Spicerack
+from spicerack.mysql import Instance as MInst
+from spicerack.remote import Remote, RemoteHosts
 from wmflib.interactive import ensure_shell_is_durable
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
-
 logger = logging.getLogger(__name__)
+
+# TODO: improve handling of spurious changes, right now it bails out
+# TODO: check that the host is not downtimed and green in Icinga/AM?
+# TODO: check for mysql/metrics errors during the repooling operation?
+
+
+def ensure(condition: bool, msg: str) -> None:
+    """Just some syntactic sugar for readability."""
+    if condition:
+        return
+    logger.error("Failed safety check: {msg}", exc_info=True)
+    raise AssertionError(msg)
+
+
+def _fetch_mysql_instance_wildcard(spicerack: Spicerack, hostname: str) -> MInst:
+    # TODO: only use fqdns
+    ensure("." in hostname, f"Invalid hostname: contains dot '{hostname}'")
+    db = spicerack.mysql().get_dbs(f"{hostname}.*")
+    instances = db.list_hosts_instances()
+    ensure(len(instances) == 1, f"{len(instances)} found, expected one")
+    return instances[0]
+
+
+def _fetch_db_remotehost(remote: Remote, fqdn: str) -> RemoteHosts:
+    query = "P{" + fqdn + "} and A:db-all and not A:db-multiinstance"
+    h = remote.query(query)
+    ensure(len(h.hosts) == 1, f"{len(h.hosts)} hosts matching '{fqdn}'")
+    return h
+
+
+def _get_fqdn(mi: MInst) -> str:
+    t = tuple(mi.host.hosts)
+    ensure(len(t) == 1, f"{len(t)} hosts in {mi}")
+    return t[0]
+
+
+def _run_cmd(host: RemoteHosts, cmd: str, is_safe=False) -> str:
+    out = host.run_sync(cmd, is_safe=is_safe, print_progress_bars=False, print_output=False)
+    return list(out)[0][1].message().decode("utf-8")
+
+
+def _count_tcp_connections_port_3306(remote_host: RemoteHosts) -> int:
+    # TODO: this breaks on multiinstance hosts or if there are any other unexpected conns
+    cmd = """ss -ntH state all exclude listening '( dport = :3306 or sport = :3306 )' """
+    out = _run_cmd(remote_host, cmd, is_safe=True)
+    conn_cnt = out.count("\n")
+    return conn_cnt
+
+
+def _fetch_replication_delay_ms(ins: MInst) -> int:
+    sql = """
+    SELECT TIMESTAMPDIFF(MICROSECOND, max(ts), UTC_TIMESTAMP(6)) AS delta_us
+    FROM heartbeat.heartbeat ORDER BY ts LIMIT 1 """
+    r = ins.fetch_one_row(sql)
+    return int(r["delta_us"] / 1_000)
+
+
+def _fetchall(ins: MInst, sql: str, args: tuple) -> Tuple[Dict]:
+    with ins.cursor() as (_conn, cur):
+        _ = cur.execute(sql, args)
+        res = tuple(cur.fetchall())
+        ins.check_warnings(cur)
+        return res
+
+
+def _fetch_instance_connections_count_detailed(ins: MInst) -> Tuple[Dict]:
+    """Gather database instance connection counts.
+
+    +----------+-----------------+-----------+
+    | count(*) | user            | command   |
+    +----------+-----------------+-----------+
+    |        1 | cumin2024       | Query     |
+    |        1 | event_scheduler | Daemon    |
+    |        3 | orchestrator    | Sleep     |
+    |        1 | system user     | Slave_IO  |
+    |        1 | system user     | Slave_SQL |
+    |       27 | wikiuser2023    | Sleep     |
+    +----------+-----------------+-----------+
+    """
+    sql = """SELECT user, command, COUNT(*) AS cnt
+        FROM information_schema.processlist GROUP BY user, command"""
+    return _fetchall(ins, sql, ())
+
+
+def _fetch_instance_connections_count_wikiusers(ins: MInst) -> int:
+    """Count database instance connections matching wiki-related users."""
+    sql = "SELECT COUNT(*) AS cnt FROM information_schema.processlist WHERE user LIKE '%%wiki%%'"
+    return ins.fetch_one_row(sql, ())["cnt"]
+
+
+def _fetch_instance_by_name(dbctl, hostname: str) -> DBCInst:
+    dbi = dbctl.instance.get(hostname)
+    ensure(dbi is not None, f"Unable to find instance {hostname} in dbctl. Aborting.")
+    return dbi
+
+
+def _gather_instance_status(host: RemoteHosts, mi: MInst) -> int:
+    socket_cnt = _count_tcp_connections_port_3306(host)
+    wikiuser_cnt = _fetch_instance_connections_count_wikiusers(mi)
+    delay_ms = _fetch_replication_delay_ms(mi)
+    msg = "Replication delay: %7.3f s Wikiuser conn cnt: %3d TCP socket 3306 cnt: %3d"
+    logger.info(msg, delay_ms / 1000.0, wikiuser_cnt, socket_cnt)
+    return wikiuser_cnt
 
 
 # This class is also used as a base class for the Depool cookbook
@@ -88,11 +194,14 @@ class PoolDepoolRunner(CookbookRunnerBase):
         logging.getLogger("etcd.client").setLevel(logging.INFO)
         logging.getLogger("conftool").setLevel(logging.INFO)
 
+        ensure_shell_is_durable()
+
         self.args = args
         self.pool = args.operation == "pool"
         self.dbctl = spicerack.dbctl()
         self.reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
         self.dry_run = spicerack.dry_run
+        self._mysql = spicerack.mysql()
 
         if self.pool:
             if self.args.slow:
@@ -113,21 +222,17 @@ class PoolDepoolRunner(CookbookRunnerBase):
             else:
                 self.steps = (6, 25, 56, 100)  # 4 steps, power of 2 progression
 
-        instance = self.dbctl.instance.get(self.args.instance)
-        if instance is None:
-            raise RuntimeError(f"Unable to find instance {self.args.instance} in dbctl. Aborting.")
+        dbi: DBCInst = _fetch_instance_by_name(self.dbctl, args.instance)
+        self._mysql_instance: MInst = _fetch_mysql_instance_wildcard(spicerack, dbi.name)
+        fqdn = _get_fqdn(self._mysql_instance)
 
-        self.datacenter = instance.tags.get("datacenter")
-        self.phabricator = None
+        self.datacenter = dbi.tags.get("datacenter")
+        self.remote_host = _fetch_db_remotehost(spicerack.remote(), fqdn)
+
         if self.reason.task_id is not None:
             self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-
-        if self.pool:
-            ensure_shell_is_durable()
-
-        # TODO: improve handling of spurious changes, right now it bails out
-        # TODO: check that the host is not downtimed and green in Icinga/AM?
-        # TODO: check for mysql/metrics errors during the repooling operation?
+        else:
+            self.phabricator = None
 
     @property
     def runtime_description(self) -> str:
@@ -142,11 +247,8 @@ class PoolDepoolRunner(CookbookRunnerBase):
     def lock_args(self) -> LockArgs:
         """Make the cookbook lock per-instance."""
         # TTL includes both the sleep time (900s) plus the potential retries for wait_diff_clean (30*30s) for each step
-        return LockArgs(
-            suffix=self.args.instance,
-            concurrency=1,
-            ttl=1800 * len(self.steps) if self.pool else 60,
-        )
+        ttl = 1800 * len(self.steps) if self.pool else 60
+        return LockArgs(suffix=self.args.instance, concurrency=1, ttl=ttl)
 
     def check_action_result(self, action_result: ActionResult, message: str) -> None:
         """Raise on failure and log any messages present in an ActionResult instance."""
@@ -160,64 +262,63 @@ class PoolDepoolRunner(CookbookRunnerBase):
             raise RuntimeError(f"Failed to {message}")
 
     def run(self) -> None:
-        """Required by the Spicerack API."""
+        """As required by the Spicerack API."""
         if self.pool:
             if self.phabricator is not None:
-                self.phabricator.task_comment(
-                    self.reason.task_id,
-                    f"Start pool of {self.runtime_description} - {self.reason.owner}",
-                )
+                msg = f"Start pool of {self.runtime_description} - {self.reason.owner}"
+                self.phabricator.task_comment(self.reason.task_id, msg)
 
             self.gradual_pooling()
 
         else:
-            message = "depool instance {self.args.instance}"
+            msg = "depool instance {self.args.instance}"
             self.wait_diff_clean()
             ret = self.dbctl.instance.depool(self.args.instance)
-            self.check_action_result(ret, message)
-            self.commit_change(message)
+            self.check_action_result(ret, msg)
+            self.commit_change(msg)
+
+            self.wait_for_connection_drain()
 
         if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.reason.task_id,
-                f"Completed {self.args.operation} of {self.runtime_description} - {self.reason.owner}",
-            )
+            msg = f"Completed {self.args.operation} of {self.runtime_description} - {self.reason.owner}"
+            self.phabricator.task_comment(self.reason.task_id, msg)
+
+    def _fetch_current_pooling(self, i: str, percentage: int) -> set:
+        instance = self.dbctl.instance.get(i)
+        current_pooling = {
+            (section["pooled"], section["percentage"] >= percentage) for section in instance.sections.values()
+        }
+        return current_pooling
 
     def gradual_pooling(self) -> None:
         """Gradually pool the instance with increasing percentages."""
         sleep_duration = 5 if self.dry_run else 900
         for percentage in self.steps:
-
-            instance = self.dbctl.instance.get(self.args.instance)
-            current_pooling = {
-                (section["pooled"], section["percentage"] >= percentage) for section in instance.sections.values()
-            }
+            current_pooling = self._fetch_current_pooling(self.args.instance, percentage)
             # Skip if all the sections are pooled with a percentage equal or greater than the percentage to set
             if len(current_pooling) == 1 and current_pooling.pop() == (True, True):
-                logger.info(
-                    "Skipping pooling instance %s at %d%%, instance already pooled with higher percentage",
-                    self.args.instance,
-                    percentage,
-                )
+                msg = "Skipping pooling instance %s at %d%%: instance already pooled with higher percentage"
+                logger.info(msg, self.args.instance, percentage)
                 continue
 
-            message = f"pool instance {self.args.instance} at {percentage}%"
-            logger.info(message)
+            msg = f"Pooling instance {self.args.instance} at {percentage}%"
+            logger.info(msg)
             self.wait_diff_clean()
             ret = self.dbctl.instance.pool(self.args.instance, percentage=percentage)
-            self.check_action_result(ret, message)
-            self.commit_change(message)
-            if percentage != 100:
-                sleep_ends = datetime.utcnow() + timedelta(seconds=sleep_duration)
-                logger.info(
-                    "Sleeping for %ds, next step will be at %s",
-                    sleep_duration,
-                    sleep_ends,
-                )
-                sleep(sleep_duration)  # TODO: replace with a polling of metrics from prometheus or the DB itself
+            self.check_action_result(ret, msg)
+            self.commit_change(msg)
+            if percentage == 100:
+                logger.debug("pooling-in completed")
+                return
+
+            monitor_end_t = datetime.utcnow() + timedelta(seconds=sleep_duration)
+            logger.info("Next pool-in step will happen after %s", monitor_end_t)
+            while datetime.utcnow() < monitor_end_t:
+                _gather_instance_status(self.remote_host, self._mysql_instance)
+                sleep(10)
 
     def commit_change(self, message: str) -> None:
-        """Check the diff and commit the change."""
+        """Check the diff and commit the changepy."""
         ret, diff = self.get_diff()
         self.check_action_result(ret, f"get diff to {message}")
 
@@ -240,6 +341,25 @@ class PoolDepoolRunner(CookbookRunnerBase):
             return
 
         raise RuntimeError("dbctl config has a pending diff or unable to get the diff")
+
+    def wait_for_connection_drain(self) -> None:
+        """Wait for connections from the parser to drain.
+
+        NOTE: this does not support misc databases
+        """
+        timeout = datetime.utcnow() + timedelta(hours=1)
+        logger.info("Monitoring number of wikiuser* connections and sockets on port 3306")
+        while datetime.utcnow() < timeout:
+            wikiuser_cnt = _gather_instance_status(self.remote_host, self._mysql_instance)
+            if wikiuser_cnt == 0:
+                logger.info("Connection drain completed")
+                return
+
+            sleep(10)
+
+        d = _fetch_instance_connections_count_detailed(self._mysql_instance)
+        logger.info("Drain timeout! Connection summary: %r", d)
+        raise RuntimeError("The instance failed to drain in an hour")
 
     def get_diff(self) -> tuple[ActionResult, Generator]:
         """Get the current dbctl config diff."""
@@ -264,9 +384,5 @@ class PoolDepoolRunner(CookbookRunnerBase):
                 count += 1
 
         if count:
-            logger.error(
-                "The current diff has %d spurious changes, aborting:\n%s",
-                count,
-                pformat(diff),
-            )
+            logger.error("The current diff has %d spurious changes, aborting:\n%s", count, pformat(diff))
             raise RuntimeError("Unable to proceed due to spurious changes in the diff")
