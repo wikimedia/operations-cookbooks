@@ -183,13 +183,12 @@ class RollingOperationRunner(CookbookRunnerBase):
             if nodes is None:
                 break
 
-            remote_hosts = nodes.get_remote_hosts()
-            puppet = self.spicerack.puppet(remote_hosts)
+            puppet = self.spicerack.puppet(nodes.remote_hosts)
 
             logger.info('Starting work on the next batch of nodes.')
             logger.info('#### Please don\'t kill this cookbook now. ####')
 
-            with self.spicerack.alerting_hosts(remote_hosts.hosts).downtimed(
+            with self.spicerack.alerting_hosts(nodes.remote_hosts.hosts).downtimed(
                     self.reason, duration=timedelta(minutes=60)):
                 with puppet.disabled(self.reason):
                     with ExitStack() as stack:
@@ -248,31 +247,31 @@ class RollingOperationRunner(CookbookRunnerBase):
 
             stop_es_cmd = 'systemctl list-units elasticsearch_* --plain --no-legend --all | ' + \
                           'awk \' { print $1 } \' | xargs systemctl stop'
-            nodes.get_remote_hosts().run_sync(stop_es_cmd)
+            nodes.remote_hosts.run_sync(stop_es_cmd)
 
             upgrade_cmd = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
                           options='-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
                           packages=' '.join(['elasticsearch-oss', 'wmf-elasticsearch-search-plugins']))
 
-            nodes.get_remote_hosts().run_sync('chown -R elasticsearch /etc/elasticsearch/*')
-            nodes.get_remote_hosts().run_sync(upgrade_cmd)
+            nodes.remote_hosts.run_sync('chown -R elasticsearch /etc/elasticsearch/*')
+            nodes.remote_hosts.run_sync(upgrade_cmd)
             nodes.start_elasticsearch()
             # FIXME: implement polling per comment at
             # https://gerrit.wikimedia.org/r/c/operations/cookbooks/+/769109/comment/91b26217_5f2fd4bb/
             sleep(120)  # Sleep during restart of elasticsearch services (b/c systemctl returns asynchronously)
             # Restarting the service will write a keystore file that requires elasticsearch to be owner. See:
             # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/elasticsearch-keystore.html#keystore-upgrade
-            nodes.get_remote_hosts().run_sync('chown -R root /etc/elasticsearch/*')
+            nodes.remote_hosts.run_sync('chown -R root /etc/elasticsearch/*')
 
         if self.operation is Operation.REBOOT:
-            nodes.get_remote_hosts().reboot(batch_size=self.nodes_per_run)
-            nodes.get_remote_hosts().wait_reboot_since(start_time)
+            nodes.remote_hosts.reboot(batch_size=self.nodes_per_run)
+            nodes.remote_hosts.wait_reboot_since(start_time)
 
         if self.operation is Operation.RESTART:
             nodes.start_elasticsearch()
 
         if self.operation is Operation.REIMAGE:
-            nodeset = nodes.get_remote_hosts().hosts
+            nodeset = nodes.remote_hosts.hosts
             for node in nodeset:
                 hostname = node.split('.')[0]
                 ret_val = self.spicerack.run_cookbook(
@@ -285,5 +284,5 @@ class RollingOperationRunner(CookbookRunnerBase):
                                    ret_val, hostname)
 
             logger.info("Forcing puppet run after reimage:")
-            puppet = self.spicerack.puppet(nodes.get_remote_hosts())
+            puppet = self.spicerack.puppet(nodes.remote_hosts)
             puppet.run()

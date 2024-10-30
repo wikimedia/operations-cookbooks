@@ -232,7 +232,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.task_id = args.task_id
         self.keep_mgmt_dns = args.keep_mgmt_dns
-        self.puppet_server = spicerack.puppet_server().server_host
+        self.puppet_server = spicerack.puppet_server().remote_hosts
         self.kerberos_kadmin = self.remote.query(KERBEROS_KADMIN_CUMIN_ALIAS)
         self.deployment_host = self.remote.query(self.dns.resolve_cname(DEPLOYMENT_HOST))
         self.patterns = get_grep_patterns(self.dns, self.decom_hosts)
