@@ -3,7 +3,9 @@ import logging
 from datetime import timedelta
 from time import sleep
 
-from spicerack.mysql_legacy import Instance, MasterUseGTID, MysqlLegacyError, ReplicationInfo
+from pymysql.err import MySQLError
+
+from spicerack.mysql_legacy import Instance, MasterUseGTID, ReplicationInfo
 from wmflib.actions import Actions
 from wmflib.config import load_yaml_config
 from wmflib.interactive import confirm_on_failure
@@ -80,16 +82,16 @@ class PrepareSection:
         from_host = str(self.master_from.host)
         to_host = str(self.master_to.host)
 
-        read_only_from = self.master_from.run_vertical_query("SELECT @@read_only", is_safe=True)[0]["@@read_only"]
+        read_only_from = self.master_from.fetch_one_row("SELECT @@read_only")["@@read_only"]
         logger.info("[%s] MASTER_FROM %s @@read_only=%s", self.section, from_host, read_only_from)
-        if read_only_from != "0":
+        if read_only_from != 0:
             message = f"MASTER_FROM {from_host} should be read write"
             self.actions.failure(f"**{message}**")
             raise RuntimeError(message)
 
-        read_only_to = self.master_to.run_vertical_query("SELECT @@read_only", is_safe=True)[0]["@@read_only"]
+        read_only_to = self.master_to.fetch_one_row("SELECT @@read_only")["@@read_only"]
         logger.info("[%s] MASTER_TO %s @@read_only=%s", self.section, to_host, read_only_to)
-        if read_only_to != "1":
+        if read_only_to != 1:
             message = f"MASTER_TO {to_host} should be read only"
             self.actions.failure(f"**{message}**")
             raise RuntimeError(message)
@@ -102,7 +104,11 @@ class PrepareSection:
             self.actions.failure(f"**{message}**")
             raise RuntimeError(message)
 
-        master_to_replicas = self.master_to.run_vertical_query("SHOW SLAVE HOSTS", is_safe=True)
+        with self.master_to.cursor() as (_connection, cursor):
+            _ = cursor.execute("SHOW SLAVE HOSTS")
+            master_to_replicas = cursor.fetchall()
+            self.master_to.check_warnings(cursor)
+
         for replica in master_to_replicas:
             logger.info("[%s] Checking MASTER_TO %s replica %s", self.section, to_host, replica)
             if replica["Host"].split(".")[1] != to_host.split(".")[1]:
@@ -115,13 +121,13 @@ class PrepareSection:
                     self.section, from_host, to_host)
         binlog_query = "SELECT @@GLOBAL.binlog_format AS binlog_format"
         try:
-            binlog_from = self.master_from.run_vertical_query(binlog_query, is_safe=True)[0]["binlog_format"]
-        except MysqlLegacyError:
+            binlog_from = self.master_from.fetch_one_row(binlog_query)["binlog_format"]
+        except MySQLError:
             binlog_from = "UNDEFINED"
 
         try:
-            binlog_to = self.master_to.run_vertical_query(binlog_query, is_safe=True)[0]["binlog_format"]
-        except MysqlLegacyError:
+            binlog_to = self.master_to.fetch_one_row(binlog_query)["binlog_format"]
+        except MySQLError:
             binlog_to = "UNDEFINED"
 
         if binlog_from != binlog_to:
@@ -146,8 +152,8 @@ class PrepareSection:
         expected = {
             "Slave_IO_Running": "Yes",
             "Slave_SQL_Running": "Yes",
-            "Last_IO_Errno": "0",
-            "Last_SQL_Errno": "0",
+            "Last_IO_Errno": 0,
+            "Last_SQL_Errno": 0,
             "Using_Gtid": MasterUseGTID.NO.value.capitalize(),
         }
         status = self.master_to.show_slave_status()
@@ -167,7 +173,7 @@ class PrepareSection:
         self.master_to.stop_slave()
         self.actions.success(f"MASTER_TO {self.master_to.host} STOP SLAVE.")
 
-    def wait_master_to_position(self) -> dict[str, str]:
+    def wait_master_to_position(self) -> dict:
         """Waits until the MASTER_TO master position is stable and return it."""
         logger.info(
             "[%s] Checking if MASTER_TO %s master position is stable over time", self.section, self.master_to.host)
@@ -200,7 +206,7 @@ class PrepareSection:
         self.actions.failure(f"**{message}**")
         raise RuntimeError(message)
 
-    def enable_circular_replication(self, master_to_position: dict[str, str]) -> None:
+    def enable_circular_replication(self, master_to_position: dict) -> None:
         """Changes the master on MASTER_FROM to replicate from MASTER_TO and enable circular replication."""
         repl_info = ReplicationInfo(
             primary=str(self.master_to.host),
@@ -241,14 +247,14 @@ class PrepareSection:
         expected = {
             "Master_Host": str(self.master_to.host),
             "Master_User": self.user,
-            "Master_Port": "3306",
+            "Master_Port": 3306,
             "Master_Log_File": master_to_position["File"],
             "Read_Master_Log_Pos": master_to_position["Position"],
             "Exec_Master_Log_Pos": master_to_position["Position"],
             "Slave_IO_Running": "Yes",
             "Slave_SQL_Running": "Yes",
-            "Last_IO_Errno": "0",
-            "Last_SQL_Errno": "0",
+            "Last_IO_Errno": 0,
+            "Last_SQL_Errno": 0,
         }
         status = self.master_from.show_slave_status()
         self._validate_slave_status(f"MASTER_FROM {self.master_from.host}", status, expected)
@@ -264,11 +270,11 @@ class PrepareSection:
         expected = {
             "Master_Host": str(self.master_from.host),
             "Master_User": self.user,
-            "Master_Port": "3306",
+            "Master_Port": 3306,
             "Slave_IO_Running": "Yes",
             "Slave_SQL_Running": "Yes",
-            "Last_IO_Errno": "0",
-            "Last_SQL_Errno": "0",
+            "Last_IO_Errno": 0,
+            "Last_SQL_Errno": 0,
         }
         status = self.master_to.show_slave_status()
         self._validate_slave_status(f"MASTER_TO {self.master_to.host}", status, expected)
@@ -287,11 +293,11 @@ class PrepareSection:
         expected = {
             "Master_Host": str(self.master_to.host),
             "Master_User": self.user,
-            "Master_Port": "3306",
+            "Master_Port": 3306,
             "Slave_IO_Running": "Yes",
             "Slave_SQL_Running": "Yes",
-            "Last_IO_Errno": "0",
-            "Last_SQL_Errno": "0",
+            "Last_IO_Errno": 0,
+            "Last_SQL_Errno": 0,
         }
         status = self.master_from.show_slave_status()
         self._validate_slave_status(f"MASTER_FROM {self.master_from.host}", status, expected)
@@ -300,7 +306,7 @@ class PrepareSection:
             "pt-heartbeat"
         )
 
-    def _validate_slave_status(self, prefix: str, status: dict[str, str], expected: dict[str, str]):
+    def _validate_slave_status(self, prefix: str, status: dict, expected: dict):
         """Ensure that SHOW SLAVE STATUS provided keys have the expected values."""
         for key, value in expected.items():
             logger.info("[%s] %s checking SLAVE STATUS %s=%s", self.section, prefix, key, status[key])

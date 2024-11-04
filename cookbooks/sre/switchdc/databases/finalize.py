@@ -59,16 +59,16 @@ class FinalizeSection:
         from_host = str(self.master_from.host)
         to_host = str(self.master_to.host)
 
-        read_only_from = self.master_from.run_vertical_query("SELECT @@read_only", is_safe=True)[0]["@@read_only"]
+        read_only_from = self.master_from.fetch_one_row("SELECT @@read_only")["@@read_only"]
         logger.info("[%s] MASTER_FROM %s @@read_only=%s", self.section, from_host, read_only_from)
-        if read_only_from != "1":
+        if read_only_from != 1:
             message = f"MASTER_FROM {from_host} should be read only"
             self.actions.failure(f"**{message}**")
             raise RuntimeError(message)
 
-        read_only_to = self.master_to.run_vertical_query("SELECT @@read_only", is_safe=True)[0]["@@read_only"]
+        read_only_to = self.master_to.fetch_one_row("SELECT @@read_only")["@@read_only"]
         logger.info("[%s] MASTER_TO %s @@read_only=%s", self.section, to_host, read_only_to)
-        if read_only_to != "0":
+        if read_only_to != 0:
             message = f"MASTER_TO {to_host} should be read write"
             self.actions.failure(f"**{message}**")
             raise RuntimeError(message)
@@ -105,7 +105,8 @@ class FinalizeSection:
 
         self.master_to.stop_slave()
         self.actions.success(f"MASTER_TO {self.master_to.host} STOP SLAVE.")
-        self.master_to.run_query("RESET SLAVE ALL")
+
+        self.master_to.execute("RESET SLAVE ALL")
         self.actions.success(f"MASTER_TO {self.master_to.host} RESET SLAVE ALL.")
 
         try:
@@ -121,16 +122,21 @@ class FinalizeSection:
 
     def clean_heartbeat(self):
         """Clean the MASTER_FROM rows in pt-heartbeat on MASTER_TO."""
-        query = (f"SELECT server_id FROM heartbeat WHERE shard = '{self.section}' AND "
-                 f"datacenter = '{self.dc_from}'")  # nosec
-        rows = self.master_to.run_vertical_query(query, "heartbeat", is_safe=True)
-        server_ids = [int(row["server_id"]) for row in rows]
+        query = ("SELECT server_id FROM heartbeat WHERE shard = %(section)s AND "
+                 "datacenter = %(dc_from)s")  # nosec
+
+        with self.master_to.cursor(database="heartbeat") as (_connection, cursor):
+            _ = cursor.execute(query, {"section": self.section, "dc_from": self.dc_from})
+            server_ids = [row["server_id"] for row in cursor]
+            self.master_to.check_warnings(cursor)
+
         self.actions.success(f"MASTER_TO {self.master_from.host} heartbeat server IDs to delete are: {server_ids}")
 
-        for server_id in server_ids:
-            query = f"DELETE FROM heartbeat WHERE server_id={server_id}"  # nosec
-            self.master_to.run_query(query, "heartbeat")
-            self.actions.success(f"MASTER_TO {self.master_from.host} DELETED heartbeat rows for server ID {server_id}")
+        query = "DELETE FROM heartbeat WHERE server_id IN (%s)"  # nosec
+        rows = self.master_to.execute(query, server_ids, database="heartbeat", autocommit=True)
+
+        self.actions.success(
+            f"MASTER_TO {self.master_from.host} DELETED {rows} heartbeat rows for server IDs {server_ids}")
 
     def enable_gtid(self) -> None:
         """Enable GTID on the MASTER_FROM."""
