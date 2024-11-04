@@ -1,7 +1,7 @@
 """Perform all the Database related finalization steps after the switch datacenter."""
 import logging
 
-from spicerack.mysql_legacy import Instance, MasterUseGTID, MysqlLegacyError
+from spicerack.mysql import Instance, MasterUseGTID, MysqlError
 from wmflib.actions import Actions
 from wmflib.interactive import confirm_on_failure
 
@@ -99,7 +99,7 @@ class FinalizeSection:
         """Reset the replication on MASTER_TO."""
         try:
             status = self.master_to.show_slave_status()
-        except MysqlLegacyError:  # Raised if the host is not replicating already
+        except MysqlError:  # Raised if the host is not replicating already
             self.actions.success(f"MASTER_TO {self.master_to.host} has no replication set, skipping.")
             return
 
@@ -117,7 +117,7 @@ class FinalizeSection:
                 self.actions.success("Ignoring failed check for reset replication in DRY-RUN mode.")
             else:
                 raise RuntimeError(f"[{self.section}] {message}")
-        except MysqlLegacyError:  # Raised if the host is not replicating, as expected
+        except MysqlError:  # Raised if the host is not replicating, as expected
             self.actions.success(f"MASTER_TO {self.master_to.host} has no replication set.")
 
     def clean_heartbeat(self):

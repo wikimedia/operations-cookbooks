@@ -13,7 +13,7 @@ class SetDBReadWriteRunner(MediaWikiSwitchDCRunnerBase):
     def action(self):
         """Required by base class API."""
         logger.info('Setting in read-write mode all the core DB primaries in %s', self.dc_to)
-        mysql = self.spicerack.mysql_legacy()
+        mysql = self.spicerack.mysql()
         mysql.set_core_masters_readwrite(self.dc_to)
 
 

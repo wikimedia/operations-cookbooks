@@ -2,7 +2,7 @@
 
 import logging
 
-from spicerack.mysql_legacy import MysqlLegacyError
+from spicerack.mysql import MysqlError
 
 from cookbooks.sre.switchdc.mediawiki import MediaWikiSwitchDCBase, MediaWikiSwitchDCRunnerBase
 
@@ -16,7 +16,7 @@ class SetDBReadOnlyRunner(MediaWikiSwitchDCRunnerBase):
         """Required by base class API."""
         logger.info('Setting in read-only mode all the core DB primaries in %s and verify those in %s',
                     self.dc_from, self.dc_to)
-        mysql = self.spicerack.mysql_legacy()
+        mysql = self.spicerack.mysql()
         if self.live_test:
             logger.info('Skip verifying core DB primaries in %s are in read-only mode', self.dc_to)
         else:
@@ -28,7 +28,7 @@ class SetDBReadOnlyRunner(MediaWikiSwitchDCRunnerBase):
                     self.dc_to, self.dc_from)
         try:
             mysql.check_core_masters_in_sync(self.dc_from, self.dc_to)
-        except MysqlLegacyError as e:
+        except MysqlError as e:
             if self.live_test:
                 logger.warning(
                     'Check failed while in live-test mode (%s). This is expected if circular replication is not '

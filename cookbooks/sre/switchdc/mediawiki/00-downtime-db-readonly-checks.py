@@ -15,7 +15,7 @@ class DowntimeReadOnlyChecksRunner(MediaWikiSwitchDCRunnerBase):
 
     def action(self):
         """Required by base class API."""
-        mysql = self.spicerack.mysql_legacy()
+        mysql = self.spicerack.mysql()
         hosts = mysql.get_core_dbs(replication_role="master")
         icinga_hosts = self.spicerack.icinga_hosts(nodeset(str(hosts)))
 

@@ -5,7 +5,7 @@ from time import sleep
 
 from pymysql.err import MySQLError
 
-from spicerack.mysql_legacy import Instance, MasterUseGTID, ReplicationInfo
+from spicerack.mysql import Instance, MasterUseGTID, ReplicationInfo
 from wmflib.actions import Actions
 from wmflib.config import load_yaml_config
 from wmflib.interactive import confirm_on_failure

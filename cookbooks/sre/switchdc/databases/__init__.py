@@ -4,7 +4,7 @@ from abc import abstractmethod
 from collections.abc import Sequence
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.mysql_legacy import CORE_SECTIONS, Instance
+from spicerack.mysql import CORE_SECTIONS, Instance
 from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import AbortError, ask_confirmation, ensure_shell_is_durable
 
@@ -35,7 +35,7 @@ class DatabaseRunnerBase(CookbookRunnerBase):
             self.sections = CORE_SECTIONS
 
         self.dry_run = spicerack.dry_run
-        self.mysql = spicerack.mysql_legacy()
+        self.mysql = spicerack.mysql()
         self.remote = spicerack.remote()
         self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         self.actions = spicerack.actions
