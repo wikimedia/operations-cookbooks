@@ -207,8 +207,14 @@ class PoolDepoolRunner(CookbookRunnerBase):
         # Count the diff lines unrelated to the current change
         count = 0
         for line in diff:
-            if line.startswith(" ") or line.startswith("---") or line.startswith("+++") or line.startswith("@@"):
-                continue  # ignore control lines and context linex
+            if (
+                # ignore control lines and context lines
+                any(line.startswith(prefix) for prefix in (" ", "---", "+++", "@@"))
+                # ignore DB groups lines (e.g. '"vslow": {', '}')
+                or any(substr in line for substr in ("{", "}"))
+            ):
+                continue
+
             if self.args.instance not in line:
                 count += 1
 
