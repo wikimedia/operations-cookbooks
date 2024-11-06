@@ -306,7 +306,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.dns.resolve_ips(dns_name)  # Will raise if not valid
 
         if not self.virtual:
-            self.ipmi.check_connection()  # Will raise if unable to connect
+            if self.is_uefi:
+                self.redfish.check_connection()
+            else:
+                self.ipmi.check_connection()  # Will raise if unable to connect
 
     def _depool(self):
         """Depool all the pooled services for the host."""
