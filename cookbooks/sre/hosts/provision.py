@@ -102,7 +102,8 @@ class Provision(CookbookBase):
             raise RuntimeError(
                 f'Host {args.host} has active status in Netbox but --no-dhcp and --no-users were not set.')
         if args.host.startswith(VIRT_PREFIXES) and not args.enable_virtualization:
-            ask_confirmation("Virtualization not enabled but this host might need it, continue?")
+            raise RuntimeError(
+                'Virtualization not enabled but this host will need it.')
 
         # The Runner to instantiate is vendor-specific to ease the customizations
         # and management of different vendors via Redfish.
