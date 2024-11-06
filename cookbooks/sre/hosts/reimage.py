@@ -486,7 +486,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.remote_installer.wait_reboot_since(pxe_reboot_time, print_progress_bars=False)
         time.sleep(30)  # Avoid race conditions, the host is in the d-i, need to wait anyway
         di_reboot_time = datetime.utcnow()
-        env_command = 'grep -q "BOOT_IMAGE=debian-installer" /proc/cmdline'
+        target = 'preseed/url=' if self.is_uefi else 'BOOT_IMAGE=debian-installer'
+        env_command = f'grep -q "{target}" /proc/cmdline'
         try:
             self.remote_installer.run_sync(env_command, print_output=False, print_progress_bars=False)
         except RemoteExecutionError:
