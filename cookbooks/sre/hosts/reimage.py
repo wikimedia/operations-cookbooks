@@ -512,6 +512,13 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 self.ipmi.remove_boot_override()
                 self.ipmi.check_bootparams()
                 self.host_actions.success('Checked BIOS boot parameters are back to normal')
+            else:
+                efi_regular_boot = {
+                    "Boot": {
+                        "BootSourceOverrideEnabled": "Disabled"
+                    }
+                }
+                self.redfish.request("patch", self.redfish.system_manager, json=efi_regular_boot)
 
         try:
             self.remote_installer.wait_reboot_since(di_reboot_time, print_progress_bars=False)
