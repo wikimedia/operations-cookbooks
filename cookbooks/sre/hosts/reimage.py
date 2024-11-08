@@ -461,6 +461,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         """Perform the OS reinstall."""
         pxe_reboot_time = datetime.utcnow()
 
+        di_cmdline_pattern = 'BOOT_IMAGE=debian-installer'
+
         if self.virtual:
             # Prepare a Ganeti VM for reboot and PXE boot for
             # reimaging.
@@ -473,6 +475,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             # Prepare a physical host for reboot and PXE or UEFI HTTP boot
             # for reimaging.
             if self.is_uefi:
+                di_cmdline_pattern = 'preseed/url='
                 self.redfish.force_http_boot_once()
                 self.host_actions.success('Forced UEFI HTTP Boot for next reboot')
                 self.redfish.chassis_reset(ChassisResetPolicy.FORCE_RESTART)
@@ -486,8 +489,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.remote_installer.wait_reboot_since(pxe_reboot_time, print_progress_bars=False)
         time.sleep(30)  # Avoid race conditions, the host is in the d-i, need to wait anyway
         di_reboot_time = datetime.utcnow()
-        target = 'preseed/url=' if self.is_uefi else 'BOOT_IMAGE=debian-installer'
-        env_command = f'grep -q "{target}" /proc/cmdline'
+        env_command = f'grep -q "{di_cmdline_pattern}" /proc/cmdline'
         try:
             self.remote_installer.run_sync(env_command, print_output=False, print_progress_bars=False)
         except RemoteExecutionError:
