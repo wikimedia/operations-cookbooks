@@ -515,10 +515,18 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 self.ipmi.check_bootparams()
                 self.host_actions.success('Checked BIOS boot parameters are back to normal')
             else:
+                # On Supermicro X12 there is no possibility to change the Boot
+                # Order list, see:
+                # https://www.supermicro.com/manuals/other/redfish-ref-guide-html/Content/general-content/bios-configuration.htm#configuring-boot-order-system-bios
+                # We observed that some PXE-related settings may lead to changes
+                # in the Boot Order as well, leading to unexpected failures like
+                # trying to boot the EFI shell first (instead of Hdd).
+                # Add a specific override to use 'Hdd' forever right after d-i,
+                # so we are sure that we'll never boot anything differently.
                 efi_regular_boot = {
                     "Boot": {
-                        "BootSourceOverrideEnabled": "Disabled",
-                        "BootSourceOverrideTarget": "None",
+                        "BootSourceOverrideEnabled": "Continuous",
+                        "BootSourceOverrideTarget": "Hdd",
                     }
                 }
                 self.redfish.request("patch", self.redfish.system_manager, json=efi_regular_boot)
