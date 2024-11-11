@@ -668,6 +668,9 @@ class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-insta
             self.config_changes['BIOS.Setup.1-1']['HttpDev1Protocol'] = 'IPv4'
             self.config_changes['BIOS.Setup.1-1']['HttpDev1VlanEnDis'] = 'Disabled'
 
+        if 'IntelSgx' in config['BIOS.Setup.1-1']:
+            self.config_changes['BIOS.Setup.1-1']['IntelSgx'] = 'Off'
+
         self._config_pxe(config)
         was_changed = config.update(self.config_changes)
         if not was_changed:
