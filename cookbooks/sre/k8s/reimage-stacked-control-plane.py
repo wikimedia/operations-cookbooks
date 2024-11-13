@@ -67,6 +67,11 @@ class ReimageControlPlanes(CookbookBase):
             help="Debian OS codename to use for the reimages",
             choices=OS_VERSIONS,
         )
+        parser.add_argument(
+            "--force-dhcp-tftp",
+            action="store_true",
+            help="Force DHCP settings to TFTP only (without HTTP), as workaround for T363576.",
+        )
         return parser
 
     def get_runner(self, args: Namespace) -> "ReimageControlPlanesRunner":
@@ -164,8 +169,17 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
         for member in cluster_health:
             state = "healthy" if member["health"] else "unhealthy"
             logger.info("%s, %s", member["endpoint"], state)
+            # Consider the cluster not healthy if any member is unhealthy
             if not member["health"]:
                 is_healthy = False
+        # Consider the cluster not healthy if it has less than 3 members
+        if len(cluster_health) < 3:
+            logger.error(
+                "etcd cluster health check failed. "
+                "Expected at least 3 members, got: %s",
+                len(cluster_health),
+            )
+            is_healthy = False
         return is_healthy
 
     def rollback(self):
@@ -261,18 +275,21 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
                 if not self.spicerack.dry_run:
                     # The reimage cookbook will store it's actions in spicerack.actions
                     # with consecutive calls appending their actions. In order to avoid
-                    # posting the the actions after each reimage, we don't pass the task-id
+                    # posting all the actions after each reimage, we don't pass the task-id
                     # to the reimage cookbook and post the actions once, after all reimages
                     # have been completed.
+                    reimage_args = [
+                        "--force",
+                        "--no-downtime",
+                        "--os",
+                        self.args.os,
+                        host.split(".")[0],
+                    ]
+                    if self.args.force_dhcp_tftp:
+                        reimage_args.insert(0, "--force-dhcp-tftp")
                     return_code = self.spicerack.run_cookbook(
                         "sre.hosts.reimage",
-                        [
-                            "--force",
-                            "--no-downtime",
-                            "--os",
-                            self.args.os,
-                            host.split(".")[0],
-                        ],
+                        reimage_args,
                     )
                     if return_code:
                         ask_confirmation(
