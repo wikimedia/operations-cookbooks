@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 from argparse import ArgumentParser, Namespace
 from datetime import timedelta
 from typing import Optional
@@ -255,6 +256,11 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
                 "inactive",
                 name=host,
             ):
+                if not self.spicerack.dry_run:
+                    logger.info(
+                        "Waiting for 3 minutes to allow for any in-flight connection to complete"
+                    )
+                    time.sleep(180)
                 # Disable puppet
                 puppet = self.spicerack.puppet(remote)
                 puppet.disable(self.reason)
