@@ -541,7 +541,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
                 # Do not add active/passive services if do_all or failover_from is not selected.
                 # skip active/active services if failover_from is selected
                 if complete_record.active_active:
-                    if self.action in ["pool", "depool"]:
+                    if self.action != "failover_from":
                         all_services["active_active"].append(complete_record)
                 elif self.do_all or self.action == "failover_from":
                     all_services["active_passive"].append(complete_record)
