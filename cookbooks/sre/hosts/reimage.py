@@ -510,27 +510,18 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.ganeti_instance.set_boot_media('disk')
             self.host_actions.success('Set boot media to disk')
         else:
+            # On UEFI platforms the boot override once flag should be disabled
+            # by the UEFI firmware prior to boot. Altering the override flag
+            # during the d-i, via Redfish, causes the UEFI boot entries created
+            # by grub to be lost, at least on Supermicro hardware. Commit
+            # 9d3cdfb8a6a5f1ec34f77839d685bdcbc6f84edd was added to explicitly
+            # disable via Redfish during the d-i, because the override flag
+            # seemed to not be properly disabled, but it is possible the cause
+            # was different, so don't alter for now.
             if not self.is_uefi:
                 self.ipmi.remove_boot_override()
                 self.ipmi.check_bootparams()
                 self.host_actions.success('Checked BIOS boot parameters are back to normal')
-            else:
-                # On Supermicro X12 there is no possibility to change the Boot
-                # Order list, see:
-                # https://www.supermicro.com/manuals/other/redfish-ref-guide-html/Content/general-content/bios-configuration.htm#configuring-boot-order-system-bios
-                # We observed that some PXE-related settings may lead to changes
-                # in the Boot Order as well, leading to unexpected failures like
-                # trying to boot the EFI shell first (instead of Hdd).
-                # Add a specific override to use 'Hdd' forever right after d-i,
-                # so we are sure that we'll never boot anything differently.
-                efi_regular_boot = {
-                    "Boot": {
-                        "BootSourceOverrideEnabled": "Continuous",
-                        "BootSourceOverrideTarget": "Hdd",
-                    }
-                }
-                self.redfish.request("patch", self.redfish.system_manager, json=efi_regular_boot)
-                self.host_actions.success('Forced UEFI regular Boot for next reboot')
 
         try:
             self.remote_installer.wait_reboot_since(di_reboot_time, print_progress_bars=False)
