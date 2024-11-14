@@ -256,6 +256,10 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
                 "inactive",
                 name=host,
             ):
+                # Get the management password early so cookbook can continue unattended.
+                # The password will be stored in the spicerack instance which will be passed down
+                # to the reimage cookbook.
+                _ = self.spicerack.management_password
                 if not self.spicerack.dry_run:
                     logger.info(
                         "Waiting for 3 minutes to allow for any in-flight connection to complete"
