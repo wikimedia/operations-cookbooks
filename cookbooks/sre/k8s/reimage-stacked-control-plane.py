@@ -69,9 +69,14 @@ class ReimageControlPlanes(CookbookBase):
             choices=OS_VERSIONS,
         )
         parser.add_argument(
-            "--force-dhcp-tftp",
-            action="store_true",
-            help="Force DHCP settings to TFTP only (without HTTP), as workaround for T363576.",
+            '--use-http-for-dhcp', action='store_true', default=False,
+            help=(
+                "Fetching the DHCP config via HTTP is quicker, "
+                "but we've run into issues with various NIC firmwares "
+                "when operating in BIOS mode. As such we default to the slower, "
+                "yet more reliable TFTP for BIOS. If a server is known "
+                "to be working fine with HTTP, it can be forced with this option."
+            )
         )
         return parser
 
@@ -295,8 +300,8 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
                         self.args.os,
                         host.split(".")[0],
                     ]
-                    if self.args.force_dhcp_tftp:
-                        reimage_args.insert(0, "--force-dhcp-tftp")
+                    if self.args.use_http_for_dhcp:
+                        reimage_args.insert(0, "--use-http-for-dhcp")
                     return_code = self.spicerack.run_cookbook(
                         "sre.hosts.reimage",
                         reimage_args,

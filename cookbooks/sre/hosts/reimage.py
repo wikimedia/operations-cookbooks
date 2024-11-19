@@ -98,8 +98,15 @@ class Reimage(CookbookBase):
                                   'Is autodetected for existing hosts. One of %(choices)s.'))
         parser.add_argument('host', help='Short hostname of the host to be reimaged, not FQDN')
         parser.add_argument(
-            '--force-dhcp-tftp', action='store_true',
-            help="Force DHCP settings to TFTP only (without HTTP), as workaround for T363576.")
+            '--use-http-for-dhcp', action='store_true', default=False,
+            help=(
+                "Fetching the DHCP config via HTTP is quicker, "
+                "but we've run into issues with various NIC firmwares "
+                "when operating in BIOS mode. As such we default to the slower, "
+                "yet more reliable TFTP for BIOS. If a server is known "
+                "to be working fine with HTTP, it can be forced with this option."
+            )
+        )
         parser.add_argument(
             '--force', action='store_true',
             help="Skip the first confirmation prompt and don't ask to --move-vlan.")
@@ -151,6 +158,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.requests = spicerack.requests_session(__name__, timeout=(5.0, 30.0))
         self.virtual: bool = self.netbox_server.virtual
         self.populate_puppetdb_attempted = False
+        self.use_tftp = not self.args.use_http_for_dhcp
 
         try:
             self.remote_host = self.remote.query(self.fqdn)
@@ -227,7 +235,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.is_uefi = self.redfish.is_uefi
             if not self.is_uefi:
                 self.ipmi: Ipmi = self.spicerack.ipmi(self.mgmt_fqdn)
-            self.dhcp_config = self._get_dhcp_config_opt82(force_tftp=self.args.force_dhcp_tftp)
+            self.dhcp_config = self._get_dhcp_config_opt82(force_tftp=self.use_tftp)
 
         self._validate()
 
@@ -696,7 +704,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                                           f'sre.hosts.move-vlan cookbook returned {move_vlan_retcode}**')
                 raise RuntimeError(f'sre.hosts.move-vlan cookbook returned {move_vlan_retcode}')
             # Update the DHCP config with the New IP
-            self.dhcp_config = self._get_dhcp_config_opt82(force_tftp=self.args.force_dhcp_tftp)
+            self.dhcp_config = self._get_dhcp_config_opt82(force_tftp=self.use_tftp)
             self._validate()
 
         # Clear both old Puppet5 and new Puppet7 infra in all cases, it doesn't fail if the host is not present

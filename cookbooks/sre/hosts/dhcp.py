@@ -25,8 +25,14 @@ class Dhcp(CookbookBase):
             help=('Specify a different media suffix to use in the PXE settings of the DHCP configuration. To be used '
                   'when a specific installer is needed that is available as tftpboot/$OS-$PXE_MEDIA/.'))
         parser.add_argument(
-            '--force-dhcp-tftp', action='store_true',
-            help="Force DHCP settings to TFTP only (without HTTP), as workaround for T363576.")
+            '--use-http-for-dhcp', action='store_true', default=False,
+            help=(
+                "Fetching the DHCP config via HTTP is quicker, "
+                "but we've run into issues with various NIC firmwares "
+                "when operating in BIOS mode. As such we default to the slower, "
+                "yet more reliable TFTP for BIOS. If a server is known "
+                "to be working fine with HTTP, it can be forced with this option.")
+        )
         parser.add_argument('host', help='Short hostname of the host for which to set the DHCP config, not FQDN')
 
         return parser
@@ -56,6 +62,7 @@ class DhcpRunner(CookbookRunnerBase):
             raise RuntimeError(f'Host {self.host} is a virtual machine. VMs are not yet supported.')
 
         self.remote_host = self.remote.query(f'D{{{self.fqdn}}}')
+        self.use_tftp = not self.args.use_http_for_dhcp
         self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
         self.dhcp_config = self._get_dhcp_config()
 
@@ -94,7 +101,7 @@ class DhcpRunner(CookbookRunnerBase):
         # We also got confirmation from Supermicro/Broadcom that they
         # don't support lpxelinux.0, so for this vendor we force the TFTP flag
         # even if it wasn't set.
-        if self.args.force_dhcp_tftp:
+        if self.use_tftp:
             dhcp_filename = f"/srv/tftpboot/{self.args.os}-installer/pxelinux.0"
             dhcp_options = {
                 "pxelinux.pathprefix": f"/srv/tftpboot/{self.args.os}-installer/"
