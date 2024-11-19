@@ -31,8 +31,10 @@ class DatabaseRunnerBase(CookbookRunnerBase):
 
         if args.section:
             self.sections: Sequence[str] = (args.section,)
+            self.description_suffix = f"section {args.section}"
         else:
             self.sections = CORE_SECTIONS
+            self.description_suffix = "all core sections"
 
         self.dry_run = spicerack.dry_run
         self.mysql = spicerack.mysql()
@@ -47,7 +49,7 @@ class DatabaseRunnerBase(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return the decription to use in SAL."""
-        return f"for the switch from {self.dc_from} to {self.dc_to}"
+        return f"for the switch from {self.dc_from} to {self.dc_to} for {self.description_suffix}"
 
     def rollback(self):
         """Save the current actions to Phabricator."""
