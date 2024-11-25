@@ -21,7 +21,7 @@ from transferpy.Transferer import Transferer
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.kafka import ConsumerDefinition
 
-from cookbooks.sre.wdqs import check_hosts_are_valid, wait_for_updater, get_site, get_hostname, MUTATION_TOPICS
+from cookbooks.sre.wdqs import wait_for_updater, get_site, get_hostname, MUTATION_TOPICS
 
 BLAZEGRAPH_INSTANCES = {
 
@@ -212,11 +212,6 @@ class DataTransferRunner(CookbookRunnerBase):
 
     def run_for_instance(self, bg_instance_name, instance):
         """Required by Spicerack API."""
-        host_kind = check_hosts_are_valid(self.remote_hosts, self.remote)
-        if host_kind != instance['valid_on']:
-            raise ValueError('Instance (valid_on:{}) is not valid for selected hosts ({})'.format(
-                instance['valid_on'], host_kind))
-
         # Check graph type on source and dest
         data_loaded_flag_filepath = instance['data_path'] + '/data_loaded'
         if not self.no_check_graph_type:
@@ -260,13 +255,13 @@ class DataTransferRunner(CookbookRunnerBase):
                 for file in files:
                     self.r_dest.run_sync('chown blazegraph: "{file}"'.format(file=file))
 
-                if bg_instance_name not in ('commons'):
+                if bg_instance_name not in ('categories'):
                     logger.info('Setting file %s/data_loaded to %s', data_path, self.blazegraph_instance)
                     self.r_dest.run_sync('echo {blazegraph_instance} > {data_path}/data_loaded'.format(
                         blazegraph_instance=self.blazegraph_instance, data_path=data_path))
 
                 if bg_instance_name == 'categories':
-                    logger.info('Reloading nginx to load new categories mapping.')
+                    logger.info('Reloading nginx to load new categories mapping')
                     self.r_dest.run_sync('systemctl reload nginx')
 
                 source_hostname = get_hostname(str(self.r_source))
