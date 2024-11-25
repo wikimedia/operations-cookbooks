@@ -31,14 +31,20 @@ cluster, one at a time per taint-group, waiting 35 seconds before rebooting.
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from math import ceil
-from cumin import NodeSet
+from typing import Optional
 
+from cumin import NodeSet
 from kubernetes.client.models import V1Taint
 from spicerack import Spicerack
 from spicerack.k8s import Kubernetes, KubernetesApiError, KubernetesNode
 from spicerack.remote import RemoteHosts
+from wmflib import phabricator
 
-from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
+from cookbooks.sre import (
+    PHABRICATOR_BOT_CONFIG_FILE,
+    SREBatchBase,
+    SRELBBatchRunnerBase,
+)
 from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES
 
 
@@ -69,19 +75,22 @@ class RollRebootK8sNodes(SREBatchBase):
     def argument_parser(self) -> ArgumentParser:
         """Parse arguments"""
         parser = super().argument_parser()
-
         parser.add_argument(
-            '--exclude',
-            help='List of hosts that should not be rebooted, in NodeSet notation',
-            default=''
+            "--k8s-cluster",
+            required=True,
+            help="K8s cluster the nodes are part of",
+            choices=ALLOWED_CUMIN_ALIASES.keys(),
+        )
+        parser.add_argument(
+            "--exclude",
+            help="List of hosts that should not be rebooted, in NodeSet notation",
+            default="",
         )
 
         return parser
 
     def get_runner(self, args: Namespace) -> "RollRebootK8sNodesRunner":
         """As specified by Spicerack API."""
-        if not args.alias:
-            raise RuntimeError("Alias (-a/--alias) is required for this cookbook, --query is not supported.")
         return RollRebootK8sNodesRunner(args, self.spicerack)
 
 
@@ -100,18 +109,14 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Initialize the runner."""
+        self.phabricator: Optional[phabricator.Phabricator] = None
+        self.k8s_cluster = args.k8s_cluster
         # Init k8s_client early, as it is used in _hosts() which will be called by super().__init__
-        for _, metadata in ALLOWED_CUMIN_ALIASES.items():
-            if metadata["workers"] == args.alias:
-                k8s_metadata = metadata
-                break
-        else:
-            raise RuntimeError(
-                f"Cannot find the alias {args.alias} among any k8s workers alias: "
-                f"{self.allowed_aliases}")
         self.k8s_cli = Kubernetes(
-            group=k8s_metadata["k8s-group"],
-            cluster=k8s_metadata["k8s-cluster"],
+            group=ALLOWED_CUMIN_ALIASES[self.k8s_cluster]["k8s-group"],
+            # The cluster name expected here might be different from the one in the cumin alias
+            # wikikube is an example of this as we call it wikikube-eqiad in cumin, but eqiad in k8s config
+            cluster=ALLOWED_CUMIN_ALIASES[self.k8s_cluster]["k8s-cluster"],
             dry_run=spicerack.dry_run,
         )
         # Dictionary containing KubernetesNode instances for all hosts
@@ -122,6 +127,18 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
         self._first_batch = True
         # _host_group_idx stores the index of the host group currently in progress
         self._host_group_idx = 0
+
+        if args.task_id is not None:
+            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+            self.phabricator.task_comment(
+                args.task_id,
+                (
+                    f"Started rebooting nodes in {self.k8s_cluster} cluster:\n"
+                    + "\n".join([f"* {group}" for group in self.host_groups])
+                ),
+            )
+        else:
+            self.phabricator = None
 
     def _k8s_node_action(self, node_name: str, action: str) -> None:
         """Call the function action on a KubernetesNode instance for a given node_name"""
@@ -156,25 +173,17 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
     @property
     def allowed_aliases(self) -> list:
         """Return a list of allowed aliases for this cookbook"""
-        return [metadata["workers"] for _, metadata in ALLOWED_CUMIN_ALIASES.items()]
-
-    @property
-    def allowed_aliases_query(self) -> str:
-        """Override the parent property to optimize the query."""
-        # The following query must include all hosts matching all the allowed_aliases
-        allowed_aliases = [
-            f'A:{metadata["workers"]}' for _, metadata in ALLOWED_CUMIN_ALIASES.items()]
-        return " ".join(allowed_aliases)
+        aliases = []
+        for _, metadata in ALLOWED_CUMIN_ALIASES.items():
+            aliases.append(metadata["workers"])
+            aliases.append(metadata["control-plane"])
+        return aliases
 
     def _hosts(self) -> list[RemoteHosts]:
         all_hosts = super()._hosts()[0]
         to_exclude = NodeSet(self.exclude)
         if len(to_exclude) > 0:
-            self.logger.info(
-                "Excluding %s nodes: %s",
-                len(to_exclude),
-                to_exclude
-            )
+            self.logger.info("Excluding %s nodes: %s", len(to_exclude), to_exclude)
 
         working_hosts = all_hosts.hosts - to_exclude
 
@@ -190,9 +199,7 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
                     )
                 self._all_k8s_nodes[node_name] = k8s_node
                 flat_taints = (
-                    ""
-                    if k8s_node.taints == []
-                    else flatten_taints(k8s_node.taints)
+                    "" if k8s_node.taints == [] else flatten_taints(k8s_node.taints)
                 )
             except KubernetesApiError:
                 # This node is not registered in kubernetes API.
