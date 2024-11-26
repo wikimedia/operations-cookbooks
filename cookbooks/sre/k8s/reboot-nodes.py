@@ -173,11 +173,10 @@ class RollRebootK8sNodesRunner(SRELBBatchRunnerBase):
     @property
     def allowed_aliases(self) -> list:
         """Return a list of allowed aliases for this cookbook"""
-        aliases = []
-        for _, metadata in ALLOWED_CUMIN_ALIASES.items():
-            aliases.append(metadata["workers"])
-            aliases.append(metadata["control-plane"])
-        return aliases
+        return [
+            ALLOWED_CUMIN_ALIASES[self.k8s_cluster]["workers"],
+            ALLOWED_CUMIN_ALIASES[self.k8s_cluster]["control-plane"],
+        ]
 
     def _hosts(self) -> list[RemoteHosts]:
         all_hosts = super()._hosts()[0]
