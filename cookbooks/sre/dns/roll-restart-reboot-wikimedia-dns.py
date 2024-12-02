@@ -57,7 +57,7 @@ class Runner(SREBatchRunnerBase):
     @property
     def allowed_aliases(self) -> list:
         """Required by RebootRunnerBase"""
-        aliases = []
+        aliases = ["wikidough"]
         for datacenter in ALL_DATACENTERS:
             aliases.append(f"wikidough-{datacenter}")
         return aliases
