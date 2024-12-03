@@ -1,5 +1,6 @@
 """Test the import of all the cookbooks."""
 import importlib
+import inspect
 import pathlib
 import os
 
@@ -8,6 +9,8 @@ from setuptools import find_packages
 from unittest import mock
 
 import pytest
+
+from spicerack.cookbook import CookbookBase
 
 
 MOCKED_SRE_SWITCHDC_SERVICES_YAML = """---
@@ -22,6 +25,20 @@ b-service:
     codfw: b-service.svc.codfw.wmnet
     eqiad: b-service.svc.eqiad.wmnet
 """
+# SRE teams only from Puppet's Wmflib::Team (modules/wmflib/types/team.pp)
+VALID_OWNER_TEAM = (
+    "Collaboration Services",
+    "Data Persistence",
+    "Data Platform",
+    "Fundraising Tech",
+    "Infrastructure Foundations",
+    "Machine Learning",
+    "Observability",
+    "ServiceOps",
+    "Traffic",
+    "WMCS",
+)
+VALID_OWNER_TEAM_STR = "\n".join(VALID_OWNER_TEAM)
 
 
 def get_modules():
@@ -39,8 +56,29 @@ def get_modules():
     return modules
 
 
-@pytest.mark.parametrize('module_name', get_modules())
+@pytest.mark.parametrize("module_name", get_modules())
 def test_import(module_name):
     """It should successfully import all defined cookbooks and their packages."""
-    with mock.patch('builtins.open', mock.mock_open(read_data=MOCKED_SRE_SWITCHDC_SERVICES_YAML)):
+    with mock.patch("builtins.open", mock.mock_open(read_data=MOCKED_SRE_SWITCHDC_SERVICES_YAML)):
         importlib.import_module(module_name)  # Will raise on failure
+
+
+@pytest.mark.parametrize("module_name", get_modules())
+def test_owner_team(module_name):
+    """If set the owner_team should have one of the valid values."""
+    with mock.patch("builtins.open", mock.mock_open(read_data=MOCKED_SRE_SWITCHDC_SERVICES_YAML)):
+        module = importlib.import_module(module_name)
+        for name, obj in inspect.getmembers(module):
+            # Module API check
+            if name == "__owner_team__":
+                assert obj in VALID_OWNER_TEAM, (f"Module {module_name} has an invalid __owner_team__ '{obj}'. "
+                                                 f"It must be one of:\n{VALID_OWNER_TEAM_STR}")
+
+            # Class API check
+            if inspect.isclass(obj) and issubclass(obj, CookbookBase) and obj is not CookbookBase:
+                owner = getattr(obj, "owner_team", None)
+                if owner is None:
+                    continue
+
+                assert owner in VALID_OWNER_TEAM, (f"Class {module_name}.{obj.__name__} has an invalid owner_team "
+                                                   f"'{owner}'. Must be one of:\n{VALID_OWNER_TEAM_STR}")
