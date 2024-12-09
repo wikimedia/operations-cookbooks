@@ -97,23 +97,28 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         self.rollback_netbox = False
         self.dns_propagated = False
         self.switch_port_configured = False
+        # Keep track of the need to move the host to the new VLAN
+        self.is_move_required = self._is_move_required()
 
-        # Always run the pre flight checks at each run
-        if not self.pre_flight():
+        # Check if this host needs to be moved to the new VLAN and run preflight checks if so
+        if self.is_move_required and not self.pre_flight():
             raise RuntimeError('The host is not suitable for the migration, see above.')
 
         if self.args.action == 'inplace':
             raise NotImplementedError('In-place migration not yet available.')
 
-    def pre_flight(self) -> bool:
-        """Check if there are any blockers to the migration."""
+    def _is_move_required(self):
+        """Check if the server is in a state to be re-numbered."""
         if self.netbox_server.virtual:
             logger.info('This is only for physical servers, nothing to do. 👍')
             return False
         if self.pre_config['vlan'] not in LEGACY_VLANS:
             logger.info('Server not in a vlan requiring a migration, nothing to do. 👍')
             return False
+        return True
 
+    def pre_flight(self) -> bool:
+        """Check if there are any blockers to the migration."""
         if ((self.pre_config['count_ipaddresses'] > 2 and self.netbox_server.primary_ip4_address) or
            (self.pre_config['count_ipaddresses'] > 1 and not self.netbox_server.primary_ip4_address)):
             logger.info('Too many IPs configure on the primary interface, manual migration required.')
@@ -209,6 +214,9 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         """Run the cookbook."""
         # If only the checks were needed, stop here
         if self.args.action == 'preflight':
+            return
+        # If the host is not in a vlan requiring a migration, stop here
+        if not self.is_move_required:
             return
 
         self.post_config = self.generate_new_ip_vlan()
