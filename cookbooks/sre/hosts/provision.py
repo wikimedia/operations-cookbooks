@@ -132,6 +132,11 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         self.verbose = spicerack.verbose
         self.device_model_slug = self.netbox_data['device_type']['slug']
 
+        self.uefi_only_devices = [
+            # https://phabricator.wikimedia.org/T378368
+            "P1_AIOMAOC_ATGC_i2TMLAN1OPROM"
+        ]
+
         if self.args.no_users:
             bmc_username = "root"
             password = ''  # nosec
@@ -456,7 +461,13 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
 
         for key, value in bios_attributes.items():
             if old_value == str(value) or key.startswith("RSC_"):
-                self.bios_changes["Attributes"][key] = new_value
+                if new_value == 'Legacy' and key in self.uefi_only_devices:
+                    ask_confirmation(
+                        f"The device related to {key} works only with UEFI settings. "
+                        "The cookbook will leave its config as is, please proceed "
+                        "only if you don't care about the device.")
+                else:
+                    self.bios_changes["Attributes"][key] = new_value
 
 
 class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
