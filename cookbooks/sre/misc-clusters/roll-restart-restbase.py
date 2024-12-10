@@ -11,6 +11,7 @@ class RestbaseRestart(SREBatchBase):
 
     """
 
+    owner_team = 'Data Persistence'
     batch_default = 1
     valid_actions = ('restart_daemons',)
     grace_sleep = 5
