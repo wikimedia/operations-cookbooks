@@ -14,6 +14,7 @@ class DockerRegistryRestartReboot(SREBatchBase):
 
     """
 
+    owner_team = 'ServiceOps'
     batch_default = 1
     grace_sleep = 2
 

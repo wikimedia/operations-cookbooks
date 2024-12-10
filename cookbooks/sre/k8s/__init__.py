@@ -1,5 +1,8 @@
-"""Kubernetes cluster operations"""
+"""Kubernetes cluster operations."""
 from typing import Union
+
+__title__ = __doc__
+__owner_team__ = "ServiceOps"
 
 # Prometheus matchers to properly downtime a k8s cluster.
 # If we downtime only the hosts we may end up in alerts firing when
