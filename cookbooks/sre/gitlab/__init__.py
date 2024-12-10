@@ -11,6 +11,7 @@ from spicerack.decorators import retry
 from spicerack.remote import RemoteHosts
 
 __title__ = __doc__
+__owner_team__ = "Collaboration Services"
 logger = logging.getLogger(__name__)
 
 
