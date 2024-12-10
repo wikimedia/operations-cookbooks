@@ -31,6 +31,7 @@ class Downtime(CookbookBase):
 
     """
 
+    owner_team = "Observability"
     DEFAULT_DOWNTIME_HOURS = 4
 
     def argument_parser(self):

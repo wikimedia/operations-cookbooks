@@ -23,6 +23,8 @@ class RemoveDowntime(CookbookBase):
 
     """
 
+    owner_team = "Observability"
+
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
