@@ -1,4 +1,4 @@
-"""Decommission a host from all inventories."""
+"""Hardware-specific cookbooks."""
 import logging
 import re
 
@@ -16,6 +16,8 @@ from requests.exceptions import RequestException
 from wmflib.interactive import ask_input
 
 logger = logging.getLogger(__name__)
+__title__ = __doc__
+__owner_team__ = "Infrastructure Foundations"
 
 
 def list_picker(options: list) -> Any:

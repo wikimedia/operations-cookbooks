@@ -16,6 +16,7 @@ from spicerack.decorators import retry
 
 logger = getLogger(__name__)
 __title__ = __doc__
+__owner_team__ = 'Infrastructure Foundations'
 MIN_SECRET_SIZE = 6
 
 

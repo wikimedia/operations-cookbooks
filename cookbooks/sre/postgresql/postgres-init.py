@@ -10,6 +10,7 @@ import logging
 from datetime import timedelta
 
 __title__ = "Postgres replica initialization cookbook"
+__owner_team__ = "Infrastructure Foundations"
 logger = logging.getLogger(__name__)
 
 

@@ -30,6 +30,8 @@ class RebootSingleHost(CookbookBase):
 
     """
 
+    owner_team = 'Infrastructure Foundations'
+
     def get_runner(self, args):
         """As specified by Spicerack API."""
         return RebootSingleHostRunner(args, self.spicerack)

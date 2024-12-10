@@ -41,6 +41,8 @@ class MoveVlan(CookbookBase):
 
     """
 
+    owner_team = "Infrastructure Foundations"
+
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()

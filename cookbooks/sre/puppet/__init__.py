@@ -8,6 +8,7 @@ from requests.exceptions import RequestException
 
 
 __title__ = __doc__
+__owner_team__ = "Infrastructure Foundations"
 
 
 def get_puppet_fact(session: Session, host: str, fact: str) -> Union[str, None]:

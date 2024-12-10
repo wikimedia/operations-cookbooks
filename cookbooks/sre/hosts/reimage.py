@@ -45,6 +45,8 @@ class Reimage(CookbookBase):
         cookbook sre.hosts.reimage --os bullseye -t T12345 example1001
     """
 
+    owner_team = "Infrastructure Foundations"
+
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()

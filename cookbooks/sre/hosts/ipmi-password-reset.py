@@ -23,6 +23,7 @@ from spicerack.netbox import NetboxError
 
 
 __title__ = 'Reset the hosts IPMI password'
+__owner_team__ = 'Infrastructure Foundations'
 logger = logging.getLogger(__name__)
 
 

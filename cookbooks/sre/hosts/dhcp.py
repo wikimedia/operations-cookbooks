@@ -15,6 +15,8 @@ class Dhcp(CookbookBase):
         cookbook sre.hosts.dhcp --os buster example1001
     """
 
+    owner_team = "Infrastructure Foundations"
+
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()

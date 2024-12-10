@@ -34,6 +34,7 @@ from wmflib.constants import CORE_DATACENTERS
 
 
 __title__ = "Perform a rolling reboot of a conftool cluster"
+__owner_team__ = "Infrastructure Foundations"
 logger = logging.getLogger(__name__)
 
 

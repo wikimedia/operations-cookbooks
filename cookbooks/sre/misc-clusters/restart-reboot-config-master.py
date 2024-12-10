@@ -12,6 +12,7 @@ class ConfigMasterRestartReboot(SREBatchBase):
 
     """
 
+    owner_team = 'Infrastructure Foundations'
     batch_default = 1
 
     def get_runner(self, args):
