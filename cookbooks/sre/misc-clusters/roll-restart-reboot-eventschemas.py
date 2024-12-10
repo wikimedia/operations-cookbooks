@@ -14,6 +14,7 @@ class EventSchemasRestartReboot(SREBatchBase):
 
     """
 
+    owner_team = 'Data Platform'
     batch_default = 1
     grace_sleep = 2
 

@@ -5,6 +5,7 @@ import logging
 from dateutil.parser import parse
 
 __title__ = __doc__
+__owner_team__ = 'Data Platform'
 logger = logging.getLogger(__name__)
 
 # Used in imports for other files

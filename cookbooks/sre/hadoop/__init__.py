@@ -25,6 +25,7 @@ causes the HDFS Namenodes to shutdown (as precautionary measure).
 
 """
 __title__ = "Hadoop Clusters Operations"
+__owner_team__ = "Data Platform"
 
 # List of Hadoop cluster names (reused across cookbooks)
 HADOOP_CLUSTER_NAMES = ('test', 'analytics')
