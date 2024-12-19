@@ -165,8 +165,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         try:
             self.remote_host = self.remote.query(self.fqdn)
             if self.args.new:
-                ask_confirmation(f'Host {self.fqdn} was found in PuppetDB but --new was set. Are you sure you want to '
-                                 'proceed? The --new option will be unset')
+                if not self.args.force:
+                    ask_confirmation(f'Host {self.fqdn} was found in PuppetDB but --new was set. Are you sure you want '
+                                     'to proceed? The --new option will be unset')
                 self.args.new = False  # Unset --new
                 logger.info('The option --new has been unset')
         except RemoteError as e:
