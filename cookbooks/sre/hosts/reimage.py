@@ -111,7 +111,7 @@ class Reimage(CookbookBase):
         )
         parser.add_argument(
             '--force', action='store_true',
-            help="Skip the first confirmation prompt and don't ask to --move-vlan.")
+            help="Skip the first confirmation prompt, don't ask to --move-vlan, unset --new if host is in PuppetDB.")
 
         return parser
 
