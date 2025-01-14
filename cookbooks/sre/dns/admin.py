@@ -1,6 +1,6 @@
 """Cookbook for GeoDNS pool/depool of a site."""
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookInitSuccess, CookbookRunnerBase
 from wmflib.constants import ALL_DATACENTERS, DATACENTER_NUMBERING_PREFIX, US_DATACENTERS
 from wmflib.interactive import ask_confirmation
 
@@ -75,7 +75,7 @@ class DNSAdminRunner(CookbookRunnerBase):
         self._print_summary("=> CURRENT STATE:")
 
         if self.args.action == "show":
-            raise RuntimeError("show action called; outputting current admin_state. No changes were made.")
+            raise CookbookInitSuccess("show action called; outputting current admin_state. No changes were made.")
 
         # Safety checks before we actually call run() depool. These are skipped
         # further down if the override flag is passed.
