@@ -71,11 +71,11 @@ class DNSAdminRunner(CookbookRunnerBase):
             else f"{self.args.action} site {self.args.site}"
         )
 
-        if self.args.action == "show":
-            raise CookbookInitSuccess("show action called; outputting current admin_state. No changes were made.")
-
         # Before we proceed, print the current admin_state as seen by confctl.
         self._print_summary("=> CURRENT STATE:")
+
+        if self.args.action == "show":
+            raise CookbookInitSuccess("show action called; outputting current admin_state above. No changes were made.")
 
         # Safety checks before we actually call run() depool. These are skipped
         # further down if the override flag is passed.
