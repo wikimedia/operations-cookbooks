@@ -27,6 +27,7 @@ b-service:
 """
 # SRE teams only from Puppet's Wmflib::Team (modules/wmflib/types/team.pp)
 VALID_OWNER_TEAM = (
+    "unowned",
     "Collaboration Services",
     "Data Persistence",
     "Data Platform",
