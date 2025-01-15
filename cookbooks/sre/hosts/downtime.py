@@ -111,6 +111,11 @@ class DowntimeRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the downtime action."""
         return self.short_message
 
+    @property
+    def skip_start_sal(self):
+        """Skip the START SAL logging in all cases except when a making a puppet run on the Icinga host (slow run)."""
+        return self.puppet is None
+
     def run(self):
         """Required by Spicerack API."""
         if self.puppet is not None:
