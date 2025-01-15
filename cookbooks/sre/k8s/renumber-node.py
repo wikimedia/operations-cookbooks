@@ -49,7 +49,7 @@ class RenumberSingleHost(CookbookBase):
             action="store_true",
             help="Adds appropriate switches to reimage cookbook, sets BGP in netbox",
         )
-        parser.add_argument("--os", choices=OS_VERSIONS, default="bullseye",
+        parser.add_argument("--os", choices=OS_VERSIONS, default="bookworm",
                             help="the Debian version to install. Mandatory parameter. One of %(choices)s.")
         parser.add_argument(
             "host", help="A single host to be renumbered (specified in Cumin query syntax)"
