@@ -11,7 +11,7 @@ from ipaddress import ip_address
 
 from prettytable import PrettyTable
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookInitSuccess, CookbookRunnerBase
 from wmflib.interactive import ask_confirmation
 
 from cookbooks.sre.network import get_junos_bgp_summary, run_junos_commands
@@ -91,7 +91,7 @@ class PeeringRunner(CookbookRunnerBase):
         # Action "show" is here so it doesn't !log it
         if self.args.action == 'show':
             print(self.peering_matrix(WIKIMEDIA_ASN, self.args.ASN))
-            raise RuntimeError("Everything is fine.")
+            raise CookbookInitSuccess()
 
     @property
     def runtime_description(self):
