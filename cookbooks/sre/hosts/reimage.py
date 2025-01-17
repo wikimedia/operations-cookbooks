@@ -91,7 +91,8 @@ class Reimage(CookbookBase):
                   'when a specific installer is needed that is available as tftpboot/$OS-$PXE_MEDIA/.'))
         parser.add_argument(
             '--move-vlan', action='store_true',
-            help='Call the sre.hosts.move-vlan cookbook to migrate the host to the new VLAN during the reimage.')
+            help='Call the sre.hosts.move-vlan cookbook to migrate the host to the new VLAN during the reimage.'
+                 'See https://wikitech.wikimedia.org/wiki/Vlan_migration for further information.')
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         parser.add_argument('--os', choices=OS_VERSIONS, required=True,
                             help='the Debian version to install. Mandatory parameter. One of %(choices)s.')
