@@ -392,23 +392,24 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         """Instantiate a DHCP configuration to be used for the reimage."""
         netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
         netbox_iface = netbox_host.primary_ip.assigned_object
-        switch_iface = netbox_iface.connected_endpoints[0]
-        if netbox_iface.type.value == 'bridge':
-            # We need to get the physical port that belongs to the bridge instead
-            bridge_members = self.netbox.api.dcim.interfaces.filter(device=netbox_host.name, bridge_id=netbox_iface.id)
-            connected_ifaces = [iface for iface in bridge_members if iface.connected_endpoints]
-            if len(connected_ifaces) == 1:
-                switch_iface = connected_ifaces[0].connected_endpoints[0]
-        if switch_iface is None:
-            raise RuntimeError(f'Error finding primary interface connected switch port for {self.host}. Netbox '
-                               'model of server connections is invalid.')
-
+        # If it's a ganeti host the primary IP is on a bridge, we get the physical port that is a member
+        if netbox_iface.type.value == "bridge":
+            netbox_iface = self.netbox.api.dcim.interfaces.get(
+                device_id=netbox_host.id,
+                bridge_id=netbox_iface.id,
+                type__n=("virtual", "lag", "bridge"),
+                mgmt_only=False,
+            )
+        try:
+            switch_iface = netbox_iface.connected_endpoints[0]
+        except TypeError as e:
+            raise RuntimeError(f'Error finding switch port connected to {netbox_iface} on {netbox_host}. Netbox '
+                               'model of server connections is invalid.') from e
         switch_hostname = (
             switch_iface.device.virtual_chassis.name.split('.')[0]
             if switch_iface.device.virtual_chassis is not None
             else switch_iface.device.name
         )
-
         if self.is_uefi:
             # After the iPXE boot loader is fetched via UEFI HTTP Boot, iPXE
             # tries to fetch autoexec.ipxe from the base directory of the boot
