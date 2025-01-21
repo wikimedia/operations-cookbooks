@@ -34,6 +34,8 @@ class RemoveHosts(CookbookBase):
 class RemoveHostsRunner(CookbookRunnerBase):
     """Debmonitor host removal cookbook runner class."""
 
+    skip_start_sal = True  # Only runs a few seconds anyway, avoid logging START
+
     def __init__(self, args, spicerack):
         """Initialize the runner."""
         self.debmonitor = spicerack.debmonitor()
