@@ -44,6 +44,8 @@ class Logout(CookbookBase):
 class LogoutRunner(CookbookRunnerBase):
     """Logout specific user"""
 
+    skip_start_sal = True  # Only runs a few seconds anyway, avoid logging START
+
     def __init__(self, args, spicerack):
         """Initialize the runner."""
         remote = spicerack.remote()
