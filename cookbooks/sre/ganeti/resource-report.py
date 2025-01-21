@@ -8,7 +8,8 @@ import urllib3
 
 from prettytable import PrettyTable
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookInitSuccess, CookbookRunnerBase
+
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +104,6 @@ class GanetiGroupReportRunner(CookbookRunnerBase):
             "DFree avg",
         ]
 
-    def run(self):
-        """Get the ganeti report data."""
         groups_info = {}
         for group in self.rapi.groups(bulk=True):
             name = group["uuid"]
@@ -119,3 +118,7 @@ class GanetiGroupReportRunner(CookbookRunnerBase):
         for group in groups_info.values():
             self.table.add_row(group.table_row())
         print(self.table)
+        raise CookbookInitSuccess()
+
+    def run(self):
+        """Empty method, nothing to do here."""
