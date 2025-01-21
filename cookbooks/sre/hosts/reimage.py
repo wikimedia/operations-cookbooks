@@ -192,7 +192,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             raise RuntimeError('Puppet 7 is not supported on buster you must first upgrade the os.')
 
         if not self.args.force and not self.virtual and not self.args.move_vlan and \
-                self.netbox_server.access_vlan in LEGACY_VLANS:
+                self.netbox_server.access_vlan in LEGACY_VLANS and \
+                not self.host.startswith('ganeti'):
             ask_confirmation('Physical host on legacy vlan/IP, please consider re-imaging it using --move-vlan.\n'
                              'More info: https://wikitech.wikimedia.org/wiki/Vlan_migration\n'
                              'Continue to ignore.')
