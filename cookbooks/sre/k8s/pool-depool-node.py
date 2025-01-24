@@ -8,13 +8,19 @@ from typing import Optional
 
 from cumin import NodeSet
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
+from spicerack.cookbook import (
+    CookbookBase,
+    CookbookRunnerBase,
+    LockArgs,
+    CookbookInitSuccess,
+)
 from spicerack.k8s import Kubernetes
 from spicerack.remote import RemoteError, RemoteHosts
 from wmflib import phabricator
 from wmflib.decorators import retry
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+from cookbooks.sre.hosts.downtime import enrich_argument_parser_with_downtime_duration
 from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES
 
 logger = logging.getLogger(__name__)
@@ -55,7 +61,14 @@ class PoolDepoolK8sNodes(CookbookBase):
         )
         actions = parser.add_subparsers(dest="action", help="The action to perform")
         action_pool = actions.add_parser("pool")
+        action_pool.add_argument(
+            "--downtime-id",
+            help="Remove downtime by downtime-id",
+        )
+
         action_depool = actions.add_parser("depool")
+        action_depool = enrich_argument_parser_with_downtime_duration(action_depool)
+
         action_check = actions.add_parser("check")
         for action in (action_pool, action_depool, action_check):
             action.add_argument(
@@ -79,6 +92,12 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
         self.reason = self.spicerack.admin_reason(
             f"{args.action} {args.hosts}" if not args.reason else args.reason
         )
+        if args.action != "depool" or (args.minutes == args.hours == args.days == 0):
+            self.downtime_duration = None
+        else:
+            self.downtime_duration = timedelta(
+                days=args.days, hours=args.hours, minutes=args.minutes
+            )
 
         try:
             self.remote_hosts: RemoteHosts = spicerack.remote().query(
@@ -101,7 +120,9 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
         # Get the expected number of BGP sessions for each host from netbox
         self.expected_bgp_session_counts: dict[str, int] = {}
         for host in self.remote_hosts.hosts:
-            self.expected_bgp_session_counts[host] = self._get_expected_bgp_session_count(host)
+            self.expected_bgp_session_counts[host] = (
+                self._get_expected_bgp_session_count(host)
+            )
 
         self.k8s_cli = Kubernetes(
             group=ALLOWED_CUMIN_ALIASES[self.k8s_cluster]["k8s-group"],
@@ -113,11 +134,13 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
 
         if args.task_id is not None:
             self.phabricator = self.spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-            self.post_to_phab(
-                f"{args.action} host {self.remote_hosts.hosts} by {self.reason.owner} with reason: {args.reason}\n"
-            )
         else:
             self.phabricator = None
+
+        if self.args.action == "check":
+            self._action_check()
+            # Bail out early, don't log to SAL etc.
+            raise CookbookInitSuccess()
 
     @property
     def runtime_description(self) -> str:
@@ -129,14 +152,34 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
         """Make the cookbook lock per-host."""
         return LockArgs(suffix=str(self.remote_hosts.hosts), concurrency=1, ttl=600)
 
-    def post_to_phab(self, message: Optional[str] = None) -> None:
-        """Comment on the phabricator task"""
-        if self.phabricator is not None:
+    def _repool_message(self, downtime_id: str) -> str:
+        """Return a message on how to repool the nodes and remove the downtime"""
+        extra_args = ""
+        if self.args.reason:
+            extra_args += f"--reason '{self.args.reason}'"
+        if self.args.task_id:
+            extra_args += f" --task-id {self.args.task_id}"
+        extra_args += " "
+
+        return (
+            f"To repool the nodes and remove the downtime, run:\n"
+            f"`cookbook sre.k8s.pool-depool-node --k8s-cluster '{self.args.k8s_cluster}' "
+            f"{extra_args}pool --downtime-id {downtime_id} '{self.args.hosts}'`\n"
+        )
+
+    def post_to_phab(
+        self, message: Optional[str] = None, downtime_id: Optional[str] = None
+    ) -> None:
+        """Comment on the phabricator task if we pool/depool"""
+        if self.phabricator is not None and self.args.action != "check":
             if message is None:
                 message = (
                     f"Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} completed:\n"
                     f"{self.actions}\n"
                 )
+                if downtime_id:
+                    message += self._repool_message(downtime_id)
+
             self.phabricator.task_comment(self.args.task_id, message)
 
     def _get_expected_bgp_session_count(self, host: str) -> int:
@@ -213,51 +256,78 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
             action_method = getattr(k8s_node, action)
             action_method()
 
+    def _action_check(self):
+        """Check the status of the node(s)"""
+        for service in self.confctl_services:
+            logger.info(
+                "%s confctl status: %s=%s",
+                service.name,
+                service.tags["service"],
+                (
+                    "pooled"
+                    if getattr(service, "pooled") == "yes"
+                    else getattr(service, "pooled")
+                ),
+            )
+        for host in self.remote_hosts.hosts:
+            k8s_node = self.k8s_cli.get_node(host)
+            logger.info(
+                "%s k8s status: %s",
+                host,
+                ("schedulable" if k8s_node.is_schedulable() else "unschedulable"),
+            )
+        self.check_calico_node_status(self.remote_hosts)
+
+    def _action_depool(self):
+        """Cordon, drain and depool the node(s)"""
+        downtime_id = None
+        if self.downtime_duration is not None:
+            alerting_hosts = self.spicerack.alerting_hosts(self.remote_hosts.hosts)
+            downtime_id = alerting_hosts.downtime(
+                (
+                    self.reason
+                    if self.args.reason
+                    else self.spicerack.admin_reason(
+                        "Depooled via sre.k8s.pool-depool-node"
+                    )
+                ),
+                duration=self.downtime_duration,
+            )
+        logger.info("Depooling %s from %s", self.remote_hosts.hosts, self.k8s_cluster)
+        self.confctl.update_objects({"pooled": "inactive"}, self.confctl_services)
+        self._k8s_node_action(self.remote_hosts.hosts, "cordon")
+        logger.info("Draining %s", self.remote_hosts.hosts)
+        self._k8s_node_action(self.remote_hosts.hosts, "drain")
+        self.actions[str(self.remote_hosts.hosts)].success(
+            f"Host {self.remote_hosts.hosts} depooled from {self.k8s_cluster}"
+        )
+        logger.info("%s completed:\n%s\n", __name__, self.actions)
+        self.post_to_phab(downtime_id=downtime_id)
+        if downtime_id is not None:
+            logger.info(self._repool_message(downtime_id))
+
+    def _action_pool(self):
+        """Uncordon and pool the node(s)"""
+        logger.info("Checking calicoctl node status")
+        self.wait_for_calico_node_status_ok(self.remote_hosts)
+        logger.info("Pooling %s in %s", self.remote_hosts.hosts, self.k8s_cluster)
+        self.confctl.update_objects(
+            {"pooled": "yes", "weight": 10}, self.confctl_services
+        )
+        self._k8s_node_action(self.remote_hosts.hosts, "uncordon")
+        self.actions[str(self.remote_hosts.hosts)].success(
+            f"Host {self.remote_hosts.hosts} pooled in {self.k8s_cluster}"
+        )
+        if self.args.downtime_id:
+            alerting_hosts = self.spicerack.alerting_hosts(self.remote_hosts.hosts)
+            alerting_hosts.remove_downtime(self.args.downtime_id)
+        logger.info("%s completed:\n%s\n", __name__, self.actions)
+        self.post_to_phab()
+
     def run(self):
         """Uncordon and pool or cordon, drain, and depool the host"""
+        # Check action is called from __init__() to bail out early
         if self.args.action == "pool":
-            logger.info("Checking calicoctl node status")
-            self.wait_for_calico_node_status_ok(self.remote_hosts)
-            logger.info("Pooling %s in %s", self.remote_hosts.hosts, self.k8s_cluster)
-            self.confctl.update_objects(
-                {"pooled": "yes", "weight": 10}, self.confctl_services
-            )
-            self._k8s_node_action(self.remote_hosts.hosts, "uncordon")
-            self.actions[str(self.remote_hosts.hosts)].success(
-                f"Host {self.remote_hosts.hosts} pooled in {self.k8s_cluster}"
-            )
-            logger.info("%s completed:\n%s\n", __name__, self.actions)
-            self.post_to_phab()
+            self._action_pool()
         elif self.args.action == "depool":
-            logger.info(
-                "Depooling %s from %s", self.remote_hosts.hosts, self.k8s_cluster
-            )
-            self.confctl.update_objects({"pooled": "inactive"}, self.confctl_services)
-            self._k8s_node_action(self.remote_hosts.hosts, "cordon")
-            logger.info("Draining %s", self.remote_hosts.hosts)
-            self._k8s_node_action(self.remote_hosts.hosts, "drain")
-            self.actions[str(self.remote_hosts.hosts)].success(
-                f"Host {self.remote_hosts.hosts} depooled from {self.k8s_cluster}"
-            )
-            logger.info("%s completed:\n%s\n", __name__, self.actions)
-            self.post_to_phab()
-        elif self.args.action == "check":
-            for service in self.confctl_services:
-                logger.info(
-                    "%s confctl status: %s=%s",
-                    service.name,
-                    service.tags["service"],
-                    (
-                        "pooled"
-                        if getattr(service, "pooled") == "yes"
-                        else getattr(service, "pooled")
-                    ),
-                )
-            for host in self.remote_hosts.hosts:
-                k8s_node = self.k8s_cli.get_node(host)
-                logger.info(
-                    "%s k8s status: %s",
-                    host,
-                    ("schedulable" if k8s_node.is_schedulable() else "unschedulable"),
-                )
-            self.check_calico_node_status(self.remote_hosts)
+            self._action_depool()

@@ -19,6 +19,7 @@ from wmflib.interactive import (
     ensure_shell_is_durable,
 )
 
+from cookbooks.sre.hosts.downtime import enrich_argument_parser_with_downtime_duration
 from cookbooks.sre.k8s import (
     ALLOWED_CUMIN_ALIASES,
     PROMETHEUS_MATCHERS,
@@ -68,27 +69,7 @@ class WipeK8sCluster(CookbookBase):
     def argument_parser(self) -> ArgumentParser:
         """Parse the command line arguments."""
         parser = super().argument_parser()
-        parser.add_argument(
-            "-M",
-            "--minutes",
-            type=int,
-            default=0,
-            help="For how many minutes the downtime should last. [optional, default=0]",
-        )
-        parser.add_argument(
-            "-H",
-            "--hours",
-            type=int,
-            default=0,
-            help="For how many hours the downtime should last. [optional, default=0]",
-        )
-        parser.add_argument(
-            "-D",
-            "--days",
-            type=int,
-            default=0,
-            help="For how many days the downtime should last. [optional, default=0]",
-        )
+        parser = enrich_argument_parser_with_downtime_duration(parser)
         parser.add_argument(
             "--k8s-cluster",
             required=True,

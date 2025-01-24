@@ -1,6 +1,7 @@
 """Downtime hosts and all their services in Icinga and Alertmanager."""
 import logging
 
+from argparse import ArgumentParser
 from datetime import timedelta
 
 from cumin import NodeSet
@@ -14,6 +15,17 @@ from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 
 logger = logging.getLogger(__name__)
+
+
+def enrich_argument_parser_with_downtime_duration(parser: ArgumentParser) -> ArgumentParser:
+    """Add downtime duration arguments (--minutes, --hours, --days) to the provided parser."""
+    parser.add_argument('-M', '--minutes', type=int, default=0,
+                        help='For how many minutes the downtime should last. [optional, default=0]')
+    parser.add_argument('-H', '--hours', type=int, default=0,
+                        help='For how many hours the downtime should last. [optional, default=0]')
+    parser.add_argument('-D', '--days', type=int, default=0,
+                        help='For how many days the downtime should last. [optional, default=0]')
+    return parser
 
 
 class Downtime(CookbookBase):
@@ -36,16 +48,11 @@ class Downtime(CookbookBase):
     argument_task_required = False
     DEFAULT_DOWNTIME_HOURS = 4
 
-    def argument_parser(self):
+    def argument_parser(self) -> ArgumentParser:
         """As specified by Spicerack API."""
         parser = super().argument_parser()
+        parser = enrich_argument_parser_with_downtime_duration(parser)
         parser.add_argument('query', help='Cumin query to match the host(s) to act upon.')
-        parser.add_argument('-M', '--minutes', type=int, default=0,
-                            help='For how many minutes the downtime should last. [optional, default=0]')
-        parser.add_argument('-H', '--hours', type=int, default=0,
-                            help='For how many hours the downtime should last. [optional, default=0]')
-        parser.add_argument('-D', '--days', type=int, default=0,
-                            help='For how many days the downtime should last. [optional, default=0]')
         parser.add_argument('--force-puppet', action='store_true',
                             help='Force a Puppet run on the Icinga host to pick up new hosts or services.')
         parser.add_argument('--force', action='store_true',
