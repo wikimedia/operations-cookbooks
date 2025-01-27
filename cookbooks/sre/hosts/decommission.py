@@ -246,7 +246,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return 'for hosts {}'.format(self.decom_hosts)
 
-    def _decommission_host(self, fqdn):  # noqa: MC0001
+    def _decommission_host(self, fqdn):  # noqa: MC0001 # pylint: disable=too-many-statements
         """Perform all the decommissioning actions on a single host and return its switch if physical."""
         hostname = fqdn.split('.')[0]
         puppet_master = self.spicerack.puppet_master()
