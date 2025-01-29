@@ -68,6 +68,7 @@ def junos_set_interface_config(netbox_data: dict, live_interface: Optional[dict]
     """
     commands: list[str] = []
     device_name = netbox_data['name']
+    switch_model = nb_switch_interface.device.device_type.slug
     # We want to disable the interface if it's disabled in Netbox
     if not nb_switch_interface.enabled:
         # If there is already something configured and the interface is enabled: clear it
@@ -88,7 +89,10 @@ def junos_set_interface_config(netbox_data: dict, live_interface: Optional[dict]
         commands.extend([f'set interfaces {nb_switch_interface} description "DISABLED"',
                          f"set interfaces {nb_switch_interface} disable",
                          ])
-
+        if not nb_switch_interface.device.name.startswith("fasw"):
+            commands.append(f"delete class-of-service interfaces {nb_switch_interface}")
+        if switch_model.startswith('qfx5120'):
+            commands.append(f"delete protocols sflow interfaces {nb_switch_interface}.0")
     else:  # the interface is enabled in Netbox
         # The interface doesn't exists yet on the device, configure it
         # Status
@@ -138,6 +142,21 @@ def junos_set_interface_config(netbox_data: dict, live_interface: Optional[dict]
                                     f'ethernet-switching vlan members')
                     commands.append(f'set interfaces {nb_switch_interface} unit 0 family '
                                     f"ethernet-switching vlan members [ {' '.join(sorted(vlans_members))} ]")
+
+        # QoS & Sflow config for the interface - not currently done on fasw
+        if nb_switch_interface.device.name.startswith("fasw"):
+            return commands
+        commands.append(f"delete class-of-service interfaces {nb_switch_interface}")
+        commands.append(f"set class-of-service interfaces {nb_switch_interface} unit 0 "
+                        "classifiers dscp v4_classifier")
+        if switch_model.startswith('qfx5120'):
+            commands.append(f"set class-of-service interfaces {nb_switch_interface} scheduler-map wmf_map")
+            commands.append(f"set class-of-service interfaces {nb_switch_interface} unit 0 "
+                            "classifiers dscp-ipv6 v6_classifier")
+            commands.append(f"set protocols sflow interfaces {nb_switch_interface}.0")
+        elif switch_model.startswith(('qfx5100', 'ex4')):
+            commands.append(f"set class-of-service interfaces {nb_switch_interface} forwarding-class-set "
+                            "wmf_classes output-traffic-control-profile wmf_tc_profile")
 
     return commands
 
