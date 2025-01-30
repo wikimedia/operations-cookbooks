@@ -1,4 +1,6 @@
 """Kubernetes cluster operations."""
+import json
+import logging
 from abc import ABCMeta
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
@@ -9,7 +11,7 @@ from kubernetes.client.models import V1Taint
 from spicerack import Spicerack
 from spicerack.cookbook import LockArgs
 from spicerack.k8s import KubernetesApiError, KubernetesNode
-from spicerack.remote import NodeSet, RemoteHosts
+from spicerack.remote import NodeSet, RemoteExecutionError, RemoteHosts
 from wmflib import phabricator
 
 from cookbooks.sre import (PHABRICATOR_BOT_CONFIG_FILE, SREBatchBase,
@@ -17,6 +19,8 @@ from cookbooks.sre import (PHABRICATOR_BOT_CONFIG_FILE, SREBatchBase,
 
 __title__ = __doc__
 __owner_team__ = "ServiceOps"
+
+logger = logging.getLogger(__name__)
 
 # Prometheus matchers to properly downtime a k8s cluster.
 # If we downtime only the hosts we may end up in alerts firing when
@@ -209,6 +213,55 @@ def flatten_taints(taints: list[V1Taint]) -> str:
     return ";".join(
         [f"{t.key}={t.value}:{t.effect}" for t in sorted(taints, key=lambda a: a.key)]
     )
+
+
+def etcdctl(command: str) -> str:
+    """Prepend the API v3 environment variable and endpoints to an etcdctl command"""
+    return f"ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 {command}"
+
+
+def etcd_cluster_healthy(remote: RemoteHosts) -> bool:
+    """Check if the etcd cluster is healthy, logs the status of each member and returns a boolean"""
+    cmd = etcdctl("-w json endpoint health --cluster")
+    is_healthy = True
+    try:
+        result = remote.run_sync(
+            cmd,
+            is_safe=True,
+            print_progress_bars=False,
+            print_output=False,
+        )
+    except RemoteExecutionError as exc:
+        # etcdctl will return exitcode != 0 if the cluster is unhealthy
+        # but JSON output will still be printed, so we try to parse it anyway
+        logger.warning(
+            "Command '%s' on %s returned exitcode != 0. Error: %s",
+            cmd,
+            remote.hosts[0],
+            exc,
+        )
+        # We already know the cluster is unhealthy
+        is_healthy = False
+    _, output = next(result)
+    # Stdout and stderr are merged in the output but etcdctl always prints JSON
+    # before everything else, so we can just parse the first line.
+    cluster_health = json.loads(next(output.lines()))
+    logger.info("etcd clusters health:")
+    for member in cluster_health:
+        state = "healthy" if member["health"] else "unhealthy"
+        logger.info("%s, %s", member["endpoint"], state)
+        # Consider the cluster not healthy if any member is unhealthy
+        if not member["health"]:
+            is_healthy = False
+    # Consider the cluster not healthy if it has less than 3 members
+    if len(cluster_health) < 3:
+        logger.error(
+            "etcd cluster health check failed. "
+            "Expected at least 3 members, got: %s",
+            len(cluster_health),
+        )
+        is_healthy = False
+    return is_healthy
 
 
 class K8sBatchBase(SREBatchBase, metaclass=ABCMeta):

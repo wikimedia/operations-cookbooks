@@ -19,7 +19,7 @@ from wmflib.phabricator import Phabricator
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
-from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES
+from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES, etcdctl, etcd_cluster_healthy
 
 logger = logging.getLogger(__name__)
 
@@ -141,53 +141,6 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
                 return self.spicerack_remote.query(host)
         raise RuntimeError("No other control plane node found")
 
-    def _etcdctl(self, command: str) -> str:
-        """Prepend the API v3 environment variable and endpoints to an etcdctl command"""
-        return f"ETCDCTL_API=3 /usr/bin/etcdctl --endpoints https://$(hostname -f):2379 {command}"
-
-    def _etcd_cluster_healthy(self, remote: RemoteHosts) -> bool:
-        """Check if the etcd cluster is healthy, logs the status of each member and returns a boolean"""
-        cmd = self._etcdctl("-w json endpoint health --cluster")
-        is_healthy = True
-        try:
-            result = remote.run_sync(
-                cmd,
-                is_safe=True,
-                print_progress_bars=False,
-                print_output=False,
-            )
-        except RemoteExecutionError as exc:
-            # etcdctl will return exitcode != 0 if the cluster is unhealthy
-            # but JSON output will still be printed, so we try to parse it anyway
-            logger.warning(
-                "Command '%s' on %s returned exitcode != 0. Error: %s",
-                cmd,
-                remote.hosts[0],
-                exc,
-            )
-            # We already know the cluster is unhealthy
-            is_healthy = False
-        _, output = next(result)
-        # Stdout and stderr are merged in the output but etcdctl always prints JSON
-        # before everything else, so we can just parse the first line.
-        cluster_health = json.loads(next(output.lines()))
-        logger.info("etcd clusters health:")
-        for member in cluster_health:
-            state = "healthy" if member["health"] else "unhealthy"
-            logger.info("%s, %s", member["endpoint"], state)
-            # Consider the cluster not healthy if any member is unhealthy
-            if not member["health"]:
-                is_healthy = False
-        # Consider the cluster not healthy if it has less than 3 members
-        if len(cluster_health) < 3:
-            logger.error(
-                "etcd cluster health check failed. "
-                "Expected at least 3 members, got: %s",
-                len(cluster_health),
-            )
-            is_healthy = False
-        return is_healthy
-
     def rollback(self):
         """Update the Phabricator task with the actions already taken."""
         if self.phabricator is not None:
@@ -220,7 +173,7 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
             remote = self.spicerack_remote.query(host)
             any_other_remote = self._get_any_other_remote(host)
             # Sanity check
-            if not self._etcd_cluster_healthy(remote):
+            if not etcd_cluster_healthy(remote):
                 ask_confirmation(
                     "etcd cluster is in an unhealthy state. "
                     "Do you want to continue anyway?"
@@ -228,7 +181,7 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
 
             # Fetch the member_id of the control plane node to be re-imaged
             result = remote.run_sync(
-                self._etcdctl("-w json endpoint status"),
+                etcdctl("-w json endpoint status"),
                 is_safe=True,
                 print_progress_bars=False,
                 print_output=False,
@@ -281,8 +234,8 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
                 )
                 # Delete and re-add (as new) the control plane
                 any_other_remote.run_sync(
-                    self._etcdctl(f"member remove {member_id}"),
-                    self._etcdctl(f"member add {host} --peer-urls=https://{host}:2380"),
+                    etcdctl(f"member remove {member_id}"),
+                    etcdctl(f"member add {host} --peer-urls=https://{host}:2380"),
                     print_progress_bars=False,
                 )
                 # Reimage
@@ -314,7 +267,7 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
                         )
                 icinga_hosts.wait_for_optimal(skip_acked=True)
                 # Sanity check
-                if not self._etcd_cluster_healthy(any_other_remote):
+                if not etcd_cluster_healthy(any_other_remote):
                     ask_confirmation(
                         "etcd cluster is in an unhealthy state. "
                         "Do you want to continue anyway?"
