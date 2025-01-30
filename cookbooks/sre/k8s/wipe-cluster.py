@@ -173,13 +173,15 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
         # Check the etcd cluster first.
         # If it does not look healthy it's probably not safe to continue
         logger.info("Checking the status of the etcd cluster...")
-        # Get one etcd node to run commands on
+        # Get one etcd node to run etcdctl commands on
         etcd_node = next(self.etcd_nodes.split(len(self.etcd_nodes)))
         if not etcd_cluster_healthy(etcd_node):
             ask_confirmation(
                 "etcd cluster is in an unhealthy state. "
                 "Do you want to continue anyway?"
             )
+        # Get one control plane node to run kubectl commands on
+        ctrl_node = next(self.control_plane_nodes.split(len(self.control_plane_nodes)))
         self._prepare_nodes()
         affected_nodes = nodeset()
         affected_nodes.update(self.control_plane_nodes.hosts)
@@ -216,9 +218,24 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
             print_progress_bars=False,
         )
 
+        # Delete all keys in etcd
+        logger.info("Deleting all keys in etcd...")
         confirm_on_failure(
             etcd_node.run_sync,
             etcdctl('del "" --from-key=true'),
+            print_progress_bars=False,
+        )
+
+        # Flush all iptables rules still around
+        logger.info("Flushing iptables rules on all nodes...")
+        confirm_on_failure(
+            self.control_plane_nodes.run_sync,
+            "/usr/bin/systemctl restart 'ferm.service'",
+            print_progress_bars=False,
+        )
+        confirm_on_failure(
+            self.worker_nodes.run_sync,
+            "/usr/bin/systemctl restart 'ferm.service'",
             print_progress_bars=False,
         )
         logger.info("Cluster's state wiped!")
@@ -237,14 +254,20 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
         ):
             self._run_puppet()
 
+        # Update labels of control-plane nodes
+        nodes = " ".join(self.control_plane_nodes.hosts)
+        confirm_on_failure(
+            ctrl_node.run_sync,
+            f'/usr/bin/kubectl label nodes {nodes} node-role.kubernetes.io/control-plane=""',
+            print_progress_bars=False,
+        )
+        logger.info("Added control-plane role to: %s", nodes)
+
         if ask_yesno(
             "After running puppet, all nodes will have rejoined the cluster cordoned. "
             "Do you want me to uncordon all of them?"
         ):
             # Get one control plane node and run the command only on it.
-            ctrl_node = next(
-                self.control_plane_nodes.split(len(self.control_plane_nodes))
-            )
             nodes = " ".join(affected_nodes)
             confirm_on_failure(
                 ctrl_node.run_sync,
