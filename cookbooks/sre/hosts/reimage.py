@@ -261,10 +261,15 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 ))
         else:
             has_puppet7 = self.puppet_server.hiera_lookup(self.fqdn, "profile::puppet::agent::force_puppet7")
+            logger.info("Lookup result for force_puppet7: %s", has_puppet7)
             if has_puppet7 == "true":
                 self.args.puppet_version = 7
             else:
-                self.args.puppet_version = 5
+                self.args.puppet_version = int(ask_input(
+                    "The cookbook is now forcing Puppet 5. To confirm "
+                    "it was expected, please select the puppet version to "
+                    "install with", ('5', '7')
+                ))
 
         if self.args.puppet_version == 5:
             return self.spicerack.puppet_master()
