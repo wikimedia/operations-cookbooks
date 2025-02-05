@@ -48,6 +48,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         self.remote = spicerack.remote()
         self.master = self.remote.query(ganeti.rapi(args.cluster).master)
         self.remote_host = self.remote.query(args.fqdn)
+        self.netbox = spicerack.netbox()
 
         self.cluster = args.cluster
         self.group = args.group
@@ -157,3 +158,8 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
 
         self.master.run_sync('gnt-cluster verify-disks')
         ask_confirmation('Verify that the disk state looks correct.')
+
+        logger.info('Running Netbox PuppetDB import script to pickup eventual bridge changes.')
+        run_script_logs = self.netbox.run_script(name='import_server_facts.ImportPuppetDB',
+                                                 commit=True, params={'device': self.fqdn.split('.')[0]})
+        logger.debug('Netbox script logs :\n%s', '\n'.join(run_script_logs))
