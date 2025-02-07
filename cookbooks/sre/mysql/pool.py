@@ -1,4 +1,5 @@
 """Pool or depool a DB from dbctl."""
+
 from datetime import datetime, timedelta
 from pprint import pformat
 from time import sleep
@@ -41,12 +42,29 @@ class Pool(CookbookBase):
     def argument_parser(self):
         """CLI parsing, as required by the Spicerack API."""
         parser = super().argument_parser()
-        parser.add_argument("-r", "--reason", required=True, help="The administrative reason for the action.")
-        parser.add_argument("-t", "--task-id", help="The Phabricator task ID to update and refer (i.e.: T12345)")
+        parser.add_argument(
+            "-r",
+            "--reason",
+            required=True,
+            help="The administrative reason for the action.",
+        )
+        parser.add_argument(
+            "-t",
+            "--task-id",
+            help="The Phabricator task ID to update and refer (i.e.: T12345)",
+        )
         if self.__class__.__name__ == "Pool":
             profile = parser.add_mutually_exclusive_group()
-            profile.add_argument("--fast", action="store_true", help="Repool the host quicker with just two steps.")
-            profile.add_argument("--slow", action="store_true", help="Repool the host more slowly, with ten steps.")
+            profile.add_argument(
+                "--fast",
+                action="store_true",
+                help="Repool the host quicker with just two steps.",
+            )
+            profile.add_argument(
+                "--slow",
+                action="store_true",
+                help="Repool the host more slowly, with ten steps.",
+            )
 
         # TODO: add support for multiple instances? Based on what? (puppetdb, dbctl, orchestrator)
         parser.add_argument("instance", help="Instance name as defined in dbctl.")
@@ -76,7 +94,18 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
         if self.pool:
             if self.args.slow:
-                self.steps: tuple[int, ...] = (1, 4, 9, 16, 25, 36, 49, 64, 81, 100)  # 10 steps, power or 2 progression
+                self.steps: tuple[int, ...] = (
+                    1,
+                    4,
+                    9,
+                    16,
+                    25,
+                    36,
+                    49,
+                    64,
+                    81,
+                    100,
+                )  # 10 steps, power or 2 progression
             elif self.args.fast:
                 self.steps = (25, 100)  # 2 steps, power of 2 progression
             else:
@@ -111,7 +140,11 @@ class PoolDepoolRunner(CookbookRunnerBase):
     def lock_args(self):
         """Make the cookbook lock per-instance."""
         # TTL includes both the sleep time (900s) plus the potential retries for wait_diff_clean (30*30s) for each step
-        return LockArgs(suffix=self.args.instance, concurrency=1, ttl=1800 * len(self.steps) if self.pool else 60)
+        return LockArgs(
+            suffix=self.args.instance,
+            concurrency=1,
+            ttl=1800 * len(self.steps) if self.pool else 60,
+        )
 
     def check_action_result(self, action_result, message):
         """Raise on failure and log any messages present in an ActionResult instance."""
@@ -129,7 +162,9 @@ class PoolDepoolRunner(CookbookRunnerBase):
         if self.pool:
             if self.phabricator is not None:
                 self.phabricator.task_comment(
-                    self.reason.task_id, f"Start pool of {self.runtime_description} - {self.reason.owner}")
+                    self.reason.task_id,
+                    f"Start pool of {self.runtime_description} - {self.reason.owner}",
+                )
 
             self.gradual_pooling()
 
@@ -152,12 +187,16 @@ class PoolDepoolRunner(CookbookRunnerBase):
         for percentage in self.steps:
 
             instance = self.dbctl.instance.get(self.args.instance)
-            current_pooling = {(section['pooled'], section['percentage'] >= percentage)
-                               for section in instance.sections.values()}
+            current_pooling = {
+                (section["pooled"], section["percentage"] >= percentage) for section in instance.sections.values()
+            }
             # Skip if all the sections are pooled with a percentage equal or greater than the percentage to set
             if len(current_pooling) == 1 and current_pooling.pop() == (True, True):
-                logger.info("Skipping pooling instance %s at %d%%, instance already pooled with higher percentage",
-                            self.args.instance, percentage)
+                logger.info(
+                    "Skipping pooling instance %s at %d%%, instance already pooled with higher percentage",
+                    self.args.instance,
+                    percentage,
+                )
                 continue
 
             message = f"pool instance {self.args.instance} at {percentage}%"
@@ -168,7 +207,11 @@ class PoolDepoolRunner(CookbookRunnerBase):
             self.commit_change(message)
             if percentage != 100:
                 sleep_ends = datetime.utcnow() + timedelta(seconds=sleep_duration)
-                logger.info("Sleeping for %ds, next step will be at %s", sleep_duration, sleep_ends)
+                logger.info(
+                    "Sleeping for %ds, next step will be at %s",
+                    sleep_duration,
+                    sleep_ends,
+                )
                 sleep(sleep_duration)  # TODO: replace with a polling of metrics from prometheus or the DB itself
 
     def commit_change(self, message):
@@ -219,5 +262,9 @@ class PoolDepoolRunner(CookbookRunnerBase):
                 count += 1
 
         if count:
-            logger.error("The current diff has %d spurious changes, aborting:\n%s", count, pformat(diff))
+            logger.error(
+                "The current diff has %d spurious changes, aborting:\n%s",
+                count,
+                pformat(diff),
+            )
             raise RuntimeError("Unable to proceed due to spurious changes in the diff")
