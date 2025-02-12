@@ -109,6 +109,10 @@ class RollingOperation(CookbookBase):
         reason = self.spicerack.admin_reason(args.admin_reason, task_id=args.task_id)
         start_datetime = args.start_datetime
         nodes_per_run = args.nodes_per_run
+
+        if clustergroup == "relforge" and nodes_per_run > 1:
+            raise RuntimeError("--nodes-per-run cannot be > 1 on relforge, as the cluster has 2 nodes")
+
         with_lvs = args.with_lvs
         wait_for_green = args.wait_for_green
         allow_yellow = args.allow_yellow
