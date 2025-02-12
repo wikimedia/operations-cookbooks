@@ -8,6 +8,7 @@ from time import sleep
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.elasticsearch_cluster import ElasticsearchClusterCheckError
 from wmflib.constants import CORE_DATACENTERS
+from wmflib.interactive import ask_confirmation
 
 from cookbooks.sre.elasticsearch import CLUSTERGROUPS, valid_datetime_type
 
@@ -93,6 +94,8 @@ class RollingOperation(CookbookBase):
         parser.add_argument('--write-queue-datacenters', choices=CORE_DATACENTERS, default=CORE_DATACENTERS, nargs='+',
                             help='Manually specify a list of specific datacenters to check the '
                                  'cirrus write queue rather than checking all core datacenters (default)')
+        parser.add_argument('--wait-for-confirmation', action='store_true',
+                            help='Wait before manual confirmation before running the action on the next batch of nodes')
 
         return parser
 
@@ -139,6 +142,7 @@ class RollingOperation(CookbookBase):
             wait_for_green=wait_for_green,
             allow_yellow=allow_yellow,
             operation=operation,
+            wait_for_confirmation=args.wait_for_confirmation
         )
 
 
@@ -147,7 +151,7 @@ class RollingOperationRunner(CookbookRunnerBase):
 
     # pylint: disable=too-many-arguments
     def __init__(self, *, spicerack, task_id, elasticsearch_clusters, clustergroup, reason, start_datetime,
-                 nodes_per_run, with_lvs, wait_for_green, allow_yellow, operation):
+                 nodes_per_run, with_lvs, wait_for_green, allow_yellow, operation, wait_for_confirmation):
         """Create rolling operation for cluster."""
         self.spicerack = spicerack
         self.task_id = task_id
@@ -163,6 +167,7 @@ class RollingOperationRunner(CookbookRunnerBase):
         self.nodes_per_run = nodes_per_run
 
         self.operation = operation
+        self.wait_for_confirmation = wait_for_confirmation
 
     @property
     def runtime_description(self):
@@ -189,8 +194,11 @@ class RollingOperationRunner(CookbookRunnerBase):
 
             puppet = self.spicerack.puppet(nodes.remote_hosts)
 
-            logger.info('Starting work on the next batch of nodes.')
+            logger.info('Starting work on the next batch of nodes (%s).', nodes)
             logger.info('#### Please don\'t kill this cookbook now. ####')
+
+            if self.wait_for_confirmation:
+                ask_confirmation('Ready to proceed?')
 
             with self.spicerack.alerting_hosts(nodes.remote_hosts.hosts).downtimed(
                     self.reason, duration=timedelta(minutes=60)):
