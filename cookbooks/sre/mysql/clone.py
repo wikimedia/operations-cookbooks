@@ -286,24 +286,16 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self.alerting_hosts = spicerack.alerting_hosts
         self.admin_reason = spicerack.admin_reason("MySQL Clone")
         self.remote = spicerack.remote()
-        source = "P{" + args.source + "} and A:db-all and not A:db-multiinstance"
-        source_hosts = spicerack.remote().query(source)
-        if len(source_hosts) != 1:
-            print("No suitable host as source have been found, exiting")
-            raise RuntimeError
-        self.source_host = list(source_hosts.split(1))[0]
-        target = "P{" + args.target + "} and A:db-all and not A:db-multiinstance"
-        target_hosts = spicerack.remote().query(target)
-        if len(target_hosts) != 1:
-            print("No suitable host as target have been found, exiting")
-            raise RuntimeError
-        self.target_host = list(target_hosts.split(1))[0]
-        primary = "P{" + args.primary + "} and A:db-all and not A:db-multiinstance"
-        primary_hosts = spicerack.remote().query(primary)
-        if len(primary_hosts) != 1:
-            print("No suitable host as the primary have been found, exiting")
-            raise RuntimeError
-        self.primary_host = list(primary_hosts.split(1))[0]
+
+        self.source_hostname, self.source_fqdn = parse_db_host_fqdn(args.source)
+        self.source_host = _fetch_db_remotehost(self.remote, self.source_hostname)
+
+        self.target_hostname, self.target_fqdn = parse_db_host_fqdn(args.target)
+        self.target_host = _fetch_db_remotehost(self.remote, self.target_hostname)
+
+        self.primary_hostname, self.primary_fqdn = parse_db_host_fqdn(args.primary)
+        self.primary_host = _fetch_db_remotehost(self.remote, self.primary_hostname)
+
         self.puppet = spicerack.puppet
         self.logger = logging.getLogger(__name__)
         # Other prep
@@ -342,15 +334,8 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self._run_scripts(self.source_host, ['mysql -e "STOP SLAVE;"'])
         # Sleep for a second to make sure the position is updated
         time.sleep(1)
-        replication_status = self.source_host.run_sync('mysql -e "SHOW SLAVE STATUS\\G"')
-        replication_status = list(replication_status)[0][1].message().decode("utf-8")
-        binlog_file = re.findall(r"\sMaster_Log_File:\s*(\S+)", replication_status)
-        repl_position = re.findall(r"\sExec_Master_Log_Pos:\s*(\d+)", replication_status)
-        if len(binlog_file) != 1 or len(repl_position) != 1:
-            self.logger.error("Cloud not find the replication position aborting")
-            raise AbortError
-        binlog_file = binlog_file[0]
-        repl_position = repl_position[0]
+
+        binlog_file, repl_position = _fetch_replication_status(self.source_host)
         self._run_scripts(self.source_host, ["service mariadb stop"])
 
         self._run_scripts(
