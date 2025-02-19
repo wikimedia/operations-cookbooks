@@ -621,7 +621,8 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             )
             return target_version, None
         self._ask_confirmation(
-            f"{netbox_host.fqdn} {driver_category.name}: About to upload {firmware_file}, please confirm"
+            f"""{netbox_host.fqdn} {driver_category.name}:
+            About to upload {firmware_file}, please confirm (may take up to half an hour on slow BMCs)"""
         )
 
         # TODO: make the following the default when everything is on 4.40+
