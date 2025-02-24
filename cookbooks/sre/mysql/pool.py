@@ -3,8 +3,10 @@
 from datetime import datetime, timedelta
 from pprint import pformat
 from time import sleep
+from typing import Generator
 import logging
 
+from conftool.extensions.dbconfig.action import ActionResult
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.decorators import retry
 from wmflib.interactive import ensure_shell_is_durable
@@ -128,7 +130,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
         # TODO: check for mysql/metrics errors during the repooling operation?
 
     @property
-    def runtime_description(self):
+    def runtime_description(self) -> str:
         """Return a nicely formatted string that represents the cookbook action."""
         suffix = ""
         if self.pool:
@@ -137,7 +139,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
         return f"{self.args.instance}{suffix} - {self.reason.reason}"
 
     @property
-    def lock_args(self):
+    def lock_args(self) -> LockArgs:
         """Make the cookbook lock per-instance."""
         # TTL includes both the sleep time (900s) plus the potential retries for wait_diff_clean (30*30s) for each step
         return LockArgs(
@@ -146,7 +148,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
             ttl=1800 * len(self.steps) if self.pool else 60,
         )
 
-    def check_action_result(self, action_result, message):
+    def check_action_result(self, action_result: ActionResult, message: str) -> None:
         """Raise on failure and log any messages present in an ActionResult instance."""
         for result_message in action_result.messages:
             logger.log(logging.INFO if action_result.success else logging.ERROR, result_message)
@@ -157,7 +159,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
         if not action_result.success:
             raise RuntimeError(f"Failed to {message}")
 
-    def run(self):
+    def run(self) -> None:
         """Required by the Spicerack API."""
         if self.pool:
             if self.phabricator is not None:
@@ -181,7 +183,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
                 f"Completed {self.args.operation} of {self.runtime_description} - {self.reason.owner}",
             )
 
-    def gradual_pooling(self):
+    def gradual_pooling(self) -> None:
         """Gradually pool the instance with increasing percentages."""
         sleep_duration = 5 if self.dry_run else 900
         for percentage in self.steps:
@@ -214,7 +216,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
                 )
                 sleep(sleep_duration)  # TODO: replace with a polling of metrics from prometheus or the DB itself
 
-    def commit_change(self, message):
+    def commit_change(self, message: str) -> None:
         """Check the diff and commit the change."""
         ret, diff = self.get_diff()
         self.check_action_result(ret, f"get diff to {message}")
@@ -231,7 +233,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
         failure_message="Waiting for dbctl config diff to be clean",
         exceptions=(RuntimeError,),
     )
-    def wait_diff_clean(self):
+    def wait_diff_clean(self) -> None:
         """Poll until dbctl config diff is clean."""
         ret, _ = self.get_diff()
         if ret.success and ret.exit_code == 0:  # Empty diff
@@ -239,13 +241,13 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
         raise RuntimeError("dbctl config has a pending diff or unable to get the diff")
 
-    def get_diff(self):
+    def get_diff(self) -> tuple[ActionResult, Generator]:
         """Get the current dbctl config diff."""
         ret, diff = self.dbctl.config.diff(datacenter=self.datacenter, force_unified=True)
         self.check_action_result(ret, "evaluate dbctl config diff")
         return ret, diff
 
-    def check_diff(self, diff):
+    def check_diff(self, diff: Generator) -> None:
         """Ensure that the diff has only the expected change in it."""
         # Count the diff lines unrelated to the current change
         count = 0
