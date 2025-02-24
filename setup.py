@@ -11,6 +11,7 @@ install_requires = [
     'prettytable',
     'python-dateutil',
     'python-gitlab==3.11.0',
+    'scapy>=2.4.4',
     'wikimedia-spicerack',
     # on cumin nodes transferpy v1.1 is installed as the Debian package
     'transferpy @ git+https://gerrit.wikimedia.org/r/operations/software/transferpy@v1.1',
