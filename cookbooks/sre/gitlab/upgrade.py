@@ -90,8 +90,16 @@ class UpgradeRunner(CookbookRunnerBase):
         self.target_version = args.version
         self.skip_confirm_prompt = args.skip_confirm_prompt
 
+        # Skipping backups on production should not be possible
         if args.skip_replica_backups and not self.check_can_skip_backup():
             raise RuntimeError(f"--skip_replica-backups can't be used on {self.url}")
+
+        # Remind users to skip backup on replicas
+        if not args.skip_replica_backups and self.check_can_skip_backup():
+            ask_confirmation("Cookbook is executed on a replica without the "
+                             "--skip-replica-backups flag. Are you sure you want to create a "
+                             "backup on the replica? This takes 3+ hours.")
+
         self.skip_replica_backups = args.skip_replica_backups
 
         self.token = get_secret('GitLab API Token')
