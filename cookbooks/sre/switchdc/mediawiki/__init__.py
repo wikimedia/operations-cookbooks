@@ -24,7 +24,6 @@ DEFAULT_READ_ONLY_REASON = (
     "in a few minutes."
 )
 MEDIAWIKI_SERVICES = (
-    "jobrunner",
     "mwdebug",
     "mwdebug-next",
     "mw-web",
@@ -35,7 +34,6 @@ MEDIAWIKI_SERVICES = (
     "mw-jobrunner",
     "mw-parsoid",
     "mw-wikifunctions",
-    "videoscaler",
 )
 # Read-only mediawiki services that are active-active by default and won't be touched by this switchover.
 MEDIAWIKI_RO_SERVICES = (
