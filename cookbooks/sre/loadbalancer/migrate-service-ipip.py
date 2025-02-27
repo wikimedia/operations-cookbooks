@@ -159,7 +159,7 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
             Press continue when the change is merged
             """
         ))
-        self.realservers_puppet.run()
+        self.realservers_puppet.run(timeout=600)
         self.lvs_puppet.run()
 
         inner_src_ip = self._resolve_ipv4(self.fqdn)
