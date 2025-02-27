@@ -272,6 +272,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 ))
 
         if self.args.puppet_version == 5:
+            logger.info("Return the Puppet Master handle (puppet_version 5).")
             return self.spicerack.puppet_master()
 
         return self.spicerack.puppet_server()
@@ -522,7 +523,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         except RemoteExecutionError:
             ask_confirmation('Unable to set the puppet version inside the Debian installer, please do manually '
                              f'with: sudo install-console {self.fqdn}\n{puppet_version_cmd}')
-        self.host_actions.success('Add puppet_version metadata to Debian installer')
+        self.host_actions.success(f'Add puppet_version metadata ({self.args.puppet_version}) to Debian installer')
 
         # Reset boot media allowing the newly installed OS to boot.
         if self.virtual:
