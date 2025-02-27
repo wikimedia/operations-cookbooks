@@ -94,7 +94,7 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
         try:
             self.realservers_remote_hosts = spicerack.remote().query(realservers_query)
         except RemoteError as error:
-            raise RuntimeError("No hosts found matching {self.role} in {self.dc}") from error
+            raise RuntimeError(f"No hosts found matching {self.role} in {self.dc}") from error
 
         self.realservers_puppet = spicerack.puppet(self.realservers_remote_hosts)
 
@@ -102,7 +102,7 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
         try:
             self.lvs_remote_hosts = spicerack.remote().query(self.lvs_query)
         except RemoteError as error:
-            raise RuntimeError("No LVS found in {self.dc}") from error
+            raise RuntimeError(f"No LVS found in {self.dc}") from error
 
         self.lvs_puppet = spicerack.puppet(self.lvs_remote_hosts)
 
