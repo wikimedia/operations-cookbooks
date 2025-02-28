@@ -1,4 +1,5 @@
 """Cookbook to migrate services to IPIP encapsulation"""
+import logging
 
 from datetime import timedelta
 from logging import getLogger
@@ -16,6 +17,9 @@ from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 from scapy.all import IP, L3RawSocket, TCP, sr1  # type: ignore[attr-defined]
 from scapy.all import conf as scapyconf
 # pylint: enable=no-name-in-module
+
+
+logger = logging.getLogger(__name__)
 
 
 class MigrateServiceIPIP(CookbookBase):
@@ -154,7 +158,7 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
 
     @retry(backoff_mode='constant', delay=timedelta(seconds=1), exceptions=(RuntimeError,))
     def ask_update_hiera(self):
-        """Inform the user to manually update the hiera config and check this has been performed."""
+        """Inform the user to manually update the hiera config and run puppet."""
         ask_confirmation(dedent(
             f"""\
             Please add the following hiera entries to the realservers:
@@ -174,10 +178,14 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
         self.realservers_puppet.run(timeout=600)
         self.lvs_puppet.run()
 
+    @retry(backoff_mode='constant', delay=timedelta(seconds=1), exceptions=(RuntimeError,))
+    def validate_realservers(self):
+        """Check that realservers accept inbound IPIP traffic for the configured services"""
         inner_src_ip = self._resolve_ipv4(self.fqdn)
         for realserver_host in self.realservers_remote_hosts.hosts:
             outer_dst_ip = self._resolve_ipv4(realserver_host)
             for service in self.services:
+                logger.info("Validating that realserver %s accepts IPIP traffic for %s", realserver_host, service.name)
                 inner_dst_ip = str(service.ip.get(self.dc))
                 if not self._ipip_traffic_accepted(outer_src_ip=self.IPIP_OUTER_SRC_IP,
                                                    outer_dst_ip=outer_dst_ip,
@@ -202,4 +210,5 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
     def run(self):
         """Main run method either query or clear MigrateHosts events."""
         self.ask_update_hiera()
+        self.validate_realservers()
         return self.restart_pybal()
