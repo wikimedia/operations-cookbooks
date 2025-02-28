@@ -29,6 +29,7 @@ class MigrateServiceIPIP(CookbookBase):
 
     Usage:
         cookbook sre.loadbalancer.migrate-service-ipip --dc codfw --role swift::proxy swift swift-https
+        cookbook sre.loadbalancer.migrate-service-ipip --dc codfw --alias swift-fe swift swift-https
     """
 
     def argument_parser(self):
@@ -41,11 +42,16 @@ class MigrateServiceIPIP(CookbookBase):
             choices=CORE_DATACENTERS,
             help="Target datacenter. One of %(choices)s.",
         )
-        parser.add_argument(
+        realservers = parser.add_mutually_exclusive_group(required=True)
+        realservers.add_argument(
             "--role",
             type=str,
-            required=True,
             help="Puppet role used by the realservers",
+        )
+        realservers.add_argument(
+            "--alias",
+            type=str,
+            help="Alias used to match realservers",
         )
         parser.add_argument(
             "services",
@@ -75,6 +81,7 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.dry_run = spicerack.dry_run
         self.role = args.role
+        self.alias = args.alias
         self.dc = args.dc
         self.fqdn = getfqdn()
         self.dns = spicerack.dns()
@@ -90,7 +97,10 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
             raise RuntimeError(f"No services found matching {args.services} and LVS configured")
 
         self.logger = getLogger(__name__)
-        realservers_query = f"P{{O:{self.role}}} and A:{self.dc}"
+        if args.role is not None:
+            realservers_query = f"P{{O:{self.role}}} and A:{self.dc}"
+        else:
+            realservers_query = f"A:{args.alias} and A:{self.dc}"
         try:
             self.realservers_remote_hosts = spicerack.remote().query(realservers_query)
         except RemoteError as error:
@@ -109,7 +119,10 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return f'for role: {self.role}@{self.dc}'
+        if self.role is not None:
+            return f'for role: {self.role}@{self.dc}'
+
+        return f'for alias: {self.alias}@{self.dc}'
 
     def _ipip_traffic_accepted(self,  *,
                                outer_src_ip: str, outer_dst_ip: str,
@@ -144,8 +157,7 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
         """Inform the user to manually update the hiera config and check this has been performed."""
         ask_confirmation(dedent(
             f"""\
-            Please add the following hiera entry to:
-            hieradata/role/{self.dc}/{self.role.replace('::', '/')}.yaml
+            Please add the following hiera entries to the realservers:
                 profile::lvs::realserver::ipip::enabled: true
                 profile::base::enable_rp_filter: false
 
