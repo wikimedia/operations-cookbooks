@@ -1,6 +1,7 @@
 """Provision a new physical host setting up it's BIOS and management console."""
 import logging
 
+from collections import defaultdict
 from pprint import pformat
 from time import sleep
 from typing import Union
@@ -31,6 +32,11 @@ OLD_SERIAL_MODELS = (
 
 SUPERMICRO_AMD_DEVICE_SLUGS = (
     'as-2014s-tr',
+)
+
+# See https://phabricator.wikimedia.org/T387577#10627655
+SUPERMICRO_UEFI_NIC_PXE_BIOS_FIRMWARES = (
+    'BIOS_X12DDW-1B58_20240704_2.1_STDsp.bin',
 )
 
 # Hostname prefixes that usually need --enable-virtualization
@@ -235,6 +241,25 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             raise RuntimeError(
                 f'The management password provided seems incorrect, it does not work on {cumin_host}.') from None
 
+        logging.info("Retrieving the BMC's firmware version.")
+        bmc_response = self.redfish.request(
+            "get", f"{self.redfish.update_service}/FirmwareInventory/BMC").json()
+        logging.info("BMC firmware release date: %s", bmc_response['ReleaseDate'])
+        if bmc_response['ReleaseDate'].startswith('2022-'):
+            ask_confirmation(
+                "The BMC firmware was released in 2022 and it may not support "
+                "all the settings that we need. Please consider upgrading firmware "
+                "first. See https://phabricator.wikimedia.org/T371416 for more info.")
+        logging.info("Retrieving the BIOS's firmware version.")
+        bios_response = self.redfish.request(
+            "get", f"{self.redfish.update_service}/FirmwareInventory/BIOS").json()
+        logging.info("BIOS firmware version: %s", bios_response['Version'])
+        # We save the BMC/BIOS firmware filename since it is easier and more
+        # precise to pin-point corner cases when dealing with BIOS settings
+        # later on.
+        self.bmc_firmware_filename = bmc_response["Oem"]["Supermicro"]["UniqueFilename"]
+        self.bios_firmware_filename = bios_response["Oem"]["Supermicro"]["UniqueFilename"]
+
         ask_confirmation(f'Are you sure to proceed to apply BIOS/iDRAC settings {self.runtime_description}?')
 
     @property
@@ -363,17 +388,49 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         self.redfish.chassis_reset(self.chassis_reset_policy)
         sleep(300)
 
+    def _get_network_info(self):
+        """Find registered network NICs and their port link statuses."""
+        network_info: dict = defaultdict(dict)
+        network_adapters = self.redfish.request(
+            "GET", "/redfish/v1/Chassis/1/NetworkAdapters").json()
+        for member in network_adapters["Members"]:
+            network_adapter_uri = member["@odata.id"]
+            network_adapter = self.redfish.request("GET", network_adapter_uri).json()
+            logger.info("Retrieving port configs for %s", network_adapter["Model"])
+            network_ports = self.redfish.request(
+                "GET", f"{network_adapter_uri}/Ports").json()
+            for port in network_ports["Members"]:
+                port_info = self.redfish.request("GET", port["@odata.id"]).json()
+                model = network_adapter["Model"]
+                if "LinkStatus" in port_info:
+                    network_info[model][port_info["PortId"]] = port_info["LinkStatus"]
+                else:
+                    network_info[model][port_info["PortId"]] = "Unknown"
+                logger.info(
+                    "Port %s has link status %s",
+                    port_info["PortId"], network_info[model][port_info["PortId"]])
+        return network_info
+
+    def _print_network_info(self, network_info):
+        """Pretty print the dictionary returned by _get_network_info."""
+        logger.info("Link status for the NIC ports:")
+        for model, ports in network_info.items():
+            for port, link_status in ports.items():
+                logger.info("Model %s Port %s: %s", model, port, link_status)
+
+    def _find_bios_nic_setting(self, model, port, pxe_nic_devices):
+        """Find the BIOS NIC setting name from a model and port combination."""
+        # For more details see https://phabricator.wikimedia.org/T387577#10607565
+        normalized_model = model.replace("-", "_")[0:12]
+        port_suffix = f"LAN{port}"
+        for nic_device in pxe_nic_devices:
+            if normalized_model in nic_device and port_suffix in nic_device:
+                return nic_device
+        return None
+
     def _config_host(self):
         """Provision the BIOS and BMC settings."""
         try:
-            logging.info("Retrieving the BMC's firmware version.")
-            bmc_response = self.redfish.request("get", "/redfish/v1/UpdateService/FirmwareInventory/BMC").json()
-            logging.info("BMC firmware release date: %s", bmc_response['ReleaseDate'])
-            if bmc_response['ReleaseDate'].startswith('2022-'):
-                ask_confirmation(
-                    "The BMC firmware was released in 2022 and it may not support "
-                    "all the settings that we need. Please consider upgrading firmware "
-                    "first. See https://phabricator.wikimedia.org/T371416 for more info.")
             logging.info("Retrieving BIOS settings (first round).")
             bios_attributes = self._get_bios_settings()
             logging.info("Setting up BootMode and basic BIOS settings.")
@@ -438,7 +495,7 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
                     f"Error while checking BIOS attribute {key}") from e
         return found_diffs
 
-    def _config_pxe_bios_settings(self, bios_attributes: dict):
+    def _config_pxe_bios_settings(self, bios_attributes: dict):  # pylint: disable=too-many-branches, too-many-locals
         """Set BIOS settings from EFI to Legacy, including riser's PCIe settings.
 
         Look for all BIOS settings with a value containing 'EFI' and set them
@@ -461,8 +518,10 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             self.bios_changes["Attributes"]['IPv6HTTPSupport'] = 'Disabled'
             self.bios_changes["Attributes"]['IPv6PXESupport'] = 'Disabled'
 
+        pxe_nic_devices = []
         for key, value in bios_attributes.items():
-            if old_value == str(value) or key.startswith("RSC_"):
+            if ((old_value == str(value) or key.startswith("RSC_")) and
+                    "LAN" not in key):
                 if new_value == 'Legacy' and key in self.uefi_only_devices:
                     ask_confirmation(
                         f"The device related to {key} works only with UEFI settings. "
@@ -470,6 +529,49 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
                         "only if you don't care about the device.")
                 else:
                     self.bios_changes["Attributes"][key] = new_value
+            if "LAN" in key:
+                logger.info("Found a NIC device: %s", key)
+                pxe_nic_devices.append(key)
+
+        if len(pxe_nic_devices) == 1:
+            pxe_nic = pxe_nic_devices[0]
+        else:
+            network_info = self._get_network_info()
+            self._print_network_info(network_info)
+            chosen_pxe_nic = None
+            nics_with_link_up = 0
+            for model, ports in network_info.items():
+                for port, link_status in ports.items():
+                    if link_status == "LinkUp":
+                        logger.info(
+                            "Detected link up for NIC %s port %s", model, port)
+                        if nics_with_link_up >= 1:
+                            logger.warning(
+                                "Detected more than one link with LinkUp status. "
+                                "PXE settings already assigned to another NIC, "
+                                "skipping this one.")
+                        chosen_pxe_nic = self._find_bios_nic_setting(
+                            model, port, pxe_nic_devices)
+                        nics_with_link_up += 1
+            if not chosen_pxe_nic:
+                chosen_pxe_nic = ask_input(
+                    f"The heuristic to map NIC link status info and BIOS NIC device "
+                    "settings failed to provide a suggestion. "
+                    "Pick the one to set PXE " f"on:\n{pxe_nic_devices}",
+                    pxe_nic_devices)
+            for nic in pxe_nic_devices:
+                if nic == chosen_pxe_nic:
+                    pxe_nic = nic
+                else:
+                    logger.info("Set (PXE) Disabled to the NIC %s", nic)
+                    self.bios_changes["Attributes"][nic] = "Disabled"
+
+        logger.info("Set PXE to the NIC %s", pxe_nic)
+        if self.bios_firmware_filename in SUPERMICRO_UEFI_NIC_PXE_BIOS_FIRMWARES:
+            uefi_pxe_setting = "PXE"
+        else:
+            uefi_pxe_setting = "EFI"
+        self.bios_changes["Attributes"][pxe_nic] = uefi_pxe_setting if self.args.uefi else "PXE"
 
 
 class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
