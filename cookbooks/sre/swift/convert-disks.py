@@ -137,13 +137,17 @@ class ConvertDisksRunner(CookbookRunnerBase):
                 logger.info('Skipping firmware upgrade as requested')
             else:
                 logger.info('upgrading idrac: %s', self.host)
-                self._check_run('sre.hardware.upgrade-firmware', ['-c', 'idrac', str(self.remote_host)])
+                self.spicerack.run_cookbook(
+                    'sre.hardware.upgrade-firmware',
+                    ['-c', 'idrac', str(self.remote_host)],
+                    raises=True)
                 # Force a reboot, as otherwise the subsequent drive deletion
                 # jobs don't work
                 logger.info('Rebooting host: %s', self.remote_host)
-                self._check_run('sre.hosts.reboot-single',
-                                [str(self.remote_host), "--reason",
-                                 "idrac upgrade"])
+                self.spicerack.run_cookbook(
+                    'sre.hosts.reboot-single',
+                    [str(self.remote_host), "--reason", "idrac upgrade"],
+                    raises=True)
 
             logger.info('Unmount disks: %s', self.host)
             # Stop any running swift processes
@@ -152,7 +156,7 @@ class ConvertDisksRunner(CookbookRunnerBase):
             self.remote_host.run_async('find  /srv/swift-storage/ -type d -maxdepth  1 -exec umount {} + || true')
             self._convert()
             logger.info('Disk conversion done; now reimaging %s', self.host)
-            self._check_run('sre.hosts.reimage', ['--os', self.args.os, self.host])
+            self.spicerack.run_cookbook('sre.hosts.reimage', ['--os', self.args.os, self.host], raises=True)
 
     def _convert(self):
         """Perform the conversion of the disks."""
@@ -175,9 +179,3 @@ class ConvertDisksRunner(CookbookRunnerBase):
         logger.debug('Using task URL: %s', task_url)
         results = self.redfish.poll_task(task_url)
         logger.info(pformat(results))
-
-    def _check_run(self, name, args):
-        """Run cookbook name with args, raise RunTimeError if it fails"""
-        ret = self.spicerack.run_cookbook(name, args)
-        if ret:
-            raise RuntimeError(f'Running cookbook {name} failed')
