@@ -288,13 +288,13 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self.remote = spicerack.remote()
 
         self.source_hostname, self.source_fqdn = parse_db_host_fqdn(args.source)
-        self.source_host = _fetch_db_remotehost(self.remote, self.source_hostname)
+        self.source_host = _fetch_db_remotehost(self.remote, self.source_fqdn)
 
         self.target_hostname, self.target_fqdn = parse_db_host_fqdn(args.target)
-        self.target_host = _fetch_db_remotehost(self.remote, self.target_hostname)
+        self.target_host = _fetch_db_remotehost(self.remote, self.target_fqdn)
 
         self.primary_hostname, self.primary_fqdn = parse_db_host_fqdn(args.primary)
-        self.primary_host = _fetch_db_remotehost(self.remote, self.primary_hostname)
+        self.primary_host = _fetch_db_remotehost(self.remote, self.primary_fqdn)
 
         self.puppet = spicerack.puppet
         self.logger = logging.getLogger(__name__)
