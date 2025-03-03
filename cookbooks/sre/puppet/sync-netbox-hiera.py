@@ -37,6 +37,7 @@ query ($role: [String!], $status: [String!]) {
         device_type {
             slug
             manufacturer { slug }
+            model
         }
         site { slug }
         tenant { name }
@@ -271,6 +272,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
             data = {
                 'primary_fqdn': device['primary_ip4']['dns_name'],
                 'manufacturer': device['device_type']['manufacturer']['slug'],
+                'model': device['device_type']['model'],
                 'site': device['site']['slug'],
                 'role': device['role']['slug'],
                 'ipv4': device['primary_ip4']['address'].split('/')[0],
