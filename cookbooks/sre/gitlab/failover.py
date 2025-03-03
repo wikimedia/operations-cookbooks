@@ -303,7 +303,7 @@ class FailoverRunner(CookbookRunnerBase):
         """Raises an exception if the IP addresses haven't changed since before the migration started"""
         # The tool underlying the wipe-cache cookbook takes space-separated arguments, but run_cookbook needs a list
         self.spicerack.run_cookbook(
-            'sre.dns.wipe-cache', [" ".join([self.switch_from_gitlab_url, self.switch_to_gitlab_url])]
+            'sre.dns.wipe-cache', [" ".join([self.switch_from_gitlab_url, self.switch_to_gitlab_url])], raises=True
         )
 
         switch_from_host_ips = sorted(self.dns.resolve_ips(urlparse(self.switch_from_gitlab_url).netloc))
