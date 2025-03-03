@@ -76,9 +76,7 @@ class HiddenParmaRunner(CookbookRunnerBase):
             args.extend(["-t", self.args.task_id])
         args.extend(["hiddenparma", "A:icinga"])
         logger.info("Running the deployment")
-        exit_code = self.spicerack.run_cookbook("sre.deploy.python-code", args=args)
-        if exit_code != 0:
-            raise RuntimeError("Deployment failed")
+        self.spicerack.run_cookbook("sre.deploy.python-code", args=args, raises=True)
         logger.info("Deployment successful")
         logger.info("Restarting the service")
         self.spicerack.remote().query("A:icinga").run_sync("systemctl restart hiddenparma.service")
