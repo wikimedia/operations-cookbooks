@@ -95,12 +95,7 @@ class ProvisionRunner(CookbookRunnerBase):
 
     def _propagate_dns(self, prefix):
         """Propagate the DNS changes."""
-        def run_raise(name, args):
-            ret = self.run_cookbook(name, args)
-            if ret:
-                raise RuntimeError(f'Failed to run cookbook {name}')
-
-        confirm_on_failure(run_raise, 'sre.dns.netbox', [f'{prefix} management record for {self.netbox_device}'])
+        self.run_cookbook('sre.dns.netbox', [f'{prefix} management record for {self.netbox_device}'], confirm=True)
         self.rollback_dns = True
 
     def _allocate_ip(self):
