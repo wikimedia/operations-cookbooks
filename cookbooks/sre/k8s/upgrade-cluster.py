@@ -308,16 +308,11 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
                         )
                         continue
                     hostname = host.split(".")[0]
-                    return_code = self.spicerack.run_cookbook(
+                    self.spicerack.run_cookbook(
                         "sre.hosts.reimage",
                         ["--force", "--no-downtime", "--os", self.args.os, hostname],
+                        confirm=True,
                     )
-                    if return_code:
-                        ask_confirmation(
-                            "The cookbook returned a non-zero code, something "
-                            "failed and you'd need to check. Do you want to "
-                            "continue anyway?"
-                        )
                 logger.info("etcd nodes reimaged!")
             else:
                 logger.info("Re-enabling puppet on etcd nodes...")
@@ -333,16 +328,11 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
             )
             for host in self.control_plane_nodes.hosts:
                 hostname = host.split(".")[0]
-                return_code = self.spicerack.run_cookbook(
+                self.spicerack.run_cookbook(
                     "sre.hosts.reimage",
                     ["--force", "--no-downtime", "--os", self.args.os, hostname],
+                    confirm=True,
                 )
-                if return_code:
-                    ask_confirmation(
-                        "The cookbook returned a non-zero code, something "
-                        "failed and you'd need to check. Do you want to "
-                        "continue anyway?"
-                    )
             logger.info(
                 "Control plane nodes reimaged! "
                 "Checking on every node to see if the view of the cluster is "
@@ -365,17 +355,11 @@ class UpgradeK8sClusterRunner(CookbookRunnerBase):
             )
             for host in self.worker_nodes.hosts:
                 hostname = host.split(".")[0]
-                return_code = self.spicerack.run_cookbook(
+                self.spicerack.run_cookbook(
                     "sre.hosts.reimage",
                     ["--force", "--no-downtime", "--os", self.args.os, hostname],
+                    confirm=True,
                 )
-                if return_code:
-                    ask_confirmation(
-                        "The cookbook returned a non-zero code, something "
-                        "failed and you'd need to check. Do you want to "
-                        "continue anyway?"
-                    )
-
             logger.info("Worker nodes reimaged!")
 
         ask_confirmation(

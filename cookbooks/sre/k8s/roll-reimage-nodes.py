@@ -29,7 +29,7 @@ from spicerack import Spicerack
 from spicerack.administrative import Reason
 from spicerack.remote import RemoteHosts
 
-from wmflib.interactive import ask_confirmation, confirm_on_failure
+from wmflib.interactive import ask_confirmation
 
 from cookbooks.sre.hosts import OS_VERSIONS
 from cookbooks.sre.k8s import K8sBatchBase, K8sBatchRunnerBase
@@ -95,11 +95,6 @@ class RollReimageK8sNodesRunner(K8sBatchRunnerBase):
 
         return res
 
-    def _check_run_cookbook(self, name, args):
-        """Run cookbook name with args, raise RuntimeError if it fails"""
-        if self._spicerack.run_cookbook(name, args) != 0:
-            raise RuntimeError(f'Running cookbook {name} failed')
-
     def _reimage_action(self, hosts: RemoteHosts, _: Reason) -> None:
         """Reimage a set of hosts.
 
@@ -116,7 +111,7 @@ class RollReimageK8sNodesRunner(K8sBatchRunnerBase):
             # pass --new, as the reimage cookbook unsets it when not needed
             reimage_args = ['--force', '--new', '--puppet', '7', '--os', self._args.os, hostname]
 
-            confirm_on_failure(self._check_run_cookbook, 'sre.hosts.reimage', reimage_args)
+            self._spicerack.run_cookbook('sre.hosts.reimage', reimage_args, confirm=True)
 
             # The reimage cookbook puts spicerack actions under just the hostname, while this (and
             # the parent class) uses the FQDN, so we patch it here.
