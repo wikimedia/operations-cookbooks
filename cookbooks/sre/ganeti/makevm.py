@@ -7,7 +7,7 @@ import re
 from ipaddress import ip_interface
 
 from wmflib.constants import CORE_DATACENTERS, DATACENTER_NUMBERING_PREFIX
-from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
@@ -145,15 +145,10 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
 
     def _propagate_dns(self, prefix):
         """Run the sre.dns.netbox cookbook to propagate the DNS records."""
-        def run_raise(name, args):
-            ret = self.spicerack.run_cookbook(name, args)
-            if ret:
-                raise RuntimeError(f'Failed to run cookbook {name}')
-
-        confirm_on_failure(run_raise, 'sre.dns.netbox', [f'{prefix} records for VM {self.fqdn}'])
+        self.spicerack.run_cookbook('sre.dns.netbox', [f'{prefix} records for VM {self.fqdn}'], confirm=True)
         self.dns_propagated = True
         # Clean out DNS cache to remove stale NXDOMAINs
-        confirm_on_failure(run_raise, 'sre.dns.wipe-cache', [self.fqdn])
+        self.spicerack.run_cookbook('sre.dns.wipe-cache', [self.fqdn], confirm=True)
 
     def _ganeti_netbox_sync(self):
         """Perform a sync from Ganeti to Netbox in the affected DC."""

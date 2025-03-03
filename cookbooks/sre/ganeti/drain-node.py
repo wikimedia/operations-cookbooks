@@ -131,7 +131,7 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
                 logger.info("This node is the master node, you need to failover first")
             else:
                 ask_confirmation(f'Reboot {self.node}?')
-                self.spicerack.run_cookbook("sre.hosts.reboot-single", [self.node])
+                self.spicerack.run_cookbook("sre.hosts.reboot-single", [self.node], raises=True)
                 self.run_cmd('gnt-cluster verify-disks')
 
     def run_cmd(self, cmd):
