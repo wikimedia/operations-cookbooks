@@ -4,7 +4,7 @@ import logging
 from ipaddress import ip_interface
 
 
-from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 
@@ -197,15 +197,9 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
             self.netbox_server.primary_ip6_address = config[6]
             logger.info('Updated IPv6 to %s', config[6])
 
-    def run_raise(self, name: str, args: list):
-        """Run a cookbook and raise an error if return code is non-zero."""
-        ret = self.spicerack.run_cookbook(name, args)
-        if ret:
-            raise RuntimeError(f'Failed to run cookbook {name}')
-
     def propagate_dns(self, action: str, config: dict):
         """Run the sre.dns.netbox cookbook to propagate the DNS records."""
-        confirm_on_failure(self.run_raise, 'sre.dns.netbox', [f'{action} records for host {self.args.host}'])
+        self.spicerack.run_cookbook('sre.dns.netbox', [f'{action} records for host {self.args.host}'], confirm=True)
         self.dns_propagated = True
         # Clean out DNS cache to remove stale NXDOMAINs
         ptr4 = config[4].ip.reverse_pointer
@@ -213,7 +207,7 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         if config[6]:
             records_to_wipe.append(config[6].ip.reverse_pointer)
 
-        confirm_on_failure(self.run_raise, 'sre.dns.wipe-cache', records_to_wipe)
+        self.spicerack.run_cookbook('sre.dns.wipe-cache', records_to_wipe, confirm=True)
 
     def run(self):
         """Run the cookbook."""
@@ -235,7 +229,7 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         if self.args.action == 'reimage':
             # Run the sre.network.configure-switch-interfaces cookbook
             logger.info('Updating the switch port config, the host will lose connectivity.')
-            confirm_on_failure(self.run_raise, 'sre.network.configure-switch-interfaces', [self.args.host])
+            self.spicerack.run_cookbook('sre.network.configure-switch-interfaces', [self.args.host], confirm=True)
             # At this point, if the re-image fails, it's better to rollforward and run the re-image cookbook
             self.rollback_netbox = False
 
@@ -261,7 +255,7 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         self.update_netbox_ip_vlan(self.pre_config)
         # Keeping it here as it will be needed for the in-place re-numbering
         if self.switch_port_configured:
-            confirm_on_failure(self.run_raise, 'sre.network.configure-switch-interfaces', [self.args.host])
+            self.spicerack.run_cookbook('sre.network.configure-switch-interfaces', [self.args.host], confirm=True)
 
         if self.dns_propagated:
             self.propagate_dns('Rollback', self.post_config)

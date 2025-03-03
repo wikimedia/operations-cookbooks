@@ -665,7 +665,7 @@ class SREDiscoveryNoLVSBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         self._pool(exclude=current_site)
         self.service_discovery.depool(current_site)
         self.service.check_dns_state(self.ip_per_dc_map)
-        self._spicerack.run_cookbook("sre.dns.wipe-cache", [self.discovery_record])
+        self._spicerack.run_cookbook("sre.dns.wipe-cache", [self.discovery_record], raises=True)
 
     def rollback(self):
         """Rollback any errors"""

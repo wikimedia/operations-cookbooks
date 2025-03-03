@@ -5,7 +5,7 @@ from pprint import pformat
 
 from packaging import version
 
-from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
@@ -103,12 +103,6 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
             self.phabricator = None
         ask_confirmation(f"Is {self.new_name} in Puppet's site.pp and preseed.yaml?")
 
-    def run_raise(self, name: str, args: list):
-        """Run a cookbook and raise an error if return code is non-zero."""
-        ret = self.run_cookbook(name, args)
-        if ret:
-            raise RuntimeError(f'Failed to run cookbook {name}')
-
     def run(self):
         """Run the cookbook."""
         self.alerting_host.downtime(self.reason)
@@ -131,7 +125,7 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         self.host_actions.success('✔️ BMC Hostname updated')
 
         self.propagate_dns()
-        confirm_on_failure(self.run_raise, 'sre.network.configure-switch-interfaces', [self.new_name])
+        self.run_cookbook('sre.network.configure-switch-interfaces', [self.new_name], confirm=True)
         self.host_actions.success('✔️ Switch description updated')
         self.switch_description_changed = True
 
@@ -166,7 +160,7 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
             message = f'Rolling back {self.new_name} to {self.old_name}'
         else:
             message = f'Renaming {self.old_name} to {self.new_name}'
-        confirm_on_failure(self.run_raise, 'sre.dns.netbox', [message])
+        self.run_cookbook('sre.dns.netbox', [message], confirm=True)
         self.host_actions.success('✔️ DNS updated')
         self.dns_propagated = True
         # TODO do we care about wiping DNS cache?
@@ -182,7 +176,7 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         self.netbox_server.name = self.old_name
         self.host_actions.success('✔️ Netbox rolled back')
         if self.switch_description_changed:
-            confirm_on_failure(self.run_raise, 'sre.network.configure-switch-interfaces', [self.old_name])
+            self.run_cookbook('sre.network.configure-switch-interfaces', [self.old_name], confirm=True)
         if self.dns_propagated:
             self.propagate_dns(rollback=True)
         if self.bmc_hostname_updated:
