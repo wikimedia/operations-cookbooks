@@ -13,7 +13,7 @@ from spicerack.decorators import retry
 from spicerack import Spicerack
 from spicerack.mysql import Instance as MInst
 from spicerack.remote import Remote, RemoteHosts
-from wmflib.interactive import ensure_shell_is_durable
+from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 # TODO: improve handling of spurious changes, right now it bails out
 # TODO: check that the host is not downtimed and green in Icinga/AM?
 # TODO: check for mysql/metrics errors during the repooling operation?
+# TODO: support both fqdn or hostname as CLI argument
 
 
 def ensure(condition: bool, msg: str) -> None:
@@ -33,8 +34,7 @@ def ensure(condition: bool, msg: str) -> None:
 
 
 def _fetch_mysql_instance_wildcard(spicerack: Spicerack, hostname: str) -> MInst:
-    # TODO: only use fqdns
-    ensure("." in hostname, f"Invalid hostname: contains dot '{hostname}'")
+    ensure("." not in hostname, f"Invalid hostname: contains dot '{hostname}'")
     db = spicerack.mysql().get_dbs(f"{hostname}.*")
     instances = db.list_hosts_instances()
     ensure(len(instances) == 1, f"{len(instances)} found, expected one")
@@ -384,5 +384,5 @@ class PoolDepoolRunner(CookbookRunnerBase):
                 count += 1
 
         if count:
-            logger.error("The current diff has %d spurious changes, aborting:\n%s", count, pformat(diff))
-            raise RuntimeError("Unable to proceed due to spurious changes in the diff")
+            logger.info("CAUTION: The current diff has unexpected spurious changes:\n%s", pformat(diff))
+            ask_confirmation("Review the changes. Do you still want to commit them?")
