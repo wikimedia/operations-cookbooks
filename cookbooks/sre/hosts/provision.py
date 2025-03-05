@@ -548,7 +548,7 @@ class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-insta
                 'NIC.1#DNSRacName': self.args.host,
                 'NICStatic.1#DNSDomainFromDHCP': 'Disabled',
                 'NICStatic.1#DNSDomainName': f'mgmt.{self.netbox_data["site"]["slug"]}.wmnet',
-                'WebServer.1#HostHeaderCheck': 'Enabled',
+                'WebServer.1#HostHeaderCheck': 'Disabled',
             },
             'System.Embedded.1': {
                 'ServerPwr.1#PSRapidOn': 'Disabled',
