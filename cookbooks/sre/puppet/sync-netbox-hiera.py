@@ -269,6 +269,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
                 if device['virtual_chassis']
                 else device['name']
             )
+            # IMPORTANT: modules/netbox/types/device/network.pp must be updated on any change
             data = {
                 'primary_fqdn': device['primary_ip4']['dns_name'],
                 'manufacturer': device['device_type']['manufacturer']['slug'],
@@ -310,6 +311,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
             if host['tenant'] is not None:
                 continue
 
+            # IMPORTANT: modules/netbox/types/device/location/baremetal.pp must be updated on any change
             data = {
                 'status': host['status'].lower(),
                 'location': {'site': host['site']['slug']},
@@ -342,6 +344,8 @@ class NetboxHieraRunner(CookbookRunnerBase):
                 continue
             if host['tenant'] is not None:
                 continue
+
+            # IMPORTANT: modules/netbox/types/device/location/virtual.pp must be updated on any change
             data = {
                 'status': host['status'].lower(),
                 'location': {
@@ -393,6 +397,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
             status: the netbox status to filter on
 
         """
+        # IMPORTANT: modules/netbox/types/prefix.pp must be updated on any change of the fields
         variables = {"status": status}
         prefix_list = await self._gql_execute(PREFIX_LIST, variables)
         prefixes: DefaultDict[str, dict] = defaultdict(dict)
