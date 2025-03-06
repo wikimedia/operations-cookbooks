@@ -114,6 +114,28 @@ query ($status: [String!]) {
   }
 }
 """
+PDU_LIST_GQL = """
+query ($role: [String!], $status: [String!]) {
+    device_list(filters: {role: $role, status: $status, has_primary_ip: true}) {
+        name
+        device_type {
+            slug
+            manufacturer { slug }
+        }
+        site { slug }
+        rack {
+            name
+            location {
+                slug
+            }
+        }
+        primary_ip4 {
+            dns_name
+            address
+        }
+    }
+}
+"""
 
 
 @dataclass
@@ -125,6 +147,7 @@ class NetboxData:
     network_devices: dict
     baremetal_hosts: dict
     mgmt_hosts: dict
+    pdus: dict
 
     @property
     def hosts(self):
@@ -246,8 +269,8 @@ class NetboxHieraRunner(CookbookRunnerBase):
         """Return the devices data.
 
         Arguments:
-            roles: the netbox devices roles to filer on
-            status: the netbox status to filter on
+            roles: the netbox device roles to filter on
+            status: the netbox statuses to filter on
 
         """
         results = {}
@@ -293,8 +316,8 @@ class NetboxHieraRunner(CookbookRunnerBase):
         """Return the devices data.
 
         Arguments:
-            roles: the netbox devices roles to filer on
-            status: the netbox status to filter on
+            roles: the netbox devices roles to filter on
+            status: the netbox statuses to filter on
             results: the object to update
 
         Returns:
@@ -419,6 +442,39 @@ class NetboxHieraRunner(CookbookRunnerBase):
 
         return prefixes
 
+    async def _pdus(self, status: list[str], roles: list[str]):
+        """Fetch and format the list of PDUs from netbox.
+
+        Arguments:
+            status: the netbox statuses to filter on
+            roles: the netbox devices roles to filter on
+
+        Results:
+            dict: the results
+
+        """
+        # IMPORTANT: modules/netbox/types/device/pdus.pp must be updated on any change of the fields
+        variables = {"status": status, "role": roles}
+        pdu_list = await self._gql_execute(PDU_LIST_GQL, variables)
+        pdus: DefaultDict[str, dict] = defaultdict(dict)
+        for pdu_data in pdu_list['device_list']:
+            pdu = pdus[pdu_data['name']]
+
+            pdu['fqdn'] = pdu_data['primary_ip4']['dns_name']
+            pdu['location'] = {
+                'site': pdu_data['site']['slug'],
+                'rack': pdu_data['rack']['name'],
+                'row': self.normalize_pdu_row(
+                    pdu_data['rack']['location']['slug'],
+                    pdu_data['rack']['name'],
+                    pdu_data['site']['slug']
+                )
+            }
+            pdu['manufacturer'] = pdu_data['device_type']['manufacturer']['slug']
+            pdu['model'] = pdu_data['device_type']['slug']
+
+        return pdus
+
     async def _fetch_data(self) -> NetboxData:
         """Fetch the data from netbox"""
         valid_status = ['active', 'failed']
@@ -429,18 +485,23 @@ class NetboxHieraRunner(CookbookRunnerBase):
         network_devices_task = asyncio.create_task(
             self._network_devices(['active'], NETWORK_ROLES)
         )
+        pdus_task = asyncio.create_task(
+            self._pdus(['active'], ['pdu'])
+        )
 
         baremetal_hosts = await baremetal_hosts_task
         virtual_hosts = await virtual_hosts_task
         mgmt_hosts = await mgmt_hosts_task
         prefixes = await prefixes_task
         network_devices = await network_devices_task
+        pdus = await pdus_task
         return NetboxData(
             virtual_hosts=virtual_hosts,
             network_devices=network_devices,
             baremetal_hosts=baremetal_hosts,
             mgmt_hosts=mgmt_hosts,
-            prefixes=prefixes
+            prefixes=prefixes,
+            pdus=pdus
         )
 
     async def _write_hiera_files(self, out_dir: Path) -> None:
@@ -468,6 +529,7 @@ class NetboxHieraRunner(CookbookRunnerBase):
                     f"{self.hiera_prefix}::data::mgmt": netbox_data.mgmt_hosts,
                     f"{self.hiera_prefix}::data::prefixes": netbox_data.prefixes,
                     f"{self.hiera_prefix}::data::network_devices": netbox_data.network_devices,
+                    f"{self.hiera_prefix}::data::pdus": netbox_data.pdus,
                 }
             )
         )
@@ -524,3 +586,18 @@ class NetboxHieraRunner(CookbookRunnerBase):
         self.update_puppetmasters(self.reposync.hexsha)
         self.update_puppetservers(self.reposync.hexsha)
         return 0
+
+    def normalize_pdu_row(self, rack_location_slug: str, rack_name: str, site_slug: str):
+        """Normalize the row field for pdu devices
+
+        In eqiad and codfw, we have rows, which we extract from the location slug,
+        for example: codfw-row-a.
+        In all other data centers, there are no rows,
+        so we consider the rack itself as a row.
+        """
+        if site_slug in ['eqiad', 'codfw']:
+            _, row = rack_location_slug.rsplit('-', 1)
+        else:
+            row = rack_name
+
+        return row.lower()
