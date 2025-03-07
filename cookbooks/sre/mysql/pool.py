@@ -123,6 +123,27 @@ def _gather_instance_status(host: RemoteHosts, mi: MInst) -> int:
     return wikiuser_cnt
 
 
+def _check_depooling_last_instance(conf, hostname: str, nocheck_extloads: bool) -> None:
+    """Warn if removing the only host in a section (e.g. vslow or dump)."""
+    ensure("." not in hostname, f"hostname '{hostname}' contains a dot")
+
+    for dc, dc_conf in conf.items():
+        if nocheck_extloads is False:
+            ext_loads = dc_conf["externalLoads"]
+            for section, li in ext_loads.items():
+                for d in li:
+                    if len(d) == 1 and hostname in d:
+                        print(f"{hostname} is the only entry in dc: {dc} section: {section}")
+                        ask_confirmation("CAUTION: attempting to depool the only instance in a section!")
+
+        group_loads = dc_conf["groupLoadsBySection"]
+        for section, group_d in group_loads.items():
+            for group, d in group_d.items():
+                if len(d) == 1 and hostname in d:
+                    print(f"{hostname} is the only entry in dc: {dc} section: {section} group: {group}")
+                    ask_confirmation("CAUTION: attempting to depool the only instance in a section!")
+
+
 # This class is also used as a base class for the Depool cookbook
 class Pool(CookbookBase):
     """Pool a DB instance in dbctl and allow to gradually increase its pooled percentage.
@@ -160,6 +181,11 @@ class Pool(CookbookBase):
             "-t",
             "--task-id",
             help="The Phabricator task ID to update and refer (i.e.: T12345)",
+        )
+        parser.add_argument(
+            "--nocheck-external-loads",
+            action="store_true",
+            help="Disable safety check that prevents depooling the only host in externalLoads",
         )
         if self.__class__.__name__ == "Pool":
             profile = parser.add_mutually_exclusive_group()
@@ -273,6 +299,9 @@ class PoolDepoolRunner(CookbookRunnerBase):
         else:
             msg = "depool instance {self.args.instance}"
             self.wait_diff_clean()
+
+            dbctl_conf = self.dbctl.config.generate()
+            _check_depooling_last_instance(dbctl_conf, self.args.instance, self.args.nocheck_external_loads)
             ret = self.dbctl.instance.depool(self.args.instance)
             self.check_action_result(ret, msg)
             self.commit_change(msg)
