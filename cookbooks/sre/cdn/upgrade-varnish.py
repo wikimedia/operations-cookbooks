@@ -113,7 +113,7 @@ def run(args, spicerack):
     cmds = [
         "apt update",
         "service varnish-frontend stop",
-        "apt-get -y remove libvarnishapi2",
+        "apt-get -y remove libvarnishapi* libvmod-* varnish*",
     ]
     remote_host.run_sync(*cmds)
 
