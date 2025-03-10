@@ -10,11 +10,13 @@ tox -e py311-unit -- tests/unit/sre/mysql/pool_test.py -vv
 import json
 from pathlib import Path
 from unittest import mock
+
 import cookbooks.sre.mysql.pool
 from cookbooks.sre.mysql.pool import (
     _fetch_instance_connections_count_wikiusers,
     _fetch_instance_connections_count_detailed,
     _check_depooling_last_instance,
+    _poll_icinga_notification_status,
 )
 
 
@@ -63,3 +65,12 @@ def test_last_instance_depool():
 
     _check_depooling_last_instance(conf, "db2227", False)  # vslow, 1 inst
     ac.assert_called()
+
+
+@mock.patch("spicerack.icinga.IcingaHosts", autospec=True)
+def test_poll_icinga_notification_status(mock_ihs):
+    s = mock.MagicMock()
+    s.notifications_enabled = True
+    mock_ihs.get_status.return_value = {"foo": s}
+    _poll_icinga_notification_status(mock_ihs, "foo")
+    mock_ihs.get_status.assert_called()

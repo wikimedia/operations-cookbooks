@@ -1,26 +1,28 @@
 """Pool or depool a DB from dbctl."""
 
+import logging
 from datetime import datetime, timedelta
 from pprint import pformat
 from time import sleep
 from typing import Dict, Generator, Tuple
-import logging
 
 from conftool.extensions.dbconfig.action import ActionResult
 from conftool.extensions.dbconfig.entities import Instance as DBCInst
+from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.decorators import retry
-from spicerack import Spicerack
+from spicerack.icinga import IcingaStatusNotFoundError, HostsStatus as IcingaHostsStatus
+from spicerack.icinga import HostStatus as IcingaStatus, IcingaHosts
 from spicerack.mysql import Instance as MInst
 from spicerack.remote import Remote, RemoteHosts
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
+
 logger = logging.getLogger(__name__)
 
 # TODO: improve handling of spurious changes, right now it bails out
-# TODO: check that the host is not downtimed and green in Icinga/AM?
 # TODO: check for mysql/metrics errors during the repooling operation?
 # TODO: support both fqdn or hostname as CLI argument
 
@@ -144,6 +146,27 @@ def _check_depooling_last_instance(conf, hostname: str, nocheck_extloads: bool) 
                     ask_confirmation("CAUTION: attempting to depool the only instance in a section!")
 
 
+def _poll_icinga_notification_status(icinga_host: IcingaHosts, hostname: str) -> None:
+    notif_disabled_msg = f"""Host notifications are disabled on Icinga. Check puppet for
+    `profile::monitoring::notifications_enabled: false`
+    in hieradata/hosts/{hostname}.yaml
+    """
+    for attempt in range(100):
+        try:
+            ihs: IcingaHostsStatus = icinga_host.get_status()
+            s: IcingaStatus = ihs[hostname]
+            if s.notifications_enabled:
+                return
+            logger.info(notif_disabled_msg)
+        except (IcingaStatusNotFoundError, KeyError):
+            logger.info("The host is unknown to Icinga: you might need to add it to puppet.")
+
+        logger.debug("[%s] polling again in 5 minutes...", attempt)
+        sleep(60 * 5)
+
+    raise RuntimeError("Timed out while waiting for Icinga notifications to be enabled")
+
+
 # This class is also used as a base class for the Depool cookbook
 class Pool(CookbookBase):
     """Pool a DB instance in dbctl and allow to gradually increase its pooled percentage.
@@ -187,6 +210,7 @@ class Pool(CookbookBase):
             action="store_true",
             help="Disable safety check that prevents depooling the only host in externalLoads",
         )
+        parser.add_argument("--skip-safety-checks", action="store_true", help="Skip checking for Icinga status")
         if self.__class__.__name__ == "Pool":
             profile = parser.add_mutually_exclusive_group()
             profile.add_argument(
@@ -249,11 +273,13 @@ class PoolDepoolRunner(CookbookRunnerBase):
                 self.steps = (6, 25, 56, 100)  # 4 steps, power of 2 progression
 
         dbi: DBCInst = _fetch_instance_by_name(self.dbctl, args.instance)
+        self._hostname = dbi.name
         self._mysql_instance: MInst = _fetch_mysql_instance_wildcard(spicerack, dbi.name)
         fqdn = _get_fqdn(self._mysql_instance)
 
         self.datacenter = dbi.tags.get("datacenter")
         self.remote_host = _fetch_db_remotehost(spicerack.remote(), fqdn)
+        self._icinga_host = spicerack.icinga_hosts(self.remote_host.hosts)
 
         if self.reason.task_id is not None:
             self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
@@ -290,6 +316,11 @@ class PoolDepoolRunner(CookbookRunnerBase):
     def run(self) -> None:
         """As required by the Spicerack API."""
         if self.pool:
+            if self.args.skip_safety_checks is False:
+                _poll_icinga_notification_status(self._icinga_host, self._hostname)
+                logger.debug("Waiting for icinga to go green")
+                self._icinga_host.wait_for_optimal()
+
             if self.phabricator is not None:
                 msg = f"Start pool of {self.runtime_description} - {self.reason.owner}"
                 self.phabricator.task_comment(self.reason.task_id, msg)
