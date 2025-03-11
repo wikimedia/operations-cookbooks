@@ -60,14 +60,26 @@ def get_modules():
 @pytest.mark.parametrize("module_name", get_modules())
 def test_import(module_name):
     """It should successfully import all defined cookbooks and their packages."""
-    with mock.patch("builtins.open", mock.mock_open(read_data=MOCKED_SRE_SWITCHDC_SERVICES_YAML)):
+    # avoid messing up with prometheus_client opening /proc/self/stat on module import
+    if module_name.startswith("cookbooks.sre.switchdc.services"):
+        mocked_open = mock.mock_open(read_data=MOCKED_SRE_SWITCHDC_SERVICES_YAML)
+    else:
+        mocked_open = open
+
+    with mock.patch("builtins.open", mocked_open):
         importlib.import_module(module_name)  # Will raise on failure
 
 
 @pytest.mark.parametrize("module_name", get_modules())
 def test_owner_team(module_name):
     """If set the owner_team should have one of the valid values."""
-    with mock.patch("builtins.open", mock.mock_open(read_data=MOCKED_SRE_SWITCHDC_SERVICES_YAML)):
+    # avoid messing up with prometheus_client opening /proc/self/stat on module import
+    if module_name.startswith("cookbooks.sre.switchdc.services"):
+        mocked_open = mock.mock_open(read_data=MOCKED_SRE_SWITCHDC_SERVICES_YAML)
+    else:
+        mocked_open = open
+
+    with mock.patch("builtins.open", mocked_open):
         module = importlib.import_module(module_name)
         for name, obj in inspect.getmembers(module):
             # Module API check
