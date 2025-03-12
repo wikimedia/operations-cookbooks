@@ -11,17 +11,11 @@ tox -e py311-unit -- tests/unit/sre/mysql/clone_test.py -vv
 from unittest import mock
 import pytest
 
-from pymysql import Connection
-
 from cookbooks.sre.mysql.clone import (
-    _add_host_to_zarcillo,
-    check_db_role_on_zarcillo,
-    connect_to_zarcillo,
-    ensure_db_not_in_zacillo,
-    _fetch_db_remotehost,
     parse_db_host_fqdn,
     parse_phabricator_task,
     _parse_replication_status,
+    _check_if_target_is_already_on_dbctl,
 )
 
 
@@ -101,3 +95,22 @@ Slave_Non_Transactional_Groups: 0
 """
     fn, pos = _parse_replication_status(blob)
     assert (fn, pos) == ("db1184-bin.008640", 219615945)
+
+
+@mock.patch("spicerack.dbctl.Dbctl", autospec=True)
+def test_check_if_target_is_already_on_dbctl(dbctl):
+    dbctl.instance.get.return_value = None
+    assert not _check_if_target_is_already_on_dbctl(dbctl, "db0000", "s0")
+
+    dbci = mock.MagicMock()
+    dbci.sections = {}
+    dbctl.instance.get.return_value = dbci
+    assert not _check_if_target_is_already_on_dbctl(dbctl, "db0000", "s0")
+
+    # Examples:
+    {"s1": {"groups": {"api": {"pooled": True, "weight": 100}}, "percentage": 100, "pooled": True, "weight": 200}}
+    {"pc7": {"percentage": 100, "pooled": True, "weight": 1}}
+    {"es7": {"percentage": 100, "pooled": True, "weight": 100}}
+
+    dbci.sections = {"s0": {"pooled": False}}
+    assert _check_if_target_is_already_on_dbctl(dbctl, "db0000", "s0")

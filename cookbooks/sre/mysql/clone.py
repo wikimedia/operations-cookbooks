@@ -226,6 +226,47 @@ def pool_in_instance_slowly(_run_cookbook, fqdn: str, hostname: str, phabricator
     _run_cookbook("sre.mysql.pool", ["--slow", "--reason", reason, "--task-id", task, hostname], confirm=True)
 
 
+def _check_if_target_is_already_on_dbctl(dbctl: Dbctl, hostname: str, section: str) -> bool:
+    """Return True when ready"""
+    dbci = dbctl.instance.get(hostname)
+    if dbci is None:
+        msg = f"""Target host {hostname} is not known to dbctl.
+Create a new entry for {hostname} in Puppet in
+conftool-data/dbconfig-instance/instances.yaml then review and merge it.
+For an example see:
+https://gerrit.wikimedia.org/r/c/operations/puppet/+/663570/4/conftool-data/dbconfig-instance/instances.yaml
+
+Also update the hieradata/hosts/{hostname}.yaml file in Puppet with the following text:
+-----
+# {hostname}
+# {section}
+mariadb::shard: '{section}'
+-----
+"""
+        log.info(msg)
+        return False
+
+    if section not in dbci.sections:
+        # TODO: support parsercache & others
+        msg = f"""Target host {hostname} is known to dbctl but it has the following sections configured:
+{dbci.sections}
+
+Update the hieradata/hosts/{hostname}.yaml file in Puppet with the following text:
+-----
+# {hostname}
+# {section}
+mariadb::shard: '{section}'
+-----
+"""
+        log.info(msg)
+        return False
+
+    if dbci.sections[section]["pooled"]:
+        log.warn(f"{hostname} is already pooled in according to {dbci.sections}")
+
+    return True
+
+
 def check_pooling_status(
     dbctl: Dbctl,
     hostname: str,
@@ -315,6 +356,15 @@ def _fetch_primary_fqdn(mysql: Mysql, fqdn: str) -> str:
     return p
 
 
+def _wait_until_target_dbctl_conf_is_good(dbctl: Dbctl, hostname: str, section: str) -> None:
+    for attempt in range(144):  # 24h
+        if _check_if_target_is_already_on_dbctl(dbctl, hostname, section) is True:
+            return
+        log.info(f"[{attempt}] Polling again in 10 mins.")
+        time.sleep(60 * 10)
+    raise TimeoutError("Timed out")
+
+
 class CloneMySQLRunner(CookbookRunnerBase):
     """Clone MySQL cookbook runner."""
 
@@ -399,6 +449,10 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self.primary_section = check_pooling_status(self._dbctl, self.primary_hostname, self.primary_fqdn)
         ensure(source_section == source_section_z, "Inconsistent section")
         ensure(self.primary_section == primary_section_z, "Inconsistent section")
+
+        if _check_if_target_is_already_on_dbctl(self._dbctl, self.target_hostname, source_section) is False:
+            log.info("Note: you can update the section configured in puppet during the cloning")
+
         print(f"*** Preparing to clone {self.source_fqdn} to {self.target_fqdn} on section {source_section} ***")
 
     @property
@@ -458,12 +512,8 @@ class CloneMySQLRunner(CookbookRunnerBase):
         step("icinga", "Removing icinga 'downtime'")
         alerters.remove_downtime(downtime_id)
 
-        print(
-            f"Create a new entry for {self.target_hostname} in "
-            "conftool-data/dbconfig-instance/instances.yaml then review and merge it. "
-            "For an example see: "
-            "https://gerrit.wikimedia.org/r/c/operations/puppet/+/663570/4/conftool-data/dbconfig-instance/instances.yaml "  # pylint: disable=C0301
-        )
+        _wait_until_target_dbctl_conf_is_good(self._dbctl, self.target_hostname, self.primary_section)
+
         ask_confirmation("Is the change to instances.yaml merged?")
 
         # TODO: wait until the host shows up on prometheus
