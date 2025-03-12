@@ -219,15 +219,11 @@ def _add_host_to_zarcillo(mysql: Mysql, hostname: str, fqdn: str, datacenter: st
         tx.execute(sql, (fqdn, hostname, datacenter, rack))
 
 
-# TODO: use run_cookbook sre.mysql.pool
-def pool_in_instance_slowly(dbctl: Dbctl, fqdn: str, hostname: str, phabricator_task_id: int) -> None:
-    """Pool in with 10 min intervals (synchronous)"""
-    for perc in (2, 5, 10, 20, 50, 75, 100):
-        step("repool", f"Pooling in {fqdn} at {perc}%")
-        dbctl.instance.pool(hostname, percentage=perc)
-        dbctl.config.commit(batch=False, comment=f"Pool {hostname} T{phabricator_task_id}")
-        step("wait", "Waiting 10m")
-        time.sleep(60 * 10)
+def pool_in_instance_slowly(_run_cookbook, fqdn: str, hostname: str, phabricator_task_id: int) -> None:
+    step("pool", f"Pooling in {fqdn}")
+    reason = f"Pool {fqdn} in after cloning"
+    task = f"T{phabricator_task_id}"
+    _run_cookbook("sre.mysql.pool", ["--slow", "--reason", reason, "--task-id", task, hostname], confirm=True)
 
 
 def check_pooling_status(
@@ -334,6 +330,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self.admin_reason = spicerack.admin_reason("MySQL Clone")
         self.remote = spicerack.remote()
         self._phab = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        self._run_cookbook = spicerack.run_cookbook
 
         self.source_hostname, self.source_fqdn = parse_db_host_fqdn(args.source)
         self.source_host = _fetch_db_remotehost(self.remote, self.source_fqdn)
@@ -387,6 +384,8 @@ class CloneMySQLRunner(CookbookRunnerBase):
         if not args.ignore_existing:
             ensure_db_not_in_zacillo(self._mysql, self.target_fqdn, self.target_hostname)
 
+        # TODO: check if target is pooled in
+
         # Check DB roles in Zarcillo and cross-reference their sections
         source_section_z = check_db_role_on_zarcillo(self._mysql, self.source_fqdn)
         primary_section_z = check_db_role_on_zarcillo(self._mysql, self.primary_fqdn, expect_db_is_master=True)
@@ -412,8 +411,6 @@ class CloneMySQLRunner(CookbookRunnerBase):
         # Guard against useless conftool messages
         logging.getLogger("conftool").setLevel(logging.WARNING)
 
-        # TODO: log to phabricator
-
         print("Open Grafana for the source: %s" % gen_grafana_mysql_url(self.source_hostname))
         print("Open Grafana for the target: %s" % gen_grafana_mysql_url(self.target_hostname))
 
@@ -422,9 +419,11 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self._phab.task_comment(str(self.phabricator_task_id), msg)
 
         step("depool", f"Depooling {self.source_fqdn}")
-        # TODO: use run_cookbook sre.mysql.depool
-        self._dbctl.instance.depool(self.source_hostname)
-        self._dbctl.config.commit(batch=False, comment=f"Depool {self.source_hostname} T{self.phabricator_task_id}")
+        reason = f"Depool {self.source_fqdn} to then clone it to {self.target_fqdn} - {self.admin_reason.owner}"
+        task = f"T{self.phabricator_task_id}"
+        self._run_cookbook(
+            "sre.mysql.depool", ["--reason", reason, "--task-id", task, self.target_hostname], confirm=True
+        )
 
         step("icinga", "Disabling monitoring for source and target host")
         alerters = self.alerting_hosts(self.source_host.hosts | self.target_host.hosts)
@@ -470,12 +469,14 @@ class CloneMySQLRunner(CookbookRunnerBase):
         # TODO: wait until the host shows up on prometheus
 
         ask_confirmation("Ready to pool in the nodes. Monitor the Grafana charts.")
-        pool_in_instance_slowly(self._dbctl, self.source_fqdn, self.source_hostname, self.phabricator_task_id)
+        pool_in_instance_slowly(self._run_cookbook, self.source_fqdn, self.source_hostname, self.phabricator_task_id)
 
         if self.pool_in_target:
             step("wait", "Waiting 1h before pooling in {target_fqdn}")
             time.sleep(3600)
-            pool_in_instance_slowly(self._dbctl, self.target_fqdn, self.target_hostname, self.phabricator_task_id)
+            pool_in_instance_slowly(
+                self._run_cookbook, self.target_fqdn, self.target_hostname, self.phabricator_task_id
+            )
 
         msg = f"Finished cloning {self.source_fqdn} to {self.target_fqdn} - {self.admin_reason.owner}"
         self._phab.task_comment(str(self.phabricator_task_id), msg)
