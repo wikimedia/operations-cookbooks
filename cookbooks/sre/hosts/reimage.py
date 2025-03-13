@@ -594,6 +594,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         poll_puppetdb()
         self.host_actions.success('Found Nagios_host resource for this host in PuppetDB')
+        self.populate_puppetdb_attempted = False  # No need to remove it from PuppetDB past this point
 
     def _mask_units(self):
         """Mask systemd units."""
