@@ -124,7 +124,7 @@ class DatabaseCookbookBase(CookbookBase):
             "--section",
             help=("Run only for a specific section. Works also for non-core sections. The specified name will be used "
                   "in this PuppetDB query to select the target hosts and then filtered by role and datacenter: "
-                  "R:profile::mariadb::section%section = SECTION_NAME"),
+                  "R:profile::mariadb::section%%section = SECTION_NAME"),  # % need to be escaped
         )
         parser.add_argument(
             "dc_from", metavar="DC_FROM", choices=CORE_DATACENTERS,
