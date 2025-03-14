@@ -44,6 +44,10 @@ class LibericaAdminRunner(SREBatchRunnerBase):
         super().__init__(args, spicerack)
         self._http = spicerack.requests_session(__name__, timeout=5.0, tries=3, backoff=2.0)
         self._reload_ts = int(time.time())
+        reason = "sre.loadbalancer.admin (de)pooling in progress"
+        if args.task_id:
+            reason += f" ({args.task_id})"
+        self._puppet_reason = spicerack.admin_reason(reason)
 
     @property
     def allowed_aliases(self) -> list:
@@ -70,19 +74,19 @@ class LibericaAdminRunner(SREBatchRunnerBase):
             msg += f" ({self._args.task_id})"
         return msg
 
-    def _depool_action(self, hosts: RemoteHosts, reason: Reason) -> None:
+    def _depool_action(self, hosts: RemoteHosts, _: Reason) -> None:
         """Depool liberica instance by stopping the control plane service"""
         puppet = self._spicerack.puppet(hosts)
-        puppet.disable(reason)
+        puppet.disable(self._puppet_reason, verbatim_reason=True)
         depool_cmd = "/bin/systemctl stop liberica-cp.service"
         confirm_on_failure(hosts.run_sync, depool_cmd)
 
-    def _pool_action(self, hosts: RemoteHosts, reason: Reason) -> None:
+    def _pool_action(self, hosts: RemoteHosts, _: Reason) -> None:
         """Pool liberica instance by starting the control plane service"""
         puppet = self._spicerack.puppet(hosts)
         pool_cmd = "/bin/systemctl start liberica-cp.service"
         confirm_on_failure(hosts.run_sync, pool_cmd)
-        puppet.enable(reason)
+        puppet.enable(self._puppet_reason, verbatim_reason=True)
 
     def _config_reload_action(self, hosts: RemoteHosts, _: Reason) -> None:
         reload_cmd = "/bin/systemctl reload liberica-cp.service"
