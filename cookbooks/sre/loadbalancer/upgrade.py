@@ -166,12 +166,7 @@ class RollUpgradeLibericaRunner(SREBatchRunnerBase):
     @retry(tries=5, delay=timedelta(seconds=3), backoff_mode='linear', exceptions=(RemoteExecutionError,))
     def _check_liberica_is_stopped(self, hosts: RemoteHosts) -> None:
         """Check if liberica services have been stopped"""
-        cmd = ' | '.join([
-            '/bin/systemctl show --property MainPID --value liberica-*.service',
-            'grep -v "^$"',
-            'paste -s -d","',
-            'grep "^[0,]+$"',  # systemctl returns MainPID=0 if the service isn't running
-        ])
+        cmd = '! /bin/systemctl -q is-active liberica-*.service'
         hosts.run_sync(cmd)
 
     def _admin_cookbook(self, action: str) -> None:
