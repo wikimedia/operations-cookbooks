@@ -237,35 +237,35 @@ class RollingOperationRunner(CookbookRunnerBase):
             self.elasticsearch_clusters.wait_for_green()
 
     def rolling_operation(self, nodes):
-        """Performs rolling Elasticsearch service restarts across the cluster.
+        """Performs rolling Opensearch service restarts across the cluster.
 
-        Optionally upgrade Elasticsearch plugins before proceeding to restart/reboot.
+        Optionally upgrade Opensearch plugins before proceeding to restart/reboot.
         Optionally performs a full reboot as opposed to just restarting services.
         """
         start_time = datetime.utcnow()
         logger.info("Starting rolling_operation %s on %s at time %s", self.operation, nodes, start_time)
 
         if self.operation is Operation.UPGRADE:
-            # Stop all elasticsearch units (we're mainly concerned with the old version)
-            logger.info("Trying to stop elasticsearch units before proceeding with upgrade")
+            # Stop all opensearch units (we're mainly concerned with the old version)
+            logger.info("Trying to stop opensearch units before proceeding with upgrade")
 
-            stop_es_cmd = 'systemctl list-units elasticsearch_* --plain --no-legend --all | ' + \
+            stop_cmd = 'systemctl list-units opensearch_* --plain --no-legend --all | ' + \
                           'awk \' { print $1 } \' | xargs systemctl stop'
-            nodes.remote_hosts.run_sync(stop_es_cmd)
+            nodes.remote_hosts.run_sync(stop_cmd)
 
             upgrade_cmd = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
                           options='-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"',
-                          packages=' '.join(['elasticsearch-oss', 'wmf-elasticsearch-search-plugins']))
+                          packages=' '.join(['opensearch', 'wmf-opensearch-search-plugins']))
 
-            nodes.remote_hosts.run_sync('chown -R elasticsearch /etc/elasticsearch/*')
+            nodes.remote_hosts.run_sync('chown -R opensearch /etc/opensearch/*')
             nodes.remote_hosts.run_sync(upgrade_cmd)
-            nodes.start_elasticsearch()
+            nodes.start_opensearch()
             # FIXME: implement polling per comment at
             # https://gerrit.wikimedia.org/r/c/operations/cookbooks/+/769109/comment/91b26217_5f2fd4bb/
-            sleep(120)  # Sleep during restart of elasticsearch services (b/c systemctl returns asynchronously)
-            # Restarting the service will write a keystore file that requires elasticsearch to be owner. See:
-            # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/elasticsearch-keystore.html#keystore-upgrade
-            nodes.remote_hosts.run_sync('chown -R root /etc/elasticsearch/*')
+            sleep(120)  # Sleep during restart of opensearch services (b/c systemctl returns asynchronously)
+            # Restarting the service will write a keystore file that requires opensearch to be owner. See:
+            # https://www.elastic.co/guide/en/opensearch/reference/7.17/opensearch-keystore.html#keystore-upgrade
+            nodes.remote_hosts.run_sync('chown -R root /etc/opensearch/*')
 
         if self.operation is Operation.REBOOT:
             nodes.remote_hosts.reboot(batch_size=self.nodes_per_run)
