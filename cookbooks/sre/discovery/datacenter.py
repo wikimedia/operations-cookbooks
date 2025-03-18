@@ -562,7 +562,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         try:
             if self.action in ["pool", "depool"]:
                 action = ask_input(
-                    f"{record.fqdn} is only pooled in {dc_from}: skip or move to {dest}?",
+                    f"{record.fqdn} is only pooled in {dc_from}: [skip] or [move] to {dest}?",
                     ["move", "skip"],
                 )
                 if action == "skip":
