@@ -139,6 +139,8 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         self.remote = spicerack.remote()
         self.verbose = spicerack.verbose
         self.device_model_slug = self.netbox_data['device_type']['slug']
+        self.bmc_firmware_filename = None
+        self.bios_firmware_filename = None
 
         self.uefi_only_devices = [
             # https://phabricator.wikimedia.org/T378368
@@ -241,25 +243,6 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             raise RuntimeError(
                 f'The management password provided seems incorrect, it does not work on {cumin_host}.') from None
 
-        logging.info("Retrieving the BMC's firmware version.")
-        bmc_response = self.redfish.request(
-            "get", f"{self.redfish.update_service}/FirmwareInventory/BMC").json()
-        logging.info("BMC firmware release date: %s", bmc_response['ReleaseDate'])
-        if bmc_response['ReleaseDate'].startswith('2022-'):
-            ask_confirmation(
-                "The BMC firmware was released in 2022 and it may not support "
-                "all the settings that we need. Please consider upgrading firmware "
-                "first. See https://phabricator.wikimedia.org/T371416 for more info.")
-        logging.info("Retrieving the BIOS's firmware version.")
-        bios_response = self.redfish.request(
-            "get", f"{self.redfish.update_service}/FirmwareInventory/BIOS").json()
-        logging.info("BIOS firmware version: %s", bios_response['Version'])
-        # We save the BMC/BIOS firmware filename since it is easier and more
-        # precise to pin-point corner cases when dealing with BIOS settings
-        # later on.
-        self.bmc_firmware_filename = bmc_response["Oem"]["Supermicro"]["UniqueFilename"]
-        self.bios_firmware_filename = bios_response["Oem"]["Supermicro"]["UniqueFilename"]
-
         ask_confirmation(f'Are you sure to proceed to apply BIOS/iDRAC settings {self.runtime_description}?')
 
     @property
@@ -292,6 +275,25 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
                 raise RuntimeError(error_msg) from e
 
         confirm_on_failure(check_connection)
+
+        logging.info("Retrieving the BMC's firmware version.")
+        bmc_response = self.redfish.request(
+            "get", f"{self.redfish.update_service}/FirmwareInventory/BMC").json()
+        logging.info("BMC firmware release date: %s", bmc_response['ReleaseDate'])
+        if bmc_response['ReleaseDate'].startswith('2022-'):
+            ask_confirmation(
+                "The BMC firmware was released in 2022 and it may not support "
+                "all the settings that we need. Please consider upgrading firmware "
+                "first. See https://phabricator.wikimedia.org/T371416 for more info.")
+        logging.info("Retrieving the BIOS's firmware version.")
+        bios_response = self.redfish.request(
+            "get", f"{self.redfish.update_service}/FirmwareInventory/BIOS").json()
+        logging.info("BIOS firmware version: %s", bios_response['Version'])
+        # We save the BMC/BIOS firmware filename since it is easier and more
+        # precise to pin-point corner cases when dealing with BIOS settings
+        # later on.
+        self.bmc_firmware_filename = bmc_response["Oem"]["Supermicro"]["UniqueFilename"]
+        self.bios_firmware_filename = bios_response["Oem"]["Supermicro"]["UniqueFilename"]
 
         self._config_host()
 
