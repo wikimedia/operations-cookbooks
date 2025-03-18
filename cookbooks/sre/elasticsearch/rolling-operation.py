@@ -250,7 +250,7 @@ class RollingOperationRunner(CookbookRunnerBase):
             logger.info("Trying to stop opensearch units before proceeding with upgrade")
 
             stop_cmd = 'systemctl list-units opensearch_* --plain --no-legend --all | ' + \
-                          'awk \' { print $1 } \' | xargs systemctl stop'
+                'awk \' { print $1 } \' | xargs systemctl stop'
             nodes.remote_hosts.run_sync(stop_cmd)
 
             upgrade_cmd = 'DEBIAN_FRONTEND=noninteractive apt-get {options} install {packages}'.format(
