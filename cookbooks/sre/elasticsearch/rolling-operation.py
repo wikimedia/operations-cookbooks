@@ -186,8 +186,8 @@ class RollingOperationRunner(CookbookRunnerBase):
                 else:
                     self.elasticsearch_clusters.wait_for_green()
 
-            logger.info('(Group %d) Fetch %d node(s) from %s to perform the rolling restart',
-                        groups_restarted, self.nodes_per_run, self.clustergroup)
+            logger.info('(Group %d) Fetch %d node(s) from %s to perform the %s operation',
+                        groups_restarted, self.nodes_per_run, self.clustergroup, self.operation)
             nodes = self.elasticsearch_clusters.get_next_clusters_nodes(self.start_datetime, self.nodes_per_run)
             if nodes is None:
                 break
