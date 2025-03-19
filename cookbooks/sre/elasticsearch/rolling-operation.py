@@ -267,7 +267,7 @@ class RollingOperationRunner(CookbookRunnerBase):
 
             nodes.remote_hosts.run_sync('chown -R opensearch /etc/opensearch/*')
             nodes.remote_hosts.run_sync(upgrade_cmd)
-            nodes.start_opensearch()
+            nodes.start_elasticsearch()
             # FIXME: implement polling per comment at
             # https://gerrit.wikimedia.org/r/c/operations/cookbooks/+/769109/comment/91b26217_5f2fd4bb/
             sleep(120)  # Sleep during restart of opensearch services (b/c systemctl returns asynchronously)
