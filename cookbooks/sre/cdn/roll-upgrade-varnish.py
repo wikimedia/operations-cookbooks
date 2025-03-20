@@ -44,18 +44,17 @@ class RollUpgradeVarnishRunner(SRELBBatchRunnerBase):
         puppet = self._spicerack.puppet(hosts)
         puppet.run()
 
-        pkgs = [
+        apt_get = self._spicerack.apt_get(hosts)
+        confirm_on_failure(apt_get.update)
+        confirm_on_failure(
+            apt_get.install,
             "libvarnishapi3",
             "libvmod-netmapper",
             "libvmod-querysort",
             "varnish",
             "varnish-modules",
             "varnish-re2",
-        ]
-
-        apt_get = self._spicerack.apt_get(hosts)
-        confirm_on_failure(apt_get.update)
-        confirm_on_failure(apt_get.install, ",".join(pkgs))
+        )
 
         self._restart_daemons_action(hosts, reason)
         # Run any potential corrective measures.
