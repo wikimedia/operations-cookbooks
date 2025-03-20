@@ -42,6 +42,7 @@ class RollUpgradeVarnishRunner(SRELBBatchRunnerBase):
     def _upgrade_action(self, hosts: RemoteHosts, reason: Reason) -> None:
         """Install packages"""
         puppet = self._spicerack.puppet(hosts)
+        # Recently-merged puppet changed might need to still be synced.
         puppet.run()
 
         apt_get = self._spicerack.apt_get(hosts)
@@ -62,7 +63,7 @@ class RollUpgradeVarnishRunner(SRELBBatchRunnerBase):
         puppet.run()
 
     @property
-    def allowed_aliases(self):
+    def allowed_aliases(self) -> list:
         """Required by RebootRunnerBase"""
         aliases = ['cp']
         for role in ('text', 'upload'):
@@ -78,12 +79,12 @@ class RollUpgradeVarnishRunner(SRELBBatchRunnerBase):
         return 'A:cp'  # This query must include all hosts matching all the allowed_aliases
 
     @property
-    def runtime_description(self):
+    def runtime_description(self) -> str:
         """Override the default runtime description"""
-        return f'rolling upgrade of Varnish on {self._query()}'
+        return f'rolling upgrade of Varnish on {self._query()} - {self._reason}'
 
     @property
-    def restart_daemons(self):
+    def restart_daemons(self) -> list:
         """Return a list of daemons to restart when using the restart action"""
         return [
             "prometheus-varnish-exporter@frontend",
