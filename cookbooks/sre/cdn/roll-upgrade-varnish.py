@@ -90,4 +90,6 @@ class RollUpgradeVarnishRunner(SRELBBatchRunnerBase):
             "varnish-frontend",
             # varnishkafka is linked against libvarnishapi
             "varnishkafka-all",
+            "varnishmtail@default",
+            "varnishmtail@internal",
         ]
