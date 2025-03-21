@@ -1,21 +1,24 @@
 """Pool or depool a DB from dbctl."""
 
 import logging
+from argparse import ArgumentParser, Namespace
 from datetime import datetime, timedelta
 from pprint import pformat
 from time import sleep
-from typing import Dict, Generator, Tuple
+from typing import Dict, Generator, Tuple, Optional, Any
 
 from conftool.extensions.dbconfig.action import ActionResult
 from conftool.extensions.dbconfig.entities import Instance as DBCInst
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
+from spicerack.dbctl import Dbctl
 from spicerack.decorators import retry
 from spicerack.icinga import IcingaStatusNotFoundError, HostsStatus as IcingaHostsStatus
 from spicerack.icinga import HostStatus as IcingaStatus, IcingaHosts
 from spicerack.mysql import Instance as MInst
 from spicerack.remote import Remote, RemoteHosts
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
+from wmflib.phabricator import Phabricator
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
@@ -51,13 +54,14 @@ def _fetch_db_remotehost(remote: Remote, fqdn: str) -> RemoteHosts:
 
 
 def _get_fqdn(mi: MInst) -> str:
-    t = tuple(mi.host.hosts)
+    t: Tuple[str] = tuple(mi.host.hosts)
     ensure(len(t) == 1, f"{len(t)} hosts in {mi}")
     return t[0]
 
 
-def _run_cmd(host: RemoteHosts, cmd: str, is_safe=False) -> str:
+def _run_cmd(host: RemoteHosts, cmd: str, is_safe: bool = False) -> str:
     out = host.run_sync(cmd, is_safe=is_safe, print_progress_bars=False, print_output=False)
+    # TODO: cleanup
     return list(out)[0][1].message().decode("utf-8")
 
 
@@ -85,7 +89,7 @@ def _fetchall(ins: MInst, sql: str, args: tuple) -> Tuple[Dict]:
         return res
 
 
-def _fetch_instance_connections_count_detailed(ins: MInst) -> Tuple[Dict]:
+def _fetch_instance_connections_count_detailed(ins: MInst) -> Tuple[Dict[str, Any]]:
     """Gather database instance connection counts.
 
     +----------+-----------------+-----------+
@@ -107,10 +111,11 @@ def _fetch_instance_connections_count_detailed(ins: MInst) -> Tuple[Dict]:
 def _fetch_instance_connections_count_wikiusers(ins: MInst) -> int:
     """Count database instance connections matching wiki-related users."""
     sql = "SELECT COUNT(*) AS cnt FROM information_schema.processlist WHERE user LIKE '%%wiki%%'"
-    return ins.fetch_one_row(sql, ())["cnt"]
+    row = ins.fetch_one_row(sql, ())
+    return int(row["cnt"])
 
 
-def _fetch_instance_by_name(dbctl, hostname: str) -> DBCInst:
+def _fetch_instance_by_name(dbctl: Dbctl, hostname: str) -> DBCInst:
     dbi = dbctl.instance.get(hostname)
     ensure(dbi is not None, f"Unable to find instance {hostname} in dbctl. Aborting.")
     return dbi
@@ -125,7 +130,7 @@ def _gather_instance_status(host: RemoteHosts, mi: MInst) -> int:
     return wikiuser_cnt
 
 
-def _check_depooling_last_instance(conf, hostname: str, nocheck_extloads: bool) -> None:
+def _check_depooling_last_instance(conf: Dict[str, Any], hostname: str, nocheck_extloads: bool) -> None:
     """Warn if removing the only host in a section (e.g. vslow or dump)."""
     ensure("." not in hostname, f"hostname '{hostname}' contains a dot")
 
@@ -191,7 +196,7 @@ class Pool(CookbookBase):
 
     """
 
-    def argument_parser(self):
+    def argument_parser(self) -> ArgumentParser:
         """CLI parsing, as required by the Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument(
@@ -229,7 +234,7 @@ class Pool(CookbookBase):
 
         return parser
 
-    def get_runner(self, args):
+    def get_runner(self, args: Namespace) -> "PoolDepoolRunner":
         """As specified by Spicerack API."""
         args.operation = self.__class__.__name__.lower()
         return PoolDepoolRunner(args, self.spicerack)
@@ -238,7 +243,7 @@ class Pool(CookbookBase):
 class PoolDepoolRunner(CookbookRunnerBase):
     """Pool or depool a MySQL instance cookbook runner."""
 
-    def __init__(self, args, spicerack):
+    def __init__(self, args: Namespace, spicerack: Spicerack):
         """As specified by Spicerack API."""
         # Silence some more noisy loggers for the dry-run mode
         logging.getLogger("etcd.client").setLevel(logging.INFO)
@@ -282,7 +287,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
         self._icinga_host = spicerack.icinga_hosts(self.remote_host.hosts)
 
         if self.reason.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+            self.phabricator: Optional[Phabricator] = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         else:
             self.phabricator = None
 
@@ -321,7 +326,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
                 logger.debug("Waiting for icinga to go green")
                 self._icinga_host.wait_for_optimal()
 
-            if self.phabricator is not None:
+            if self.phabricator is not None and self.reason.task_id is not None:
                 msg = f"Start pool of {self.runtime_description} - {self.reason.owner}"
                 self.phabricator.task_comment(self.reason.task_id, msg)
 
@@ -331,7 +336,8 @@ class PoolDepoolRunner(CookbookRunnerBase):
             msg = "depool instance {self.args.instance}"
             self.wait_diff_clean()
 
-            dbctl_conf = self.dbctl.config.generate()
+            ar, dbctl_conf = self.dbctl.config.generate()
+            self.check_action_result(ar, "Failed to generate dbctl conf")
             _check_depooling_last_instance(dbctl_conf, self.args.instance, self.args.nocheck_external_loads)
             ret = self.dbctl.instance.depool(self.args.instance)
             self.check_action_result(ret, msg)
@@ -339,11 +345,11 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
             self.wait_for_connection_drain()
 
-        if self.phabricator is not None:
+        if self.phabricator is not None and self.reason.task_id is not None:
             msg = f"Completed {self.args.operation} of {self.runtime_description} - {self.reason.owner}"
             self.phabricator.task_comment(self.reason.task_id, msg)
 
-    def _fetch_current_pooling(self, i: str, percentage: int) -> set:
+    def _fetch_current_pooling(self, i: str, percentage: int) -> set[Tuple[bool, bool]]:
         instance = self.dbctl.instance.get(i)
         current_pooling = {
             (section["pooled"], section["percentage"] >= percentage) for section in instance.sections.values()
