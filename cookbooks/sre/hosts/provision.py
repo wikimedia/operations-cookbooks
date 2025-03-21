@@ -19,6 +19,7 @@ from cookbooks.sre.network import configure_switch_interfaces
 
 DNS_ADDRESS = '10.3.0.1'
 DELL_DEFAULT = 'calvin'
+SUPERMICRO_DEFAULT = 'calvin'
 OLD_SERIAL_MODELS = (
     'poweredge r430',
     'poweredge r440',
@@ -131,6 +132,7 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         ensure_shell_is_durable()
         self.args = args
 
+        self.spicerack = spicerack
         self.netbox = spicerack.netbox()
         self.netbox_server = spicerack.netbox_server(self.args.host)
         self.netbox_data = self.netbox_server.as_dict()
@@ -141,38 +143,17 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         self.device_model_slug = self.netbox_data['device_type']['slug']
         self.bmc_firmware_filename = None
         self.bios_firmware_filename = None
+        self.mgmt_password = spicerack.management_password
 
         self.uefi_only_devices = [
             # https://phabricator.wikimedia.org/T378368
             "P1_AIOMAOC_ATGC_i2TMLAN1OPROM"
         ]
 
-        if self.args.no_users:
-            bmc_username = "root"
-            password = ''  # nosec
-        else:
-            # The Supermicro vendor ships its servers with a unique BMC admin
-            # password, that is displayed in the server's label:
-            # https://www.supermicro.com/en/support/BMC_Unique_Password
-            # To keep it simple, for the moment we just ask the password
-            # to the admin/operator running the cookbook.
-            # The correspondent user is "ADMIN".
-            bmc_username = "ADMIN"
-            logger.info(
-                "Supermicro sets a unique BMC ADMIN password for every server, "
-                "usually printed in the server's label or collected in "
-                "a spreadsheet."
-                "====== IMPORTANT =====:\n"
-                "If this is the first time ever that the host "
-                "is provisioned, please retrieve the password and insert it "
-                "so the cookbook can change it to ours.\n"
-                "If this is not the first time, and the ADMIN password "
-                "has already been changed to the standard root one, "
-                "please insert that instead.")
-            password = get_secret("BMC ADMIN Password")
-
-        self.redfish = spicerack.redfish(
-            self.args.host, username=bmc_username, password=password)
+        # Init redfish with a fake password, since in __init__ we just need
+        # some metadata about the host like IP etc..
+        # The real initialization happens in run().
+        self.redfish = spicerack.redfish(self.args.host, 'fake')
 
         # DHCP automation
         self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
@@ -190,8 +171,6 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             self.chassis_reset_policy = ChassisResetPolicy.GRACEFUL_RESTART
         else:
             self.chassis_reset_policy = ChassisResetPolicy.FORCE_RESTART
-
-        self.mgmt_password = spicerack.management_password
 
         self.mgmt_network_changes = {
             "HostName": self.args.host,
@@ -267,14 +246,12 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             self.dhcp.push_configuration(self.dhcp_config)
             self._dhcp_active = True
 
-        def check_connection():
-            try:
-                self.redfish.check_connection()
-            except RedfishError as e:
-                error_msg = f"Unable to connect to the Redfish API of {self.args.host}. "
-                raise RuntimeError(error_msg) from e
-
-        confirm_on_failure(check_connection)
+        if not self.args.no_users:
+            confirm_on_failure(self._try_bmc_password)
+        else:
+            # Initialize redfish with the WMF mgmt password
+            self.redfish = self.spicerack.redfish(self.args.host)
+            confirm_on_failure(self.redfish.check_connection)
 
         logging.info("Retrieving the BMC's firmware version.")
         bmc_response = self.redfish.request(
@@ -574,6 +551,49 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         else:
             uefi_pxe_setting = "EFI"
         self.bios_changes["Attributes"][pxe_nic] = uefi_pxe_setting if self.args.uefi else "PXE"
+
+    def _try_bmc_password(self, bmc_username="ADMIN"):
+        """Test the known BMC passwords, find a working one and configure Redfish."""
+        passwords_to_test = {
+            "wmf_root_mgmt": self.mgmt_password,
+            "calvin": SUPERMICRO_DEFAULT,
+            "BMC_LABEL": None
+        }
+        for label, password in passwords_to_test.items():
+            try:
+                logger.info(
+                    "Connecting to the BMC as user %s, with password %s",
+                    bmc_username, label)
+                if label == "BMC_LABEL":
+                    # The Supermicro vendor ships its servers with a unique BMC admin
+                    # password, that is displayed in the server's label:
+                    # https://www.supermicro.com/en/support/BMC_Unique_Password
+                    bmc_password = get_secret(
+                        "Please insert the BMC ADMIN Password written on "
+                        "the server's label.")
+                else:
+                    bmc_password = password
+                self.redfish = self.spicerack.redfish(
+                    self.args.host, username=bmc_username, password=bmc_password)
+                self.redfish.check_connection()
+                # We know for sure that this URI requires authentication.
+                self.redfish.request(
+                    "get", f"{self.redfish.update_service}/FirmwareInventory/BMC").json()
+                logger.info("The username/password combination worked.")
+                break
+            except RedfishError as e:
+                if "HTTP 401" in str(e):
+                    logger.warning(
+                        "Unauthorized response from the BMC when using "
+                        "the password %s", label)
+                    continue
+                raise RuntimeError(
+                    "Client Response error when trying to contact the BMC.") from e
+        else:
+            raise RuntimeError(
+                "Tried all the known combinations of user/passwords, please "
+                "verify the username settings on the BMC."
+            )
 
 
 class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
