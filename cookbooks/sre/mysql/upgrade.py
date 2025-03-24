@@ -1,44 +1,81 @@
 """Upgrade minor version of MySQL hosts."""
 
+# TODO: add cluster-wide soft locking
+# TODO: add instance-level locking
+
 import logging
+from argparse import ArgumentParser, Namespace
 from datetime import datetime, timedelta
 
+from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.mysql import Instance as MInst, Mysql
+from spicerack.remote import RemoteHosts
 from wmflib.interactive import AbortError, confirm_on_failure, ensure_shell_is_durable
+
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+
+
+log = logging.getLogger(__name__)
+
+# pylint: disable=missing-docstring,logging-fstring-interpolation,too-many-instance-attributes
+
+
+def step(slug: str, msg: str) -> None:
+    """Logging helper."""
+    log.info("[%s.%s] %s", __name__, slug, msg)
+
+
+def get_db_instance(mysql: Mysql, fqdn: str) -> MInst:
+    """Get Mysql Instance."""
+    db = mysql.get_dbs(fqdn)
+    return db.list_hosts_instances()[0]
 
 
 class UpgradeMySQL(CookbookBase):
-    """Upgrade minor veresion of MySQL hosts.
+    """Upgrade minor veresion of MySQL hosts."""
 
-    Note: It doesn't depool the host (yet).
-    """
+    argument_reason_required = True
+    argument_task_required = True
 
-    def argument_parser(self):
+    def argument_parser(self) -> ArgumentParser:
         """CLI parsing, as required by the Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument("query", help="Cumin query to match the host(s) to act upon.")
+
+        parser.add_argument("--repool", action="store_true", help="Pool in host after upgrade")
         return parser
 
-    def get_runner(self, args):
+    def get_runner(self, args: Namespace) -> "UpgradeMySQLRunner":
         """As specified by Spicerack API."""
         return UpgradeMySQLRunner(args, self.spicerack)
+
+
+def _fqdn(rhost: RemoteHosts) -> str:
+    return tuple(rhost.hosts)[0]
 
 
 class UpgradeMySQLRunner(CookbookRunnerBase):
     """Upgrade MySQL cookbook runner."""
 
-    def __init__(self, args, spicerack):
+    def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Upgrade MySQL on a given set of hosts."""
         ensure_shell_is_durable()
 
         self.alerting_hosts = spicerack.alerting_hosts
         self.icinga_hosts = spicerack.icinga_hosts
-        self.admin_reason = spicerack.admin_reason("MySQL upgrade")
         self.remote = spicerack.remote()
         query = "P{" + args.query + "} and A:db-all and not A:db-multiinstance"
-        self.hosts = spicerack.remote().query(query)
+        self.hosts: RemoteHosts = spicerack.remote().query(query)
         self.puppet = spicerack.puppet
         self.logger = logging.getLogger(__name__)
+        self._dbctl = spicerack.dbctl()
+        self._phab = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        self._mysql = spicerack.mysql()
+        self._run_cookbook = spicerack.run_cookbook
+        self._do_repool = args.repool
+        self.task_id = args.task_id
+        self.admin_reason = spicerack.admin_reason(args.reason)
         if not self.hosts:
             print("No hosts have been found, exiting")
         if len(self.hosts) <= 5:
@@ -47,9 +84,13 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
             self.hosts_message = f"{len(self.hosts)} hosts"
 
     @property
-    def runtime_description(self):
+    def runtime_description(self) -> str:
         """Return a nicely formatted string that represents the cookbook action."""
         return f"for {self.hosts_message}"
+
+    def _is_in_dbctl(self, hostname: str) -> bool:
+
+        return self._dbctl.instance.get(hostname) is not None
 
     def upgrade_host(self, host):
         """Upgrade mysql version of a single host."""
@@ -58,6 +99,17 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
             with host_puppet.disabled(self.admin_reason):
                 self._run_upgrade(host)
 
+        # Pool in host after alerting goes green and is enabled, puppet is enabled, replication is in sync
+        hostname = str(host).split(".", maxsplit=1)[0]
+        reason = f"Upgrade of {host} completed"
+        if self._do_repool and self._is_in_dbctl(hostname):
+            self._run_cookbook(
+                "sre.mysql.pool",
+                ["--reason", reason, "--task-id", self.task_id, hostname],
+                confirm=True,
+            )
+        self._phab.task_comment(self.task_id, reason)
+
     def run(self):
         """Required by the Spicerack API."""
         # Guard against useless conftool messages
@@ -65,9 +117,23 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         for host in self.hosts.split(1):
             self.upgrade_host(host)
 
-    def _run_upgrade(self, host):
-        self.logger.info("Stopping mariadb on %s", host)
+    def _run_upgrade(self, host: RemoteHosts) -> None:
+        """Upgrade mysql version of a single host."""
+        fqdn = _fqdn(host)
+        reason = f"Upgrading {host}"
+        self._phab.task_comment(self.task_id, reason)
 
+        hostname = str(host).split(".", maxsplit=1)[0]
+        if self._is_in_dbctl(hostname):
+            step("depool", f"Depooling {fqdn}")
+            hostname = str(host).split(".", maxsplit=1)[0]
+            self._run_cookbook(
+                "sre.mysql.depool",
+                ["--reason", reason, "--task-id", self.task_id, hostname],
+                confirm=True,
+            )
+
+        step("stop_mariadb", f"Stopping mariadb on {fqdn}")
         upgrade_cmd = (
             "DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' "
             + "-o Dpkg::Options::='--force-confold' dist-upgrade"
@@ -94,8 +160,19 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
             'mysql -e "start slave;"',
         ]
         self._run_scripts(host, scripts)
-        # Wait for the host to be healty before removing the downtime
-        confirm_on_failure(self.icinga_hosts(host.hosts).wait_for_optimal(skip_acked=True))
+
+        reason = f"Upgrade of {host} completed"
+        if not self._do_repool:
+            self.logger.info("Repooling not requested")
+            self._phab.task_comment(self.task_id or "", reason)
+            return
+
+        step("catchup_repl_s", f"Catching up replication lag on {fqdn} before removing icinga downtime")
+        dbi = get_db_instance(self._mysql, fqdn)
+        dbi.wait_for_replication()
+
+        step("wait_icinga_s", f"Waiting for icinga to go green for {fqdn}")
+        self.icinga_hosts(host.hosts).wait_for_optimal()
 
     def _run_scripts(self, host, scripts) -> None:
         for script in scripts:
