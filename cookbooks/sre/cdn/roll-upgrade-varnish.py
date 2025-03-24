@@ -54,6 +54,7 @@ class RollUpgradeVarnishRunner(SRELBBatchRunnerBase):
             "varnish",
             "varnish-modules",
             "varnish-re2",
+            "varnishkafka",
         )
 
         self._restart_daemons_action(hosts, reason)
