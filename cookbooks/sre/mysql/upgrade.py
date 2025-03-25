@@ -32,6 +32,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
 
         self.alerting_hosts = spicerack.alerting_hosts
+        self.icinga_hosts = spicerack.icinga_hosts
         self.admin_reason = spicerack.admin_reason("MySQL upgrade")
         self.remote = spicerack.remote()
         query = "P{" + args.query + "} and A:db-all and not A:db-multiinstance"
@@ -93,6 +94,8 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
             'mysql -e "start slave;"',
         ]
         self._run_scripts(host, scripts)
+        # Wait for the host to be healty before removing the downtime
+        confirm_on_failure(self.icinga_hosts(host.hosts).wait_for_optimal(skip_acked=True))
 
     def _run_scripts(self, host, scripts) -> None:
         for script in scripts:
