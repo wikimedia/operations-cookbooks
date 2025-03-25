@@ -505,7 +505,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self.logger.info("Removing /srv/sqldata on %s", self.target_hostname)
         _run(self.target_host, "rm -rf /srv/sqldata/")
 
-        self.logger.info("Starting transferer")
+        self.logger.info("Starting transfer")
         t = Transferer(
             str(self.source_host),
             "/srv/sqldata",
