@@ -54,6 +54,11 @@ def ensure(condition: bool, msg: str) -> None:
     raise AssertionError(msg)
 
 
+def ensure_or_ask(condition: bool, msg: str) -> None:
+    if not condition:
+        ask_confirmation(msg)
+
+
 def step(slug: str, msg: str) -> None:
     """
     Log next step in a friendly/greppable format.
@@ -276,32 +281,15 @@ mariadb::shard: '{section}'
     return True
 
 
-def check_pooling_status(
-    dbctl: Dbctl,
-    hostname: str,
-    fqdn: str,
-    expect_pooled=True,
-    reject_candidate_master=True,
-) -> str:
-    """
-    Check pooling status, extract section, reject unsuitable instances
-    """
+def _fetch_pooling_status(dbctl: Dbctl, hostname: str, fqdn: str) -> Tuple[str, bool, bool]:
+    """Fetch section, pooling status, candidate_master flag"""
     dbci = dbctl.instance.get(hostname)
     ensure(dbci is not None, f"{hostname} not found in dbctl")
     sections = dbci.sections
     ensure(len(sections) == 1, f"{fqdn} has sections: '{sections.keys()}'")
     sec_name: str = list(sections.keys())[0]
     sd: Dict = sections[sec_name]
-    if expect_pooled:
-        if not sd["pooled"]:
-            ask_confirmation(f"{fqdn} is not pooled")
-    else:
-        ensure(not sd["pooled"], f"{fqdn} is pooled")
-
-    if reject_candidate_master:
-        ensure(not sd.get("candidate_master"), f"{fqdn} is candidate master")
-
-    return sec_name
+    return (sec_name, bool(sd["pooled"]), bool(sd.get("candidate_master")))
 
 
 def _wait_for_replication_lag_to_lower(log: Logger, instance: MInst) -> None:
@@ -448,14 +436,21 @@ class CloneMySQLRunner(CookbookRunnerBase):
         # Check DB roles in Zarcillo and cross-reference their sections
         source_section_z = check_db_role_on_zarcillo(self._mysql, self.source_fqdn)
         primary_section_z = check_db_role_on_zarcillo(self._mysql, self.primary_fqdn, expect_db_is_master=True)
-        ensure(
-            source_section_z == primary_section_z,
-            "Primary and source DB are in different sections",
-        )
+        ensure(source_section_z == primary_section_z, "Primary and source DB are in different sections")
 
         step("check", "Checking current pooling status")
-        source_section = check_pooling_status(self._dbctl, self.source_hostname, self.source_fqdn)
-        self.primary_section = check_pooling_status(self._dbctl, self.primary_hostname, self.primary_fqdn)
+        (source_section, source_is_pooled, source_is_candidate) = _fetch_pooling_status(
+            self._dbctl, self.source_hostname, self.source_fqdn
+        )
+        ensure_or_ask(source_is_pooled, f"{self.source_fqdn} is not pooled")
+        ensure_or_ask(not source_is_candidate, f"{self.source_fqdn} is candidate master")
+
+        (self.primary_section, primary_is_pooled, primary_is_candidate) = _fetch_pooling_status(
+            self._dbctl, self.primary_hostname, self.primary_fqdn
+        )
+        ensure_or_ask(primary_is_pooled, f"{self.primary_fqdn} is not pooled")
+        ensure_or_ask(not primary_is_candidate, f"{self.primary_fqdn} is candidate master")
+
         ensure(source_section == source_section_z, "Inconsistent section")
         ensure(self.primary_section == primary_section_z, "Inconsistent section")
 
@@ -477,16 +472,17 @@ class CloneMySQLRunner(CookbookRunnerBase):
         print("Open Grafana for the source: %s" % gen_grafana_mysql_url(self.source_hostname))
         print("Open Grafana for the target: %s" % gen_grafana_mysql_url(self.target_hostname))
 
-        ask_confirmation(f"Ready to depool {self.source_fqdn}?")
         msg = f"Started cloning {self.source_fqdn} to {self.target_fqdn} - {self.admin_reason.owner}"
         self._phab.task_comment(str(self.phabricator_task_id), msg)
 
-        step("depool", f"Depooling {self.source_fqdn}")
-        reason = f"Depool {self.source_fqdn} to then clone it to {self.target_fqdn} - {self.admin_reason.owner}"
-        task = f"T{self.phabricator_task_id}"
-        self._run_cookbook(
-            "sre.mysql.depool", ["--reason", reason, "--task-id", task, self.target_hostname], confirm=True
-        )
+        (_, source_is_pooled, _) = _fetch_pooling_status(self._dbctl, self.source_hostname, self.source_fqdn)
+        if source_is_pooled:
+            step("depool", f"Depooling {self.source_fqdn}")
+            reason = f"Depool {self.source_fqdn} to then clone it to {self.target_fqdn} - {self.admin_reason.owner}"
+            task = f"T{self.phabricator_task_id}"
+            self._run_cookbook(
+                "sre.mysql.depool", ["--reason", reason, "--task-id", task, self.target_hostname], confirm=True
+            )
 
         step("icinga", "Disabling monitoring for source and target host")
         alerters = self.alerting_hosts(self.source_host.hosts | self.target_host.hosts)
