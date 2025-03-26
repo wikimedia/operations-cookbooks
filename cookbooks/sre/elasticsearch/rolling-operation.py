@@ -181,7 +181,9 @@ class RollingOperationRunner(CookbookRunnerBase):
         groups_restarted = 0
         while True:
             if self.wait_for_green:
-                if self.allow_yellow and groups_restarted == 1:
+                # temporarily disable 'groups_restarted' for the OpenSearch migration, see T388610
+                # if self.allow_yellow and groups_restarted == 1:
+                if self.allow_yellow:
                     self.elasticsearch_clusters.wait_for_yellow_w_no_moving_shards()
                 else:
                     self.elasticsearch_clusters.wait_for_green()
@@ -286,8 +288,15 @@ class RollingOperationRunner(CookbookRunnerBase):
             nodeset = nodes.remote_hosts.hosts
             for node in nodeset:
                 hostname = node.split('.')[0]
+                new_hostname = "cirrussearch{}".format(hostname.split('elastic')[1])
+                # sre.hosts.rename -t T388610 elastic2055 cirrussearch2055
                 ret_val = self.spicerack.run_cookbook(
-                    'sre.hosts.reimage', ['--os', 'bullseye', '-t', self.task_id, hostname]
+                    'sre.hosts.rename', ['-t', self.task_id, hostname, new_hostname]
+                )
+                # Add new, http and move-vlan arguments temporarily to facilitate OpenSearch migration (T388610)
+                ret_val = self.spicerack.run_cookbook(
+                    'sre.hosts.reimage', ['--os', 'bullseye', '-t', self.task_id, new_hostname,
+                                          '--new', '--use-http-for-dhcp', '--move-vlan']
                 )
 
                 if ret_val != 0:
