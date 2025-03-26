@@ -28,8 +28,9 @@ from pymysql.cursors import DictCursor
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.dbctl import Dbctl
+from spicerack.decorators import retry
 from spicerack.mysql import Instance as MInst, Mysql
-from spicerack.remote import Remote, RemoteHosts
+from spicerack.remote import Remote, RemoteHosts, RemoteError
 from transferpy.Transferer import Transferer
 from wmflib.config import load_yaml_config
 from wmflib.interactive import AbortError, confirm_on_failure, ensure_shell_is_durable, ask_confirmation
@@ -142,14 +143,22 @@ def ensure_db_not_in_zacillo(mysql: Mysql, fqdn: str, hostname: str) -> None:
     ensure(r["cnt"] == 0, f"{hostname} found in masters table on zarcillo")
 
 
+# occasional "spicerack.remote.RemoteError: No hosts provided" has been raised
+@retry(tries=20, delay=timedelta(seconds=5), backoff_mode="constant", exceptions=(RemoteError,))
+def _remotehosts_query(remote: Remote, query, fqdn: str) -> RemoteHosts:
+    h = remote.query(query)
+    if len(h.hosts) != 1:
+        print(f"No suitable host matching {fqdn} have been found")
+        raise RuntimeError
+    return h
+
+
 def _fetch_db_remotehost(remote: Remote, fqdn: str) -> RemoteHosts:
     parse_db_host_fqdn(fqdn)
     query = "A:db-all and not A:db-multiinstance and P{%s}" % fqdn
-    h = remote.query(query)
-    if len(h.hosts) != 1:
-        print(f"No suitable host matching {fqdn} have been found, exiting")
-        raise RuntimeError
-    return h
+    log.debug("Searching remote '%s'", query)
+    ensure(len(fqdn) > 0, "Empty fqdn in _fetch_db_remotehost")
+    return _remotehosts_query(remote, query, fqdn)
 
 
 def _parse_replication_status(replication_status: str) -> Tuple[str, int]:
