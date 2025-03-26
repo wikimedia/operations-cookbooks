@@ -2,7 +2,7 @@
 import logging
 import socket
 
-from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteExecutionError
 
@@ -152,7 +152,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         self.master.run_sync(f'gnt-node add --no-ssh-key-check -g "{self.group}" "{self.fqdn}"')
         ask_confirmation('Has the node been added correctly?')
 
-        self.master.run_sync('gnt-cluster verify')
+        confirm_on_failure(self.master.run_sync, 'gnt-cluster verify')
         ask_confirmation('Verify that the cluster state looks correct.')
 
         self.master.run_sync('gnt-cluster verify-disks')
