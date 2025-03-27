@@ -5,6 +5,7 @@
 # flake8: noqa: D103
 
 # NOTE: For this initial iteration we expect the target host to be a new host
+# TODO: when enabling support for `misc` both source/target/primary might not be known to dbctl
 
 # TODO: add cluster-wide soft locking
 # TODO: add instance-level locking
@@ -487,14 +488,22 @@ class CloneMySQLRunner(CookbookRunnerBase):
                 "sre.mysql.depool", ["--reason", reason, "--task-id", task, self.source_hostname], confirm=True
             )
 
-        (_, target_is_pooled, _) = _fetch_pooling_status(self._dbctl, self.target_hostname, self.target_fqdn)
-        if target_is_pooled:
-            step("depool", f"Depooling target {self.target_fqdn}")
-            reason = f"Depool {self.target_fqdn} - {self.admin_reason.owner}"
-            task = f"T{self.phabricator_task_id}"
-            self._run_cookbook(
-                "sre.mysql.depool", ["--reason", reason, "--task-id", task, self.target_hostname], confirm=True
+        if self._dbctl.instance.get(self.target_hostname) is None:
+            ask_confirmation(
+                f"The target host {self.target_hostname} is not yet known to dbctl. You can abort\n"
+                "the execution now, or add it during the cloning.\n"
+                "The cookbook will check again before pooling it in (unless you passed --nopool)"
             )
+
+        else:
+            (_, target_is_pooled, _) = _fetch_pooling_status(self._dbctl, self.target_hostname, self.target_fqdn)
+            if target_is_pooled:
+                step("depool", f"Depooling target {self.target_fqdn}")
+                reason = f"Depool {self.target_fqdn} - {self.admin_reason.owner}"
+                task = f"T{self.phabricator_task_id}"
+                self._run_cookbook(
+                    "sre.mysql.depool", ["--reason", reason, "--task-id", task, self.target_hostname], confirm=True
+                )
 
         step("icinga", "Disabling monitoring for source and target host")
         alerters = self.alerting_hosts(self.source_host.hosts | self.target_host.hosts)
@@ -540,12 +549,18 @@ class CloneMySQLRunner(CookbookRunnerBase):
         pool_in_instance_slowly(self._run_cookbook, self.source_fqdn, self.source_hostname, self.phabricator_task_id)
 
         if self.pool_in_target:
-            step("wait", "Waiting 1h before pooling in target {target_fqdn}")
-            time.sleep(3600)
-            step("pool", f"Pooling in target {self.target_fqdn}")
-            pool_in_instance_slowly(
-                self._run_cookbook, self.target_fqdn, self.target_hostname, self.phabricator_task_id
-            )
+            if self._dbctl.instance.get(self.target_hostname):
+                step("wait", f"Waiting 1h before pooling in target {self.target_fqdn}")
+                time.sleep(3600)
+                step("pool", f"Pooling in target {self.target_fqdn}")
+                pool_in_instance_slowly(
+                    self._run_cookbook, self.target_fqdn, self.target_hostname, self.phabricator_task_id
+                )
+            else:
+                log.info(f"Target {self.target_fqdn} is not known to dbctl, skipping pool-in")
+
+        else:
+            log.info(f"Pooling-in of target {self.target_fqdn} has been skipped using --nopool")
 
         msg = f"Finished cloning {self.source_fqdn} to {self.target_fqdn} - {self.admin_reason.owner}"
         self._phab.task_comment(str(self.phabricator_task_id), msg)
