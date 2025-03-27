@@ -156,8 +156,9 @@ def ensure_db_not_in_zacillo(mysql: Mysql, fqdn: str, hostname: str) -> None:
 def _remotehosts_query(remote: Remote, query, fqdn: str) -> RemoteHosts:
     h = remote.query(query)
     if len(h.hosts) != 1:
-        print(f"No suitable host matching {fqdn} have been found")
-        raise RuntimeError
+        msg = f"No suitable host matching {fqdn} have been found"
+        log.error(msg)
+        raise RuntimeError(msg)
     return h
 
 
@@ -175,8 +176,10 @@ def _parse_replication_status(replication_status: str) -> Tuple[str, int]:
     repl_position_matches = re.findall(r"\sExec_Master_Log_Pos:\s*(\d+)", replication_status)
 
     if len(binlog_file_matches) != 1 or len(repl_position_matches) != 1:
-        log.error("Could not find the replication position, aborting")
-        raise AbortError
+        msg = "Could not find the replication position, aborting"
+        log.error(msg)
+        log.error(replication_status)
+        raise RuntimeError(msg)
 
     binlog_fn: str = str(binlog_file_matches[0])
     position: int = int(repl_position_matches[0])
@@ -522,7 +525,6 @@ class CloneMySQLRunner(CookbookRunnerBase):
             self.target_rack_name,
             self.primary_section,
         )
-
         step("catchup_repl_s", f"Catching up replication lag on {self.source_fqdn} before removing icinga downtime")
         _wait_for_replication_lag_to_lower(self.logger, get_db_instance(self._mysql, self.source_fqdn))
 

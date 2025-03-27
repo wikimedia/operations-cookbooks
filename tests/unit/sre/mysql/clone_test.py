@@ -8,14 +8,20 @@ tox -e py311-unit -- tests/unit/sre/mysql/clone_test.py -vv
 # pylint: disable=missing-docstring,line-too-long
 # flake8: noqa: D103
 
+from argparse import Namespace
 from unittest import mock
+from unittest.mock import MagicMock, patch
+
 import pytest
+from spicerack.remote import RemoteHosts
 
 from cookbooks.sre.mysql.clone import (
+    MInst,
     parse_db_host_fqdn,
     parse_phabricator_task,
     _parse_replication_status,
     _check_if_target_is_already_on_dbctl,
+    CloneMySQLRunner,
 )
 
 
@@ -114,3 +120,156 @@ def test_check_if_target_is_already_on_dbctl(dbctl):
 
     dbci.sections = {"s0": {"pooled": False}}
     assert _check_if_target_is_already_on_dbctl(dbctl, "db0000", "s0")
+
+
+yamlconf = dict(replication_user="ru", replication_password="rp")
+
+
+@patch("cookbooks.sre.mysql.clone.retry", autospec=True)
+@patch("cookbooks.sre.mysql.clone.ensure_shell_is_durable", autospec=True)
+@patch("cookbooks.sre.mysql.clone.ask_confirmation", autospec=True)
+@patch("cookbooks.sre.mysql.clone._add_host_to_zarcillo", autospec=True)
+@patch("cookbooks.sre.mysql.clone.Transferer", autospec=True)
+@patch("cookbooks.sre.mysql.clone._run", autospec=True)
+@patch("cookbooks.sre.mysql.clone.load_yaml_config", autospec=True, return_value=yamlconf)
+@patch("cookbooks.sre.mysql.clone.get_db_instance", autospec=True)
+@patch("cookbooks.sre.mysql.clone._remotehosts_query", autospec=True)
+@patch("spicerack.Spicerack", autospec=True)
+def test_run(
+    m_sr, m_remotehosts_query, m_gdbi, m_loadyaml, m_run, m_xfr, m_add_host_zarc, m_ask_conf, m_ensure_shell, m_retry
+):
+
+    def netbox(hn):
+        if hn in ["db001", "db002", "db003"]:
+            m = MagicMock()
+            m.as_dict.return_value = {"site": {"slug": "meow"}, "rack": {"name": "RN"}}
+            m.status = "active"
+            return m
+
+        assert 0, f"Unmocked netbox {hn}"
+
+    m_sr.netbox_server = netbox
+
+    def gdbi(_, fqdn):
+        m = MagicMock(spec=MInst)
+        if fqdn == "db002.eqiad.wmnet":  # source
+            m.show_slave_status.return_value = dict(Master_Host="db001.eqiad.wmnet")  # primary
+            return m
+
+        elif fqdn == "db1215.eqiad.wmnet":  # zarcillo
+
+            def x(sql, par, database=""):
+                assert database == "zarcillo"
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM instances WHERE server = %s", ("db003.eqiad.wmnet",)):
+                    return dict(cnt=0)
+
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM section_instances WHERE instance = %s", ("db003",)):
+                    return dict(cnt=0)
+
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM masters WHERE instance = %s", ("db003",)):
+                    return dict(cnt=0)
+
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM masters WHERE instance = %s", ("db002",)):
+                    return dict(cnt=0)
+
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM masters WHERE instance = %s", ("db001",)):
+                    return dict(cnt=1)
+
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM instances WHERE server = %s", ("db002.eqiad.wmnet",)):
+                    return dict(cnt=1)
+
+                if (sql, par) == (
+                    "SELECT name, port, `group` FROM instances WHERE server = %s",
+                    ("db002.eqiad.wmnet",),
+                ):
+                    return dict(name="foo:123", server="", port=3306)
+
+                if (sql, par) == (
+                    "SELECT name, port, `group` FROM instances WHERE server = %s",
+                    ("db001.eqiad.wmnet",),
+                ):
+                    return dict(name="foo:444", server="", port=3306)
+
+                if (sql, par) == ("SELECT section FROM section_instances WHERE instance = %s", "foo:123"):
+                    return dict(section="s3")
+
+                if (sql, par) == ("SELECT section FROM section_instances WHERE instance = %s", "foo:444"):
+                    return dict(section="s3")
+
+                assert 0, f"Unmocked zarcillo query {sql!r} {par!r}"
+
+            m.fetch_one_row = x
+            return m
+
+        if fqdn == "db003.eqiad.wmnet":  # target
+            # m.show_slave_status.return_value = dict(Master_Host="db001.eqiad.wmnet")  # primary
+            return m
+
+        assert 0, f"Unmocked netbox get_db_instance for {fqdn}"
+
+    m_gdbi.side_effect = gdbi
+
+    args = Namespace(
+        source="db002.eqiad.wmnet", target="db003.eqiad.wmnet", task="T0", nopool=True, ignore_existing=False
+    )
+
+    # mock sr.dbctl().instance.get(...).sections
+    m_sr.dbctl.return_value.instance.get.return_value.sections = {"s3": {"pooled": True, "candidate_master": False}}
+
+    # mock _remotehosts_query
+    src = MagicMock(spec=RemoteHosts, __name="src", name="src")
+    tgt = MagicMock(spec=RemoteHosts, __name="tgt", name="tgt")
+    pri = MagicMock(spec=RemoteHosts, __name="pri", name="pri")
+
+    def mrq(remote, query, fqdn):
+        assert fqdn in ["db002.eqiad.wmnet", "db003.eqiad.wmnet", "db001.eqiad.wmnet"]
+        idx_num = int(fqdn[4])
+        return [None, pri, src, tgt][idx_num]
+
+    m_remotehosts_query.side_effect = mrq
+
+    # mock _run
+    def _run(host, cmd, *a, **kw):
+        n = host.__name
+        if (n, cmd) == ("src", 'mysql -e "SHOW SLAVE STATUS\G"'):
+            return "\nMaster_Log_File: foo\nExec_Master_Log_Pos: 4"
+        if n == "src":
+            expected = [
+                'mysql -e "STOP SLAVE;"',
+                "service mariadb stop",
+                "systemctl start mariadb",
+                "systemctl restart mariadb",
+                'mysql -e "START SLAVE;"',
+            ]
+            if cmd in expected:
+                return ""
+
+        if n == "tgt":
+            expected = [
+                'mysql -e "STOP SLAVE;"',
+                "service mariadb stop",  # TODO systemctl
+                "rm -rf /srv/sqldata/",
+                "chown -R mysql. /srv/*",
+                'systemctl set-environment MYSQLD_OPTS="--skip-slave-start"',
+                "systemctl start mariadb",
+                'mysql -e "STOP SLAVE; RESET SLAVE ALL"',
+                'mysql -e "START SLAVE;"',
+                "mysql_upgrade --force",
+                "systemctl start mariadb",
+            ]
+            if cmd in expected:
+                return ""
+
+            # TODO
+            if "CHANGE MASTER TO" in cmd:
+                return ""
+
+        assert 0, f"Unmocked call to _run {host} '{cmd}' {a} {kw}"
+
+    m_run.side_effect = _run
+
+    m_xfr.return_value.run.return_value = [0]
+
+    runner = CloneMySQLRunner(args, m_sr)
+
+    runner.run()
