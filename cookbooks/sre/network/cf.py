@@ -70,6 +70,9 @@ def run(args, spicerack):
     # But still return a cookbook failure if at least one update fails.
     return_code = 0
 
+    # Start by assuming that no changes were made.
+    changes_made = False
+
     # Iterate over all prefixes
     for prefix in list_prefixes['result']:
         # Only care about the ones we select (or all)
@@ -90,11 +93,21 @@ def run(args, spicerack):
             logger.debug('Skipping update of prefix %(cidr)s ("%(description)s") in DRY-RUN mode', prefix)
             continue
 
+        # Changes were made or will likely be made given we have come this far.
+        # This helps us confirm that the either the CIDR or the DC matched,
+        # otherwise one of the many previous continues would have kicked in.
+        changes_made = True
+
         try:
             update_prefix_status(session, base_url, prefix, advertise)
         except Exception as e:  # pylint: disable=broad-except
             # Don't interrupt the run if there is an error
             logger.error('⚠️  Failed to update prefix %s: %s', prefix['cidr'], e)
+            return_code = 1
+
+    if not changes_made and args.action != 'status':
+        logger.error('⚠️  No changes were likely made. Please double-check the query and output.')
+        if not spicerack.dry_run:
             return_code = 1
 
     return return_code
