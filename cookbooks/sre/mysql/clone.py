@@ -12,6 +12,7 @@
 # TODO: detect if target is moving to a new section and ask for confirmation
 # TODO: upsert entries in zarcillo
 # TODO: allow setting non-core group in zarcillo
+# TODO support both hostnames and fqdn
 
 import logging
 import re
@@ -116,10 +117,11 @@ def check_db_role_on_zarcillo(mysql: Mysql, fqdn: str, expect_db_is_master: bool
     """
     Check the DB role on zarcillo and return the section
     """
-    sql = "SELECT name, server, port, `group` FROM instances WHERE server = %s"
+    sql = "SELECT name, port, `group` FROM instances WHERE server = %s"
     row = query_zarcillo_one_row(mysql, sql, (fqdn,))
     ensure(row["port"] == 3306, "Source is not on port 3306")
     name = row["name"]
+    # On multiinstance name can be "db1155:3312" with server = "db1155.eqiad.wmnet"
 
     hn, _ = parse_db_host_fqdn(fqdn)
     sql = "SELECT COUNT(*) AS cnt FROM masters WHERE instance = %s"
@@ -234,7 +236,6 @@ def _add_host_to_zarcillo(mysql: Mysql, hostname: str, fqdn: str, datacenter: st
 
 
 def pool_in_instance_slowly(_run_cookbook, fqdn: str, hostname: str, phabricator_task_id: int) -> None:
-    step("pool", f"Pooling in {fqdn}")
     reason = f"Pool {fqdn} in after cloning"
     task = f"T{phabricator_task_id}"
     _run_cookbook("sre.mysql.pool", ["--slow", "--reason", reason, "--task-id", task, hostname], confirm=True)
@@ -324,6 +325,7 @@ class CloneMySQL(CookbookBase):
         parser = super().argument_parser()
         parser.add_argument("--source", help="Cumin query to match the host of the source.", required=True)
         parser.add_argument("--target", help="Cumin query to match the host of the target.", required=True)
+        # TODO switch to task-id
         parser.add_argument("--task", help="Phabricator task", required=True)
         parser.add_argument("--nopool", action="store_true", help="Do not pool in target host")
         h = "Do not check if target host already exists in zarcillo"
@@ -389,6 +391,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self.primary_hostname, self.primary_fqdn = parse_db_host_fqdn(primary_fqdn)
         self.primary_host = _fetch_db_remotehost(self.remote, self.primary_fqdn)
 
+        # TODO: use task_id from admin_reason
         self.phabricator_task_id = parse_phabricator_task(args.task)
 
         self.pool_in_target = not args.nopool
@@ -477,8 +480,17 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         (_, source_is_pooled, _) = _fetch_pooling_status(self._dbctl, self.source_hostname, self.source_fqdn)
         if source_is_pooled:
-            step("depool", f"Depooling {self.source_fqdn}")
+            step("depool", f"Depooling source {self.source_fqdn}")
             reason = f"Depool {self.source_fqdn} to then clone it to {self.target_fqdn} - {self.admin_reason.owner}"
+            task = f"T{self.phabricator_task_id}"
+            self._run_cookbook(
+                "sre.mysql.depool", ["--reason", reason, "--task-id", task, self.source_hostname], confirm=True
+            )
+
+        (_, target_is_pooled, _) = _fetch_pooling_status(self._dbctl, self.target_hostname, self.target_fqdn)
+        if target_is_pooled:
+            step("depool", f"Depooling target {self.target_fqdn}")
+            reason = f"Depool {self.target_fqdn} - {self.admin_reason.owner}"
             task = f"T{self.phabricator_task_id}"
             self._run_cookbook(
                 "sre.mysql.depool", ["--reason", reason, "--task-id", task, self.target_hostname], confirm=True
@@ -524,11 +536,13 @@ class CloneMySQLRunner(CookbookRunnerBase):
         # TODO: wait until the host shows up on prometheus
 
         ask_confirmation("Ready to pool in the nodes. Monitor the Grafana charts.")
+        step("pool", f"Pooling in source {self.source_fqdn}")
         pool_in_instance_slowly(self._run_cookbook, self.source_fqdn, self.source_hostname, self.phabricator_task_id)
 
         if self.pool_in_target:
-            step("wait", "Waiting 1h before pooling in {target_fqdn}")
+            step("wait", "Waiting 1h before pooling in target {target_fqdn}")
             time.sleep(3600)
+            step("pool", f"Pooling in target {self.target_fqdn}")
             pool_in_instance_slowly(
                 self._run_cookbook, self.target_fqdn, self.target_hostname, self.phabricator_task_id
             )
