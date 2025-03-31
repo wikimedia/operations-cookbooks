@@ -21,7 +21,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from cookbooks.sre.network import parse_results
 
-NETWORK_ROLES = ('cloudsw', 'asw', 'cr')
+NETWORK_ROLES = ('cloudsw', 'asw', 'cr', 'mr', 'pfw', 'msw')
 RENEW_EXPIRATION_DELTA = datetime.timedelta(weeks=4)
 logger = logging.getLogger(__name__)
 
