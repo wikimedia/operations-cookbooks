@@ -250,12 +250,12 @@ def _check_if_target_is_already_on_dbctl(dbctl: Dbctl, hostname: str, section: s
     dbci = dbctl.instance.get(hostname)
     if dbci is None:
         msg = f"""Target host {hostname} is not known to dbctl.
-Create a new entry for {hostname} in Puppet in
+FYI: You can create a new entry for {hostname} in Puppet in
 conftool-data/dbconfig-instance/instances.yaml then review and merge it.
 For an example see:
 https://gerrit.wikimedia.org/r/c/operations/puppet/+/663570/4/conftool-data/dbconfig-instance/instances.yaml
 
-Also update the hieradata/hosts/{hostname}.yaml file in Puppet with the following text:
+Also you might want to update the hieradata/hosts/{hostname}.yaml file in Puppet with the following text:
 -----
 # {hostname}
 # {section}
@@ -363,7 +363,8 @@ def _wait_until_target_dbctl_conf_is_good(dbctl: Dbctl, hostname: str, section: 
     for attempt in range(144):  # 24h
         if _check_if_target_is_already_on_dbctl(dbctl, hostname, section) is True:
             return
-        log.info(f"[{attempt}] Polling again in 10 mins.")
+        log.info(f"Configuring {hostname} in dbctl is *required* to continue.")
+        log.info(f"[{attempt}] Polling again in 10 mins for a total of 24h.")
         time.sleep(60 * 10)
     raise TimeoutError("Timed out")
 
@@ -431,6 +432,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self.admin_reason = spicerack.admin_reason(f"Cloning MariaDB T{self.phabricator_task_id}")
         self._dbctl: Dbctl = spicerack.dbctl()
 
+        self._source_icinga_host = spicerack.icinga_hosts(self.source_host.hosts)
         self._target_icinga_host = spicerack.icinga_hosts(self.target_host.hosts)
 
         step("check", "Running pre-flight checks")
@@ -460,6 +462,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         ensure(source_section == source_section_z, "Inconsistent section")
         ensure(self.primary_section == primary_section_z, "Inconsistent section")
+        # TODO rename to self.section
 
         if _check_if_target_is_already_on_dbctl(self._dbctl, self.target_hostname, source_section) is False:
             log.info("Note: you can update the section configured in puppet during the cloning")
@@ -509,10 +512,11 @@ class CloneMySQLRunner(CookbookRunnerBase):
                 )
 
         step("icinga", "Disabling monitoring for source and target host")
-        alerters = self.alerting_hosts(self.source_host.hosts | self.target_host.hosts)
-        downtime_id = alerters.downtime(self.admin_reason, duration=timedelta(hours=8))
-        alerters.downtime(self.admin_reason, duration=timedelta(hours=48))
+        source_alerter = self.alerting_hosts(self.source_host.hosts)
+        source_downtime_id = source_alerter.downtime(self.admin_reason, duration=timedelta(hours=8))
 
+        target_alerter = self.alerting_hosts(self.target_host.hosts)
+        target_downtime_id = target_alerter.downtime(self.admin_reason, duration=timedelta(hours=8))
         step("clone", "Running the cloning tool")
         self._run_clone()
 
@@ -525,44 +529,47 @@ class CloneMySQLRunner(CookbookRunnerBase):
             self.target_rack_name,
             self.primary_section,
         )
+
+        # First focus on getting the source db back in production asap, target can/should wait:
+
         step("catchup_repl_s", f"Catching up replication lag on {self.source_fqdn} before removing icinga downtime")
         _wait_for_replication_lag_to_lower(self.logger, get_db_instance(self._mysql, self.source_fqdn))
 
-        step("catchup_repl_t", f"Catching up replication lag on {self.target_fqdn} before removing icinga downtime")
-        _wait_for_replication_lag_to_lower(self.logger, get_db_instance(self._mysql, self.target_fqdn))
-
         step("wait_icinga_s", f"Waiting for icinga to go green for {self.source_fqdn}")
-        self._target_icinga_host.wait_for_optimal()
+        self._source_icinga_host.wait_for_optimal()
 
-        step("wait_icinga_t", f"Waiting for icinga to go green for {self.target_fqdn}")
-        self._target_icinga_host.wait_for_optimal()
+        step("icinga", f"Removing icinga downtime for {self.source_fqdn}")
+        source_alerter.remove_downtime(source_downtime_id)
 
-        step("icinga", "Removing icinga 'downtime'")
-        alerters.remove_downtime(downtime_id)
-
-        _wait_until_target_dbctl_conf_is_good(self._dbctl, self.target_hostname, self.primary_section)
-
-        ask_confirmation("Is the change to instances.yaml merged?")
-
-        # TODO: wait until the host shows up on prometheus
-
-        ask_confirmation("Ready to pool in the nodes. Monitor the Grafana charts.")
         step("pool", f"Pooling in source {self.source_fqdn}")
         pool_in_instance_slowly(self._run_cookbook, self.source_fqdn, self.source_hostname, self.phabricator_task_id)
 
-        if self.pool_in_target:
-            if self._dbctl.instance.get(self.target_hostname):
-                step("wait", f"Waiting 1h before pooling in target {self.target_fqdn}")
-                time.sleep(3600)
-                step("pool", f"Pooling in target {self.target_fqdn}")
-                pool_in_instance_slowly(
-                    self._run_cookbook, self.target_fqdn, self.target_hostname, self.phabricator_task_id
-                )
-            else:
-                log.info(f"Target {self.target_fqdn} is not known to dbctl, skipping pool-in")
+        # Now the target:
 
-        else:
-            log.info(f"Pooling-in of target {self.target_fqdn} has been skipped using --nopool")
+        step("catchup_repl_t", f"Catching up replication lag on {self.target_fqdn}")
+        _wait_for_replication_lag_to_lower(self.logger, get_db_instance(self._mysql, self.target_fqdn))
+
+        # TODO: wait until the host shows up on prometheus?
+
+        if self.pool_in_target:
+            step("wait_icinga_t", f"Waiting for icinga to go green for {self.target_fqdn}")
+            self._target_icinga_host.wait_for_optimal()
+
+            step("icinga", f"Removing icinga downtime for {self.target_fqdn}")
+            target_alerter.remove_downtime(target_downtime_id)
+
+            t0 = time.time()
+            _wait_until_target_dbctl_conf_is_good(self._dbctl, self.target_hostname, self.primary_section)
+
+            to_wait = 3600 - (time.time() - t0)
+            if to_wait > 0:
+                step("wait", f"Waiting {to_wait} seconds before pooling in target {self.target_fqdn}")
+                time.sleep(to_wait)
+
+            step("pool", f"Pooling in target {self.target_fqdn}")
+            pool_in_instance_slowly(
+                self._run_cookbook, self.target_fqdn, self.target_hostname, self.phabricator_task_id
+            )
 
         msg = f"Finished cloning {self.source_fqdn} to {self.target_fqdn} - {self.admin_reason.owner}"
         self._phab.task_comment(str(self.phabricator_task_id), msg)
