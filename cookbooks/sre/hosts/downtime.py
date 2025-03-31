@@ -90,7 +90,7 @@ class DowntimeRunner(CookbookRunnerBase):
         self.lock = spicerack.lock
 
         if args.force_puppet:
-            self.puppet = spicerack.puppet(spicerack.icinga_master_host)
+            self.puppet = spicerack.puppet(spicerack.icinga_master_host())
         else:
             self.puppet = None
 

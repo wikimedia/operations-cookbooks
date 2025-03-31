@@ -143,7 +143,7 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         self.device_model_slug = self.netbox_data['device_type']['slug']
         self.bmc_firmware_filename = None
         self.bios_firmware_filename = None
-        self.mgmt_password = spicerack.management_password
+        self.mgmt_password = spicerack.management_password()
 
         self.uefi_only_devices = [
             # https://phabricator.wikimedia.org/T378368
@@ -639,7 +639,7 @@ class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-insta
             self.reboot_policy = DellSCPRebootPolicy.FORCED
             self.chassis_reset_policy = ChassisResetPolicy.FORCE_RESTART
 
-        self.mgmt_password = spicerack.management_password
+        self.mgmt_password = spicerack.management_password()
 
         self.platform_doc_link = (
             "https://wikitech.wikimedia.org/wiki/SRE/Dc-operations/"

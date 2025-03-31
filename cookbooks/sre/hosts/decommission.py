@@ -366,7 +366,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
         """Force a run of the Ganeti-Netbox sync systemd timer."""
         try:
             # TODO: avoid race conditions to run it at the same time that the systemd timer will trigger it
-            self.spicerack.netbox_master_host.run_sync(
+            self.spicerack.netbox_master_host().run_sync(
                 'systemctl start netbox_ganeti_{cluster}_sync.service'
                 .format(cluster=virtual_machine.cluster))
             # TODO: add polling and validation that it completed to run

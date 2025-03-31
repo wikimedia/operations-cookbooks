@@ -77,7 +77,7 @@ class RollReimageK8sNodesRunner(K8sBatchRunnerBase):
         ask_confirmation(f'Will reimage {len(self.all_hosts)} nodes: {self.all_hosts}. Proceed?')
 
         # ask for mgmt password early, it will be stored
-        _ = self._spicerack.management_password
+        _ = self._spicerack.management_password()
 
     def run(self) -> int:
         """Perform rolling reimages on a set of nodes."""

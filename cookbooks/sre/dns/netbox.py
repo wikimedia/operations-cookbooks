@@ -54,7 +54,7 @@ def argument_parser():
 def run(args, spicerack):  # pylint: disable=too-many-locals
     """Required by Spicerack API."""
     remote = spicerack.remote()
-    netbox_host = spicerack.netbox_master_host
+    netbox_host = spicerack.netbox_master_host()
     netbox_hostname = str(netbox_host)
     netbox_hosts = remote.query(NETBOX_HOSTS_QUERY)
     reason = spicerack.admin_reason(args.message, task_id=args.task_id)

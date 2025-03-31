@@ -154,7 +154,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         """Perform a sync from Ganeti to Netbox in the affected DC."""
         cluster = self.group.cluster.name
         logger.info('Syncing VMs in group %s of cluster %s to Netbox', self.group.name, cluster)
-        self.spicerack.netbox_master_host.run_sync(
+        self.spicerack.netbox_master_host().run_sync(
             f'systemctl start netbox_ganeti_{cluster}_sync.service')
         self.need_netbox_sync = False
 
