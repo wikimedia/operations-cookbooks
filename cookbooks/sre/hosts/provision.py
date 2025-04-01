@@ -6,6 +6,7 @@ from pprint import pformat
 from time import sleep
 from typing import Union
 
+from spicerack.apiclient import APIClientResponseError
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.dhcp import DHCPConfMac, DHCPConfMgmt
 from spicerack.netbox import MANAGEMENT_IFACE_NAME
@@ -453,8 +454,22 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             if should_patch:
                 self._reboot_chassis()
         except RedfishError as e:
-            raise RuntimeError(
-                f"Error while configuring BIOS or mgmt interface: {e}") from e
+            ipv6_disabled_err = (
+                "The property StatelessAddressAutoConfig is a "
+                "read only property and cannot be assigned a value.")
+            if (e.__cause__ is not None
+                    and isinstance(e.__cause__, APIClientResponseError)
+                    and e.__cause__.response is not None  # pylint: disable=no-member
+                    and ipv6_disabled_err in str(e.__cause__.response.text)):  # pylint: disable=no-member
+                ask_confirmation(
+                    "The BMC's IPv6 Stateless autoconfig cannot be disabled. "
+                    "This is a bug tracked in T389950, the current workaround "
+                    "is to connect to the WebUI and explicitly enable IPv6 "
+                    "in the BMC Network config. Then please retry running "
+                    "the cookbook, the error shouldn't surface again.")
+            else:
+                raise RuntimeError(
+                    f"Error while configuring BIOS or mgmt interface: {e}") from e
 
     def _found_diffs_bios_attributes(self, bios_attributes: dict):
         """Diff the Supermicro's BIOS settings/attributes with our ideal config."""
