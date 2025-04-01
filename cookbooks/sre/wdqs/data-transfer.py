@@ -74,6 +74,9 @@ class DataTransfer(CookbookBase):
     Use force when wanting to delete existing jnl files.
     """
 
+    argument_reason_required = True
+    argument_task_required = False
+
     def argument_parser(self):
         """Parse the command line arguments for all the sre.wdqs cookbooks."""
         parser = super().argument_parser()
@@ -82,9 +85,7 @@ class DataTransfer(CookbookBase):
         parser.add_argument('--dest', required=True, help='FQDN of destination node.')
         parser.add_argument('--blazegraph_instance', required=True, choices=list(BLAZEGRAPH_INSTANCES.keys()) +
                             ['wdqs-all'], help='One of: %(choices)s.')
-        parser.add_argument('--reason', required=True, help='Administrative Reason')
         parser.add_argument('--downtime', type=int, default=6, help="Hours of downtime")
-        parser.add_argument('--task-id', help='task_id for the change')
         parser.add_argument('--lvs-strategy', required=True, help='which hosts to depool/repool', choices=LVS_STRATEGY)
         parser.add_argument('--encrypt', action='store_true', help='Enable encryption on transfer')
         parser.add_argument('--force', action='store_true', help='Delete files on target before transfer')

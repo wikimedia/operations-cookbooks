@@ -26,12 +26,13 @@ class CategoryReload(CookbookBase):
         --reason "reloading on test host" --task-id T301167 wdqs1009.eqiad.wmnet
     """
 
+    argument_reason_required = True
+    argument_task_required = False
+
     def argument_parser(self) -> argparse.ArgumentParser:
         """Parse the command line arguments for this cookbook."""
         parser = super().argument_parser()
         parser.add_argument('host', help='select a single WDQS host.')
-        parser.add_argument('--task-id', help='task id for the change')
-        parser.add_argument('--reason', required=True, help='Administrative Reason')
         parser.add_argument('--downtime', type=int, default=4, help='Hour(s) of downtime')
         parser.add_argument('--no-depool', action='store_true',
                             help='Don\'t depool host (use for non-lvs-managed hosts)')
