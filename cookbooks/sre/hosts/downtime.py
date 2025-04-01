@@ -32,17 +32,14 @@ class Downtime(CookbookBase):
     """
 
     owner_team = "Observability"
+    argument_reason_required = True
+    argument_task_required = False
     DEFAULT_DOWNTIME_HOURS = 4
 
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument('query', help='Cumin query to match the host(s) to act upon.')
-        parser.add_argument('-r', '--reason', required=True,
-                            help=('The reason for the downtime. The current username and originating host are '
-                                  'automatically added.'))
-        parser.add_argument('-t', '--task-id',
-                            help='An optional task ID to refer in the downtime message (i.e. T12345).')
         parser.add_argument('-M', '--minutes', type=int, default=0,
                             help='For how many minutes the downtime should last. [optional, default=0]')
         parser.add_argument('-H', '--hours', type=int, default=0,
