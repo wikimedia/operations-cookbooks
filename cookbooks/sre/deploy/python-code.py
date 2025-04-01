@@ -25,17 +25,14 @@ class Deploy(CookbookBase):
     """
 
     owner_team = "Infrastructure Foundations"
+    argument_reason_required = True
+    argument_task_required = False
 
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument('project', help='The name of the project on the deployment server.')
         parser.add_argument('query', help='Cumin query to match the host(s) to act upon.')
-        parser.add_argument('-r', '--reason', required=True,
-                            help=('The reason for the downtime. The current username and originating host are '
-                                  'automatically added.'))
-        parser.add_argument('-t', '--task-id',
-                            help='An optional task ID to refer in the downtime message (i.e. T12345).')
         parser.add_argument('-u', '--user',
                             help=('By default the deployment will be run with the deploy-$project user. Use this '
                                   'parameter to override it in case a different one should be used.'))

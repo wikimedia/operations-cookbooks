@@ -31,6 +31,8 @@ class RebootSingleHost(CookbookBase):
     """
 
     owner_team = 'Infrastructure Foundations'
+    argument_reason_required = False
+    argument_task_required = False
 
     def get_runner(self, args):
         """As specified by Spicerack API."""
@@ -40,11 +42,6 @@ class RebootSingleHost(CookbookBase):
         """Parse arguments"""
         parser = super().argument_parser()
         parser.add_argument('host', help='A single host to be rebooted (specified in Cumin query syntax)')
-        parser.add_argument('-r', '--reason', required=False,
-                            help=('The reason for the reboot. The current username and originating host are '
-                                  'automatically added.'))
-        parser.add_argument('-t', '--task-id',
-                            help='An optional task ID to refer in the downtime message (i.e. T12345).')
         parser.add_argument('--depool', help='Whether to run depool/pool on the server around reboots.',
                             action='store_true')
         parser.add_argument('--enable-puppet', help='Enable Puppet with a specific reason.')

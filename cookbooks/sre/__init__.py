@@ -89,6 +89,8 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
     By default this get_runner will return an instance of RebootRunner
     """
 
+    argument_reason_required = True
+    argument_task_required = False
     batch_default = 1
     batch_max = 40
     grace_sleep = 1
@@ -135,8 +137,6 @@ class SREBatchBase(CookbookBase, metaclass=ABCMeta):
             default=self.max_failed,
             type=int,
         )
-        parser.add_argument("--reason", help="Administrative Reason", required=True)
-        parser.add_argument("--task-id", help="task id for the change")
         parser.add_argument(
             "--ignore-restart-errors",
             action="store_true",

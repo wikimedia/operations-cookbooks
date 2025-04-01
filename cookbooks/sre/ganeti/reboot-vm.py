@@ -29,6 +29,9 @@ class RebootSingleVM(CookbookBase):
 
     """
 
+    argument_reason_required = False
+    argument_task_required = False
+
     def get_runner(self, args):
         """As specified by Spicerack API."""
         return RebootSingleVMRunner(args, self.spicerack)
@@ -37,11 +40,6 @@ class RebootSingleVM(CookbookBase):
         """Parse arguments"""
         parser = super().argument_parser()
         parser.add_argument('vm', help='A single VM to reboot (specified in Cumin query syntax)')
-        parser.add_argument('-r', '--reason', required=False,
-                            help=('The reason for the reboot. The current username and originating'
-                                  'Cumin host are automatically added.'))
-        parser.add_argument('-t', '--task-id',
-                            help='An optional task ID to refer in the downtime message.')
         parser.add_argument('--skip-puppet-check', help="Don't wait for a successful Puppet run.",
                             action='store_true', default=False)
         parser.add_argument('--depool', help='Whether to run depool/pool on the VM around reboots.',
