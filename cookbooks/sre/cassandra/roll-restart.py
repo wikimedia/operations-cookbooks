@@ -28,6 +28,8 @@ class RollRestartCassandra(CookbookBase):
     cookbook sre.cassandra.roll-restart --batch-sleep-seconds 600 --instance-sleep-seconds 30 -r "Type reason here" aqs
     """
 
+    argument_reason_required = True
+
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
@@ -38,8 +40,6 @@ class RollRestartCassandra(CookbookBase):
                                  'a Cumin alias. As an alternative, you can pass a specific Cumin '
                                  'host query using the --query argument'))
         group.add_argument('--query', help='A cumin query string')
-        parser.add_argument('-r', '--reason', help='The reason for performing the restart',
-                            required=True)
         parser.add_argument('--batch-sleep-seconds', type=float, default=300.0,
                             help="Seconds to sleep between each host.")
         parser.add_argument('--instance-sleep-seconds', type=int, default=10,

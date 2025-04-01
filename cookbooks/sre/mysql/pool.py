@@ -179,20 +179,12 @@ class Pool(CookbookBase):
 
     """
 
+    argument_reason_required = True
+    argument_task_required = False
+
     def argument_parser(self) -> ArgumentParser:
         """CLI parsing, as required by the Spicerack API."""
         parser = super().argument_parser()
-        parser.add_argument(
-            "-r",
-            "--reason",
-            required=True,
-            help="The administrative reason for the action.",
-        )
-        parser.add_argument(
-            "-t",
-            "--task-id",
-            help="The Phabricator task ID to update and refer (i.e.: T12345)",
-        )
         parser.add_argument(
             "--nocheck-external-loads",
             action="store_true",
