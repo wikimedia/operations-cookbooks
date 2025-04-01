@@ -195,6 +195,8 @@ class DiscoveryDcRoute(CookbookBase):
 
     """
 
+    argument_task_required = False
+
     def argument_parser(self):
         """Parse the command line arguments for this cookbook."""
         parser = super().argument_parser()
@@ -211,7 +213,6 @@ class DiscoveryDcRoute(CookbookBase):
                 )
             action.add_argument("--fast-insecure", "-f", help="Run the commands faster but relatively insecurely.")
             action.add_argument("-r", "--reason", required=False, help="Admin reason", default="maintenance")
-            action.add_argument("-t", "--task-id", help="the Phabricator task ID to update and refer (i.e.: T12345)")
         status = actions.add_parser("status")
         status.add_argument(
             "datacenter", choices=CORE_DATACENTERS + ("all",), help="Name of the datacenter. One of: %(choices)s."

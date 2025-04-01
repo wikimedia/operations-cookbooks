@@ -35,6 +35,8 @@ class RenumberSingleHost(CookbookBase):
         cookbook sre.k8s.renumber-node wikikube-worker2001.codfw.wmnet
     """
 
+    argument_task_required = False
+
     def get_runner(self, args: Namespace) -> "RenumberSingleHostRunner":
         """As specified by Spicerack API."""
         return RenumberSingleHostRunner(args, self.spicerack)
@@ -42,7 +44,6 @@ class RenumberSingleHost(CookbookBase):
     def argument_parser(self) -> ArgumentParser:
         """Parse arguments"""
         parser = super().argument_parser()
-        parser.add_argument("-t", "--task-id", help="An optional task ID to post a message to (i.e. T12345).")
         parser.add_argument(
             "-R",
             "--renamed",

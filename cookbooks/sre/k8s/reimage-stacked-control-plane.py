@@ -42,10 +42,12 @@ class ReimageControlPlanes(CookbookBase):
     - Remove downtime
     """
 
+    argument_reason_required = True
+    argument_task_required = False
+
     def argument_parser(self) -> ArgumentParser:
         """Parse the command line arguments."""
         parser = super().argument_parser()
-        parser.add_argument("--reason", required=True, help="Admin reason")
         parser.add_argument(
             "--k8s-cluster",
             required=True,
@@ -61,7 +63,6 @@ class ReimageControlPlanes(CookbookBase):
                 "https://wikitech.wikimedia.org/wiki/Cumin#Global_grammar_host_selection)"
             ),
         )
-        parser.add_argument("--task-id", help="task id for the change")
         parser.add_argument(
             "--os",
             required=True,

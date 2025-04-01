@@ -43,10 +43,11 @@ class DiscoveryServiceRoute(CookbookBase):
 
     """
 
+    argument_reason_required = False
+
     def argument_parser(self):
         """Parse the command line arguments for all the sre.discovery cookbooks."""
         parser = super().argument_parser()
-        parser.add_argument('--reason', required=False, help='Admin reason')
         actions = parser.add_subparsers(dest='action', help='The action to perform')
         action_check = actions.add_parser('check')
         action_check.add_argument('services', nargs='+', help='The services to operate on')

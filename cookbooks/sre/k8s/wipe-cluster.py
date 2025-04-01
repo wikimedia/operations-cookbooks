@@ -61,10 +61,11 @@ class WipeK8sCluster(CookbookBase):
     the above procedure should guarantee to start from a clean state.
     """
 
+    argument_reason_required = True
+
     def argument_parser(self) -> ArgumentParser:
         """Parse the command line arguments."""
         parser = super().argument_parser()
-        parser.add_argument("--reason", required=True, help="Admin reason")
         parser.add_argument(
             "-M",
             "--minutes",

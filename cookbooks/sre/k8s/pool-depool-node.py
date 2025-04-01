@@ -37,6 +37,9 @@ class PoolDepoolK8sNodes(CookbookBase):
         cookbook sre.k8s.pool-depool-node --k8s-cluster wikikube-codfw depool wikikube-worker200[1-5].codfw.wmnet
     """
 
+    argument_reason_required = False
+    argument_task_required = False
+
     def get_runner(self, args: Namespace) -> "PoolDepoolK8sNodesRunner":
         """As specified by Spicerack API."""
         return PoolDepoolK8sNodesRunner(args, self.spicerack)
@@ -49,20 +52,6 @@ class PoolDepoolK8sNodes(CookbookBase):
             required=True,
             help="K8s cluster the nodes are part of",
             choices=ALLOWED_CUMIN_ALIASES.keys(),
-        )
-        parser.add_argument(
-            "-r",
-            "--reason",
-            required=False,
-            help=(
-                "The reason for the pooling/depooling. The current username and originating host are "
-                "automatically added."
-            ),
-        )
-        parser.add_argument(
-            "-t",
-            "--task-id",
-            help="An optional task ID to post a message to (i.e. T12345).",
         )
         actions = parser.add_subparsers(dest="action", help="The action to perform")
         action_pool = actions.add_parser("pool")

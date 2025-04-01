@@ -50,10 +50,11 @@ class UpgradeK8sCluster(CookbookBase):
     of them, so we keep only the worker nodes as mandatory.
     """
 
+    argument_reason_required = True
+
     def argument_parser(self) -> ArgumentParser:
         """Parse the command line arguments."""
         parser = super().argument_parser()
-        parser.add_argument("--reason", required=True, help="Admin reason")
         parser.add_argument(
             "--k8s-cluster",
             required=True,

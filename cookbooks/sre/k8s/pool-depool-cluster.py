@@ -24,10 +24,11 @@ class PoolDepoolCluster(CookbookBase):
         cookbook.sre.k8s.pool-depool-cluster depool --wipe-cache codfw codfw
     """
 
+    argument_reason_required = False
+
     def argument_parser(self) -> ArgumentParser:
         """Parse the command line arguments for all the sre.discovery cookbooks."""
         parser = super().argument_parser()
-        parser.add_argument('--reason', required=False, help='Admin reason')
         actions = parser.add_subparsers(dest="action", help="The action to perform")
         action_check = actions.add_parser("check")
         action_pool = actions.add_parser("pool")
