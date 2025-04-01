@@ -44,19 +44,17 @@ class Upgrade(CookbookBase):
 
     """
 
+    argument_reason_required = True
+    argument_task_required = False
+
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument('--host', required=True, help='Short hostname of the gitlab host to upgrade, not FQDN')
         parser.add_argument('--version', required=True,
                             help='Version of new GitLab Debian package in Debian versioning schema')
-        parser.add_argument('-r', '--reason', required=True,
-                            help=('The reason for the downtime. The current username and originating host are '
-                                  'automatically added.'))
         parser.add_argument('-s', '--skip-replica-backups', help='Skips creating a backup on replica hosts',
                             action='store_true')
-        parser.add_argument('-t', '--task-id', required=False,
-                            help='An optional task ID to refer in the downtime message (i.e. T12345).')
         parser.add_argument("-c", "--skip-confirm-prompt", default=False,
                             help="Skip confirmation prompt before restarting hosts")
         return parser

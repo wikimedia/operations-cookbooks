@@ -22,23 +22,14 @@ class Upgrade(CookbookBase):
         cookbook sre.vrts.ugprade --version 6.5.6 -r "Latest LTS Version" -t T12345 vrts1001
     """
 
+    argument_reason_required = True
+    argument_task_required = False
+
     def argument_parser(self):
         """Parses arguments"""
         parser = super().argument_parser()
         parser.add_argument(
             "--version", required=True, help="Version of new VRTS installation"
-        )
-        parser.add_argument(
-            "-r",
-            "--reason",
-            required=True,
-            help=("The reason for the downtime."),
-        )
-        parser.add_argument(
-            "--task-id",
-            "-t",
-            required=False,
-            help="An task ID that contains details of the new version and to refer to in the downtime message",
         )
         parser.add_argument(
             "host",
