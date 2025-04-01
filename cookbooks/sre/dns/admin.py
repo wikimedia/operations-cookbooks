@@ -23,6 +23,9 @@ class DNSAdmin(CookbookBase):
         cookbook sre.dns.admin depool esams --service text-addrs text-next # [depool esams for text*]
     """
 
+    argument_reason_required = False
+    argument_task_required = False
+
     def argument_parser(self):
         """As specified by the Spicerack API."""
         parser = super().argument_parser()
@@ -32,10 +35,6 @@ class DNSAdmin(CookbookBase):
                             help="The site/DC on which to perform the action on.")
         parser.add_argument("-s", "--service", choices=SERVICES, nargs="*",
                             help="The service in the site/DC on which the action should be performed.")
-        parser.add_argument("-r", "--reason",
-                            help="An optional reason for the action.")
-        parser.add_argument("-t", "--task-id",
-                            help="An optional Phabricator task ID to log the action.")
         parser.add_argument("-f", "--force", action="store_true",
                             help="If passed, do not prompt for any actions (default: prompt)")
         parser.add_argument("--emergency-depool-policy", action="store_true",

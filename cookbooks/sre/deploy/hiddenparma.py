@@ -20,19 +20,8 @@ class HiddenParma(CookbookBase):
         cookbook sre.deploy.hiddenparma -r 'some reason' -t T12345
     """
 
-    def argument_parser(self):
-        """As specified by Spicerack API."""
-        parser = super().argument_parser()
-        parser.add_argument(
-            "-r",
-            "--reason",
-            help=("An optional reason for the deployment. Username/host are added automatically."),
-        )
-        parser.add_argument(
-            "-t", "--task-id", help="An optional task ID to refer in the downtime message (i.e. T12345)."
-        )
-
-        return parser
+    argument_reason_required = False
+    argument_task_required = False
 
     def get_runner(self, args):
         """As specified by Spicerack API."""
