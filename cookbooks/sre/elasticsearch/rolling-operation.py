@@ -293,6 +293,19 @@ class RollingOperationRunner(CookbookRunnerBase):
                 ret_val = self.spicerack.run_cookbook(
                     'sre.hosts.rename', ['-t', self.task_id, hostname, new_hostname]
                 )
+
+                # decide if we're codfw or eqiad
+                fqdn_suffix = ""
+                if "cirrussearch2" in new_hostname:
+                    fqdn_suffix = ".codfw.wmnet"
+                elif "cirrussearch1" in new_hostname:
+                    fqdn_suffix = ".eqiad.wmnet"
+                else:
+                    raise RuntimeError("Couldn't figure out fqdn_suffix, are we neither in eqiad nor codfw?")
+                ret_val = self.spicerack.run_cookbook(
+                    'sre.dns.wipe-cache', [new_hostname + fqdn_suffix]
+                )
+
                 # Add new, http and move-vlan arguments temporarily to facilitate OpenSearch migration (T388610)
                 ret_val = self.spicerack.run_cookbook(
                     'sre.hosts.reimage', ['--os', 'bullseye', '-t', self.task_id, new_hostname,
