@@ -309,7 +309,7 @@ class RollingOperationRunner(CookbookRunnerBase):
                 # Add new, http and move-vlan arguments temporarily to facilitate OpenSearch migration (T388610)
                 ret_val = self.spicerack.run_cookbook(
                     'sre.hosts.reimage', ['--os', 'bullseye', '-t', self.task_id, new_hostname,
-                                          '--new', '--use-http-for-dhcp', '--move-vlan']
+                                          '--new', '--move-vlan']
                 )
 
                 if ret_val != 0:
@@ -317,6 +317,4 @@ class RollingOperationRunner(CookbookRunnerBase):
                                    "Letting the cookbook keep doing its thing, operator can decide what to do later",
                                    ret_val, hostname)
 
-            logger.info("Forcing puppet run after reimage:")
-            puppet = self.spicerack.puppet(nodes.remote_hosts)
-            puppet.run()
+            # TODO: Restart ferm across elastic fleet to account for DNS changes (required if renaming)
