@@ -417,7 +417,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
         logger.info("Monitoring number of wikiuser* connections and sockets on port 3306")
         while datetime.utcnow() < timeout:
             wikiuser_cnt = _gather_instance_status(self.remote_host, self._mysql_instance)
-            if wikiuser_cnt == 0:
+            if wikiuser_cnt == 0 or self.dry_run:
                 logger.info("Connection drain completed")
                 return
 
