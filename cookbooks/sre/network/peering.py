@@ -1,6 +1,5 @@
 """Manage IX peering sessions"""
 
-import argparse
 import logging
 import smtplib
 from collections import defaultdict
@@ -11,7 +10,7 @@ from ipaddress import ip_address
 
 from prettytable import PrettyTable
 
-from spicerack.cookbook import ArgparseFormatter, CookbookBase, CookbookInitSuccess, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookInitSuccess, CookbookRunnerBase
 from wmflib.interactive import ask_confirmation
 
 from cookbooks.sre.network import get_junos_bgp_summary, run_junos_commands
@@ -64,7 +63,7 @@ class Peering(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(description=self.__doc__, formatter_class=ArgparseFormatter)
+        parser = super().argument_parser()
         parser.add_argument('action', help='Action to perform', choices=['show', 'configure', 'clear', 'email'])
         parser.add_argument('ASN', help='Peer ASN', type=int)
         parser.add_argument('--no-cache', action='store_true', help='Bypass local PeeringDB cache.')
