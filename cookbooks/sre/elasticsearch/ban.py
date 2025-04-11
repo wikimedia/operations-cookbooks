@@ -1,6 +1,5 @@
 """Ban nodes based on hostname or other attributes."""
 
-import argparse
 import logging
 import yaml
 
@@ -19,8 +18,7 @@ class BanNode(CookbookBase):
 
     def argument_parser(self):
         """As specified by Spicerack API."""
-        parser = argparse.ArgumentParser(prog=__name__, description=__doc__,
-                                         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        parser = super().argument_parser()
         parser.add_argument('action', choices=('ban', 'unban'),
                             help='One of: %(choices)s.')
         parser.add_argument('clustergroup', choices=CLUSTERGROUPS, help='Name of clustergroup. One of: %(choices)s.')

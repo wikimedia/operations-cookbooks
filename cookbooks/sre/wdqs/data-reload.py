@@ -142,8 +142,7 @@ class DataReload(CookbookBase):
 
     def argument_parser(self):
         """Parse the command line arguments for this cookbook."""
-        parser = argparse.ArgumentParser(description=__doc__,
-                                         formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser = super().argument_parser()
         parser.add_argument('host', help='select a single WDQS host.')
         parser.add_argument('--task-id', help='task id for the change')
         parser.add_argument('--reason', required=True, help='Administrative Reason')
