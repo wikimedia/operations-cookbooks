@@ -7,7 +7,7 @@ Usage example:
 import argparse
 import logging
 
-__title__ = "Cassandra repair cookbook"
+
 logger = logging.getLogger(__name__)
 
 

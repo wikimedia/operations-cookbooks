@@ -27,8 +27,6 @@ POOLS = ['apache2', 'nginx']
 
 logger = logging.getLogger(__name__)
 
-__title__ = 'Restart services on various appserver clusters'
-
 
 def check_percentage(arg):
     """Type checker for a percentage between 0 and 100."""

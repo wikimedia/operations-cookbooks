@@ -1,4 +1,4 @@
-"""List the uptime of PDU's
+"""List the uptime of PDU's 🔌
 
 - Optionally checks if the default user is still configured.
 - Default user is 'root'
@@ -19,7 +19,6 @@ from wmflib.interactive import get_secret
 from cookbooks.sre import pdus
 
 
-__title__ = 'List PDU 🔌 uptime'
 logger = logging.getLogger(__name__)
 
 

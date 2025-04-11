@@ -1,4 +1,4 @@
-"""Reboot all machines in a cluster.
+"""Perform a rolling reboot of a conftool cluster
 
 For groups of machines in the cluster it will:
 - Depool all machines
@@ -33,7 +33,6 @@ from spicerack.remote import RemoteCheckError, RemoteExecutionError
 from wmflib.constants import CORE_DATACENTERS
 
 
-__title__ = "Perform a rolling reboot of a conftool cluster"
 __owner_team__ = "Infrastructure Foundations"
 logger = logging.getLogger(__name__)
 

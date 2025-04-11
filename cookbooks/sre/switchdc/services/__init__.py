@@ -8,9 +8,6 @@ from cookbooks.sre.discovery.datacenter import EXCLUDED_SERVICES
 from cookbooks.sre.switchdc.mediawiki import MEDIAWIKI_SERVICES, MEDIAWIKI_RO_SERVICES
 
 
-__title__ = __doc__
-
-
 def load_services():
     """Load the dc-local hostnames for all active-active services."""
     # TODO: find a way to use spicerack.config_dir here

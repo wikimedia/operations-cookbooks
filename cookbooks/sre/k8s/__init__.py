@@ -17,7 +17,6 @@ from wmflib import phabricator
 from cookbooks.sre import (PHABRICATOR_BOT_CONFIG_FILE, SREBatchBase,
                            SRELBBatchRunnerBase)
 
-__title__ = __doc__
 __owner_team__ = "ServiceOps"
 
 logger = logging.getLogger(__name__)

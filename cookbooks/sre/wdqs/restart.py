@@ -12,7 +12,6 @@ from datetime import timedelta
 from . import check_hosts_are_valid
 
 
-__title__ = "WDQS services restart cookbook"
 logger = logging.getLogger(__name__)
 
 

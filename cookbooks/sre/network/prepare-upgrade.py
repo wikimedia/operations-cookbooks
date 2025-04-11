@@ -17,7 +17,7 @@ from wmflib.interactive import ensure_shell_is_durable
 
 from cookbooks.sre.network import parse_results
 
-__title__ = 'Prepare the software upgrade of a network device'
+
 logger = logging.getLogger(__name__)
 
 

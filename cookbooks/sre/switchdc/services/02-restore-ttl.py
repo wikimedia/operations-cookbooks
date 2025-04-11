@@ -4,14 +4,13 @@ import logging
 from cookbooks.sre.switchdc.services import argument_parser_base, load_services, post_process_args
 
 
-__title__ = __doc__
 logger = logging.getLogger(__name__)
 SERVICES = load_services()
 
 
 def argument_parser():
     """As specified by Spicerack API."""
-    return argument_parser_base(__name__, __title__, SERVICES)
+    return argument_parser_base(__name__, __doc__, SERVICES)
 
 
 def run(args, spicerack):

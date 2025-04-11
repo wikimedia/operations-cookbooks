@@ -13,8 +13,6 @@ from cumin.transports import Command
 from spicerack.remote import RemoteHosts
 
 
-__title__ = __doc__
-
 logger = logging.getLogger(__name__)
 KERBEROS_KDC_KEYTAB_PATH = '/srv/kerberos/keytabs'
 DEPLOYMENT_HOST = 'deployment.eqiad.wmnet'

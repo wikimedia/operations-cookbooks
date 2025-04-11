@@ -64,8 +64,6 @@ BLAZEGRAPH_INSTANCES = {
 }
 
 LVS_STRATEGY = ['neither', 'source-only', 'dest-only', 'both']
-
-__title__ = "WDQS data transfer cookbook"
 logger = logging.getLogger(__name__)
 
 

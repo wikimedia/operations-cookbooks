@@ -11,7 +11,6 @@ from wmflib.interactive import AbortError, ask_confirmation, ensure_shell_is_dur
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 
-__title__ = __doc__
 logger = logging.getLogger(__name__)
 
 

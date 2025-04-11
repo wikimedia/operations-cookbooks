@@ -12,7 +12,6 @@ from spicerack.dnsdisc import Discovery, DiscoveryError, DiscoveryCheckError
 from spicerack.remote import Remote
 
 logger = logging.getLogger(__name__)
-__title__ = __doc__
 __owner_team__ = "ServiceOps"
 
 # Some IP from a subnet of each DC (to be used for EDNS lookups)

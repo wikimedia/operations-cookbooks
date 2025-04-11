@@ -17,7 +17,6 @@ from wmflib.constants import CORE_DATACENTERS
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 
-__title__ = __doc__
 DNS_SHORT_TTL = 10  # DNS short TTL in seconds to use during the switchdc
 DEFAULT_READ_ONLY_REASON = (
     "You can't edit now. This is because of maintenance. Copy and save your text and try again "

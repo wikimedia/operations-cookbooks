@@ -16,7 +16,6 @@ from spicerack.remote import RemoteExecutionError
 from . import check_hosts_are_valid
 
 
-__title__ = "WDQS reboot cookbook"
 logger = logging.getLogger(__name__)
 
 SERVICES = {

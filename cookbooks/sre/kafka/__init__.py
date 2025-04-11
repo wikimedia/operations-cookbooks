@@ -38,5 +38,4 @@ There are some things to keep into consideration:
    same time it becomes a big problem).
 """
 
-__title__ = __doc__
 __owner_team__ = "Data Platform"

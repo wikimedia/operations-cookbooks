@@ -1,4 +1,4 @@
-"""Update Sentry PDUs passwords.
+"""Update Sentry PDUs 🔌 passwords.
 
 - Optionally checks if the default user is still configured.
 - Default user is 'root'
@@ -20,7 +20,6 @@ from wmflib.interactive import ensure_shell_is_durable, get_secret
 from cookbooks.sre import pdus
 
 
-__title__ = 'Update Sentry PDUs 🔌 passwords'
 logger = logging.getLogger(__name__)
 
 

@@ -6,13 +6,12 @@ from wmflib.constants import CORE_DATACENTERS
 
 from cookbooks.sre.elasticsearch import CLUSTERGROUPS
 
-__title__ = __doc__
 logger = logging.getLogger(__name__)
 
 
 def argument_parser():
     """As specified by Spicerack API."""
-    parser = argparse.ArgumentParser(prog=__name__, description=__title__,
+    parser = argparse.ArgumentParser(prog=__name__, description=__doc__,
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('clustergroup', choices=CLUSTERGROUPS, help='Name of clustergroup. One of: %(choices)s.')
     parser.add_argument('--write-queue-datacenters', choices=CORE_DATACENTERS, default=CORE_DATACENTERS, nargs='+',

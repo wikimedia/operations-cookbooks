@@ -15,7 +15,6 @@ from cumin.transports import Command
 from wmflib.interactive import ask_confirmation, confirm_on_failure
 
 
-__title__ = 'Update and deploy the DNS records generated from Netbox'
 __owner_team__ = "Infrastructure Foundations"
 MAX_CONCURRENCY = 1
 LOCK_TTL = 300

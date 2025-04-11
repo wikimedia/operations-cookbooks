@@ -9,7 +9,7 @@ from spicerack.netbox import Netbox
 from spicerack.remote import Remote, RemoteHosts
 from wmflib.interactive import ask_confirmation
 
-__title__ = __doc__
+
 __owner_team__ = "Infrastructure Foundations"
 logger = logging.getLogger(__name__)
 

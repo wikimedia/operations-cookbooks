@@ -1,4 +1,4 @@
-"""Cookbook to rotate snmp strings"""
+"""Update Sentry PDUs 🔌 SNMP communities"""
 # pylint overrides are for https://bugs.python.org/issue31844 but on 3.10 it's fixed, so adding the useless suppression
 # pylint: disable=useless-suppression
 from datetime import datetime
@@ -13,7 +13,7 @@ from wmflib.interactive import ensure_shell_is_durable, get_secret
 
 from cookbooks.sre import pdus
 
-__title__ = 'Update Sentry PDUs 🔌 SNMP communities'
+
 logger = getLogger(__name__)
 
 
