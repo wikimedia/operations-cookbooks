@@ -199,6 +199,12 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                              'More info: https://wikitech.wikimedia.org/wiki/Vlan_migration\n'
                              'Continue to ignore.')
 
+        # Do not reimage pooled DBs
+        dbctl_instance = spicerack.dbctl().instance.get(self.host)
+        if dbctl_instance is not None and any(section['pooled'] for section in dbctl_instance.sections.values()):
+            ask_confirmation(f'ATTENTION: host {self.host} is present in dbctl and seems to be currently POOLED. '
+                             f'Are you sure you want to proceed?\nCurrent sections config: {dbctl_instance.sections}')
+
         # The same as self.remote_host but using the SSH key valid only during installation before the first Puppet run
         self.remote_installer = spicerack.remote(installer=True).query(self.fqdn)
         # Get a Puppet instance for the current cumin host to update the known hosts file
