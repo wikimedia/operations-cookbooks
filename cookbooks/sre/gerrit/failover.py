@@ -2,7 +2,7 @@
 
 This module defines a cookbook to manage Gerrit failover operations between two hosts.
 """
-__argument_task_required__ = False
+
 import logging
 import re
 from time import sleep
@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 class Failover(CookbookBase):
     """Performs a failover from one Gerrit host to another."""
+
+    argument_task_required = False
 
     def argument_parser(self) -> ArgumentParser:
         """Parses arguments."""
