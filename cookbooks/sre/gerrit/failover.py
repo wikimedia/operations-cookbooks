@@ -80,7 +80,8 @@ class FailoverRunner(CookbookRunnerBase):
             f"Please merge the change to set the DNS records for Gerrit primary on {self.switch_to_host}. "
             "I will pause for 3 minutes to let them refresh everywhere once you hit go."
         )
-        sleep(180)
+        if not self.spicerack.dry_run:
+            sleep(180)
         ask_confirmation(
             f"Please merge the change to set the puppet role for Gerrit primary on {self.switch_to_host}. "
             "When you hit go, we will re-enable puppet and execute a puppet run."
@@ -88,12 +89,15 @@ class FailoverRunner(CookbookRunnerBase):
         self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
         ask_confirmation(
             "Please verify that the switchover to gerrit.wikimedia.org is operating as expected. "
-            "Please verify that the switchover to gerrit-replica.wikimedia.org is also operating as expected, "
-            "it should return a 404 on /. "
             f"Once you are certain please merge the change to set the puppet role for {self.switch_from_host}, "
             "and we will re-enable and run puppet."
         )
         self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
+        ask_confirmation(
+            "Please verify that the switchover to gerrit-replica.wikimedia.org is also operating as expected, "
+            "it should return a 404 on /. If needed, please follow the remaining guidelines "
+            "listed here: https://w.wiki/DoeG"
+        )
 
     @property
     def runtime_description(self) -> str:
@@ -136,7 +140,7 @@ class FailoverRunner(CookbookRunnerBase):
             )
         ]
 
-        if idempotent:
+        if idempotent and not self.spicerack.dry_run:
             ret = [
                 self.rsync_no_changes(list(t)[0][1].message().decode("utf-8")) for t in transfers
             ]
