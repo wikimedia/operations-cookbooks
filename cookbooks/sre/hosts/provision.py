@@ -36,6 +36,11 @@ SUPERMICRO_AMD_DEVICE_SLUGS = (
     'as-2014s-tr',
 )
 
+# T387577
+SUPERMICRO_PXE_BUG_SLUGS = (
+    'sys-120c-tr-configc',
+)
+
 # See https://phabricator.wikimedia.org/T387577#10627655
 SUPERMICRO_UEFI_NIC_PXE_BIOS_FIRMWARES = (
     'BIOS_X12DDW-1B58_20240704_2.1_STDsp.bin',
@@ -150,6 +155,11 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             # https://phabricator.wikimedia.org/T378368
             "P1_AIOMAOC_ATGC_i2TMLAN1OPROM"
         ]
+
+        if self.device_model_slug in SUPERMICRO_PXE_BUG_SLUGS:
+            ask_confirmation(
+                "Due to T387577, during the first configuration of the server "
+                "please run provision twice to set PXE to the right NIC/port.")
 
         # Init redfish with a fake password, since in __init__ we just need
         # some metadata about the host like IP etc..
