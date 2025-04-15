@@ -74,6 +74,15 @@ class FailoverRunner(CookbookRunnerBase):
         )
 
         self.sync_files()
+        self.switch_from_host.run_sync(
+            "systemctl stop gerrit",
+            print_progress_bars=False, print_output=True
+        )
+        self.switch_to_host.run_sync(
+            "systemctl stop gerrit",
+            print_progress_bars=False, print_output=True
+        )
+        # TODO offer a landing page either through Gerrit itself or through a http server
         self.spicerack.puppet(self.switch_from_host).disable(self.reason)
         self.sync_files(idempotent=True)
         ask_confirmation(
@@ -87,12 +96,20 @@ class FailoverRunner(CookbookRunnerBase):
             "When you hit go, we will re-enable puppet and execute a puppet run."
         )
         self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
+        self.switch_to_host.run_sync(
+            "systemctl restart gerrit",
+            print_progress_bars=False, print_output=True
+        )
         ask_confirmation(
             "Please verify that the switchover to gerrit.wikimedia.org is operating as expected. "
             f"Once you are certain please merge the change to set the puppet role for {self.switch_from_host}, "
             "and we will re-enable and run puppet."
         )
         self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
+        self.switch_from_host.run_sync(
+            "systemctl restart gerrit",
+            print_progress_bars=False, print_output=True
+        )
         ask_confirmation(
             "Please verify that the switchover to gerrit-replica.wikimedia.org is also operating as expected, "
             "it should return a 404 on /. If needed, please follow the remaining guidelines "
