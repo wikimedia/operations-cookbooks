@@ -285,14 +285,21 @@ class RollingOperationRunner(CookbookRunnerBase):
             nodes.start_elasticsearch()
 
         if self.operation is Operation.REIMAGE:
+            def run_arbitrary_cookbook(name, args, hostname):
+                print(f"Running cookbook {name} with args={args} on {hostname}")
+                ret_val = self.spicerack.run_cookbook(name, args)
+                if ret_val != 0:
+                    logger.warning("Got non-zero exit code of %d for reimage cookbook on host %s\n"
+                                   "Letting the cookbook keep doing its thing, operator can decide what to do later",
+                                   ret_val, hostname)
+
             nodeset = nodes.remote_hosts.hosts
             for node in nodeset:
                 hostname = node.split('.')[0]
                 new_hostname = "cirrussearch{}".format(hostname.split('elastic')[1])
                 # sre.hosts.rename -t T388610 elastic2055 cirrussearch2055
-                ret_val = self.spicerack.run_cookbook(
-                    'sre.hosts.rename', ['-t', self.task_id, hostname, new_hostname]
-                )
+                run_arbitrary_cookbook('sre.hosts.rename', ['-t', self.task_id,
+                                       hostname, new_hostname], new_hostname)
 
                 # decide if we're codfw or eqiad
                 fqdn_suffix = ""
@@ -302,19 +309,14 @@ class RollingOperationRunner(CookbookRunnerBase):
                     fqdn_suffix = ".eqiad.wmnet"
                 else:
                     raise RuntimeError("Couldn't figure out fqdn_suffix, are we neither in eqiad nor codfw?")
-                ret_val = self.spicerack.run_cookbook(
-                    'sre.dns.wipe-cache', [new_hostname + fqdn_suffix]
-                )
+                run_arbitrary_cookbook('sre.dns.wipe-cache', [new_hostname + fqdn_suffix], new_hostname)
 
                 # Add new, http and move-vlan arguments temporarily to facilitate OpenSearch migration (T388610)
-                ret_val = self.spicerack.run_cookbook(
+                run_arbitrary_cookbook(
                     'sre.hosts.reimage', ['--os', 'bullseye', '-t', self.task_id, new_hostname,
-                                          '--new', '--move-vlan']
+                                          '--new', '--move-vlan'], new_hostname
                 )
 
-                if ret_val != 0:
-                    logger.warning("Got non-zero exit code of %d for reimage cookbook on host %s\n"
-                                   "Letting the cookbook keep doing its thing, operator can decide what to do later",
-                                   ret_val, hostname)
+                # TODO: run puppet on host an additional time
 
             # TODO: Restart ferm across elastic fleet to account for DNS changes (required if renaming)
