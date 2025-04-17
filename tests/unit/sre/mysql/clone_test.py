@@ -125,6 +125,7 @@ def test_check_if_target_is_already_on_dbctl(dbctl):
 yamlconf = dict(replication_user="ru", replication_password="rp")
 
 
+@patch("cookbooks.sre.mysql.clone.time.sleep")
 @patch("cookbooks.sre.mysql.clone.retry", autospec=True)
 @patch("cookbooks.sre.mysql.clone.ensure_shell_is_durable", autospec=True)
 @patch("cookbooks.sre.mysql.clone.ask_confirmation", autospec=True)
@@ -136,7 +137,8 @@ yamlconf = dict(replication_user="ru", replication_password="rp")
 @patch("cookbooks.sre.mysql.clone._remotehosts_query", autospec=True)
 @patch("spicerack.Spicerack", autospec=True)
 def test_run(
-    m_sr, m_remotehosts_query, m_gdbi, m_loadyaml, m_run, m_xfr, m_add_host_zarc, m_ask_conf, m_ensure_shell, m_retry
+    m_sr, m_remotehosts_query, m_gdbi, m_loadyaml, m_run, m_xfr, m_add_host_zarc, m_ask_conf, m_ensure_shell, m_retry,
+    m_sleep
 ):
 
     def netbox(hn):
@@ -231,7 +233,7 @@ def test_run(
     # mock _run
     def _run(host, cmd, *a, **kw):
         n = host.__name
-        if (n, cmd) == ("src", 'mysql -e "SHOW SLAVE STATUS\G"'):
+        if (n, cmd) == ("src", r'mysql -e "SHOW SLAVE STATUS\G"'):
             return "\nMaster_Log_File: foo\nExec_Master_Log_Pos: 4"
         if n == "src":
             expected = [

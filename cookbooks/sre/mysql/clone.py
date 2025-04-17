@@ -281,7 +281,7 @@ mariadb::shard: '{section}'
         return False
 
     if dbci.sections[section]["pooled"]:
-        log.warn(f"{hostname} is already pooled in according to {dbci.sections}")
+        log.warning(f"{hostname} is already pooled in according to {dbci.sections}")
 
     return True
 
