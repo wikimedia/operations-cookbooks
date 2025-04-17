@@ -8,7 +8,7 @@ from spicerack.remote import RemoteHosts
 from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
 
 
-class UpdateExtrasBase(SREBatchBase):
+class UpdateExtras(SREBatchBase):
     """Base class for updating the netbox-extras repository."""
 
     valid_actions: tuple[str] = ('restart_daemons',)
