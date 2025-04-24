@@ -25,7 +25,7 @@ DEPLOYMENT_CHARTS_REPO_PATH = '/srv/deployment-charts'
 AUTHDNS_REPO_PATH = '/srv/authdns/git'
 
 # Supported Debian OS versions
-OS_VERSIONS = ('buster', 'bullseye', 'bookworm')
+OS_VERSIONS = ('buster', 'bullseye', 'bookworm', 'trixie')
 
 # Vendor slugs
 DELL_VENDOR_SLUG = 'dell'
