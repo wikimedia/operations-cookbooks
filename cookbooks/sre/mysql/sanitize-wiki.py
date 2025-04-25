@@ -5,7 +5,7 @@ import logging
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack import Spicerack
-from spicerack.mysql import Instance
+from spicerack.mysql import Instance as MInst
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -95,17 +95,17 @@ class SanitizeWikiRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
         self._wiki_names: list[str] = args.wiki
         self.section = "s5"  # we are only adding wikis to s5 for the foreseeable future
+        self._san_sock_fn = f"/run/mysqld/mysqld.{self.section}.sock"
         self.mysql = spicerack.mysql()
         self.check_only = args.check_only
         self.only_grant_and_view = args.only_grant_and_view
         self.logger = logging.getLogger(__name__)
         self.clouddb_hosts = self.mysql.get_dbs("A:db-clouddb-sanitization")
         self.sanitarium_hosts = self.mysql.get_dbs(f"A:db-sanitarium and A:db-section-{self.section}")
+        self.logger.info("Sanitarium hosts: %s", self.sanitarium_hosts)
         self._task_id = str(parse_phabricator_task(args.task))
         self._admin_reason = spicerack.admin_reason(f"Sanitize wiki {self.section}", task_id=self._task_id)
         self._phab = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        # should be f"/run/mysqld/mysqld.s5.sock"
-        self._san_sock_fn: str = self.sanitarium_hosts.list_hosts_instances(group=False)[0].socket
 
     @property
     def lock_args(self):
@@ -178,11 +178,14 @@ class SanitizeWikiRunner(CookbookRunnerBase):
 
     def _setup_clouddb(self, wiki_name: str) -> None:
         """Set up permissions and view database on clouddb hosts for a specific wiki."""
-        instance = Instance(self.clouddb_hosts.remote_hosts, name=self.section)
-        grant_query = f"GRANT SELECT, SHOW VIEW ON `{wiki_name}_p`.* TO `labsdbuser`;"
-        create_db_query = f"CREATE DATABASE {wiki_name}_p;"
-        instance.run_query(grant_query, is_safe=False)
-        instance.run_query(create_db_query, is_safe=False)
+        create_db_query = f"CREATE DATABASE IF NOT EXISTS {wiki_name}_p;"
+        grant_query = f"GRANT SELECT, SHOW VIEW ON {wiki_name}_p.* TO labsdbuser;"
+        for host in self.clouddb_hosts.remote_hosts:
+            instance = MInst(host, name=self.section)
+            self.logger.info("Running '%s' on %s on %s", create_db_query, instance, host)
+            instance.run_query(create_db_query, is_safe=False)
+            self.logger.info("Running '%s' on %s on %s", grant_query, instance, host)
+            instance.run_query(grant_query, is_safe=False)
 
     def _notify_cloud_services(self) -> None:
         msg = f"Sanitization of section {self.section} completed - {self._admin_reason.owner}"
