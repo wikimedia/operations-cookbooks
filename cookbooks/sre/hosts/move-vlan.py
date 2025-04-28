@@ -126,23 +126,26 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
             logger.info('Too many IPs configure on the primary interface, manual migration required.')
             return False
 
-        # Does it have hardcoded IPs (v4 or v6) in any repositories ?
-        found_pattern = check_patterns_in_repo(
-            (
-                GitRepoPath(
-                    remote_host=self.puppet_server, path=PUPPETSERVER_REPO_PATH, pathspec=":!manifests/site.pp"
+        if self.patterns:
+            # Does it have hardcoded IPs (v4 or v6) in any repositories ?
+            found_pattern = check_patterns_in_repo(
+                (
+                    GitRepoPath(
+                        remote_host=self.puppet_server, path=PUPPETSERVER_REPO_PATH, pathspec=":!manifests/site.pp"
+                    ),
+                    GitRepoPath(remote_host=self.puppet_server, path=PUPPETSERVER_PRIVATE_REPO_PATH),
+                    GitRepoPath(remote_host=self.deployment_host, path=MEDIAWIKI_CONFIG_REPO_PATH),
+                    GitRepoPath(remote_host=self.deployment_host, path=DEPLOYMENT_CHARTS_REPO_PATH),
+                    GitRepoPath(remote_host=self.authdns_hosts, path=AUTHDNS_REPO_PATH),
                 ),
-                GitRepoPath(remote_host=self.puppet_server, path=PUPPETSERVER_PRIVATE_REPO_PATH),
-                GitRepoPath(remote_host=self.deployment_host, path=MEDIAWIKI_CONFIG_REPO_PATH),
-                GitRepoPath(remote_host=self.deployment_host, path=DEPLOYMENT_CHARTS_REPO_PATH),
-                GitRepoPath(remote_host=self.authdns_hosts, path=AUTHDNS_REPO_PATH),
-            ),
-            self.patterns,
-            interactive=False,
-        )
-        if found_pattern:
-            # not retuning False as it's informational and not a blocker
-            logger.info('Hardcoded IPs found in the repos, manual additions will be needed during the migration.')
+                self.patterns,
+                interactive=False,
+            )
+            if found_pattern:
+                # not retuning False as it's informational and not a blocker
+                logger.info('Hardcoded IPs found in the repos, manual additions will be needed during the migration.')
+        else:
+            logger.info('Skip looking for hardcoded IPs in the repos.')
 
         return True
 
