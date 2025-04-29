@@ -239,10 +239,10 @@ def _add_host_to_zarcillo(mysql: Mysql, hostname: str, fqdn: str, datacenter: st
         tx.execute(sql, (fqdn, hostname, datacenter, rack))
 
 
-def pool_in_instance_slowly(_run_cookbook, fqdn: str, hostname: str, phabricator_task_id: int) -> None:
+def pool_in_instance(_run_cookbook, fqdn: str, hostname: str, phabricator_task_id: int) -> None:
     reason = f"Pool {fqdn} in after cloning"
     task = f"T{phabricator_task_id}"
-    _run_cookbook("sre.mysql.pool", ["--slow", "--reason", reason, "--task-id", task, hostname], confirm=True)
+    _run_cookbook("sre.mysql.pool", ["--reason", reason, "--task-id", task, hostname], confirm=True)
 
 
 def _check_if_target_is_already_on_dbctl(dbctl: Dbctl, hostname: str, section: str) -> bool:
@@ -542,7 +542,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
         source_alerter.remove_downtime(source_downtime_id)
 
         step("pool", f"Pooling in source {self.source_fqdn}")
-        pool_in_instance_slowly(self._run_cookbook, self.source_fqdn, self.source_hostname, self.phabricator_task_id)
+        pool_in_instance(self._run_cookbook, self.source_fqdn, self.source_hostname, self.phabricator_task_id)
 
         # Now the target:
 
@@ -567,9 +567,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
                 time.sleep(to_wait)
 
             step("pool", f"Pooling in target {self.target_fqdn}")
-            pool_in_instance_slowly(
-                self._run_cookbook, self.target_fqdn, self.target_hostname, self.phabricator_task_id
-            )
+            pool_in_instance(self._run_cookbook, self.target_fqdn, self.target_hostname, self.phabricator_task_id)
 
         msg = f"Finished cloning {self.source_fqdn} to {self.target_fqdn} - {self.admin_reason.owner}"
         self._phab.task_comment(str(self.phabricator_task_id), msg)
