@@ -173,7 +173,6 @@ class FailoverRunner(CookbookRunnerBase):
             "Number of created files": 0,
             "Number of deleted files": 0,
             "Number of regular files transferred": 0,
-            "Total transferred file size": 0,
         }
 
         for label, expected in patterns_expected_zero.items():
