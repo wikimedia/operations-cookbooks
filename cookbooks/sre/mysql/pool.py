@@ -65,14 +65,6 @@ def _run_cmd(host: RemoteHosts, cmd: str, is_safe: bool = False) -> str:
     return list(out)[0][1].message().decode("utf-8")
 
 
-def _count_tcp_connections_port_3306(remote_host: RemoteHosts) -> int:
-    # TODO: this breaks on multiinstance hosts or if there are any other unexpected conns
-    cmd = """ss -ntH state all exclude listening '( dport = :3306 or sport = :3306 )' """
-    out = _run_cmd(remote_host, cmd, is_safe=True)
-    conn_cnt = out.count("\n")
-    return conn_cnt
-
-
 def _fetch_replication_delay_ms(ins: MInst) -> int:
     sql = """
     SELECT TIMESTAMPDIFF(MICROSECOND, max(ts), UTC_TIMESTAMP(6)) AS delta_us
@@ -119,15 +111,6 @@ def _fetch_instance_by_name(dbctl: Dbctl, hostname: str) -> DBCInst:
     dbi = dbctl.instance.get(hostname)
     ensure(dbi is not None, f"Unable to find instance {hostname} in dbctl. Aborting.")
     return dbi
-
-
-def _gather_instance_status(host: RemoteHosts, mi: MInst) -> int:
-    socket_cnt = _count_tcp_connections_port_3306(host)
-    wikiuser_cnt = _fetch_instance_connections_count_wikiusers(mi)
-    delay_ms = _fetch_replication_delay_ms(mi)
-    msg = "Replication delay: %7.3f s Wikiuser conn cnt: %3d TCP socket 3306 cnt: %3d"
-    logger.info(msg, delay_ms / 1000.0, wikiuser_cnt, socket_cnt)
-    return wikiuser_cnt
 
 
 def _check_depooling_last_instance(conf: Dict[str, Any], hostname: str, nocheck_extloads: bool) -> None:
@@ -377,11 +360,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
                 logger.debug("pooling-in completed")
                 return
 
-            monitor_end_t = datetime.utcnow() + timedelta(seconds=sleep_duration)
-            logger.info("Next pool-in step will happen after %s", monitor_end_t)
-            while datetime.utcnow() < monitor_end_t:
-                _gather_instance_status(self.remote_host, self._mysql_instance)
-                sleep(10)
+            sleep(sleep_duration)
 
     def commit_change(self, message: str) -> None:
         """Check the diff and commit the changepy."""
@@ -414,9 +393,9 @@ class PoolDepoolRunner(CookbookRunnerBase):
         NOTE: this does not support misc databases
         """
         timeout = datetime.utcnow() + timedelta(hours=1)
-        logger.info("Monitoring number of wikiuser* connections and sockets on port 3306")
+        logger.info("Monitoring number of wikiuser* connections")
         while datetime.utcnow() < timeout:
-            wikiuser_cnt = _gather_instance_status(self.remote_host, self._mysql_instance)
+            wikiuser_cnt = _fetch_instance_connections_count_wikiusers(self._mysql_instance)
             if wikiuser_cnt == 0 or self.dry_run:
                 logger.info("Connection drain completed")
                 return
