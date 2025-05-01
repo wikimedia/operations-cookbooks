@@ -125,6 +125,7 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         self.host_actions.success('✔️ BMC Hostname updated')
 
         self.propagate_dns()
+
         self.run_cookbook('sre.network.configure-switch-interfaces', [self.new_name], confirm=True)
         self.host_actions.success('✔️ Switch description updated')
         self.switch_description_changed = True
@@ -161,9 +162,10 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         else:
             message = f'Renaming {self.old_name} to {self.new_name}'
         self.run_cookbook('sre.dns.netbox', [message], confirm=True)
+        # Clean out DNS cache to remove stale NXDOMAINs
+        self.run_cookbook('sre.dns.wipe-cache', [self.new_name], confirm=True)
         self.host_actions.success('✔️ DNS updated')
         self.dns_propagated = True
-        # TODO do we care about wiping DNS cache?
 
     def rollback(self):
         """Rollback the various changes depending on the process advancements on failure."""
@@ -187,7 +189,7 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
             logger.debug('Redfish response:\n%s', pformat(response))
             self.host_actions.success('✔️ BMC Hostname rolled back')
 
-        self.host_actions.warning('⚠️//Renaming failed but rollback succedded//⚠️ '
+        self.host_actions.warning('⚠️//Renaming failed but rollback succeeded//⚠️ '
                                   'Please check the logs for the reason and follow up with I/F if needed.'
                                   'Neither puppet nor alerting were re-enabled.')
         self._phab_dump()
