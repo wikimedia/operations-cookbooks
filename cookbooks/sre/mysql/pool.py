@@ -1,6 +1,7 @@
 """Pool or depool a DB from dbctl."""
 
 import logging
+import re
 from argparse import ArgumentParser, Namespace
 from datetime import datetime, timedelta
 from time import sleep
@@ -10,22 +11,20 @@ from conftool.extensions.dbconfig.action import ActionResult
 from conftool.extensions.dbconfig.entities import Instance as DBCInst
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
-from spicerack.dbctl import Dbctl
 from spicerack.decorators import retry
 from spicerack.icinga import IcingaStatusNotFoundError, HostsStatus as IcingaHostsStatus
 from spicerack.icinga import HostStatus as IcingaStatus, IcingaHosts
-from spicerack.mysql import Instance as MInst
-from spicerack.remote import Remote, RemoteHosts
+from spicerack.mysql import Instance as MInst, MysqlRemoteHosts
+from spicerack.remote import RemoteHosts
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
-
+hostname_regex = re.compile(r"[a-z][a-z-]*[a-z](\d{4})")
 logger = logging.getLogger(__name__)
 
 # TODO: improve handling of spurious changes, right now it bails out
 # TODO: check for mysql/metrics errors during the repooling operation?
-# TODO: support both fqdn or hostname as CLI argument
 
 
 def ensure(condition: bool, msg: str) -> None:
@@ -36,25 +35,43 @@ def ensure(condition: bool, msg: str) -> None:
     raise AssertionError(msg)
 
 
-def _fetch_mysql_instance_wildcard(spicerack: Spicerack, hostname: str) -> MInst:
-    ensure("." not in hostname, f"Invalid hostname: contains dot '{hostname}'")
-    db = spicerack.mysql().get_dbs(f"{hostname}.*")
-    instances = db.list_hosts_instances()
-    ensure(len(instances) == 1, f"{len(instances)} found, expected one")
+def _get_mysqlremotehosts(spicerack, fqdn: str) -> MysqlRemoteHosts:
+    query = "P{" + fqdn + "} and A:db-all and not A:db-multiinstance"
+    mrhs: MysqlRemoteHosts = spicerack.mysql().get_dbs(query)
+    ensure(len(mrhs) == 1, f"{len(mrhs)} Mysql instances found, expected one")
+    return mrhs
+
+
+def _get_minst(mrhs: MysqlRemoteHosts) -> MInst:
+    instances: list[MInst] = mrhs.list_hosts_instances()
     return instances[0]
 
 
-def _fetch_db_remotehost(remote: Remote, fqdn: str) -> RemoteHosts:
-    query = "P{" + fqdn + "} and A:db-all and not A:db-multiinstance"
-    h = remote.query(query)
-    ensure(len(h.hosts) == 1, f"{len(h.hosts)} hosts matching '{fqdn}'")
-    return h
+def validate_hostname_extract_dc_fqdn(hn_or_fqdn: str) -> tuple[str, str, str]:
+    """Given a hostname or FQDN, validates it and return the hostname, DC and FQDN"""
+    if "." in hn_or_fqdn:
+        hn, tmp_dc, _ = hn_or_fqdn.split(".", 2)
+    else:
+        hn, tmp_dc = hn_or_fqdn, ""
 
+    m = hostname_regex.fullmatch(hn)
+    if not m:
+        raise ValueError(f"Invalid hostname '{hn}'")
 
-def _get_fqdn(mi: MInst) -> str:
-    t: tuple[str] = tuple(mi.host.hosts)
-    ensure(len(t) == 1, f"{len(t)} hosts in {mi}")
-    return t[0]
+    dcnum = m.group(1)[0]
+    if dcnum == "1":
+        dc = "eqiad"
+    elif dcnum == "2":
+        dc = "codfw"
+    else:
+        raise ValueError(f"Invalid hostname '{hn}'")
+
+    fqdn = f"{hn}.{dc}.wmnet"
+
+    if "." in hn_or_fqdn:
+        ensure(tmp_dc == dc and fqdn == hn_or_fqdn, f"Invalid FQDN '{hn_or_fqdn}'")
+
+    return (hn, dc, fqdn)
 
 
 def _run_cmd(host: RemoteHosts, cmd: str, is_safe: bool = False) -> str:
@@ -103,12 +120,6 @@ def _fetch_instance_connections_count_wikiusers(ins: MInst) -> int:
     sql = "SELECT COUNT(*) AS cnt FROM information_schema.processlist WHERE user LIKE '%%wiki%%'"
     row = ins.fetch_one_row(sql, ())
     return int(row["cnt"])
-
-
-def _fetch_instance_by_name(dbctl: Dbctl, hostname: str) -> DBCInst:
-    dbi = dbctl.instance.get(hostname)
-    ensure(dbi is not None, f"Unable to find instance {hostname} in dbctl. Aborting.")
-    return dbi
 
 
 def _check_depooling_last_instance(conf: dict[str, Any], hostname: str, nocheck_extloads: bool) -> None:
@@ -203,7 +214,7 @@ class Pool(CookbookBase):
             )
 
         # TODO: add support for multiple instances? Based on what? (puppetdb, dbctl, orchestrator)
-        parser.add_argument("instance", help="Instance name as defined in dbctl.")
+        parser.add_argument("instance", help="Hostname or FQDN")
 
         return parser
 
@@ -251,14 +262,20 @@ class PoolDepoolRunner(CookbookRunnerBase):
             else:
                 self.steps = (6, 25, 56, 100)  # 4 steps, power of 2 progression
 
-        dbi: DBCInst = _fetch_instance_by_name(self.dbctl, args.instance)
-        self._hostname = dbi.name
-        self._mysql_instance: MInst = _fetch_mysql_instance_wildcard(spicerack, dbi.name)
-        fqdn = _get_fqdn(self._mysql_instance)
+        hostname, _dc, fqdn = validate_hostname_extract_dc_fqdn(args.instance)
+
+        mrhs = _get_mysqlremotehosts(spicerack, fqdn)
+        self._mysql_instance: MInst = _get_minst(mrhs)
+
+        dbi: DBCInst = self.dbctl.instance.get(hostname)
+        ensure(dbi is not None, f"Unable to find instance {hostname} in dbctl. Aborting.")
+        ensure(dbi.name == hostname, f"Incorrect host found {dbi.name} vs {hostname}")
+        self._hostname = hostname
 
         self.datacenter = dbi.tags.get("datacenter")
-        self.remote_host = _fetch_db_remotehost(spicerack.remote(), fqdn)
-        self._icinga_host = spicerack.icinga_hosts(self.remote_host.hosts)
+
+        nodeset = mrhs.remote_hosts.hosts
+        self._icinga_host = spicerack.icinga_hosts(nodeset)
 
         self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 

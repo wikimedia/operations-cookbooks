@@ -10,9 +10,13 @@ tox -e py311-unit -- tests/unit/sre/mysql/pool_test.py -vv
 import json
 from pathlib import Path
 from unittest import mock
+from argparse import Namespace
+
+from spicerack.mysql import Instance as MInst
 
 import cookbooks.sre.mysql.pool
 from cookbooks.sre.mysql.pool import (
+    PoolDepoolRunner,
     _fetch_instance_connections_count_wikiusers,
     _fetch_instance_connections_count_detailed,
     _check_depooling_last_instance,
@@ -74,3 +78,46 @@ def test_poll_icinga_notification_status(mock_ihs):
     mock_ihs.get_status.return_value = {"foo": s}
     _poll_icinga_notification_status(mock_ihs, "foo")
     mock_ihs.get_status.assert_called()
+
+
+@mock.patch("cookbooks.sre.mysql.pool.ensure_shell_is_durable", autospec=True)
+@mock.patch("spicerack.Spicerack", autospec=True)
+def test_runner_init_from_hostname(mock_sr, _ensure_shell):
+    mi = mock.MagicMock()
+    mi.host.hosts = ["db1234.eqiad.wmnet"]
+    mock_sr.dbctl.return_value.instance.get.return_value.name = "db1234"
+
+    mrhs = mock.MagicMock(name="my_mrhs")
+    mrhs.__len__.return_value = 1
+    assert len(mrhs) == 1
+    mock_sr.mysql().get_dbs.return_value = mrhs
+
+    mock_sr.mysql().get_dbs.return_value.list_hosts_instances.return_value = [mi]
+    args = Namespace(operation="pool", reason="test", task_id="T0", slow=None, fast=None, instance="db1234")
+    PoolDepoolRunner(args, mock_sr)
+
+    mock_sr.mysql.return_value.get_dbs.assert_called_with(
+        "P{db1234.eqiad.wmnet} and A:db-all and not A:db-multiinstance"
+    )
+    mock_sr.dbctl.return_value.instance.get.assert_called_with("db1234")
+
+
+@mock.patch("cookbooks.sre.mysql.pool.ensure_shell_is_durable", autospec=True)
+@mock.patch("spicerack.Spicerack", autospec=True)
+def test_runner_init_from_fqdn(mock_sr, _ensure_shell):
+    mi = mock.MagicMock()
+    mi.host.hosts = ["db1000.eqiad.wmnet"]
+    mock_sr.dbctl.return_value.instance.get.return_value.name = "db1000"
+
+    mrhs = mock.MagicMock(name="my_mrhs")
+    mrhs.__len__.return_value = 1
+    assert len(mrhs) == 1
+    mock_sr.mysql().get_dbs.return_value = mrhs
+
+    args = Namespace(operation="pool", reason="test", task_id="T0", slow=None, fast=None, instance="db1000.eqiad.wmnet")
+    PoolDepoolRunner(args, mock_sr)
+
+    mock_sr.mysql.return_value.get_dbs.assert_called_with(
+        "P{db1000.eqiad.wmnet} and A:db-all and not A:db-multiinstance"
+    )
+    mock_sr.dbctl.return_value.instance.get.assert_called_with("db1000")
