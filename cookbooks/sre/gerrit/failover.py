@@ -5,12 +5,12 @@ This module defines a cookbook to manage Gerrit failover operations between two 
 
 import logging
 import re
-from time import sleep
+import subprocess
 from datetime import timedelta
 from argparse import ArgumentParser
 
 from spicerack.decorators import retry
-from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
+from wmflib.interactive import ensure_shell_is_durable, ask_confirmation, ask_input
 from cookbooks.sre import CookbookBase, CookbookRunnerBase, PHABRICATOR_BOT_CONFIG_FILE
 
 logger = logging.getLogger(__name__)
@@ -54,13 +54,73 @@ class FailoverRunner(CookbookRunnerBase):
         self.switch_to_host = spicerack.remote().query(f"{args.switch_to_host}.*")
         self.message = f"from {self.switch_from_host} to {self.switch_to_host}"
 
-        self.phabricator = (
-            spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        )
-
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         self.reason = self.spicerack.admin_reason(reason=self.message)
 
         self.confirm_before_proceeding()
+
+    @property
+    def runtime_description(self) -> str:
+        """Returns a nicely formatted message describing what we're doing."""
+        return self.message
+
+    def confirm_before_proceeding(self) -> None:
+        """Make sure the user knows what the cookbook will do and they can check the hosts are correct."""
+        ask_input(
+            f"This will migrate gerrit.wikimedia.org to {self.switch_to_host}. "
+            f"Check that this is definitely what you want to do, by typing {self.switch_to_host}:\n$ ",
+            choices=['gerrit1003', 'gerrit2002', 'gerrit2003']
+            # TODO probe spicerack for host list instead of hardcoding it
+        )
+
+    def probe_dns_on_host(self, host, name: str) -> set[str]:
+        """Execute 'dig +short name' on the given host and return the set of IP addresses it resolves to."""
+        result = host.run_sync(
+            f"dig +short {name}",
+            print_progress_bars=False,
+            print_output=False
+        )
+        raw_output = result[0][1].message().decode().strip().splitlines()
+        return {line for line in raw_output if line}
+
+    @retry(
+        tries=40,
+        delay=timedelta(seconds=15),
+        backoff_mode="constant",
+        failure_message="Waiting for DNS propagation failed",
+        exceptions=(RuntimeError,),
+    )
+    def ensure_dns_propagated(self, hostname: str, expected_ip: str) -> None:
+        """Probe both Gerrit servers and assert they both resolve 'hostname' to exactly {expected_ip}.
+
+        Raises:
+            RuntimeError: triggers retry if DNS is not yet stable.
+
+        """
+        exit_code = self.spicerack.run_cookbook("sre.dns.wipe-cache",
+                                                args=[
+                                                    "gerrit.wikimedia.org",
+                                                    "gerrit-replica.wikimedia.org"
+                                                ], raises=True)
+        if exit_code != 0:
+            raise RuntimeError("Failed to wipe DNS cache")
+
+        servers = [self.switch_from_host, self.switch_to_host]
+        seen = {}
+
+        for srv in servers:
+            try:
+                ips = self.probe_dns_on_host(srv, hostname)
+            except subprocess.CalledProcessError as e:
+                logger.warning("DNS probe error on %s: %s", srv, e)
+                ips = set()
+            seen[srv.hosts[0].name] = ips
+            logger.debug("DNS seen by %s -> %s", srv.hosts[0].name, ips)
+
+        if any(ips != {expected_ip} for ips in seen.values()):
+            raise RuntimeError(f"DNS not stable yet: {seen}")
+
+        logger.info("DNS propagated consistently to %s on both servers", expected_ip)
 
     def run(self) -> None:
         """Entrypoint to execute cookbook."""
@@ -85,12 +145,15 @@ class FailoverRunner(CookbookRunnerBase):
         # TODO offer a landing page either through Gerrit itself or through a http server
         self.spicerack.puppet(self.switch_from_host).disable(self.reason)
         self.sync_files(idempotent=True)
+
         ask_confirmation(
             f"Please merge the change to set the DNS records for Gerrit primary on {self.switch_to_host}. "
-            "I will pause for 3 minutes to let them refresh everywhere once you hit go."
+            "I will wait for propagation across both Gerrit hosts."
         )
         if not self.spicerack.dry_run:
-            sleep(180)
+            expected_ip = self.switch_to_host.hosts[0].ip
+            self.ensure_dns_propagated("gerrit.wikimedia.org", expected_ip)
+
         ask_confirmation(
             f"Please merge the change to set the puppet role for Gerrit primary on {self.switch_to_host}. "
             "When you hit go, we will re-enable puppet and execute a puppet run."
@@ -112,20 +175,8 @@ class FailoverRunner(CookbookRunnerBase):
         )
         ask_confirmation(
             "Please verify that the switchover to gerrit-replica.wikimedia.org is also operating as expected, "
-            "it should return a 404 on /. If needed, please follow the remaining guidelines "
-            "listed here: https://w.wiki/DoeG"
-        )
-
-    @property
-    def runtime_description(self) -> str:
-        """Returns a nicely formatted message describing what we're doing."""
-        return self.message
-
-    def confirm_before_proceeding(self) -> None:
-        """Make sure the user knows what the cookbook will do and they can check the hosts are correct."""
-        ask_confirmation(
-            f"This will migrate gerrit.wikimedia.org to {self.switch_to_host}. "
-            "Check that this is definitely what you want to do."
+            "it should return a 404 on /. If needed, please follow the remaining guidelines listed here: "
+            "https://w.wiki/DoeG"
         )
 
     @retry(
@@ -163,7 +214,7 @@ class FailoverRunner(CookbookRunnerBase):
             ]
             if all(ret):
                 return True
-            raise RuntimeError
+            raise RuntimeError("Rsync showed changes, retrying")
 
         return True
 
@@ -176,12 +227,9 @@ class FailoverRunner(CookbookRunnerBase):
         }
 
         for label, expected in patterns_expected_zero.items():
-            pattern = rf"{re.escape(label)}:\s+(\d+)"
+            pattern = rf"{re.escape(label)}:\\s+(\\d+)"
             match = re.search(pattern, rsync_output)
-            if not match:
-                return False
-            value = int(match.group(1))
-            if value != expected:
+            if not match or int(match.group(1)) != expected:
                 return False
 
         return True
