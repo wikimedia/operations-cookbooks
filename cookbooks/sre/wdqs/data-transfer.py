@@ -256,9 +256,9 @@ class DataTransferRunner(CookbookRunnerBase):
                     self.r_dest.run_sync('chown blazegraph: "{file}"'.format(file=file))
 
                 if bg_instance_name not in ('categories'):
-                    logger.info('Setting file %s/data_loaded to %s', data_path, self.blazegraph_instance)
-                    self.r_dest.run_sync('echo {blazegraph_instance} > {data_path}/data_loaded'.format(
-                        blazegraph_instance=self.blazegraph_instance, data_path=data_path))
+                    logger.info('Setting file %s/data_loaded to %s', data_path, bg_instance_name)
+                    self.r_dest.run_sync('echo {bg_instance_name} > {data_path}/data_loaded'.format(
+                        bg_instance_name=bg_instance_name, data_path=data_path))
 
                 if bg_instance_name == 'categories':
                     logger.info('Reloading nginx to load new categories mapping')
