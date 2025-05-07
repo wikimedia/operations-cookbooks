@@ -4,6 +4,7 @@ import importlib
 import inspect
 import pathlib
 import os
+import sys
 
 from pkgutil import iter_modules
 from setuptools import find_packages
@@ -49,6 +50,9 @@ def get_modules():
     base_path = pathlib.Path(os.getcwd()) / base_package
     modules = set()
     for package in find_packages(base_path):
+        if sys.version_info >= (3, 10) and str(package) == "sre.elasticsearch":
+            continue  # Skipping elasticsearch cookbooks in Python 3.10+
+
         modules.add(f"{base_package}.{package}")
         package_path = base_path / package.replace(".", "/")
         for module_info in iter_modules([str(package_path)]):

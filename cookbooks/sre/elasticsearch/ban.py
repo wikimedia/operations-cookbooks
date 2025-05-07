@@ -3,7 +3,7 @@
 import logging
 import yaml
 
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch  # pylint: disable=no-name-in-module
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
 from wmflib.constants import CORE_DATACENTERS
@@ -115,11 +115,11 @@ class BanNodeRunner(CookbookRunnerBase):
         if self.action == "unban":
             logger.info("Unbanning all nodes using endpoint %s[]", es_endpoint)
             unban_dict = {"persistent": {"cluster.routing.allocation.exclude": {"_host": "", "_ip": "", "_name": ""}}}
-            unban_action = es_client.cluster.put_settings(unban_dict)  # type: ignore [misc]
+            unban_action = es_client.cluster.put_settings(unban_dict)  # type: ignore[misc,unused-ignore]
             logger.info(unban_action)
         if self.action == "ban":
             hosts_to_ban = ",".join(node_names)
             logger.info("Preparing to ban %s using endpoint %s", hosts_to_ban, es_endpoint)
             ban_dict = {"persistent": {"cluster.routing.allocation.exclude._name": hosts_to_ban}}
-            ban_action = es_client.cluster.put_settings(ban_dict)  # type: ignore [misc]
+            ban_action = es_client.cluster.put_settings(ban_dict)  # type: ignore[misc,unused-ignore]
             logger.info(ban_action)
