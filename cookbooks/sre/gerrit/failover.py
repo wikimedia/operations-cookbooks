@@ -14,6 +14,13 @@ from wmflib.interactive import ensure_shell_is_durable, ask_confirmation, ask_in
 from cookbooks.sre import CookbookBase, CookbookRunnerBase, PHABRICATOR_BOT_CONFIG_FILE
 
 logger = logging.getLogger(__name__)
+GERRIT_DIR_PREFIX = '/srv/gerrit/'
+GERRIT_BACKUP_PREFIX = '/srv/backup/'
+GERRIT_DIRS = ['All-Users',
+               'data',
+               'git',
+               'plugins',
+               'replication']
 
 
 class Failover(CookbookBase):
@@ -143,6 +150,8 @@ class FailoverRunner(CookbookRunnerBase):
             print_progress_bars=False, print_output=True
         )
         # TODO offer a landing page either through Gerrit itself or through a http server
+        # TODO add a git --git-dir=% git fsck --strict after backuping
+        self._ensure_backup_on_both_sides()
         self.spicerack.puppet(self.switch_from_host).disable(self.reason)
         self.sync_files(idempotent=True)
 
@@ -159,10 +168,12 @@ class FailoverRunner(CookbookRunnerBase):
             "When you hit go, we will re-enable puppet and execute a puppet run."
         )
         self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
+        # TODO check for no --replica in systemd unit
         self.switch_to_host.run_sync(
             "systemctl restart gerrit",
             print_progress_bars=False, print_output=True
         )
+        # TODO https://gerrit-review.googlesource.com/Documentation/rest-api-config.html#check-consistency on the source
         ask_confirmation(
             "Please verify that the switchover to gerrit.wikimedia.org is operating as expected. "
             f"Once you are certain please merge the change to set the puppet role for {self.switch_from_host}, "
@@ -170,7 +181,12 @@ class FailoverRunner(CookbookRunnerBase):
         )
         self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
         self.switch_from_host.run_sync(
-            "systemctl restart gerrit",
+            "systemctl stop gerrit",
+            print_progress_bars=False, print_output=True
+        )
+        # TODO check for --replica in systemd unit, we stop gerrit because puppet starts it
+        self.switch_from_host.run_sync(
+            "systemctl start gerrit",
             print_progress_bars=False, print_output=True
         )
         ask_confirmation(
@@ -178,6 +194,7 @@ class FailoverRunner(CookbookRunnerBase):
             "it should return a 404 on /. If needed, please follow the remaining guidelines listed here: "
             "https://w.wiki/DoeG"
         )
+        # TODO https://gerrit-review.googlesource.com/Documentation/rest-api-config.html#check-consistency on the repl
 
     @retry(
         tries=10,
@@ -210,7 +227,7 @@ class FailoverRunner(CookbookRunnerBase):
 
         if idempotent and not self.spicerack.dry_run:
             ret = [
-                self.rsync_no_changes(list(t)[0][1].message().decode("utf-8")) for t in transfers
+                self._rsync_no_changes(list(t)[0][1].message().decode("utf-8")) for t in transfers
             ]
             if all(ret):
                 return True
@@ -218,7 +235,8 @@ class FailoverRunner(CookbookRunnerBase):
 
         return True
 
-    def rsync_no_changes(self, rsync_output: str) -> bool:
+    def _rsync_no_changes(self, rsync_output: str) -> bool:
+        #  TODO revalidate idempotency
         """Check if rsync reports no changes in the transferred data."""
         patterns_expected_zero = {
             "Number of created files": 0,
@@ -233,3 +251,36 @@ class FailoverRunner(CookbookRunnerBase):
                 return False
 
         return True
+
+    def _ensure_backup_on_both_sides(self) -> bool:
+        """Ensure backup on *both* Gerrit servers"""
+        hosts = [self.switch_from_host, self.switch_to_host]
+
+        for host in hosts:
+            self._backup_dirs_on_host(host)
+
+        return True
+
+    def _backup_dirs_on_host(self, host) -> None:
+        for directory in GERRIT_DIRS:
+            src = f"{GERRIT_DIR_PREFIX}{directory}/"
+            dst = f"{GERRIT_BACKUP_PREFIX}{directory}/"
+
+            # Ensure destination exists before rsync; mkdir is idempotent.
+            host.run_sync(
+                f"/bin/mkdir -p {dst}",
+                is_safe=True,
+                print_progress_bars=False,
+                print_output=False,
+            )
+
+            rsync_cmd = (
+                "/usr/bin/rsync -aP --checksum --stats --delete "
+                f"{src} {dst}"
+            )
+            logger.info("Running backup rsync on %s: %s", host, rsync_cmd)
+            host.run_sync(
+                rsync_cmd,
+                print_progress_bars=False,
+                print_output=True,
+            )
