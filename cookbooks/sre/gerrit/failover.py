@@ -150,7 +150,6 @@ class FailoverRunner(CookbookRunnerBase):
             print_progress_bars=False, print_output=True
         )
         # TODO offer a landing page either through Gerrit itself or through a http server
-        # TODO add a git --git-dir=% git fsck --strict after backuping
         self._ensure_backup_on_both_sides()
         self.spicerack.puppet(self.switch_from_host).disable(self.reason)
         self.sync_files(idempotent=True)
@@ -159,6 +158,10 @@ class FailoverRunner(CookbookRunnerBase):
             f"Please merge the change to set the DNS records for Gerrit primary on {self.switch_to_host}. "
             "I will wait for propagation across both Gerrit hosts."
         )
+        self._post_sync_dst_validate()
+        self._post_sync_src_validate()
+
+    def _post_sync_dst_validate(self):
         if not self.spicerack.dry_run:
             expected_ip = self.switch_to_host.hosts[0].ip
             self.ensure_dns_propagated("gerrit.wikimedia.org", expected_ip)
@@ -168,7 +171,9 @@ class FailoverRunner(CookbookRunnerBase):
             "When you hit go, we will re-enable puppet and execute a puppet run."
         )
         self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
-        # TODO check for no --replica in systemd unit
+        if self._grep_for_replica(self.switch_to_host):
+            raise RuntimeError("Failed configuration on destination host, found replica flag still enabled.")
+        # TODO add a git --git-dir=% git fsck --strict after backuping
         self.switch_to_host.run_sync(
             "systemctl restart gerrit",
             print_progress_bars=False, print_output=True
@@ -179,12 +184,21 @@ class FailoverRunner(CookbookRunnerBase):
             f"Once you are certain please merge the change to set the puppet role for {self.switch_from_host}, "
             "and we will re-enable and run puppet."
         )
+        return True
+
+    def _post_sync_src_validate(self):
         self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
         self.switch_from_host.run_sync(
             "systemctl stop gerrit",
             print_progress_bars=False, print_output=True
         )
-        # TODO check for --replica in systemd unit, we stop gerrit because puppet starts it
+        if self._grep_for_replica(self.switch_to_host):
+            msg = (
+                "Failed configuration on destination host, found replica missing."
+                "This is a split brain situation."
+            )
+            raise RuntimeError(msg)
+        # TODO add a git --git-dir=% git fsck --strict after backuping
         self.switch_from_host.run_sync(
             "systemctl start gerrit",
             print_progress_bars=False, print_output=True
@@ -284,3 +298,19 @@ class FailoverRunner(CookbookRunnerBase):
                 print_progress_bars=False,
                 print_output=True,
             )
+
+    def _grep_for_replica(self, host) -> bool:
+        grep_cmd = (
+            "/bin/grep -q replica "
+            "/etc/systemd/system/multi-user.target.wants/gerrit.service "
+            "&& echo FOUND || echo NOTFOUND"
+        )
+
+        result = host.run_sync(
+            grep_cmd,
+            print_progress_bars=False,
+            print_output=False,
+        )
+
+        output = result[0][1].message().decode().strip()
+        return output == "FOUND"
