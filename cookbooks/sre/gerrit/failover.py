@@ -1,6 +1,6 @@
 """Gerrit failover cookbook.
 
-This module defines a cookbook to manage Gerrit failover operations between two hosts.
+This cookbook manages Gerrit failover operations between two hosts.
 """
 
 import logging
@@ -8,19 +8,13 @@ import re
 import subprocess
 from datetime import timedelta
 from argparse import ArgumentParser
-
 from spicerack.decorators import retry
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation, ask_input
 from cookbooks.sre import CookbookBase, CookbookRunnerBase, PHABRICATOR_BOT_CONFIG_FILE
 
+from . import GERRIT_DIR_PREFIX, GERRIT_BACKUP_PREFIX, GERRIT_DIRS
+
 logger = logging.getLogger(__name__)
-GERRIT_DIR_PREFIX = '/srv/gerrit/'
-GERRIT_BACKUP_PREFIX = '/srv/backup/'
-GERRIT_DIRS = ['All-Users',
-               'data',
-               'git',
-               'plugins',
-               'replication']
 
 
 class Failover(CookbookBase):
@@ -63,7 +57,7 @@ class FailoverRunner(CookbookRunnerBase):
 
         self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         self.reason = self.spicerack.admin_reason(reason=self.message)
-
+        self.args = args
         self.confirm_before_proceeding()
 
     @property
@@ -90,20 +84,11 @@ class FailoverRunner(CookbookRunnerBase):
         raw_output = result[0][1].message().decode().strip().splitlines()
         return {line for line in raw_output if line}
 
-    @retry(
-        tries=40,
-        delay=timedelta(seconds=15),
-        backoff_mode="constant",
-        failure_message="Waiting for DNS propagation failed",
-        exceptions=(RuntimeError,),
-    )
-    def ensure_dns_propagated(self, hostname: str, expected_ip: str) -> None:
-        """Probe both Gerrit servers and assert they both resolve 'hostname' to exactly {expected_ip}.
+    def _validate_dns(self):
+        expected_ip = self.switch_to_host.hosts[0].ip
+        self._ensure_dns_propagated("gerrit.wikimedia.org", expected_ip)
 
-        Raises:
-            RuntimeError: triggers retry if DNS is not yet stable.
-
-        """
+    def _run_cookbook_dns_cache_wipe(self):
         exit_code = self.spicerack.run_cookbook("sre.dns.wipe-cache",
                                                 args=[
                                                     "gerrit.wikimedia.org",
@@ -112,6 +97,20 @@ class FailoverRunner(CookbookRunnerBase):
         if exit_code != 0:
             raise RuntimeError("Failed to wipe DNS cache")
 
+    @retry(
+        tries=40,
+        delay=timedelta(seconds=15),
+        backoff_mode="constant",
+        failure_message="Waiting for DNS propagation failed",
+        exceptions=(RuntimeError,),
+    )
+    def _ensure_dns_propagated(self, hostname: str, expected_ip: str) -> None:
+        """Probe both Gerrit servers and assert they both resolve 'hostname' to exactly {expected_ip}.
+
+        Raises:
+            RuntimeError: triggers retry if DNS is not yet stable.
+
+        """
         servers = [self.switch_from_host, self.switch_to_host]
         seen = {}
 
@@ -136,11 +135,12 @@ class FailoverRunner(CookbookRunnerBase):
         )
         alerting_hosts.downtime(self.reason, duration=timedelta(hours=4))
         self.spicerack.puppet(self.switch_to_host).disable(self.reason)
+        self.spicerack.puppet(self.switch_from_host).disable(self.reason)
         ask_confirmation(
             "Run sudo -i authdns-update on ns0.wikimedia.org, review the diff but **do not commit yet.**"
         )
 
-        self.sync_files()
+        # TODO offer a landing page either through Gerrit itself or through a http server
         self.switch_from_host.run_sync(
             "systemctl stop gerrit",
             print_progress_bars=False, print_output=True
@@ -149,9 +149,14 @@ class FailoverRunner(CookbookRunnerBase):
             "systemctl stop gerrit",
             print_progress_bars=False, print_output=True
         )
-        # TODO offer a landing page either through Gerrit itself or through a http server
         self._ensure_backup_on_both_sides()
-        self.spicerack.puppet(self.switch_from_host).disable(self.reason)
+        exit_code = self.spicerack.run_cookbook("sre.gerrit.fsck",
+                                                args=[
+                                                    "--host",
+                                                    f"{self.args.switch_from_host}.*"
+                                                ], raises=True, confirm=True,)
+        if exit_code != 0:
+            raise RuntimeError("Failed to run FSCK on Gerrit backup tree.")
         self.sync_files(idempotent=True)
 
         ask_confirmation(
@@ -163,17 +168,17 @@ class FailoverRunner(CookbookRunnerBase):
 
     def _post_sync_dst_validate(self):
         if not self.spicerack.dry_run:
-            expected_ip = self.switch_to_host.hosts[0].ip
-            self.ensure_dns_propagated("gerrit.wikimedia.org", expected_ip)
+            self._run_cookbook_dns_cache_wipe()
+            self._validate_dns()
 
         ask_confirmation(
             f"Please merge the change to set the puppet role for Gerrit primary on {self.switch_to_host}. "
             "When you hit go, we will re-enable puppet and execute a puppet run."
         )
+        self.confirm_before_proceeding()
         self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
         if self._grep_for_replica(self.switch_to_host):
             raise RuntimeError("Failed configuration on destination host, found replica flag still enabled.")
-        # TODO add a git --git-dir=% git fsck --strict after backuping
         self.switch_to_host.run_sync(
             "systemctl restart gerrit",
             print_progress_bars=False, print_output=True
@@ -187,6 +192,8 @@ class FailoverRunner(CookbookRunnerBase):
         return True
 
     def _post_sync_src_validate(self):
+        if not self.spicerack.dry_run:
+            self._validate_dns()
         self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
         self.switch_from_host.run_sync(
             "systemctl stop gerrit",
@@ -198,7 +205,6 @@ class FailoverRunner(CookbookRunnerBase):
                 "This is a split brain situation."
             )
             raise RuntimeError(msg)
-        # TODO add a git --git-dir=% git fsck --strict after backuping
         self.switch_from_host.run_sync(
             "systemctl start gerrit",
             print_progress_bars=False, print_output=True
