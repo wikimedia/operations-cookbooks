@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from spicerack import Spicerack
 from spicerack.administrative import Reason
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs, CookbookInitSuccess
 from spicerack.decorators import retry
 from spicerack.dnsdisc import DiscoveryCheckError, DiscoveryError
 from spicerack.remote import RemoteHosts, RemoteExecutionError
@@ -268,6 +268,11 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         else:
             self.phabricator = None
 
+        if self.action == "status":
+            self.status()
+            # Bail out early, don't log to SAL etc.
+            raise CookbookInitSuccess()
+
     @property
     def runtime_description(self) -> str:
         """Used to log the action performed to SAL"""
@@ -305,9 +310,6 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
 
     def run(self):
         """Execute the desired action."""
-        if self.action == "status":
-            self.status()
-            return
         if self.phabricator is not None:
             self.phabricator.task_comment(
                 self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} started."
