@@ -1,14 +1,9 @@
 """Generic DNS Discovery Operations"""
 import logging
-from collections.abc import Iterator
-from typing import cast
 
-import dns
-
-from dns.rdataclass import RdataClass
-
+from ipaddress import IPv4Address
 from spicerack.decorators import retry
-from spicerack.dnsdisc import Discovery, DiscoveryError, DiscoveryCheckError
+from spicerack.dnsdisc import Discovery, DiscoveryCheckError
 from spicerack.remote import Remote
 
 logger = logging.getLogger(__name__)
@@ -16,64 +11,14 @@ __owner_team__ = "ServiceOps"
 
 # Some IP from a subnet of each DC (to be used for EDNS lookups)
 DC_IP_MAP = {
-    'eqiad': '10.64.0.1',
-    'codfw': '10.192.0.1',
-    'esams': '10.80.0.1',
-    'ulsfo': '10.128.0.1',
-    'eqsin': '10.132.0.1',
-    'drmrs': '10.136.0.1',
-    'magru': '10.140.0.1',
+    'eqiad': IPv4Address('10.64.0.1'),
+    'codfw': IPv4Address('10.192.0.1'),
+    'esams': IPv4Address('10.80.0.1'),
+    'ulsfo': IPv4Address('10.128.0.1'),
+    'eqsin': IPv4Address('10.132.0.1'),
+    'drmrs': IPv4Address('10.136.0.1'),
+    'magru': IPv4Address('10.140.0.1'),
 }
-
-
-def resolve_with_client_ip(dnsdisc: Discovery, client_ip: str, name: str) -> Iterator[dns.resolver.Answer]:
-    """Generator that yields the records as resolved from a specific datacenter (via EDNS client subnet)
-
-    Todo:
-        Move this function to spicerack dns/dnsdisc.
-        Yield the answer together with the resolver it came from.
-
-    Arguments:
-        dnsdisc (spicerack.dnsdisc.Discovery): a spicerack.dnsdisc.Discovery instance.
-        client_ip (str): IP address to be used in EDNS client subnet.
-        name (str): record name to use for the resolution.
-
-    Yields:
-        dns.resolver.Answer: the DNS response.
-
-    Raises:
-        spicerack.discovery.DiscoveryError: if unable to resolve the address.
-
-    """
-    records = [name]
-    ecs_option_client_ip = dns.edns.ECSOption(client_ip)
-
-    for nameserver, dns_resolver in dnsdisc._resolvers.items():  # pylint: disable=protected-access
-        for record in records:
-            record_name = dns.name.from_text('{record}.discovery.wmnet'.format(record=record))
-            rdtype = dns.rdatatype.from_text('A')
-            try:
-                # Craft a query message
-                query_msg = dns.message.make_query(record_name, rdtype)
-                query_msg.use_edns(options=[ecs_option_client_ip])
-
-                # Make the actual query
-                resp = dns.query.udp(
-                    query_msg,
-                    cast(list, dns_resolver.nameservers)[0],
-                    port=dns_resolver.port,
-                    timeout=dns_resolver.timeout,
-                )
-                # Build an Answer instance as a Stub Resolver would
-                answer = dns.resolver.Answer(record_name, rdtype, RdataClass.IN, resp)
-            except Exception as e:
-                # This is less than ideal, but dns.query.udp can return quite a lot of exceptions, there is no
-                # abstraction in dnspython 1.16.0 (2.0.0 has some) and I'm lazy.
-                raise DiscoveryError(
-                    'Unable to resolve {name} from {ns}'.format(name=record_name, ns=nameserver)) from e
-
-            logger.debug('[%s] %s -> %s TTL %d', nameserver, record, answer[0].address, answer.ttl)
-            yield answer
 
 
 @retry(backoff_mode='linear', exceptions=(DiscoveryCheckError,))
@@ -109,9 +54,10 @@ def check_record_for_dc(no_fail: bool, dnsdisc: Discovery, datacenter: str, name
 
     failed = False
     client_ip = DC_IP_MAP[datacenter]
-    for record in resolve_with_client_ip(dnsdisc, client_ip, name):
-        if record[0].address != expected_address:
-            logger.error("Expected IP '%s', got '%s' for record %s", expected_address, record[0].address, name)
+    for nameserver, actual_ip in dnsdisc.resolve_with_client_ip(name, client_ip).items():
+        if str(actual_ip) != expected_address:
+            logger.error("Expected IP '%s', got '%s' for record %s from %s",
+                         expected_address, actual_ip, name, nameserver)
             if not no_fail:
                 failed = True
 

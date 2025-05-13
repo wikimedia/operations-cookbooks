@@ -17,7 +17,7 @@ from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import ask_input, ask_confirmation, confirm_on_failure, ensure_shell_is_durable, InputError
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-from cookbooks.sre.discovery import resolve_with_client_ip, DC_IP_MAP
+from cookbooks.sre.discovery import DC_IP_MAP
 from cookbooks.sre.switchdc.mediawiki import MEDIAWIKI_SERVICES
 
 
@@ -98,10 +98,9 @@ class DiscoveryRecord:
         # Opposite for pooled ones.
         current_state = self.state
         for datacenter in self.ips.sites:
-            expected_ip = str(self.ips.get(datacenter))
+            expected_ip = self.ips.get(datacenter)
 
-            for dns_answer in resolve_with_client_ip(self.record.instance, DC_IP_MAP[datacenter], self.name):
-                actual_ip = dns_answer[0].address
+            for actual_ip in self.record.instance.resolve_with_client_ip(self.name, DC_IP_MAP[datacenter]).values():
                 if datacenter in current_state and actual_ip != expected_ip:
                     raise DiscoveryCheckError(
                         f"Error checking auth dns for {self.fqdn} in {datacenter}: "
