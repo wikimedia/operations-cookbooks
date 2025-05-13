@@ -4,7 +4,6 @@ import collections
 import logging
 import os
 import os.path
-import re
 import shlex
 import socket
 import sqlite3
@@ -15,9 +14,10 @@ import transferpy.transfer
 from transferpy.Transferer import Transferer
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.remote import RemoteHosts
 from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import ask_input, ensure_shell_is_durable
+
+from cookbooks.sre.swift import find_db_paths
 
 logger = logging.getLogger(__name__)
 
@@ -336,7 +336,8 @@ class RemoveGhostObjectsRunner(CookbookRunnerBase):  # pylint: disable=too-many-
 
     def _prep_state(self, dc):  # pylint: disable=invalid-name
         """Locate container DBs, fetch, check consistency"""
-        dbs = self._find_db_paths(self.state[dc]["backend"], self.container)
+        dbs = find_db_paths(self.dns, self.remote,
+                            self.state[dc]["backend"], self.container)
         if not self.skip_db_fetch:
             logger.info("Fetching container dbs from %s nodes", dc)
             for fqdn, path in dbs:
@@ -396,32 +397,3 @@ class RemoveGhostObjectsRunner(CookbookRunnerBase):  # pylint: disable=too-many-
         sn = fqdn.split('.')[0]
         bp = os.path.basename(path)
         os.rename(f"{workdir}/{bp}", f"{workdir}/{sn}.db")
-
-    def _find_db_paths(self, host, container):
-        """Query the container ring on host about container
-
-        return a list of (fqdn,path) tuples for the locations where the
-        container DBs can be found.
-        """
-        dbregex = re.compile(
-            r'^ssh (?P<ip>([0-9]{1,3}\.){3}[0-9]{1,3}) "ls.*\}(?P<path>/[^ ]+)"$',
-            re.MULTILINE)
-        rh = self.remote.query(f"D{{{host}}}")
-        if len(rh.hosts) > 1:
-            raise ValueError("Should only query 1 host for db paths")
-        results = rh.run_sync(f"/usr/bin/swift-get-nodes /etc/swift/container.ring.gz AUTH_mw {container}",
-                              is_safe=True,
-                              print_output=False,
-                              print_progress_bars=False)
-        res = RemoteHosts.results_to_list(results)[0][1]
-        ans = []
-        for m in dbregex.finditer(res):
-            ip = m.group('ip')
-            fqdn = self.dns.resolve_ptr(ip)[0]
-            dirpath = m.group('path')
-            # dirpath is /sdXX/containers/a/b/c
-            # db file is in /srv/swift-storage/dirpath/c.db
-            # we ignore the .db.pending file
-            dbname = f"{dirpath.split('/')[-1]}.db"
-            ans.append((fqdn, f"/srv/swift-storage{dirpath}/{dbname}"))
-        return ans
