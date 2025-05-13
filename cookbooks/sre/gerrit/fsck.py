@@ -47,9 +47,8 @@ class FsckBackupRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
 
         self.spicerack = spicerack
-        self.host_pattern = args.host
-        self.host_query = spicerack.remote().query(self.host_pattern + ".*")
-        self.host_name = args.host
+        self.host_query = spicerack.remote().query(f"{args.host}.*")
+        self.host_name = self.host_query.hosts[0]
 
         self.message = (
             f"git fsck on local backups on {self.host_name} to ensure consistency."
@@ -92,7 +91,7 @@ class FsckBackupRunner(CookbookRunnerBase):
     def _fsck_host(self, hostset) -> None:
         """Run fsck on all discovered repositories for the host."""
         host = hostset.hosts[0]
-        logger.info("→ Checking local backups consistency on %s", host.name)
+        logger.info("→ Checking local backups consistency on %s", host)
 
         for directory in GERRIT_DIRS:
             backup_root = PurePosixPath(GERRIT_BACKUP_PREFIX) / directory
@@ -100,7 +99,7 @@ class FsckBackupRunner(CookbookRunnerBase):
 
             if not repos:
                 logger.warning(
-                    "No repositories found under %s on %s", backup_root, host.name
+                    "No repositories found under %s on %s", backup_root, host
                 )
                 continue
 
@@ -109,8 +108,8 @@ class FsckBackupRunner(CookbookRunnerBase):
 
     def _discover_repositories(self, hostset, root: str) -> list[str]:
         """Find both standard and bare Git repositories under the root path."""
-        git_dirs = self._remote_fd_list(hostset, root, "--type", "d", "--name", "*.git")
-        head_files = self._remote_fd_list(hostset, root, "--type", "f", "--name", "HEAD")
+        git_dirs = self._remote_fd_list(hostset, root, "--type", "d", '.git')
+        head_files = self._remote_fd_list(hostset, root, "--type", "f", "HEAD")
 
         bare_repos = {str(PurePosixPath(path).parent) for path in head_files}
         all_repos = set(git_dirs) | bare_repos
@@ -131,10 +130,10 @@ class FsckBackupRunner(CookbookRunnerBase):
         ]
         cmd = " ".join(cmd_parts)
 
-        result = hostset.run_sync(cmd, print_progress_bars=False, print_output=False)
+        result = list(hostset.run_sync(cmd, print_progress_bars=False, print_output=False, is_safe=True))
         paths: list[str] = []
-        for _host, output in result:
-            text = output.message().decode().strip()
+        if result:
+            text = result[0][1].message().decode().strip()
             if text:
                 for line in text.split("\n"):
                     if line:
@@ -144,13 +143,7 @@ class FsckBackupRunner(CookbookRunnerBase):
     def _git_fsck_repo(self, hostset, repo_path: str) -> None:
         """Run 'git fsck --strict' on a given repository and fail if errors occur."""
         host = hostset.hosts[0]
-        logger.debug("[fsck] %s: %s", host.name, repo_path)
+        logger.debug("[fsck] %s: %s", host, repo_path)
 
-        cmd = f"git -C {shlex.quote(repo_path)} fsck --strict"
-        results = hostset.run_sync(cmd, print_progress_bars=False, print_output=True)
-
-        for _, output in results:
-            if output.failed:
-                raise RuntimeError(
-                    f"git fsck failed on {repo_path} of host {host.name}. See logs for details."
-                )
+        cmd = f"sudo -u gerrit git -C {shlex.quote(repo_path)} fsck --strict"
+        hostset.run_sync(cmd, print_progress_bars=False, print_output=False, is_safe=False)
