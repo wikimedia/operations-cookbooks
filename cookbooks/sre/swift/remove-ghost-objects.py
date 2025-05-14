@@ -17,7 +17,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import ask_input, ensure_shell_is_durable
 
-from cookbooks.sre.swift import find_db_paths
+from cookbooks.sre.swift import find_db_paths, lookup_be_host
 
 logger = logging.getLogger(__name__)
 
@@ -113,10 +113,12 @@ class RemoveGhostObjectsRunner(CookbookRunnerBase):  # pylint: disable=too-many-
         self.skip_db_fetch = args.skip_db_fetch
         self.working_dc = args.working_dc
         # working state, keyed on DC
-        codfw_be_host = self._lookup_be_host("codfw", args.codfw_be_host)
-        eqiad_be_host = self._lookup_be_host("eqiad", args.eqiad_be_host)
-        self.state = {"codfw": {"backend": codfw_be_host},
-                      "eqiad": {"backend": eqiad_be_host}}
+        codfw_be_host = lookup_be_host(self.remote,
+                                       "codfw", args.codfw_be_host)
+        eqiad_be_host = lookup_be_host(self.remote,
+                                       "eqiad", args.eqiad_be_host)
+        self.state: dict = {"codfw": {"backend": codfw_be_host},
+                            "eqiad": {"backend": eqiad_be_host}}
         if args.fe_host is not None:
             if self.working_dc not in args.fe_host:
                 raise ValueError("Frontend host %s not in working DC %s" %
@@ -191,16 +193,6 @@ class RemoveGhostObjectsRunner(CookbookRunnerBase):  # pylint: disable=too-many-
             logger.info("No ghosts found to delete")
         self._remove_dbs()
         return 0
-
-    def _lookup_be_host(self, dc, hostname):  # pylint: disable=invalid-name
-        """Return hostname if non-None, else fqdn of a backend host in dc"""
-        if hostname is not None:
-            if dc not in hostname:
-                raise ValueError("backend {hostname} must be FQDN in {dc}")
-            return hostname
-        backends = self.remote.query(f"A:{dc} and P{{O:swift::storage}}")
-        # take 1 backend, convert to string
-        return str(next(backends.split(len(backends))))
 
     def _remove_dbs(self):
         """Unless self.no_clean_workdir set, remove databases from workdir"""
@@ -336,7 +328,7 @@ class RemoveGhostObjectsRunner(CookbookRunnerBase):  # pylint: disable=too-many-
 
     def _prep_state(self, dc):  # pylint: disable=invalid-name
         """Locate container DBs, fetch, check consistency"""
-        dbs = find_db_paths(self.dns, self.remote,
+        dbs = find_db_paths(self.dns,
                             self.state[dc]["backend"], self.container)
         if not self.skip_db_fetch:
             logger.info("Fetching container dbs from %s nodes", dc)
