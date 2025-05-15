@@ -76,7 +76,7 @@ class RollUpgradeHAProxyRunner(SRELBBatchRunnerBase):
     @property
     def runtime_description(self) -> str:
         """Override the default runtime description"""
-        return f'rolling upgrade of HAProxy on {self._query()} - {self._reason}'
+        return f'rolling upgrade of HAProxy on {self._query()} - {self._args.reason} ({self._args.task_id})'
 
     @property
     def restart_daemons(self) -> list:

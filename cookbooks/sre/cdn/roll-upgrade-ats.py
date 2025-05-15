@@ -74,7 +74,7 @@ class RollUpgradeATSRunner(SRELBBatchRunnerBase):
     @property
     def runtime_description(self) -> str:
         """Override the default runtime description"""
-        return f'Rolling upgrade of Apache Traffic Server on {self._query()} - {self._reason}'
+        return f'Rolling upgrade of ATS on {self._query()} - {self._args.reason} ({self._args.task_id})'
 
     @property
     def restart_daemons(self) -> list:
