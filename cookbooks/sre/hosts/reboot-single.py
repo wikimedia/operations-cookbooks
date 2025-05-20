@@ -70,8 +70,9 @@ class RebootSingleHostRunner(CookbookRunnerBase):
         if args.task_id is not None:
             self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
             self.task_id = args.task_id
-            self.message = ('Host rebooted by {owner} with reason: {reason}\n').format(
-                owner=self.reason.owner, reason=args.reason)
+            self.message = (
+                "Host {host} rebooted by {owner} with reason: {reason}\n"
+            ).format(host=args.host, owner=self.reason.owner, reason=args.reason)
         else:
             self.phabricator = None
 
