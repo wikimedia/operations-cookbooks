@@ -3,6 +3,7 @@
 import logging
 from datetime import timedelta
 import re
+import time
 from packaging import version
 
 import gitlab
@@ -177,6 +178,8 @@ class UpgradeRunner(CookbookRunnerBase):
                 self.install_debian_package()
                 unpause_runners(paused_runners, dry_run=self.spicerack.dry_run)
                 broadcastmessage.delete()
+                logger.info('Wait for blackbox checks and monitoring to catch up.')
+                time.sleep(180)
 
         if self.phabricator is not None:
             self.phabricator.task_comment(
