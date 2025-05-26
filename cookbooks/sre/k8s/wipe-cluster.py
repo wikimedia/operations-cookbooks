@@ -1,5 +1,6 @@
 """Wipe a kubernetes cluster."""
 
+import json
 import logging
 from argparse import ArgumentParser, Namespace
 from datetime import timedelta
@@ -7,6 +8,7 @@ from typing import Union
 
 from cumin import nodeset
 from spicerack import Spicerack
+from spicerack.remote import RemoteHosts
 from spicerack.alerting import AlertingHosts
 from spicerack.alertmanager import Alertmanager
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -164,6 +166,35 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
             puppet = self.spicerack.puppet(remote)
             confirm_on_failure(puppet.run, enable_reason=self.admin_reason)
 
+    def _ensure_k8s_services_active(self, hosts: RemoteHosts) -> bool:
+        """Ensure that all k8s services are active."""
+        command = "/usr/bin/systemctl list-units 'kube*.service' --output=json"
+        for subhosts, output in hosts.run_sync(
+            command,
+            is_safe=True,
+            print_progress_bars=False,
+            print_output=False,
+        ):
+            try:
+                units = json.loads(output.message())
+            except json.JSONDecodeError as exc:
+                ask_confirmation(
+                    f"Failed to parse systemctl output for {subhosts}: {exc}"
+                    "Please verify the services state manually using the following command or type 'go' to retry."
+                    f"\n{command}"
+                )
+                return False
+            for unit in units:
+                if unit["active"] != "active":
+                    ask_confirmation(
+                        f"Unit {unit['unit']} on {subhosts} is not active. "
+                        "Please check the logs and fix the issue. Type 'go' to recheck."
+                    )
+                    # Return right away without checking the rest of the units
+                    # to get fresh data about them on the next iteration.
+                    return False
+        return True
+
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
@@ -254,6 +285,17 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
             "Do you want me to run puppet on all cluster nodes now?",
         ):
             self._run_puppet()
+
+        # Verify that all kubernetes services are active
+        logger.info("Verifying that all kubernetes services are active...")
+        control_plane_ok = False
+        while not control_plane_ok:
+            control_plane_ok = self._ensure_k8s_services_active(
+                self.control_plane_nodes
+            )
+        worker_ok = False
+        while not worker_ok:
+            worker_ok = self._ensure_k8s_services_active(self.worker_nodes)
 
         # Update labels of control-plane nodes
         nodes = " ".join(self.control_plane_nodes.hosts)
