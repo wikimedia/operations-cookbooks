@@ -99,7 +99,7 @@ class FirmwareUpgrade(CookbookBase):
             "--component",
             help="force a specific type of upgrade: %(choices)s",
             action='append',
-            choices=("bios", "idrac", "nic", "storage"),
+            choices=("bios", "idrac", "nic", "storage", "ssd"),
         )
         parser.add_argument(
             "query",
@@ -263,6 +263,9 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             A string representing the latest version and the path to the firmware
 
         """
+        if driver_category == DellDriverCategory.SSD:
+            raise NotImplementedError("SSD firmware fetch from DELL website not yet implemented")
+
         firmware_path = None
         product = self.dell_api.fetch(product_slug)
         drivers = product.find_driver(driver_type, driver_category)
@@ -290,9 +293,8 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         driver_version = driver_version.version
         return driver_version, firmware_path
 
-    @staticmethod
     def _get_version_odata(
-        redfish_host: Redfish, driver_category: DellDriverCategory, odata_id: str
+        self, redfish_host: Redfish, driver_category: DellDriverCategory, odata_id: str
     ) -> version.Version:
         """Get the current version
 
@@ -305,8 +307,18 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             str: The version string matching the specific odata_id
 
         """
+        if driver_category == DellDriverCategory.SSD:
+            drive_uris = self._get_members(redfish_host, odata_id, "Drives")
+            drive_versions = set()
+            for drive_uri in drive_uris:
+                drive = redfish_host.request("get", drive_uri).json()
+                if drive["MediaType"] == "SSD":
+                    drive_versions.add(version.parse("1+" + drive["Revision"][-4:]))
+
+            return min(drive_versions)  # Return the minimum version of all the SSDs
+
         try:
-            controler_key, version_key = {
+            controller_key, version_key = {
                 DellDriverCategory.NETWORK: (
                     "Controllers",
                     "FirmwarePackageVersion",
@@ -322,7 +334,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             ) from error
         data = redfish_host.request("get", odata_id).json()
         # Lets see if this is generic enough to work for more then just nics
-        odata_version = data[controler_key][0][version_key]
+        odata_version = data[controller_key][0][version_key]
         logger.debug(
             "%s: %s current version %s", redfish_host.hostname, odata_id, odata_version
         )
@@ -791,19 +803,20 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         self.poll_id(redfish_host, job_id, True)
         return self._check_version(redfish_host, target_version, driver_category)
 
-    def _get_members(self, redfish_host: Redfish, odata_id: str) -> list[str]:
+    def _get_members(self, redfish_host: Redfish, odata_id: str, key: str = "Members") -> list[str]:
         """Get a list of hw member odata.id's.
 
         Arguments:
             redfish_host: The redfish host to act on.
             odata_id: the odata_id to fetch members from
+            key: the key to get the data from
 
         Returns:
             members: A list of member odata.id's
 
         """
         data = redfish_host.request("get", odata_id).json()
-        return [member["@odata.id"] for member in data["Members"]]
+        return [member["@odata.id"] for member in data[key]]
 
     @staticmethod
     def _filter_storage(members: list[str]) -> Optional[str]:
@@ -824,6 +837,30 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         return list_picker(results)
 
+    def _filter_ssds(self, redfish_host: Redfish, members: list[str]) -> Optional[str]:
+        """Filter the list of SSDs controllers from a list of storages.
+
+        The upgrade is applied to all disks in a controller.
+
+        Arguments:
+            redfish_host: The redfish host to act on.
+            members: list storage controller odata uri's
+
+        """
+        results = []
+        for member in members:
+            drive_uris = self._get_members(redfish_host, member, "Drives")
+            for drive_uri in drive_uris:
+                drive = redfish_host.request("get", drive_uri).json()
+                if drive["MediaType"] == "SSD":
+                    results.append(member)
+                    break  # Add the controllers that have SSD disks only once
+
+        if not results:
+            return None
+
+        return list_picker(results)
+
     @staticmethod
     def _filter_network(redfish_host: Redfish, members: list[str]) -> Optional[str]:
         """Filter the list of network members to only the one with a link status
@@ -838,8 +875,8 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             ports: set = set()
             try:
                 member_data = redfish_host.request('get', member).json()
-                for controler in member_data['Controllers']:
-                    ports.update(port['@odata.id'] for port in controler['Links']['NetworkPorts'])
+                for controller in member_data['Controllers']:
+                    ports.update(port['@odata.id'] for port in controller['Links']['NetworkPorts'])
             except KeyError as error:
                 raise RuntimeError("%s: unable to find network ports") from error
             for port in ports:
@@ -874,8 +911,12 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             members = self._get_members(redfish_host, "/redfish/v1/Chassis/System.Embedded.1/NetworkAdapters")
             return self._filter_network(redfish_host, members)
         if driver_category == DellDriverCategory.STORAGE:
-            members = self._get_members(redfish_host, '/redfish/v1/Systems/System.Embedded.1/Storage')
+            members = self._get_members(redfish_host, "/redfish/v1/Systems/System.Embedded.1/Storage")
             return self._filter_storage(members)
+        if driver_category == DellDriverCategory.SSD:
+            members = self._get_members(redfish_host, "/redfish/v1/Systems/System.Embedded.1/Storage")
+            return self._filter_ssds(redfish_host, members)
+
         raise RuntimeError(
             f"{redfish_host.hostname}: unsupported device catagory {driver_category}"
         )
@@ -902,7 +943,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         member = self._get_hw_member(redfish_host, driver_category)
         if member is None:
             logger.info(
-                "%s: skipping %s as no member", netbox_host.fqdn, driver_category
+                "%s: skipping %s has no member", netbox_host.fqdn, driver_category
             )
             return True
 
@@ -927,11 +968,70 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         self._reboot(redfish_host, netbox_host)
         self.poll_id(redfish_host, job_id, True)
-        if not self._check_version(
-            redfish_host, target_version, driver_category, odata_id=member
-        ):
+        return self._check_version(redfish_host, target_version, driver_category, odata_id=member)
+
+    def update_ssd_driver(
+        self,
+        redfish_host: Redfish,
+        netbox_host: NetboxServer,
+    ) -> bool:
+        """Update a driver to the latest version on all SSDs of a controller.
+
+        Arguments:
+            redfish_host: The redfish host to act on.
+            netbox_host: The netbox host to act on.
+
+        """
+        if redfish_host.firmware_version < version.Version('4'):
+            logger.error('iDRAC version (%s) is too low to preform driver upgrades.  '
+                         'please upgrade iDRAC first')
             return False
-        return True
+
+        controller = self._get_hw_member(redfish_host, DellDriverCategory.SSD)
+        if controller is None:
+            logger.info(
+                "%s: skipping %s has no member", netbox_host.fqdn, DellDriverCategory.SSD
+            )
+            return True
+
+        target_version, job_id = self._update(
+            redfish_host,
+            netbox_host,
+            DellDriverType.FRMW,
+            DellDriverCategory.SSD,
+            odata_id=controller,
+        )
+        if job_id is None:
+            logger.error('%s: no job_id for member (%s)', netbox_host.fqdn, controller)
+            return False
+
+        if self.no_reboot:
+            logger.info('%s: skipping reboot due to no-reboot (%s)', netbox_host.fqdn, controller)
+            return True
+
+        drive_uris = self._get_members(redfish_host, controller, "Drives")
+        to_update = False
+        for drive_uri in drive_uris:
+            drive = redfish_host.request("get", drive_uri).json()
+            if drive["MediaType"] == "SSD":
+                if not drive["Revision"].endswith(str(target_version)):
+                    to_update = True
+
+        if not to_update:
+            logger.info('%s: skipping reboot version already correct for all SSDs (%s)', netbox_host.fqdn, controller)
+            return True
+
+        self._reboot(redfish_host, netbox_host)
+        self.poll_id(redfish_host, job_id, True)
+        drive_uris = self._get_members(redfish_host, controller, "Drives")
+        failed = False
+        for drive_uri in drive_uris:
+            drive = redfish_host.request("get", drive_uri).json()
+            if drive["MediaType"] == "SSD":
+                if not drive["Revision"].endswith(str(target_version)):
+                    failed = True
+
+        return not failed
 
     def _redfish_host(self, hostname: str) -> Optional[RedfishDell]:
         """Fetch a redfish host from a netbox host, and make sure its compatible.
@@ -1023,6 +1123,10 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             if not self.update_driver(
                 redfish_host, netbox_host, DellDriverCategory.STORAGE
             ):
+                failed = True
+
+        if "ssd" in self.component:
+            if not self.update_ssd_driver(redfish_host, netbox_host):
                 failed = True
 
         if self.no_reboot:

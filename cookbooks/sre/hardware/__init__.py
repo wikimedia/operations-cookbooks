@@ -33,6 +33,10 @@ def list_picker(options: list) -> Any:
 
 def extract_version(firmware_file: Path) -> version.Version:
     """Attempt to extract version number from firmware file"""
+    if firmware_file.parent.name == "SSD":
+        # SSD versions are not numeric, prefix them with 1+ to make them valid
+        return version.parse("1+" + str(firmware_file).split("_")[-2])
+
     # The firmware file has has the driver type in the path
     try:
         pattern = {
