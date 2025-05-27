@@ -36,7 +36,7 @@ class UpgradeMySQL(CookbookBase):
     """Upgrade minor veresion of MySQL hosts."""
 
     argument_reason_required = True
-    argument_task_required = True
+    argument_task_required = False
 
     def argument_parser(self) -> ArgumentParser:
         """CLI parsing, as required by the Spicerack API."""
@@ -103,12 +103,15 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         hostname = str(host).split(".", maxsplit=1)[0]
         reason = f"Upgrade of {host} completed"
         if self._do_repool and self._is_in_dbctl(hostname):
-            self._run_cookbook(
-                "sre.mysql.pool",
-                ["--reason", reason, "--task-id", self.task_id, hostname],
-                confirm=True,
-            )
-        self._phab.task_comment(self.task_id, reason)
+            if self.task_id:
+                args = ["--reason", reason, "--task-id", self.task_id, hostname]
+            else:
+                args = ["--reason", reason, hostname]
+
+            self._run_cookbook("sre.mysql.pool", args, confirm=True)
+
+        if self.task_id:
+            self._phab.task_comment(self.task_id, reason)
 
     def run(self):
         """Required by the Spicerack API."""
@@ -121,17 +124,19 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         """Upgrade mysql version of a single host."""
         fqdn = _fqdn(host)
         reason = f"Upgrading {host}"
-        self._phab.task_comment(self.task_id, reason)
+        if self.task_id:
+            self._phab.task_comment(self.task_id, reason)
 
         hostname = str(host).split(".", maxsplit=1)[0]
         if self._is_in_dbctl(hostname):
             step("depool", f"Depooling {fqdn}")
             hostname = str(host).split(".", maxsplit=1)[0]
-            self._run_cookbook(
-                "sre.mysql.depool",
-                ["--reason", reason, "--task-id", self.task_id, hostname],
-                confirm=True,
-            )
+            if self.task_id:
+                args = ["--reason", reason, "--task-id", self.task_id, hostname]
+            else:
+                args = ["--reason", reason, hostname]
+
+            self._run_cookbook("sre.mysql.depool", args, confirm=True)
 
         step("stop_mariadb", f"Stopping mariadb on {fqdn}")
         upgrade_cmd = (
