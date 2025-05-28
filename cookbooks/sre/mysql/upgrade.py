@@ -169,7 +169,8 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         reason = f"Upgrade of {host} completed"
         if not self._do_repool:
             self.logger.info("Repooling not requested")
-            self._phab.task_comment(self.task_id or "", reason)
+            if self.task_id:
+                self._phab.task_comment(self.task_id or "", reason)
             return
 
         step("catchup_repl_s", f"Catching up replication lag on {fqdn} before removing icinga downtime")
