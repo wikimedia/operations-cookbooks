@@ -11,7 +11,7 @@ from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
-from spicerack.ganeti import INSTANCE_LINKS
+from spicerack.ganeti import INSTANCE_LINKS, STORAGE_TYPES
 
 from cookbooks.sre.ganeti import add_location_args, set_default_group
 from cookbooks.sre.hosts import OS_VERSIONS
@@ -74,6 +74,8 @@ class GanetiMakeVM(CookbookBase):
             '--disk', type=positive_int, default=10, help='The amount of disk to allocate to the VM in GB.')
         parser.add_argument('--network', choices=INSTANCE_LINKS, default='private',
                             help='Specify the type of network to assign to the VM.')
+        parser.add_argument('--storage_type', choices=STORAGE_TYPES, default='drbd',
+                            help='the storage type of the VM. One of %(choices)s, default to drbd')
         parser.add_argument('--os', choices=OS_VERSIONS + ('none',), required=True,
                             help='the Debian version to install. One of %(choices)s, use "none" to skip installation')
         parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
@@ -105,6 +107,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         self.memory = args.memory
         self.network = args.network
         self.disk = args.disk
+        self.storage_type = args.storage_type
         self.skip_v6 = args.skip_v6
         self.spicerack = spicerack
         self.netbox = self.spicerack.netbox(read_write=True)
@@ -239,7 +242,8 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         self.need_netbox_sync = True
         net = ip_interface(ip_v4.address).ip if self.routed else self.network
         ip6 = ip_interface(ip_v6.address).ip
-        instance.add(group=self.group.name, vcpus=self.vcpus, memory=self.memory, disk=self.disk, net=net, ip6=ip6)
+        instance.add(group=self.group.name, vcpus=self.vcpus, memory=self.memory, storage_type=self.storage_type,
+                     disk=self.disk, net=net, ip6=ip6)
 
         self._ganeti_netbox_sync()
 
