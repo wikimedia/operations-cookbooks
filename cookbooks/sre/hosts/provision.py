@@ -833,6 +833,9 @@ class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-insta
         if 'IntelSgx' in config.components['BIOS.Setup.1-1']:
             self.config_changes['BIOS.Setup.1-1']['IntelSgx'] = 'Off'
 
+        if 'BiosNvmeDriver' in config.components['BIOS.Setup.1-1']:
+            self.config_changes['BIOS.Setup.1-1']['BiosNvmeDriver'] = 'AllDrives'
+
         self._config_pxe(config)
         was_changed = config.update(self.config_changes)
         if not was_changed:
