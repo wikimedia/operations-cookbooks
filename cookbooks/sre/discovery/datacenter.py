@@ -4,17 +4,19 @@ import logging
 import time
 
 from dataclasses import dataclass
+from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.administrative import Reason
+from spicerack.confctl import ConfctlError
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs, CookbookInitSuccess
 from spicerack.decorators import retry
 from spicerack.dnsdisc import DiscoveryCheckError, DiscoveryError
 from spicerack.remote import RemoteHosts, RemoteExecutionError
 from spicerack.service import ServiceDiscoveryRecord, ServiceIPs
-from spicerack.confctl import ConfctlError
 from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import ask_input, ask_confirmation, confirm_on_failure, ensure_shell_is_durable, InputError
+from wmflib.phabricator import Phabricator
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.discovery import DC_IP_MAP
@@ -264,7 +266,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         self._recursors: RemoteHosts = spicerack.remote().query("A:dns-rec")
         self._authdns: RemoteHosts = spicerack.remote().query("A:dns-auth")
         if self.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+            self.phabricator: Optional[Phabricator] = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         else:
             self.phabricator = None
 
