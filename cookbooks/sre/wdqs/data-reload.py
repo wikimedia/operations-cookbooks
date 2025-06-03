@@ -27,7 +27,7 @@ DAYS_IT_TAKES_TO_RELOAD = 17
 DAYS_KAFKA_RETAINED = 30
 
 # TODO: hardcoding this is far from ideal, there might be ways to infer this from the puppetdb and possibly select
-#  one of the hosts with "A:stat and P{C:hdfs_tools}" and run "df -B1 --output=avail $some_path | tail -n1" to infer
+#  one of the hosts with 'A:stat and P{C:hdfs_tools}' and run 'df -B1 --output=avail /srv/ | tail -n1' to infer
 #  what hosts have enough space. We could also consider dropping this default completely and ask the operator to always
 #  select it for us.
 DEFAULT_STAT_HOST = "stat1011.eqiad.wmnet"
