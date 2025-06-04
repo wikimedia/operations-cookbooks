@@ -25,7 +25,7 @@ class RestoreDiscoveryTTLsRunner(MediaWikiSwitchDCRunnerBase):
         # As authdns hosts could be depooled and under maintenance but still receiving confd updates and hence
         # generating the error files, attempt to delete them best-effort, just logging in case of failure.
         try:
-            self.spicerack.remote().query('A:dns-auth').run_sync(command)
+            self.spicerack.remote().query('A:dnsbox').run_sync(command)
         except RemoteExecutionError:
             logger.warning(
                 "Confd templates error files not properly cleared, check the output above for failures. "

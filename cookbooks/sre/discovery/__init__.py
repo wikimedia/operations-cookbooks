@@ -81,7 +81,7 @@ def wipe_recursor_cache(services: list[str], remote: Remote):
         https://wikitech.wikimedia.org/wiki/DNS#How_to_Remove_a_record_from_the_DNS_resolver_caches
 
     """
-    recursor_hosts = remote.query('A:dns-rec')
+    recursor_hosts = remote.query('A:dnsbox')
     records = ' '.join(['{record}.discovery.wmnet'.format(record=r) for r in services])
     wipe_cache_cmd = 'rec_control wipe-cache {records}'.format(records=records)
     recursor_hosts.run_async(wipe_cache_cmd)

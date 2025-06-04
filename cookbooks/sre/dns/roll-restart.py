@@ -66,14 +66,9 @@ class DNSBoxRollRestartRunner(SRELBBatchRunnerBase):
         return ['recdns', 'authdns-ns.*']
 
     @property
-    def allowed_aliases_query(self) -> str:
-        """Optimize the query"""
-        return 'A:dnsbox'
-
-    @property
     def allowed_aliases(self) -> list:
         """Required by RebootRunnerBase"""
-        return ['dnsbox', 'dns-rec', 'dns-auth']
+        return ['dnsbox']
 
     @property
     def restart_daemons(self) -> list:

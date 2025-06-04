@@ -46,7 +46,7 @@ class WipeCache(CookbookBase):
 class WipeCacheRunner(CookbookRunnerBase):
     """Wipe a DNS cache entry."""
 
-    _dns_rec_alias = 'A:dns-rec'
+    _dns_rec_alias = 'A:dnsbox'
 
     def __init__(self, args, spicerack):
         """Initialize the runner."""

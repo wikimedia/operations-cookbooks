@@ -54,13 +54,7 @@ class NTPRollRestartRunner(SREBatchRunnerBase):
     @property
     def allowed_aliases(self) -> list:
         """Required by RebootRunnerBase"""
-        return ['dnsbox', 'dns-rec', 'dns-auth']
-
-    @property
-    def allowed_aliases_query(self) -> str:
-        """Override the parent property to optimize the query."""
-        # This query must include all hosts matching all the allowed_aliases
-        return 'A:dnsbox'
+        return ['dnsbox']
 
     @property
     def restart_daemons(self):

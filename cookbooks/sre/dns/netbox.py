@@ -38,7 +38,7 @@ def argument_parser():
                               'https://wikitech.wikimedia.org/wiki/DNS/Netbox#Force_update_generated_records'))
     parser.add_argument('--skip-authdns-update', action='store_true',
                         help=('Do not perform an authdns-update after having pushed the changes to the local checkout '
-                              'of the Netbox-generated repository in all the dns-auth hosts. This allows to stage '
+                              'of the Netbox-generated repository in all the dnsbox auth hosts. This allows to stage '
                               'changes that require also a commit in the manual repository. After running this '
                               'cookbook a manual authdns-update will pick up also these changes.'))
     parser.add_argument('--emergency-manual-edit', action='store_true',

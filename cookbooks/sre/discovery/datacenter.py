@@ -263,8 +263,9 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         # Stores the initial state of all services we've acted upon.
         # Used for rollbacks.
         self.initial_state: dict[str, set[str]] = {}
-        self._recursors: RemoteHosts = spicerack.remote().query("A:dns-rec")
-        self._authdns: RemoteHosts = spicerack.remote().query("A:dns-auth")
+        self._recursors: RemoteHosts
+        self._authdns: RemoteHosts
+        self._recursors = self._authdns = spicerack.remote().query("A:dnsbox")
         if self.task_id is not None:
             self.phabricator: Optional[Phabricator] = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         else:
