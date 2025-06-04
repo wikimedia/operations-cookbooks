@@ -3,9 +3,8 @@
 import logging
 from argparse import ArgumentParser, Namespace
 from datetime import datetime, timedelta
-from pprint import pformat
 from time import sleep
-from typing import Dict, Generator, Tuple, Optional, Any
+from typing import Dict, Tuple, Optional, Any
 
 from conftool.extensions.dbconfig.action import ActionResult
 from conftool.extensions.dbconfig.entities import Instance as DBCInst
@@ -356,10 +355,8 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
     def commit_change(self, message: str) -> None:
         """Check the diff and commit the changepy."""
-        ret, diff = self.get_diff()
+        ret = self.get_diff()
         self.check_action_result(ret, f"get diff to {message}")
-
-        self.check_diff(diff)
 
         ret = self.dbctl.config.commit(batch=True, datacenter=self.datacenter, comment=self.reason.reason)
         self.check_action_result(ret, f"commit change to {message}")
@@ -373,7 +370,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
     )
     def wait_diff_clean(self) -> None:
         """Poll until dbctl config diff is clean."""
-        ret, _ = self.get_diff()
+        ret = self.get_diff()
         if ret.success and ret.exit_code == 0:  # Empty diff
             return
 
@@ -398,28 +395,8 @@ class PoolDepoolRunner(CookbookRunnerBase):
         logger.info("Drain timeout! Connection summary: %r", d)
         raise RuntimeError("The instance failed to drain in an hour")
 
-    def get_diff(self) -> tuple[ActionResult, Generator]:
+    def get_diff(self) -> ActionResult:
         """Get the current dbctl config diff."""
-        ret, diff = self.dbctl.config.diff(datacenter=self.datacenter, force_unified=True)
+        ret, _ = self.dbctl.config.diff(datacenter=self.datacenter, force_unified=True)
         self.check_action_result(ret, "evaluate dbctl config diff")
-        return ret, diff
-
-    def check_diff(self, diff: Generator) -> None:
-        """Ensure that the diff has only the expected change in it."""
-        # Count the diff lines unrelated to the current change
-        count = 0
-        for line in diff:
-            if (
-                # ignore control lines and context lines
-                any(line.startswith(prefix) for prefix in (" ", "---", "+++", "@@"))
-                # ignore DB groups lines (e.g. '"vslow": {', '}')
-                or any(substr in line for substr in ("{", "}"))
-            ):
-                continue
-
-            if self.args.instance not in line:
-                count += 1
-
-        if count:
-            logger.info("CAUTION: The current diff has unexpected spurious changes:\n%s", pformat(diff))
-            ask_confirmation("Review the changes. Do you still want to commit them?")
+        return ret
