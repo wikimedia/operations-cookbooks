@@ -52,6 +52,7 @@ class RollUpgradeVarnishRunner(SRELBBatchRunnerBase):
             "libvarnishapi3",
             "libvmod-netmapper",
             "libvmod-querysort",
+            "libvmod-wmfuniq",
             "varnish",
             "varnish-modules",
             "varnish-re2",
