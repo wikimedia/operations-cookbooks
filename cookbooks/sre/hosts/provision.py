@@ -41,6 +41,12 @@ SUPERMICRO_PXE_BUG_SLUGS = (
     'sys-120c-tr-configc',
 )
 
+# The Supermicro Config A hosts don't accept the "PXE" setting
+# when configuring the NIC ports in the BIOS. They need "Legacy".
+SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS = (
+    'sys-110p-wtr-configa',
+)
+
 # See https://phabricator.wikimedia.org/T387577#10627655
 SUPERMICRO_UEFI_NIC_PXE_BIOS_FIRMWARES = (
     'BIOS_X12DDW-1B58_20240704_2.1_STDsp.bin',
@@ -403,7 +409,7 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
 
     def _print_network_info(self, network_info):
         """Pretty print the dictionary returned by _get_network_info."""
-        logger.info("Link status for the NIC ports:")
+        logger.info("NetworkAdapters - Link status for the NIC ports:")
         for model, ports in network_info.items():
             for port, link_status in ports.items():
                 logger.info("Model %s Port %s: %s", model, port, link_status)
@@ -534,7 +540,7 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
                 else:
                     self.bios_changes["Attributes"][key] = new_value
             if "LAN" in key:
-                logger.info("Found a NIC device: %s", key)
+                logger.info("BIOS - Found a NIC device: %s", key)
                 pxe_nic_devices.append(key)
 
         if len(pxe_nic_devices) == 1:
@@ -548,10 +554,10 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
                 for port, link_status in ports.items():
                     if link_status == "LinkUp":
                         logger.info(
-                            "Detected link up for NIC %s port %s", model, port)
+                            "NetworkAdapters - Detected link up for NIC %s port %s", model, port)
                         if nics_with_link_up >= 1:
                             logger.warning(
-                                "Detected more than one link with LinkUp status. "
+                                "NetworkAdapters - Detected more than one link with LinkUp status. "
                                 "PXE settings already assigned to another NIC, "
                                 "skipping this one.")
                         chosen_pxe_nic = self._find_bios_nic_setting(
@@ -572,10 +578,15 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
 
         logger.info("Set PXE to the NIC %s", pxe_nic)
         if self.bios_firmware_filename in SUPERMICRO_UEFI_NIC_PXE_BIOS_FIRMWARES:
+            legacy_pxe_setting = "PXE"
+            uefi_pxe_setting = "PXE"
+        if self.device_model_slug in SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS:
+            legacy_pxe_setting = "Legacy"
             uefi_pxe_setting = "PXE"
         else:
+            legacy_pxe_setting = "PXE"
             uefi_pxe_setting = "EFI"
-        self.bios_changes["Attributes"][pxe_nic] = uefi_pxe_setting if self.args.uefi else "PXE"
+        self.bios_changes["Attributes"][pxe_nic] = uefi_pxe_setting if self.args.uefi else legacy_pxe_setting
 
     def _try_bmc_password(self, bmc_username="ADMIN"):
         """Test the known BMC passwords, find a working one and configure Redfish."""
