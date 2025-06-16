@@ -71,6 +71,17 @@ class Failover(CookbookBase):
             action='store_true',
             help=warning,
         )
+        warning = (
+            "This argument will **skip**"
+            " Gerrit's read-only plugin management."
+        )
+        parser.add_argument(
+            "--rw",
+            required=False,
+            default=False,
+            action='store_true',
+            help=warning,
+        )
 
         return parser
 
@@ -210,6 +221,18 @@ class FailoverRunner(CookbookRunnerBase):
                                         "gerrit-replica.wikimedia.org"
                                     ], raises=True)
 
+    def _run_cookbook_ro_toggle(self, host, state) -> None:
+        if not self.args.rw:
+            self.spicerack.run_cookbook("sre.gerrit.read-only-toggle",
+                                        args=[
+                                            f"--host {host}",
+                                            f"--toggle {state}"
+                                        ], raises=True)
+        else:
+            ask_confirmation(
+                "This cookbook will run without read-only state being activated on instances."
+            )
+
     @retry(
         tries=40,
         delay=timedelta(seconds=15),
@@ -265,9 +288,19 @@ class FailoverRunner(CookbookRunnerBase):
             self.spicerack.puppet(self.switch_to_host).disable(self.reason)
             self.spicerack.puppet(self.switch_from_host).disable(self.reason)
         ask_confirmation(
-            "Run sudo -i authdns-update on ns0.wikimedia.org, review the diff but **do not commit yet.**"
+            "Run sudo -i authdns-update on ns0.wikimedia.org, review the diff but **do not commit yet.**. "
+            "You will be asked later on to commit."
         )
-
+        cmd = "watch ssh gerrit.wikimedia.org -p 29418 gerrit show-queue --by-queue --wide"
+        ask_confirmation(
+            "I will make the source instance read-only after you confirm that "
+            f"{cmd} returns no more pending replication thread. "
+            "Please run that command and confirm that it is running so I can toggle the read-only mode."
+        )
+        self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0], state="on")
+        ask_confirmation(
+            "Please confirm replication is fully done."
+        )
         # TODO offer a landing page either through Gerrit itself or through a http server
         self.switch_from_host.run_sync(
             "systemctl stop gerrit",
@@ -281,6 +314,9 @@ class FailoverRunner(CookbookRunnerBase):
             print_output=True,
             is_safe=False
         )
+        # Freezing the target host to ensure consistency over restarts,
+        # despite promotions/demotions
+        self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0], state="on")
         self._ensure_backup_on_both_sides()
         if self.args.fsck:
             self.spicerack.run_cookbook("sre.gerrit.fsck",
@@ -306,6 +342,12 @@ class FailoverRunner(CookbookRunnerBase):
         self._post_sync_dst_validate()
         self._post_flight_check()
         self._post_sync_src_validate()
+        ask_confirmation(
+            "This is a danger zone, we will now enable writes on both instances. "
+            "Please make sure the cluster status is nominal before going further."
+        )
+        self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0], state="off")
+        self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0], state="off")
 
     def _post_sync_dst_validate(self) -> None:
         if not self.spicerack.dry_run:
