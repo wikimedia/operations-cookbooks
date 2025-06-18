@@ -1028,7 +1028,10 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         for drive_uri in drive_uris:
             drive = redfish_host.request("get", drive_uri).json()
             if drive["MediaType"] == "SSD":
+                logger.info("Drive %s has now revision %s, to be compared with target version %s (ends with)",
+                            drive["Id"], drive["Revision"], target_version)
                 if not drive["Revision"].endswith(str(target_version)):
+                    logger.error("Drive %s was not upgraded to target version %s", drive["Id"], target_version)
                     failed = True
 
         return not failed
