@@ -1,4 +1,5 @@
 """Pool/Depool all services running in a Kubernetes cluster"""
+
 # mypy: ignore-errors
 import logging
 from argparse import ArgumentParser, Namespace
@@ -78,7 +79,7 @@ class PoolDepoolClusterRunner(CookbookRunnerBase):
         if len(self.services) == 1:
             services_msg = self.services[0]
         else:
-            services_msg = f'{len(self.services)} services'
+            services_msg = f"{len(self.services)} services"
 
         reason = self.args.reason if self.args.reason else "maintenance"
         return f"{self.args.action} {services_msg} in {cluster_str}: {reason}"
@@ -143,13 +144,19 @@ class PoolDepoolClusterRunner(CookbookRunnerBase):
         discovery_names = set()
         for service in self.services:
             if not service.discovery:
-                logger.info("The service %s does not have a discovery "
-                            "configuration in the Puppet service catalog, skipping.",
-                            service.name)
+                logger.info(
+                    "The service %s does not have a discovery "
+                    "configuration in the Puppet service catalog, skipping.",
+                    service.name,
+                )
             elif self.args.action == "check" or service.discovery.active_active:
                 discovery_names.update([d.dnsdisc for d in service.discovery])
             else:
-                other_site = service.discovery.site if service.discovery.site == "eqiad" else "codfw"
+                other_site = (
+                    service.discovery.site
+                    if service.discovery.site == "eqiad"
+                    else "codfw"
+                )
 
                 if self.args.action == "pool":
                     confctl_commands = (
@@ -181,9 +188,13 @@ class PoolDepoolClusterRunner(CookbookRunnerBase):
                     "\n%s\n"
                     "NOTE: please keep in mind that each DNS record has a TTL value, "
                     "so any change will be reflected after the cache expires.",
-                    service.name, service.name, confctl_commands
+                    service.name,
+                    service.name,
+                    confctl_commands,
                 )
-                ask_confirmation("Please confirm to have read the above before proceeding.")
+                ask_confirmation(
+                    "Please confirm to have read the above before proceeding."
+                )
 
         run_args = [self.args.action]
         if self.args.action in ("pool", "depool"):
