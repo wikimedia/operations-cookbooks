@@ -100,24 +100,24 @@ class RollUpgradeLibericaRunner(SREBatchRunnerBase):
     def _upgrade_action(self, hosts: RemoteHosts, reason: Reason) -> int:
         """Upgrade liberica and restart the daemons"""
         if not self._args.seamless:
-            self._admin_cookbook("depool")
+            self._admin_cookbook("depool", hosts)
 
         self._run(hosts, reason, upgrade=True)
 
         if not self._args.seamless:
-            self._admin_cookbook("pool")
+            self._admin_cookbook("pool", hosts)
 
         return 0
 
     def _restart_action(self, hosts: RemoteHosts, reason: Reason) -> int:
         """Restart liberica daemons"""
         if not self._args.seamless:
-            self._admin_cookbook("depool")
+            self._admin_cookbook("depool", hosts)
 
         self._run(hosts, reason, upgrade=False)
 
         if not self._args.seamless:
-            self._admin_cookbook("pool")
+            self._admin_cookbook("pool", hosts)
 
         return 0
 
@@ -169,16 +169,12 @@ class RollUpgradeLibericaRunner(SREBatchRunnerBase):
         cmd = '! /bin/systemctl -q is-active liberica-*.service'
         hosts.run_sync(cmd)
 
-    def _admin_cookbook(self, action: str) -> None:
+    def _admin_cookbook(self, action: str, hosts: RemoteHosts) -> None:
         """Trigger sre.loadbalancer.admin cookbook"""
         args = [
+            '--query', f"P{{{hosts}}}",
             '--reason', self._args.reason,
             action
         ]
-
-        if self._args.query:
-            args.extend(('--query', self._args.query))
-        else:
-            args.extend(('--alias', self._args.alias))
 
         self._spicerack.run_cookbook('sre.loadbalancer.admin', args, confirm=True)
