@@ -49,6 +49,7 @@ EXCLUDED_SERVICES = {
 class DiscoveryRecord:
     """Encapsulates the two objects from servicecatalog we need."""
 
+    service_name: str
     record: ServiceDiscoveryRecord
     ips: ServiceIPs
 
@@ -221,8 +222,8 @@ class DiscoveryDcRoute(CookbookBase):
         status.add_argument("--filter", action="store_true", help="Filter the excluded services.")
         return parser
 
-    def get_runner(self, args):
-        """As specified by Spicerack API."""
+    def argument_postprocess(self, args: argparse.Namespace):
+        """Set proper argument defaults based on the chosen action, set up logging, etc."""
         if not self.spicerack.verbose:
             # Avoid conftool logs to flood INFO/DEBUG
             logging.getLogger("conftool").setLevel(logging.WARNING)
@@ -242,6 +243,10 @@ class DiscoveryDcRoute(CookbookBase):
         else:
             args.filter = True
             ensure_shell_is_durable()
+
+    def get_runner(self, args):
+        """As specified by Spicerack API."""
+        self.argument_postprocess(args)
         return DiscoveryDcRouteRunner(args, self.spicerack)
 
 
@@ -538,7 +543,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
                 logger.info("Skipping excluded service %s: %s", service.name, EXCLUDED_SERVICES[service.name])
                 continue
             for record in service.discovery:
-                complete_record = DiscoveryRecord(record=record, ips=service.ip)
+                complete_record = DiscoveryRecord(service_name=service.name, record=record, ips=service.ip)
                 if complete_record.name in MEDIAWIKI_SERVICES and self.do_filter:
                     logger.info("Skipping %s, (use the sre.switchdc.mediawiki cookbook instead)", complete_record.name)
                     continue
