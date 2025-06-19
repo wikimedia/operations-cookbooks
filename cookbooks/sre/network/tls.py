@@ -136,8 +136,7 @@ class TlsRunner(CookbookRunnerBase):
     def get_cert(self) -> Optional[Certificate]:
         """Query a TLS endpoint and return its certificate."""
         try:
-            # TODO add the "timeout" parameter once cumin hosts are running python >= 3.10 to speed things up
-            cert_pem = get_server_certificate((self.device_fqdn, self.port))
+            cert_pem = get_server_certificate((self.device_fqdn, self.port), timeout=5)
             return x509.load_pem_x509_certificate(str.encode(cert_pem))
         except (ConnectionRefusedError, gaierror, TimeoutError, SSLError):
             logger.info("%s: ❌ Can't connect to device, assuming initial bootstrap.", self.device)
