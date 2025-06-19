@@ -48,8 +48,10 @@ SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS = (
 )
 
 # See https://phabricator.wikimedia.org/T387577#10627655
+# and https://phabricator.wikimedia.org/T397415
 SUPERMICRO_UEFI_NIC_PXE_BIOS_FIRMWARES = (
     'BIOS_X12DDW-1B58_20240704_2.1_STDsp.bin',
+    'BIOS_X12DDW-1B58_20250329_2.3_STDsp.bin',
 )
 
 # Hostname prefixes that usually need --enable-virtualization
@@ -580,7 +582,7 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         if self.bios_firmware_filename in SUPERMICRO_UEFI_NIC_PXE_BIOS_FIRMWARES:
             legacy_pxe_setting = "PXE"
             uefi_pxe_setting = "PXE"
-        if self.device_model_slug in SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS:
+        elif self.device_model_slug in SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS:
             legacy_pxe_setting = "Legacy"
             uefi_pxe_setting = "PXE"
         else:
