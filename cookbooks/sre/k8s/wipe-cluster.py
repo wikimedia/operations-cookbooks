@@ -145,7 +145,9 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
         for name, remote in components:
             logger.info("Enabling and running puppet on %s nodes...", name)
             puppet = self.spicerack.puppet(remote)
-            confirm_on_failure(puppet.run, enable_reason=self.admin_reason)
+            confirm_on_failure(
+                puppet.run, batch_size=50, enable_reason=self.admin_reason
+            )
 
     def _ensure_k8s_services_active(self, hosts: RemoteHosts) -> bool:
         """Ensure that all k8s services are active."""
