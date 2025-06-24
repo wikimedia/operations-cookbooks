@@ -284,6 +284,12 @@ class K8sBatchBase(SREBatchBase, metaclass=ABCMeta):
             default="",
         )
 
+        parser.add_argument(
+            "--minimal-cordon",
+            action="store_true",
+            help="Only cordon the nodes that are to be rebooted, not all nodes in the taint group",
+        )
+
         return parser
 
 
@@ -322,6 +328,8 @@ class K8sBatchRunnerBase(SRELBBatchRunnerBase, metaclass=ABCMeta):
         self._host_group_idx = 0
         # _first_batch is used to detect the fist batch run in each host_group
         self._first_batch = True
+        # minimal_cordon skips cordoning all nodes in the taint group, only cordoning the nodes that are to be rebooted
+        self._minimal_cordon = args.minimal_cordon
 
         if args.task_id is not None:
             self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
@@ -462,11 +470,15 @@ class K8sBatchRunnerBase(SRELBBatchRunnerBase, metaclass=ABCMeta):
 
         # If this was the first batch in the host group, cordon all nodes that still need work
         # to prevent evicted Pod's from being scheduled there.
+        # If minimal_cordon is set, we only cordon the nodes that are to be rebooted.
         if self._first_batch:
             self._first_batch = False
-            remaining_hosts = self.host_groups[self._host_group_idx].hosts - hosts.hosts
-            self.logger.info(
-                "Cordoning remaining hosts in host group: %s", remaining_hosts
-            )
-            for node_name in remaining_hosts:
-                self._cordon(node_name)
+            if self._minimal_cordon:
+                self.logger.info("minimal_cordon is set, not cordoning remaining hosts in host group")
+            else:
+                remaining_hosts = self.host_groups[self._host_group_idx].hosts - hosts.hosts
+                self.logger.info(
+                    "Cordoning remaining hosts in host group: %s", remaining_hosts
+                )
+                for node_name in remaining_hosts:
+                    self._cordon(node_name)
