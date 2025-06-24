@@ -7,11 +7,12 @@ from collections import defaultdict
 from math import ceil
 from typing import Optional, Union
 
+from cumin import NodeSet
 from kubernetes.client.models import V1Taint
 from spicerack import Spicerack
 from spicerack.cookbook import LockArgs
 from spicerack.k8s import KubernetesApiError, KubernetesNode
-from spicerack.remote import NodeSet, RemoteExecutionError, RemoteHosts
+from spicerack.remote import RemoteExecutionError, RemoteHosts
 from wmflib import phabricator
 
 from cookbooks.sre import (PHABRICATOR_BOT_CONFIG_FILE, SREBatchBase,
@@ -210,7 +211,7 @@ def flatten_taints(taints: list[V1Taint]) -> str:
     returned by the API does not matter.
     """
     return ";".join(
-        [f"{t.key}={t.value}:{t.effect}" for t in sorted(taints, key=lambda a: a.key)]
+        [f"{t.key}={t.value}:{t.effect}" for t in sorted(taints, key=lambda a: str(a.key))]
     )
 
 
@@ -223,6 +224,7 @@ def etcd_cluster_healthy(remote: RemoteHosts) -> bool:
     """Check if the etcd cluster is healthy, logs the status of each member and returns a boolean"""
     cmd = etcdctl("-w json endpoint health --cluster")
     is_healthy = True
+    result = None
     try:
         result = remote.run_sync(
             cmd,
@@ -241,6 +243,10 @@ def etcd_cluster_healthy(remote: RemoteHosts) -> bool:
         )
         # We already know the cluster is unhealthy
         is_healthy = False
+    if not result:
+        raise RuntimeError(
+            f"etcdctl command '{cmd}' on {remote.hosts[0]} failed to run or returned no output."
+        )
     _, output = next(result)
     # Stdout and stderr are merged in the output but etcdctl always prints JSON
     # before everything else, so we can just parse the first line.
@@ -261,6 +267,19 @@ def etcd_cluster_healthy(remote: RemoteHosts) -> bool:
         )
         is_healthy = False
     return is_healthy
+
+
+def kubectl_version(ctrl_node: RemoteHosts) -> dict[str, dict[str, str]]:
+    """Return kubectl version output from a control plane as a dict."""
+    result = ctrl_node.run_sync(
+        "/usr/bin/kubectl version -o=json",
+        print_progress_bars=False,
+        is_safe=True,
+        print_output=False,
+    )
+    _, output = next(result)
+    version_info = json.loads(next(output.lines()))
+    return version_info
 
 
 class K8sBatchBase(SREBatchBase, metaclass=ABCMeta):
@@ -433,7 +452,7 @@ class K8sBatchRunnerBase(SRELBBatchRunnerBase, metaclass=ABCMeta):
             )
         return batchsize
 
-    def group_action(self, host_group_idx, _: int) -> None:
+    def group_action(self, host_group_idx, number_of_batches: int) -> None:
         """Action to perform once for every host group, right before working on the first batch
 
         Arguments:

@@ -8,10 +8,10 @@ from typing import Union
 
 from cumin import nodeset
 from spicerack import Spicerack
-from spicerack.remote import RemoteHosts
 from spicerack.alerting import AlertingHosts
 from spicerack.alertmanager import Alertmanager
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.remote import RemoteHosts
 from wmflib.interactive import (
     ask_confirmation,
     ask_input,
@@ -25,6 +25,7 @@ from cookbooks.sre.k8s import (
     PROMETHEUS_MATCHERS,
     etcd_cluster_healthy,
     etcdctl,
+    kubectl_version,
 )
 
 logger = logging.getLogger(__name__)
@@ -279,6 +280,16 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
         worker_ok = False
         while not worker_ok:
             worker_ok = self._ensure_k8s_services_active(self.worker_nodes)
+
+        # Additional sanity check: ensure that the cluster has been initialized
+        # with the expected kubernetes version before proceeding.
+        # We don't know which version to expect, so we ask the user.
+        k8s_version = kubectl_version(ctrl_node)
+        server_version = k8s_version["serverVersion"]["gitVersion"]
+        ask_confirmation(
+            f"The cluster is back up with Kubernetes {server_version}, "
+            "does this look good to you?"
+        )
 
         # Update labels of control-plane nodes
         nodes = " ".join(self.control_plane_nodes.hosts)
