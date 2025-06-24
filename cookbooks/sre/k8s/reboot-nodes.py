@@ -37,7 +37,7 @@ class RollRebootK8sNodes(K8sBatchBase):
     """Kubernetes cluster nodes reboot"""
 
     batch_default = 1
-    batch_max = 5
+    batch_max = 20
     valid_actions = ("reboot",)
 
     def get_runner(self, args: Namespace) -> "RollRebootK8sNodesRunner":
@@ -48,4 +48,4 @@ class RollRebootK8sNodes(K8sBatchBase):
 class RollRebootK8sNodesRunner(K8sBatchRunnerBase):
     """Group all nodes of a Kubernetes cluster by taints and perform rolling reboots on a per taint-group basis"""
 
-    depool_threshold = 5  # Maximum allowed batch size
+    depool_threshold = 20  # Maximum allowed batch size
