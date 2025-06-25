@@ -1,5 +1,6 @@
 """Image or re-image a physical host or a Ganeti VM."""
 import ipaddress
+import json
 import logging
 import os
 import re
@@ -22,10 +23,11 @@ from spicerack.ganeti import Ganeti, GanetiRAPI, GntInstance
 from spicerack.icinga import IcingaError
 from spicerack.ipmi import Ipmi
 from spicerack.puppet import PuppetMaster, PuppetServer
-from spicerack.redfish import ChassisResetPolicy
+from spicerack.redfish import ChassisResetPolicy, RedfishError
 from spicerack.remote import RemoteError, RemoteExecutionError, RemoteCheckError
 from wmflib.interactive import AbortError, ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
 
+from cookbooks.sre.puppet import get_puppet_fact
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import (
     OS_VERSIONS,
@@ -113,6 +115,9 @@ class Reimage(CookbookBase):
         parser.add_argument(
             '--force', action='store_true',
             help="Skip the first confirmation prompt, don't ask to --move-vlan, unset --new if host is in PuppetDB.")
+        parser.add_argument(
+            '--use-mac', action='store_true',
+            help='Use the MAC address to identify a physical host during the DHCP step.')
 
         return parser
 
@@ -239,16 +244,49 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.ganeti_instance: GntInstance = self.ganeti.instance(self.fqdn)
             self.ganeti_rapi: GanetiRAPI = self.ganeti.rapi(self.ganeti_instance.cluster)
             self.ganeti_data: dict = self.ganeti_rapi.fetch_instance(self.fqdn)
-            self.dhcp_config = self._get_dhcp_config_mac()
+            ganeti_macs = self.ganeti_data.get('nic.macs', None)
+            if not ganeti_macs or len(ganeti_macs) != 1:
+                raise RuntimeError(f'Unable to get MAC from Ganeti for {self.host}')
+            self.mac = ganeti_macs[0]
+            self.dhcp_config = self._get_dhcp_config_virtual(mac=self.mac)
         else:
             self.mgmt_fqdn = self.netbox_server.mgmt_fqdn
             self.redfish = spicerack.redfish(self.host)
             self.is_uefi = self.redfish.is_uefi
             if not self.is_uefi:
                 self.ipmi: Ipmi = self.spicerack.ipmi(self.mgmt_fqdn)
-            self.dhcp_config = self._get_dhcp_config_opt82(force_tftp=self.use_tftp)
+            self.mac = self._get_primary_mac() if self.args.use_mac else ''
+            self.dhcp_config = self._get_dhcp_config_baremetal(force_tftp=self.use_tftp, mac=self.mac)
 
         self._validate()
+
+    def _get_primary_mac(self) -> str:
+        """Get the MAC address from redfish or from Netbox"""
+        netbox_mac = self.netbox_server.primary_mac_address
+        if netbox_mac:
+            return netbox_mac
+        try:
+            redfish_mac = self.redfish.get_primary_mac()
+        except RedfishError as exp:
+            # TODO: once option 82 is no more, make it a hard blocker
+            logger.error(('Non-blocking error while trying to get the primary NIC MAC address:\n%s\n'
+                          'Make sure PXE is properly configured and iDRAC up to date\n'), exp)
+            redfish_mac = None
+        try:
+            networking_fact = get_puppet_fact(self.requests, self.host, 'networking')
+            puppet_mac = json.loads(networking_fact)['mac'] if networking_fact else None
+        except (KeyError, RuntimeError, ValueError) as exp:
+            logger.warning('Can\'t get the primary MAC address from PuppetDB:\n%s\n', exp)
+            puppet_mac = None
+        if puppet_mac and redfish_mac and puppet_mac != redfish_mac:
+            logger.error(('The MAC address stored in PuppetDB is different from the one from Redfish (%s vs %s)\n'
+                         'Make sure PXE is configure on the proper interface.'),
+                         puppet_mac, redfish_mac)
+        if redfish_mac:
+            return redfish_mac
+        # Something is very wrong if the MAC is in none of the 3 locations
+        logger.error('Can\'t find the host\'s MAC address in Netbox, Redfish or PuppetDB.')
+        return ''
 
     def _get_puppet_server(self) -> Union[PuppetMaster, PuppetServer]:
         """Validate that the puppet version is set correctly."""
@@ -384,25 +422,21 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         else:
             self.host_actions.success('No changes in confctl are needed to restore the previous state.')
 
-    def _get_dhcp_config_mac(self) -> DHCPConfMac:
+    def _get_dhcp_config_virtual(self, mac) -> DHCPConfMac:
         ip = ipaddress.IPv4Interface(self.netbox_data['primary_ip4']['address']).ip
-        mac = self.ganeti_data.get('nic.macs', None)
 
         if not isinstance(ip, ipaddress.IPv4Address):
             raise RuntimeError(f'Unable to find primary IPv4 address for {self.host}.')
 
-        if not mac or len(mac) != 1:
-            raise RuntimeError(f'Unable to get MAC from Ganeti for {self.host}')
-
         return DHCPConfMac(
             hostname=self.host,
             ipv4=ip,
-            mac=mac[0],
+            mac=mac,
             ttys=0,
             distro=self.args.os
         )
 
-    def _get_dhcp_config_opt82(self, force_tftp: bool = False) -> DHCPConfOpt82:
+    def _get_dhcp_config_baremetal(self, force_tftp: bool = False, mac: str = '') -> Union[DHCPConfMac, DHCPConfOpt82]:
         """Instantiate a DHCP configuration to be used for the reimage."""
         netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
         netbox_iface = netbox_host.primary_ip.assigned_object
@@ -469,6 +503,18 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 dhcp_options = {}
             dhcp_filename_exclude_vendor = ""
 
+        if mac:
+            return DHCPConfMac(
+                hostname=self.host,
+                ipv4=ipaddress.IPv4Interface(netbox_host.primary_ip4).ip,
+                mac=mac,
+                ttys=1,
+                distro=self.args.os,
+                media_type=self.args.pxe_media,
+                dhcp_options=dhcp_options,
+                dhcp_filename=dhcp_filename,
+                dhcp_filename_exclude_vendor=dhcp_filename_exclude_vendor,
+            )
         return DHCPConfOpt82(
             hostname=self.host,
             ipv4=ipaddress.IPv4Interface(netbox_host.primary_ip4).ip,
@@ -723,7 +769,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                                           f'sre.hosts.move-vlan cookbook returned {move_vlan_retcode}**')
                 raise RuntimeError(f'sre.hosts.move-vlan cookbook returned {move_vlan_retcode}')
             # Update the DHCP config with the New IP
-            self.dhcp_config = self._get_dhcp_config_opt82(force_tftp=self.use_tftp)
+            self.dhcp_config = self._get_dhcp_config_baremetal(force_tftp=self.use_tftp, mac=self.mac)
             self._validate()
 
         # Clear both old Puppet5 and new Puppet7 infra in all cases, it doesn't fail if the host is not present
