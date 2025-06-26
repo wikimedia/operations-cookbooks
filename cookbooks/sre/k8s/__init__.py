@@ -204,6 +204,28 @@ ALLOWED_CUMIN_ALIASES = {
 }
 
 
+def conftool_cluster_name(k8s_cluster: str) -> str:
+    """Return the conftool cluster name for a given k8s cluster name.
+
+    This is required since the Kubernetes cluster names in hiera
+    (kubernetes::clusters) do not match conftool cluster names (service.yaml).
+    """
+    if k8s_cluster.startswith("ml-serve"):
+        return "ml_serve"
+    if k8s_cluster.startswith("ml-staging"):
+        return "ml_staging"
+    if k8s_cluster.startswith("staging"):
+        return "kubernetes-staging"
+    if k8s_cluster in ("wikikube-codfw", "wikikube-eqiad"):
+        return "kubernetes"
+    if k8s_cluster.startswith("aux"):
+        return "aux-k8s"
+    if k8s_cluster.startswith("dse"):
+        return "dse-k8s"
+
+    raise RuntimeError(f"Unable to find conftool cluster for {k8s_cluster}.")
+
+
 def flatten_taints(taints: list[V1Taint]) -> str:
     """Flatten a taints structure (as returned by Kubernetes API) into a string
 
@@ -278,7 +300,7 @@ def kubectl_version(ctrl_node: RemoteHosts) -> dict[str, dict[str, str]]:
         print_output=False,
     )
     _, output = next(result)
-    version_info = json.loads(next(output.lines()))
+    version_info = json.loads(output.message())
     return version_info
 
 

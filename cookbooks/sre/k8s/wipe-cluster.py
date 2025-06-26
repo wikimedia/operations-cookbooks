@@ -12,6 +12,7 @@ from spicerack.alerting import AlertingHosts
 from spicerack.alertmanager import Alertmanager
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.remote import RemoteHosts
+from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import (
     ask_confirmation,
     ask_input,
@@ -57,9 +58,10 @@ class WipeK8sCluster(CookbookBase):
     This cookbooks automates the procedure to wipe a Kubernetes cluster.
     The idea is to:
     1) Downtime the hosts in the cluster.
-    2) Stop kube* daemons across control plane and worker nodes.
-    3) Wipe data in the etcd cluster.
-    4) Optional: Restart kube* daemons and remove downtimes by running puppet.
+    2) Down time all services running in the cluster.
+    3) Stop kube* daemons across control plane and worker nodes.
+    4) Wipe data in the etcd cluster.
+    5) Optional: Restart kube* daemons by running puppet and remove downtimes.
 
     Since the state of a cluster is stored in etcd and the rest is stateless,
     the above procedure should guarantee to start from a clean state.
@@ -94,6 +96,10 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.admin_reason = spicerack.admin_reason(args.reason)
         self.k8s_cluster = args.k8s_cluster
+        # Parse the datacenter from the k8s cluster name and ensure it is a core datacenter
+        self.datacenter = args.k8s_cluster.split("-")[-1]
+        if self.datacenter not in CORE_DATACENTERS:
+            raise ValueError(f"Datacenter {self.datacenter} is not a core datacenter.")
         self.spicerack_remote = self.spicerack.remote()
         self.etcd_nodes = self.spicerack_remote.query(self.etcd_query)
         self.control_plane_nodes = self.spicerack_remote.query(self.control_plane_query)
@@ -104,8 +110,10 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
             self.downtime_duration = timedelta(
                 days=args.days, hours=args.hours, minutes=args.minutes
             )
-        # List of tuples (alert_host_handle, downtime_id)
+        # List of tuples (alert_host_handle, downtime_id) for all cluster related downtimes
         self.downtimes: list[tuple[Union[Alertmanager, AlertingHosts], str]] = []
+        # List of tuples (alert_host_handle, downtime_id) for all service downtimes
+        self.service_downtimes: list[tuple[Union[Alertmanager, AlertingHosts], str]] = []
 
     @property
     def etcd_query(self):
@@ -179,6 +187,29 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
                     return False
         return True
 
+    def _downtime_services(
+        self, alert_host: Alertmanager, downtime_duration: timedelta
+    ) -> None:
+        """Downtime all services running on the cluster."""
+        for service in self.spicerack.service_catalog():
+            if (
+                service.lvs is not None
+                and service.lvs.enabled
+                and service.lvs.conftool.service == "kubesvc"
+                and service.lvs.conftool.cluster == self.k8s_cluster
+            ):
+                logger.info(
+                    "Downtime service %s",
+                    service.name,
+                )
+                # Downtime the service
+                downtime_id = service.downtime(
+                    site=self.datacenter,
+                    reason=self.admin_reason,
+                    duration=downtime_duration,
+                )
+                self.service_downtimes.append((alert_host, downtime_id))
+
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
@@ -210,13 +241,15 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
 
         # Add an extra downtime for the whole Prometheus k8s cluster
         # to reduce the noise as much as possible.
+        downtime_duration = timedelta(minutes=60 * len(affected_nodes))
         all_prom_cluster_alerts = self.spicerack.alertmanager()
         all_prom_cluster_alerts_id = all_prom_cluster_alerts.downtime(
             self.admin_reason,
             matchers=PROMETHEUS_MATCHERS[self.k8s_cluster],
-            duration=timedelta(minutes=60 * len(affected_nodes)),
+            duration=downtime_duration,
         )
         self.downtimes.append((all_prom_cluster_alerts, all_prom_cluster_alerts_id))
+        self._downtime_services(all_prom_cluster_alerts, downtime_duration)
 
         # In addition to k8s daemons, we need to stop confd-k8s which would (re-)start them
         # when we re-publish the service account certificates to etcd later.
@@ -320,4 +353,12 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
 
         # Remove all downtimes
         for alert_host, downtime_id in self.downtimes:
+            alert_host.remove_downtime(downtime_id)
+
+        ask_confirmation(
+            "You should re-deploy all services now, "
+            "next step will be removing service downtimes."
+        )
+        # Remove all service downtimes
+        for alert_host, downtime_id in self.service_downtimes:
             alert_host.remove_downtime(downtime_id)

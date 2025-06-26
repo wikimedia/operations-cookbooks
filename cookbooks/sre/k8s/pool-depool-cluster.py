@@ -12,7 +12,7 @@ from cookbooks.sre.discovery.datacenter import (
     DiscoveryDcRouteRunner,
     DiscoveryRecord,
 )
-from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES
+from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES, conftool_cluster_name
 
 logger = logging.getLogger(__name__)
 
@@ -91,18 +91,7 @@ class PoolDepoolClusterRunner(DiscoveryDcRouteRunner):
     def __init__(self, args: Namespace, spicerack: Spicerack):
         """Initialize the runner."""
         self.args = args
-        # Cluster names in hiera (kubernetes::clusters) and service.yaml do not match
-        if self.args.k8s_cluster.startswith("ml-serve"):
-            self.conftool_cluster = "ml_serve"
-        elif self.args.k8s_cluster.startswith("ml-staging"):
-            self.conftool_cluster = "ml_staging"
-        elif self.args.k8s_cluster.startswith("staging"):
-            self.conftool_cluster = "kubernetes-staging"
-        elif self.args.k8s_cluster in ("codfw", "eqiad"):
-            self.conftool_cluster = "kubernetes"
-        else:
-            raise RuntimeError(f"Unsupported cluster {self.args.k8s_cluster}")
-
+        self.conftool_cluster = conftool_cluster_name(args.k8s_cluster)
         super().__init__(args, spicerack)
 
     @property
