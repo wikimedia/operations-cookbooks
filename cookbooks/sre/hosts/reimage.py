@@ -17,7 +17,7 @@ from cumin.transports import Command
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.decorators import retry
-from spicerack.dhcp import DHCPConfMac, DHCPConfOpt82
+from spicerack.dhcp import DHCPConfiguration, DHCPConfMac, DHCPConfOpt82, DHCPConfUUID
 from spicerack.exceptions import SpicerackError
 from spicerack.ganeti import Ganeti, GanetiRAPI, GntInstance
 from spicerack.icinga import IcingaError
@@ -30,6 +30,7 @@ from wmflib.interactive import AbortError, ask_confirmation, ask_input, confirm_
 from cookbooks.sre.puppet import get_puppet_fact
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import (
+    DELL_VENDOR_SLUG,
     OS_VERSIONS,
     SUPERMICRO_VENDOR_SLUG,
     LEGACY_VLANS
@@ -116,8 +117,8 @@ class Reimage(CookbookBase):
             '--force', action='store_true',
             help="Skip the first confirmation prompt, don't ask to --move-vlan, unset --new if host is in PuppetDB.")
         parser.add_argument(
-            '--use-mac', action='store_true',
-            help='Use the MAC address to identify a physical host during the DHCP step.')
+            '--no82', action='store_true',
+            help='Do not use DHCP option 82 to identify a physical host (but instead UUID or MAC).')
 
         return parser
 
@@ -235,7 +236,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         # Load properties / attributes specific to either virtual
         # or physical hosts.
-        self.dhcp_config: Union[DHCPConfMac, DHCPConfOpt82]
+        self.dhcp_config: DHCPConfiguration
         if self.virtual:
             self.ganeti_instance: GntInstance = self.ganeti.instance(self.fqdn)
             self.ganeti_rapi: GanetiRAPI = self.ganeti.rapi(self.ganeti_instance.cluster)
@@ -251,11 +252,37 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.is_uefi = self.redfish.is_uefi
             if not self.is_uefi:
                 self.ipmi: Ipmi = self.spicerack.ipmi(self.mgmt_fqdn)
-            self.mac = self._get_primary_mac() if self.args.use_mac else ''
-            self.dhcp_config = self._get_dhcp_config_baremetal(force_tftp=self.use_tftp, mac=self.mac)
+            self.identifier = self._get_host_identifier() if self.args.no82 else ''
+            self.dhcp_config = self._get_dhcp_config_baremetal(force_tftp=self.use_tftp, identifier=self.identifier)
 
         self._validate()
 
+    def _get_host_identifier(self) -> str:
+        # If Dell, generate the uuid from the serial, once all boxes support
+        # redfish this can be removed.
+        if self.netbox_data['device_type']['manufacturer']['slug'] == DELL_VENDOR_SLUG:
+            serial = self.netbox_data['serial']
+            hex_string = bytes.hex(b'LLED%c%c%c%c%c%c%c%c%c%c%c%c' % (
+                0x00, ord(serial[1]),
+                ord(serial[2]), 0x10,
+                0x80, ord(serial[3]),
+                ord(serial[0]) | 0x80, 0xc0, 0x4f, ord(serial[4]), ord(serial[5]), ord(serial[6]),
+            ))
+            formatted_hex = (f"{hex_string[:8]}-{hex_string[8:12]}-"
+                             f"{hex_string[12:16]}-{hex_string[16:20]}-{hex_string[20:]}")
+            return formatted_hex
+
+        # If supermicro (or anything else) try to fetch the UUID from Redfish
+        try:
+            if self.redfish.uuid:
+                return self.redfish.uuid
+        except RedfishError as exp:
+            logger.error('Unable to obtain the SMBIOS UUID via redfish, using MAC:\n%s\n', exp)
+
+        # If no UUID, last catch all, use the MAC of the PXE nic
+        return self._get_primary_mac()
+
+    # To be eventually trimmed if option 97 works well
     def _get_primary_mac(self) -> str:
         """Get the MAC address from redfish or from Netbox"""
         netbox_mac = self.netbox_server.primary_mac_address
@@ -435,28 +462,19 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             distro=self.args.os
         )
 
-    def _get_dhcp_config_baremetal(self, force_tftp: bool = False, mac: str = '') -> Union[DHCPConfMac, DHCPConfOpt82]:
+    def _get_dhcp_config_baremetal(
+        self, force_tftp: bool = False, identifier: str = ""
+    ) -> DHCPConfiguration:
         """Instantiate a DHCP configuration to be used for the reimage."""
-        netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
-        netbox_iface = netbox_host.primary_ip.assigned_object
-        # If it's a ganeti host the primary IP is on a bridge, we get the physical port that is a member
-        if netbox_iface.type.value == "bridge":
-            netbox_iface = self.netbox.api.dcim.interfaces.get(
-                device_id=netbox_host.id,
-                bridge_id=netbox_iface.id,
-                type__n=("virtual", "lag", "bridge"),
-                mgmt_only=False,
-            )
-        try:
-            switch_iface = netbox_iface.connected_endpoints[0]
-        except TypeError as e:
-            raise RuntimeError(f'Error finding switch port connected to {netbox_iface} on {netbox_host}. Netbox '
-                               'model of server connections is invalid.') from e
-        switch_hostname = (
-            switch_iface.device.virtual_chassis.name.split('.')[0]
-            if switch_iface.device.virtual_chassis is not None
-            else switch_iface.device.name
-        )
+        if len(identifier) == 36:
+            uuid = identifier
+            mac = ''
+        elif len(identifier) == 17:
+            uuid = ''
+            mac = identifier
+        else:
+            uuid = ''
+            mac = ''
         if self.is_uefi:
             # After the iPXE boot loader is fetched via UEFI HTTP Boot, iPXE
             # tries to fetch autoexec.ipxe from the base directory of the boot
@@ -505,7 +523,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if mac:
             return DHCPConfMac(
                 hostname=self.host,
-                ipv4=ipaddress.IPv4Interface(netbox_host.primary_ip4).ip,
+                ipv4=ipaddress.IPv4Interface(self.netbox_server.primary_ip4_address).ip,
                 mac=mac,
                 ttys=1,
                 distro=self.args.os,
@@ -514,6 +532,40 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 dhcp_filename=dhcp_filename,
                 dhcp_filename_exclude_vendor=dhcp_filename_exclude_vendor,
             )
+
+        if uuid:
+            return DHCPConfUUID(
+                hostname=self.host,
+                ipv4=ipaddress.IPv4Interface(self.netbox_server.primary_ip4_address).ip,
+                uuid=uuid,
+                ttys=1,
+                distro=self.args.os,
+                media_type=self.args.pxe_media,
+                dhcp_options=dhcp_options,
+                dhcp_filename=dhcp_filename,
+                dhcp_filename_exclude_vendor=dhcp_filename_exclude_vendor,
+            )
+
+        netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
+        netbox_iface = netbox_host.primary_ip.assigned_object
+        # If it's a ganeti host the primary IP is on a bridge, we get the physical port that is a member
+        if netbox_iface.type.value == "bridge":
+            netbox_iface = self.netbox.api.dcim.interfaces.get(
+                device_id=netbox_host.id,
+                bridge_id=netbox_iface.id,
+                type__n=("virtual", "lag", "bridge"),
+                mgmt_only=False,
+            )
+        try:
+            switch_iface = netbox_iface.connected_endpoints[0]
+        except TypeError as e:
+            raise RuntimeError(f'Error finding switch port connected to {netbox_iface} on {netbox_host}. Netbox '
+                               'model of server connections is invalid.') from e
+        switch_hostname = (
+            switch_iface.device.virtual_chassis.name.split('.')[0]
+            if switch_iface.device.virtual_chassis is not None
+            else switch_iface.device.name
+        )
         return DHCPConfOpt82(
             hostname=self.host,
             ipv4=ipaddress.IPv4Interface(netbox_host.primary_ip4).ip,
@@ -774,7 +826,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                                           f'sre.hosts.move-vlan cookbook returned {move_vlan_retcode}**')
                 raise RuntimeError(f'sre.hosts.move-vlan cookbook returned {move_vlan_retcode}')
             # Update the DHCP config with the New IP
-            self.dhcp_config = self._get_dhcp_config_baremetal(force_tftp=self.use_tftp, mac=self.mac)
+            self.dhcp_config = self._get_dhcp_config_baremetal(force_tftp=self.use_tftp, identifier=self.identifier)
             self._validate()
 
         # Clear both old Puppet5 and new Puppet7 infra in all cases, it doesn't fail if the host is not present
