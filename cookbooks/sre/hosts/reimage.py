@@ -284,6 +284,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                          puppet_mac, redfish_mac)
         if redfish_mac:
             return redfish_mac
+        if puppet_mac:
+            # Temporarily store the primary MAC exposed by Puppet in Netbox, in case the reimage fails
+            self.netbox_server.primary_mac_address = puppet_mac
+            return puppet_mac
         # Something is very wrong if the MAC is in none of the 3 locations
         logger.error('Can\'t find the host\'s MAC address in Netbox, Redfish or PuppetDB.')
         return ''
@@ -718,6 +722,13 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             for line in data['log']:
                 logger.info('[%s] %s', line['status'], line['message'])
 
+        # Workaround bug https://github.com/netbox-community/pynetbox/issues/586 by refreshing netbox_server
+        # Otherwise pynetbox fails at setting it to None as it thinks it's already None
+        self.netbox_server = self.spicerack.netbox_server(self.netbox_data['name'], read_write=True)
+        if self.netbox_server.primary_mac_address:
+            # Systematically clear the MAC address stored in Netbox on successful reimage
+            self.netbox_server.primary_mac_address = None
+
         result = None
         try:
             result = self.requests.post(url, headers=headers, json=data)
@@ -864,6 +875,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self._check_icinga()
         self._repool()
         self._update_netbox_data()
+
         current_status = self.netbox_server.status
         if not self.virtual and current_status in ('planned', 'failed'):
             self.netbox_server.status = 'active'
