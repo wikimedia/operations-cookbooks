@@ -25,16 +25,16 @@ class DiscoveryServiceRoute(CookbookBase):
 
     Examples:
     - Check the state of the test-svc service:
-      cookbook.sre.k8s.discovery.service-route check test-svc
+      cookbook sre.discovery.service-route check test-svc
 
     - Depool a list of services from codfw:
-      cookbook.sre.k8s.discovery.service-route depool codfw test-svc test-svc2
+      cookbook sre.discovery.service-route depool codfw test-svc test-svc2
 
     - Pool a list of services from codfw:
-      cookbook.sre.k8s.discovery.service-route pool codfw test-svc test-svc2
+      cookbook sre.discovery.service-route pool codfw test-svc test-svc2
 
     - Depool a service from codfw and wipe the DNS recursors' cache:
-      cookbook.sre.k8s.discovery.service-route pool codfw test-svc test-svc2 --wipe-cache
+      cookbook sre.discovery.service-route pool codfw test-svc test-svc2 --wipe-cache
 
       Please note: this cookbook does not handle active/active vs active/passive
       distinctions, it will just execute a pool/depool action as the operator
