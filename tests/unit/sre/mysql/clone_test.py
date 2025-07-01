@@ -137,9 +137,19 @@ yamlconf = dict(replication_user="ru", replication_password="rp")
 @patch("cookbooks.sre.mysql.clone._remotehosts_query", autospec=True)
 @patch("spicerack.Spicerack", autospec=True)
 def test_run(
-    m_sr, m_remotehosts_query, m_gdbi, m_loadyaml, m_run, m_xfr, m_add_host_zarc, m_ask_conf, m_ensure_shell, m_retry,
-    m_sleep
+    m_sr,
+    m_remotehosts_query,
+    m_gdbi,
+    m_loadyaml,
+    m_run,
+    m_xfr,
+    m_add_host_zarc,
+    m_ask_conf,
+    m_ensure_shell,
+    m_retry,
+    m_sleep,
 ):
+    m_sr.run_cookbook = mock.Mock()
 
     def netbox(hn):
         if hn in ["db001", "db002", "db003"]:
