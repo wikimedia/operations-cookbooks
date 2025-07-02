@@ -155,65 +155,22 @@ class FailoverRunner(CookbookRunnerBase):
         )
 
     def _pre_flight_check(self) -> None:
-        logger.info("Running pre-flight checks")
-        if not self._grep_for_replica(host=self.switch_to_host):
-            raise RuntimeError("target host is not configured as replica.")
-        if self.expected_src_address != self._dig_on_host(self.switch_to_host, 'gerrit.wikimedia.org'):
-            raise RuntimeError("Unexpected IP after DNS check.")
-        if not self._is_gerrit_running(self.switch_to_host):
-            raise RuntimeError("Gerrit is in an unexpected state.")
-        if not self._gerrit_user_check():
-            if not self.args.chown:
-                raise RuntimeError("Gerrit is in an unexpected state.")
-            logger.info("User discrepancy has been handled via --chown, continuing.")
+        self.spicerack.run_cookbook("sre.gerrit.topology-check",
+                                    args=[
+                                        f"--source {self.args.switch_from_host}",
+                                        f"--replica {self.args.switch_to_host}",
+                                        "--full "
+                                    ], raises=True)
 
-    def _gerrit_user_check(self) -> bool:
-        return self.target_gerrit_user == self.source_gerrit_user
+    def _post_sync_validate_new_source(self) -> None:
+        logger.info("Running post-flight checks for the new source")
+        self.spicerack.run_cookbook("sre.gerrit.topology-check",
+                                    args=[
+                                        f"--source {self.args.switch_to_host}",
+                                        f"--replica {self.args.switch_from_host}",
+                                        "--full"
+                                    ], raises=True)
 
-    def _post_flight_check(self, before_puppet_on_future_replica=True) -> None:
-        logger.info("Running post-flight checks")
-        if before_puppet_on_future_replica:
-            # We want to skip that check since puppet has not yet been able to change that configuration
-            if not self._grep_for_replica(host=self.switch_from_host):
-                if not self.spicerack.dry_run:
-                    raise RuntimeError("Source host not configured as replica, please advise.")
-                logger.info("Source host not configured as replica, as expected, due to dry-run.")
-        if not self._dig_on_host(self.switch_to_host, 'gerrit.wikimedia.org'):
-            if not self.spicerack.dry_run:
-                raise RuntimeError("Unexpected IP after DNS check.")
-            logger.info("Unexpected IP after DNS check, as expected, due to dry-run.")
-        if self._dig_on_host(self.switch_from_host, 'gerrit.wikimedia.org'):
-            err = f"{self.switch_from_host.hosts[0]} should not be identified as gerrit.wikimedia.org in DNS."
-            if not self.spicerack.dry_run:
-                raise RuntimeError(err)
-            err += ", as expected due to dry-run"
-            logger.info(err)
-
-    def _is_gerrit_running(self, host) -> bool:
-        result = list(host.run_sync(
-            "systemctl is-running gerrit.service",
-            is_safe=True,
-            print_progress_bars=False,
-            print_output=False,
-        ))
-        output = result[0][1].message().decode().strip()
-        if output != "inactive":
-            logger.info("gerrit is running on this host")
-        else:
-            logger.info("gerrit is stopped on this host")
-        return output != "inactive"
-
-    def _validate_dns(self) -> None:
-        expected_ip = self.dns.resolve_ipv4("gerrit.wikimedia.org")[0]
-        self._ensure_dns_propagated("gerrit.wikimedia.org", expected_ip)
-
-    @retry(
-        tries=3,
-        delay=timedelta(seconds=15),
-        backoff_mode="constant",
-        failure_message="Failed to properly run cache wipe cookbook.",
-        exceptions=(RuntimeError,),
-    )
     def _run_cookbook_dns_cache_wipe(self) -> None:
         self.spicerack.run_cookbook("sre.dns.wipe-cache",
                                     args=[
@@ -232,51 +189,6 @@ class FailoverRunner(CookbookRunnerBase):
             ask_confirmation(
                 "This cookbook will run without read-only state being activated on instances."
             )
-
-    @retry(
-        tries=40,
-        delay=timedelta(seconds=15),
-        backoff_mode="constant",
-        failure_message="Waiting for DNS propagation failed",
-        exceptions=(RuntimeError,),
-    )
-    def _ensure_dns_propagated(self, hostname: str, expected_ip: str) -> None:
-        """Probe both Gerrit servers and assert they both resolve 'hostname' to exactly {expected_ip}.
-
-        Raises:
-            RuntimeError: triggers retry if DNS is not yet stable.
-
-        """
-        servers = [self.switch_from_host, self.switch_to_host]
-        seen = {}
-
-        for srv in servers:
-            try:
-                ips = set(self._dig_on_host(srv, hostname))
-            except RuntimeError as e:
-                logger.warning("DNS probe error on %s: %s", srv, e)
-                ips = set()
-            seen[srv.hosts[0].name] = ips
-            logger.debug("DNS seen by %s -> %s", srv.hosts[0].name, ips)
-
-        if any(ips != {expected_ip} for ips in seen.values()):
-            raise RuntimeError(f"DNS not stable yet: {seen}")
-
-        logger.info("DNS propagated consistently to %s on both servers", expected_ip)
-
-    def _dig_on_host(self, host, name: str):
-        """Execute 'dig +short name' on the given host."""
-        result = list(host.run_sync(
-            f"dig +short {name}",
-            print_progress_bars=False,
-            print_output=False,
-            is_safe=True,
-            raises=True
-        ))
-        result = result[0][1].message().decode().strip()
-        msg = f"{result} was found for this dig query."
-        logger.info(msg)
-        return result
 
     def run(self) -> None:
         """Entrypoint to execute cookbook."""
@@ -297,6 +209,7 @@ class FailoverRunner(CookbookRunnerBase):
             f"{cmd} returns no more pending replication thread. "
             "Please run that command and confirm that it is running so I can toggle the read-only mode."
         )
+        #  replication source being frozen, we will now wait for replication
         self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0], state="on")
         ask_confirmation(
             "Please confirm replication is fully done."
@@ -334,34 +247,22 @@ class FailoverRunner(CookbookRunnerBase):
         # We should make sure nothing is left behind while switching hosts.
 
         ask_confirmation(
-            f"Please merge the change to set the DNS records for Gerrit primary on {self.switch_to_host}. "
-            "I will wait for propagation across both Gerrit hosts."
+            f"Please merge the change to set the **DNS records** for Gerrit primary on {self.switch_to_host}. "
+            "I will trigger then a DNS cache wipe and ensure both Gerrit hosts are up to speed."
         )
         if not self.spicerack.dry_run:
             self._run_cookbook_dns_cache_wipe()
-        self._post_sync_dst_validate()
-        self._post_flight_check()
-        self._post_sync_src_validate()
+        #  Validates that all instances are seeing the same resource record version.
+        self._ensure_dns_post_merge()
         ask_confirmation(
-            "This is a danger zone, we will now enable writes on both instances. "
-            "Please make sure the cluster status is nominal before going further."
-        )
-        self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0], state="off")
-        self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0], state="off")
-
-    def _post_sync_dst_validate(self) -> None:
-        if not self.spicerack.dry_run:
-            self._validate_dns()
-
-        ask_confirmation(
-            f"Please merge the change to set the puppet role for Gerrit primary on {self.switch_to_host}. "
+            f"Please merge the change to set the **puppet role** for Gerrit primary on {self.switch_to_host}. "
             "When you hit go, we will re-enable puppet and execute a puppet run."
         )
         self.confirm_before_proceeding()
         if not self.spicerack.dry_run:
             self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
-        if self._grep_for_replica(self.switch_to_host) and not self.spicerack.dry_run:
-            raise RuntimeError("Failed configuration on destination host, found replica flag still enabled.")
+            self._post_sync_validations()  # Will enable puppet on the new replica
+
         self.switch_to_host.run_sync(
             "systemctl restart gerrit",
             print_progress_bars=False, print_output=True, is_safe=False
@@ -369,19 +270,27 @@ class FailoverRunner(CookbookRunnerBase):
         # TODO https://gerrit-review.googlesource.com/Documentation/rest-api-config.html#check-consistency on the source
         ask_confirmation(
             "Please verify that the switchover to gerrit.wikimedia.org is operating as expected. "
-            f"Once you are certain please merge the change to set the puppet role for {self.switch_from_host}, "
-            "and we will re-enable and run puppet."
+            "Once this is done, we will re-enable read-write on all instances after your confirmation."
         )
+        self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0], state="off")
+        self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0], state="off")
 
-    def _post_sync_src_validate(self) -> None:
+    def _post_sync_validations(self) -> None:
+        self._post_sync_validate_former_source()
+        self._post_sync_validate_new_source()
+
+    def _post_sync_validate_former_source(self) -> None:
+        #  this specific step is designed to ensure we avoid running into incidents such as https://w.wiki/EcxD
+        logger.info("Running post-flight checks for the new replica")
         if not self.spicerack.dry_run:
-            self._validate_dns()
+            # DNS has been checked before this, we will enable puppet to have the --replica flag on
             self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
-            self.switch_from_host.run_sync(
-                "systemctl stop gerrit",
-                print_progress_bars=False, print_output=True, is_safe=False
-            )
-            self._post_flight_check(before_puppet_on_future_replica=False)
+            # if so, it is OK to enable puppet and have that --replica flag, and double check it
+            self.spicerack.run_cookbook("sre.gerrit.topology-check",
+                                        args=[
+                                            "--systemd "
+                                            f"--host  {self.args.switch_from_host}",
+                                        ], raises=True)
 
         self.switch_from_host.run_sync(
             "systemctl start gerrit",
@@ -393,6 +302,16 @@ class FailoverRunner(CookbookRunnerBase):
             "https://w.wiki/DoeG"
         )
         # TODO https://gerrit-review.googlesource.com/Documentation/rest-api-config.html#check-consistency on the repl
+
+    def _ensure_dns_post_merge(self):
+        args = [
+            # the new source should be identified as such
+            f"--source {self.args.switch_to_host}",
+            f"--replica {self.args.switch_from_host}",
+            "--dns "
+        ]
+        self.spicerack.run_cookbook("sre.gerrit.topology-check",
+                                    args=args, raises=True)
 
     @retry(
         tries=10,
@@ -474,9 +393,12 @@ class FailoverRunner(CookbookRunnerBase):
 
     def _ensure_backup_on_both_sides(self) -> bool:
         """Ensure backup on *both* Gerrit servers"""
+        # TODO check if enough space is available to perform local backup
         hosts = [self.switch_from_host, self.switch_to_host]
 
         for host in hosts:
+            msg = f"Preparing local emergency backup on {host}"
+            logger.info(msg)
             self._backup_dirs_on_host(host)
 
         return True
@@ -507,23 +429,3 @@ class FailoverRunner(CookbookRunnerBase):
             )
             if self.spicerack.dry_run:
                 logger.info("Would have run backup rsync on %s: %s", host, rsync_cmd)
-
-    def _grep_for_replica(self, host) -> bool:
-        grep_cmd = (
-            "/bin/grep -q replica "
-            "/etc/systemd/system/multi-user.target.wants/gerrit.service "
-            "&& echo FOUND || echo MISSING"
-        )
-
-        result = list(host.run_sync(
-            grep_cmd,
-            print_progress_bars=False,
-            print_output=False,
-            is_safe=True
-        ))
-        result = result[0][1].message().decode().strip()
-        if result == "FOUND":
-            logger.info("Found that this host is configured as a replica.")
-        else:
-            logger.info("Found that this host is configured as a source.")
-        return result == "FOUND"
