@@ -133,6 +133,18 @@ PROMETHEUS_MATCHERS: dict[str, list[dict[str, Union[str, int, float, bool]]]] = 
             "value": "k8s-aux",
             "isRegex": False
         }
+    ],
+    "aux-codfw": [
+        {
+            "name": "site",
+            "value": "codfw",
+            "isRegex": False
+        },
+        {
+            "name": "prometheus",
+            "value": "k8s-aux",
+            "isRegex": False
+        }
     ]
 }
 
@@ -197,9 +209,16 @@ ALLOWED_CUMIN_ALIASES = {
     "aux-eqiad": {
         "k8s-group": "aux-k8s",
         "k8s-cluster": "aux-k8s-eqiad",
-        "etcd": "aux-etcd",
-        "control-plane": "aux-master",
-        "workers": "aux-worker"
+        "etcd": "aux-etcd-eqiad",
+        "control-plane": "aux-master-eqiad",
+        "workers": "aux-worker-eqiad"
+    },
+    "aux-codfw": {
+        "k8s-group": "aux-k8s",
+        "k8s-cluster": "aux-k8s-codfw",
+        "etcd": "aux-etcd-codfw",
+        "control-plane": "aux-master-codfw",
+        "workers": "aux-worker-codfw"
     },
 }
 
