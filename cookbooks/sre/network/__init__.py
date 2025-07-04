@@ -3,8 +3,10 @@ import json
 import logging
 
 from ipaddress import ip_address
+from subprocess import CalledProcessError, run
 from typing import Optional
 
+from spicerack.constants import KEYHOLDER_SOCK
 from spicerack.netbox import Netbox
 from spicerack.remote import Remote, RemoteHosts
 from wmflib.interactive import ask_confirmation
@@ -492,3 +494,21 @@ def get_junos_bgp_summary(remote_host: RemoteHosts, print_output: bool = False) 
                 logger.error("Key '%s' not present in returned data for %s", key, peer_address)
 
     return formatted_peers
+
+
+def run_homer(queries: list, dry_run: bool = True) -> None:
+    """Run Homer.
+
+    Arguments:
+        queries: List of queries in a Homer compatible format (glob)
+        dry_run: If true, does a diff, otherwise a commit
+
+    """
+    environment = {"SSH_AUTH_SOCK": KEYHOLDER_SOCK}
+    action = 'diff' if dry_run else f"commit 'Ran from cookbook {__name__}'"
+
+    for query in queries:
+        try:
+            run(['/usr/local/bin/homer', query, action], check=True, env=environment)
+        except CalledProcessError as e:
+            logger.warning("Issue while running Homer on %s, please run it manually.\n%s", query, e)

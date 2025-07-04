@@ -5,7 +5,7 @@ from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ensure_shell_is_durable
 
 
-from cookbooks.sre.network import configure_switch_interfaces
+from cookbooks.sre.network import configure_switch_interfaces, run_homer
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ class ConfigSwitchInterfaces(CookbookBase):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument('host', help='Physical server hostname (not FQDN)')
+        parser.add_argument('--homer', action='store_true', help='Use Homer to configure the switches')
         return parser
 
     def get_runner(self, args):
@@ -44,9 +45,11 @@ class ConfigSwitchInterfacesRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
         self.netbox = spicerack.netbox()
         self.verbose = spicerack.verbose
-        netbox_server = spicerack.netbox_server(args.host)
-        self.netbox_data = netbox_server.as_dict()
+        self.netbox_server = spicerack.netbox_server(args.host)
+        self.netbox_data = self.netbox_server.as_dict()
         self.remote = spicerack.remote()
+        self.dry_run = spicerack.dry_run
+        self.args = args
 
         if self.netbox_data['is_virtual']:
             logger.error("This cookbook is intended for baremetal hosts only")
@@ -58,4 +61,8 @@ class ConfigSwitchInterfacesRunner(CookbookRunnerBase):
 
     def run(self):
         """Required by Spicerack API."""
-        configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
+        if self.args.homer:
+            # TODO: doesn't work for virtual-chassis
+            run_homer(queries=[f'{hostname}.*' for hostname in self.netbox_server.switches], dry_run=self.dry_run)
+        else:
+            configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)

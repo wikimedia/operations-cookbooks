@@ -26,9 +26,9 @@ from spicerack.redfish import (
 from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, get_secret, ensure_shell_is_durable
 from cookbooks.sre.hosts import (
     SUPERMICRO_VENDOR_SLUG,
-    DELL_VENDOR_SLUG,
+    DELL_VENDOR_SLUG
 )
-from cookbooks.sre.network import configure_switch_interfaces
+from cookbooks.sre.network import configure_switch_interfaces, run_homer
 
 DNS_ADDRESS = '10.3.0.1'
 DELL_DEFAULT = 'calvin'
@@ -140,6 +140,7 @@ class Provision(CookbookBase):
         parser.add_argument('--enable-virtualization', action='store_true',
                             help='Keep virtualization capabilities on. They are turned off if not speficied.')
         parser.add_argument('--uefi', action='store_true', help='Set boot mode to UEFI and HTTP')
+        parser.add_argument('--homer', action='store_true', help='Use Homer to configure the switches')
         parser.add_argument('host', help='Short hostname of the host to provision, not FQDN')
 
         return parser
@@ -372,7 +373,12 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
     def run(self):
         """Run the cookbook."""
         if not self.args.no_switch:
-            configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
+            if self.args.homer:
+                # TODO: doesn't work for virtual-chassis
+                run_homer(queries=[f'{hostname}.*' for hostname in self.netbox_server.switches],
+                          dry_run=self.spicerack.dry_run)
+            else:
+                configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
 
         if not self.args.no_dhcp:
             self.dhcp.push_configuration(self.dhcp_config)
