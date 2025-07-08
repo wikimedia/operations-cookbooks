@@ -113,12 +113,11 @@ class DatabaseCookbookBase(CookbookBase):
 
     # To be overwritten by derived class with their own class derived from DatabaseRunnerBase
     runner_class: type[DatabaseRunnerBase]
+    argument_task_required = True
 
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
-        parser.add_argument("-t", "--task-id", required=True,
-                            help="the Phabricator task ID to update and refer (i.e.: T12345)")
         parser.add_argument(
             "--section",
             help=("Run only for a specific section. Works also for non-core sections. The specified name will be used "

@@ -29,11 +29,6 @@ def ensure(condition: bool, msg: str) -> None:
     raise AssertionError(msg)
 
 
-def parse_phabricator_task(t: str) -> int:
-    ensure(t.startswith("T"), f"Incorrect Phabricator task ID {t}")
-    return int(t.lstrip("T"))
-
-
 def step(slug: str, msg: str) -> None:
     """
     Log next step in a friendly/greppable format.
@@ -56,6 +51,8 @@ class SanitizeWiki(CookbookBase):
         limited to checking if there is some sanitization to perform.
     """
 
+    argument_task_required = True
+
     def argument_parser(self) -> ArgumentParser:
         """Define CLI arguments."""
         parser = super().argument_parser()
@@ -71,7 +68,6 @@ class SanitizeWiki(CookbookBase):
             action="store_true",
             help="Only perform checks without making changes",
         )
-        parser.add_argument("--task", help="Phabricator task", required=True)
         help_text = """Only perform grant permissions and create view database. This should be quicker than a \
             typical run. It will skip checking existing needs for sanitization in dbs, and focus on the last steps \
             as in https://wikitech.wikimedia.org/wiki/MariaDB/PII#Grant_Permissions_for_SQL_Views"""
@@ -103,7 +99,7 @@ class SanitizeWikiRunner(CookbookRunnerBase):
         self.clouddb_hosts = self.mysql.get_dbs("A:db-clouddb-sanitization")
         self.sanitarium_hosts = self.mysql.get_dbs(f"A:db-sanitarium and A:db-section-{self.section}")
         self.logger.info("Sanitarium hosts: %s", self.sanitarium_hosts)
-        self._task_id = str(parse_phabricator_task(args.task))
+        self._task_id = args.task_id
         self._admin_reason = spicerack.admin_reason(f"Sanitize wiki {self.section}", task_id=self._task_id)
         self._phab = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 

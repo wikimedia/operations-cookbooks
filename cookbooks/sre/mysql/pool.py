@@ -4,7 +4,7 @@ import logging
 from argparse import ArgumentParser, Namespace
 from datetime import datetime, timedelta
 from time import sleep
-from typing import Dict, Tuple, Optional, Any
+from typing import Any
 
 from conftool.extensions.dbconfig.action import ActionResult
 from conftool.extensions.dbconfig.entities import Instance as DBCInst
@@ -17,7 +17,6 @@ from spicerack.icinga import HostStatus as IcingaStatus, IcingaHosts
 from spicerack.mysql import Instance as MInst
 from spicerack.remote import Remote, RemoteHosts
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
-from wmflib.phabricator import Phabricator
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
@@ -53,7 +52,7 @@ def _fetch_db_remotehost(remote: Remote, fqdn: str) -> RemoteHosts:
 
 
 def _get_fqdn(mi: MInst) -> str:
-    t: Tuple[str] = tuple(mi.host.hosts)
+    t: tuple[str] = tuple(mi.host.hosts)
     ensure(len(t) == 1, f"{len(t)} hosts in {mi}")
     return t[0]
 
@@ -72,7 +71,7 @@ def _fetch_replication_delay_ms(ins: MInst) -> int:
     return int(r["delta_us"] / 1_000)
 
 
-def _fetchall(ins: MInst, sql: str, args: tuple) -> Tuple[Dict]:
+def _fetchall(ins: MInst, sql: str, args: tuple) -> tuple[dict]:
     with ins.cursor() as (_conn, cur):
         _ = cur.execute(sql, args)
         res = tuple(cur.fetchall())
@@ -80,7 +79,7 @@ def _fetchall(ins: MInst, sql: str, args: tuple) -> Tuple[Dict]:
         return res
 
 
-def _fetch_instance_connections_count_detailed(ins: MInst) -> Tuple[Dict[str, Any]]:
+def _fetch_instance_connections_count_detailed(ins: MInst) -> tuple[dict[str, Any]]:
     """Gather database instance connection counts.
 
     +----------+-----------------+-----------+
@@ -112,7 +111,7 @@ def _fetch_instance_by_name(dbctl: Dbctl, hostname: str) -> DBCInst:
     return dbi
 
 
-def _check_depooling_last_instance(conf: Dict[str, Any], hostname: str, nocheck_extloads: bool) -> None:
+def _check_depooling_last_instance(conf: dict[str, Any], hostname: str, nocheck_extloads: bool) -> None:
     """Warn if removing the only host in a section (e.g. vslow or dump)."""
     ensure("." not in hostname, f"hostname '{hostname}' contains a dot")
 
@@ -229,6 +228,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
         self.pool = args.operation == "pool"
         self.dbctl = spicerack.dbctl()
         self.reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
+        self.task_id = args.task_id
         self.dry_run = spicerack.dry_run
         self._mysql = spicerack.mysql()
 
@@ -260,10 +260,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
         self.remote_host = _fetch_db_remotehost(spicerack.remote(), fqdn)
         self._icinga_host = spicerack.icinga_hosts(self.remote_host.hosts)
 
-        if self.reason.task_id is not None:
-            self.phabricator: Optional[Phabricator] = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
     @property
     def runtime_description(self) -> str:
@@ -300,9 +297,8 @@ class PoolDepoolRunner(CookbookRunnerBase):
                 logger.debug("Waiting for icinga to go green")
                 self._icinga_host.wait_for_optimal()
 
-            if self.phabricator is not None and self.reason.task_id is not None:
-                msg = f"Start pool of {self.runtime_description} - {self.reason.owner}"
-                self.phabricator.task_comment(self.reason.task_id, msg)
+            msg = f"Start pool of {self.runtime_description} - {self.reason.owner}"
+            self.phabricator.task_comment(self.task_id, msg)
 
             self.gradual_pooling()
 
@@ -319,11 +315,10 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
             self.wait_for_connection_drain()
 
-        if self.phabricator is not None and self.reason.task_id is not None:
-            msg = f"Completed {self.args.operation} of {self.runtime_description} - {self.reason.owner}"
-            self.phabricator.task_comment(self.reason.task_id, msg)
+        msg = f"Completed {self.args.operation} of {self.runtime_description} - {self.reason.owner}"
+        self.phabricator.task_comment(self.task_id, msg)
 
-    def _fetch_current_pooling(self, i: str, percentage: int) -> set[Tuple[bool, bool]]:
+    def _fetch_current_pooling(self, i: str, percentage: int) -> set[tuple[bool, bool]]:
         instance = self.dbctl.instance.get(i)
         current_pooling = {
             (section["pooled"], section["percentage"] >= percentage) for section in instance.sections.values()

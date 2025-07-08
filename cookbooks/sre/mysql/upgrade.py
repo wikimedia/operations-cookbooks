@@ -110,8 +110,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
 
             self._run_cookbook("sre.mysql.pool", args, confirm=True)
 
-        if self.task_id:
-            self._phab.task_comment(self.task_id, reason)
+        self._phab.task_comment(self.task_id, reason)
 
     def run(self):
         """Required by the Spicerack API."""
@@ -124,8 +123,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         """Upgrade mysql version of a single host."""
         fqdn = _fqdn(host)
         reason = f"Upgrading {host}"
-        if self.task_id:
-            self._phab.task_comment(self.task_id, reason)
+        self._phab.task_comment(self.task_id, reason)
 
         hostname = str(host).split(".", maxsplit=1)[0]
         if self._is_in_dbctl(hostname):
@@ -169,8 +167,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         reason = f"Upgrade of {host} completed"
         if not self._do_repool:
             self.logger.info("Repooling not requested")
-            if self.task_id:
-                self._phab.task_comment(self.task_id or "", reason)
+            self._phab.task_comment(self.task_id, reason)
             return
 
         step("catchup_repl_s", f"Catching up replication lag on {fqdn} before removing icinga downtime")

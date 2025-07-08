@@ -71,12 +71,6 @@ def step(slug: str, msg: str) -> None:
     log.info("[%s.%s] %s", SLUG, slug, msg)
 
 
-def parse_phabricator_task(t: str) -> int:
-    ensure(len(t) > 1, "Phabricator task ID is required")
-    ensure(t.startswith("T"), f"Incorrect Phabricator task ID {t}")
-    return int(t.lstrip("T"))
-
-
 def parse_db_host_fqdn(fqdn: str) -> Tuple[str, str]:
     """
     Return short hostname and validated FQDN
@@ -239,10 +233,9 @@ def _add_host_to_zarcillo(mysql: Mysql, hostname: str, fqdn: str, datacenter: st
         tx.execute(sql, (fqdn, hostname, datacenter, rack))
 
 
-def pool_in_instance(_run_cookbook, fqdn: str, hostname: str, phabricator_task_id: int) -> None:
+def pool_in_instance(_run_cookbook, fqdn: str, hostname: str, phabricator_task_id: str) -> None:
     reason = f"Pool {fqdn} in after cloning"
-    task = f"T{phabricator_task_id}"
-    _run_cookbook("sre.mysql.pool", ["--reason", reason, "--task-id", task, hostname], confirm=True)
+    _run_cookbook("sre.mysql.pool", ["--reason", reason, "--task-id", phabricator_task_id, hostname], confirm=True)
 
 
 def _check_if_target_is_already_on_dbctl(dbctl: Dbctl, hostname: str, section: str) -> bool:
@@ -324,13 +317,14 @@ class CloneMySQL(CookbookBase):
     This tool is for internal use for the DBA team. It needs to run as root.
     """
 
+    argument_task_required = True
+
     def argument_parser(self) -> ArgumentParser:
         """CLI parsing, as required by the Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument("--source", help="Cumin query to match the host of the source.", required=True)
         parser.add_argument("--target", help="Cumin query to match the host of the target.", required=True)
         # TODO switch to task-id
-        parser.add_argument("--task", help="Phabricator task", required=True)
         parser.add_argument("--nopool", action="store_true", help="Do not pool in target host")
         h = "Do not check if target host already exists in zarcillo"
         parser.add_argument("--ignore-existing", action="store_true", help=h)
@@ -397,7 +391,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self.primary_host = _fetch_db_remotehost(self.remote, self.primary_fqdn)
 
         # TODO: use task_id from admin_reason
-        self.phabricator_task_id = parse_phabricator_task(args.task)
+        self.phabricator_task_id = args.task_id
 
         self.pool_in_target = not args.nopool
 
@@ -429,7 +423,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self.replication_user = config["replication_user"]
         self.replication_password = config["replication_password"]
 
-        self.admin_reason = spicerack.admin_reason(f"Cloning MariaDB T{self.phabricator_task_id}")
+        self.admin_reason = spicerack.admin_reason(f"Cloning MariaDB {self.phabricator_task_id}")
         self._dbctl: Dbctl = spicerack.dbctl()
 
         self._source_icinga_host = spicerack.icinga_hosts(self.source_host.hosts)
@@ -483,15 +477,16 @@ class CloneMySQLRunner(CookbookRunnerBase):
         print("Open Grafana for the target: %s" % gen_grafana_mysql_url(self.target_hostname))
 
         msg = f"Started cloning {self.source_fqdn} to {self.target_fqdn} - {self.admin_reason.owner}"
-        self._phab.task_comment(str(self.phabricator_task_id), msg)
+        self._phab.task_comment(self.phabricator_task_id, msg)
 
         (_, source_is_pooled, _) = _fetch_pooling_status(self._dbctl, self.source_hostname, self.source_fqdn)
         if source_is_pooled:
             step("depool", f"Depooling source {self.source_fqdn}")
             reason = f"Depool {self.source_fqdn} to then clone it to {self.target_fqdn} - {self.admin_reason.owner}"
-            task = f"T{self.phabricator_task_id}"
             self._run_cookbook(
-                "sre.mysql.depool", ["--reason", reason, "--task-id", task, self.source_hostname], confirm=True
+                "sre.mysql.depool",
+                ["--reason", reason, "--task-id", self.phabricator_task_id, self.source_hostname],
+                confirm=True,
             )
 
         if self._dbctl.instance.get(self.target_hostname) is None:
@@ -506,9 +501,10 @@ class CloneMySQLRunner(CookbookRunnerBase):
             if target_is_pooled:
                 step("depool", f"Depooling target {self.target_fqdn}")
                 reason = f"Depool {self.target_fqdn} - {self.admin_reason.owner}"
-                task = f"T{self.phabricator_task_id}"
                 self._run_cookbook(
-                    "sre.mysql.depool", ["--reason", reason, "--task-id", task, self.target_hostname], confirm=True
+                    "sre.mysql.depool",
+                    ["--reason", reason, "--task-id", self.phabricator_task_id, self.target_hostname],
+                    confirm=True,
                 )
 
         step("icinga", "Disabling monitoring for source and target host")
@@ -570,7 +566,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
             pool_in_instance(self._run_cookbook, self.target_fqdn, self.target_hostname, self.phabricator_task_id)
 
         msg = f"Finished cloning {self.source_fqdn} to {self.target_fqdn} - {self.admin_reason.owner}"
-        self._phab.task_comment(str(self.phabricator_task_id), msg)
+        self._phab.task_comment(self.phabricator_task_id, msg)
         step("done", "Done")
 
     def _run_clone(self) -> None:

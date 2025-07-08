@@ -18,18 +18,10 @@ from spicerack.remote import RemoteHosts
 from cookbooks.sre.mysql.clone import (
     MInst,
     parse_db_host_fqdn,
-    parse_phabricator_task,
     _parse_replication_status,
     _check_if_target_is_already_on_dbctl,
     CloneMySQLRunner,
 )
-
-
-def test_parse_phabricator_task():
-    assert parse_phabricator_task("T123") == 123
-    assert parse_phabricator_task("TT123") == 123  # acceptable typo
-    with pytest.raises(AssertionError):
-        parse_phabricator_task("X12345")
 
 
 def test_parse_db_host_fqdn():
@@ -222,7 +214,7 @@ def test_run(
     m_gdbi.side_effect = gdbi
 
     args = Namespace(
-        source="db002.eqiad.wmnet", target="db003.eqiad.wmnet", task="T0", nopool=True, ignore_existing=False
+        source="db002.eqiad.wmnet", target="db003.eqiad.wmnet", task_id="T0", nopool=True, ignore_existing=False
     )
 
     # mock sr.dbctl().instance.get(...).sections
