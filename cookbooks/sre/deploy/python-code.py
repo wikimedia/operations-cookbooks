@@ -67,10 +67,7 @@ class DeployRunner(CookbookRunnerBase):
         else:
             self.user = f'deploy-{self.project}'
 
-        if args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
         if len(self.remote_hosts) <= 5:
             hosts_message = str(self.remote_hosts)
@@ -97,5 +94,4 @@ class DeployRunner(CookbookRunnerBase):
             confirm_on_failure(remote_host.run_sync,
                                f'runuser -u {self.user} -- /usr/local/bin/python-deploy-venv {self.project}')
 
-        if self.phabricator is not None:
-            self.phabricator.task_comment(self.task_id, f'Deployed {self.message}')
+        self.phabricator.task_comment(self.task_id, f'Deployed {self.message}')

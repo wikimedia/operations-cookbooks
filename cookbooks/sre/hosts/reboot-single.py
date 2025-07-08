@@ -67,14 +67,11 @@ class RebootSingleHostRunner(CookbookRunnerBase):
         self.puppet = spicerack.puppet(self.remote_host)
         self.reason = spicerack.admin_reason('Rebooting host' if not args.reason else args.reason)
 
-        if args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-            self.task_id = args.task_id
-            self.message = (
-                "Host {host} rebooted by {owner} with reason: {reason}\n"
-            ).format(host=args.host, owner=self.reason.owner, reason=args.reason)
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        self.task_id = args.task_id
+        self.message = (
+            "Host {host} rebooted by {owner} with reason: {reason}\n"
+        ).format(host=args.host, owner=self.reason.owner, reason=args.reason)
 
         if args.enable_puppet is not None:
             # try to enable puppet before we check if its disabled
@@ -109,8 +106,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
         """Reboot the host"""
         ret = 0
         with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
-            if self.phabricator is not None:
-                self.phabricator.task_comment(self.task_id, self.message)
+            self.phabricator.task_comment(self.task_id, self.message)
 
             if self.depool:
                 self.remote_host.run_async('depool')

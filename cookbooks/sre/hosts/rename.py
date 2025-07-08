@@ -37,11 +37,11 @@ class Rename(CookbookBase):
     """
 
     owner_team = "Infrastructure Foundations"
+    argument_task_required = False
 
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
-        parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         parser.add_argument('old_name', help='Short hostname of the host to rename, not FQDN')
         parser.add_argument('new_name', help='Future name, still not FQDN')
 
@@ -97,10 +97,7 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         self.switch_description_changed = False
         self.bmc_hostname_updated = False
 
-        if self.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         ask_confirmation(f"Is {self.new_name} in Puppet's site.pp and preseed.yaml?")
 
     def run(self):
@@ -147,13 +144,12 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         return 0
 
     def _phab_dump(self):
-        if self.phabricator is not None:
-            action = 'executed with errors' if self.host_actions.has_failures else 'completed'
-            self.phabricator.task_comment(
-                self.task_id,
-                (f'Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} {action}:'
-                    f'\n{self.actions}\n'),
-            )
+        action = 'executed with errors' if self.host_actions.has_failures else 'completed'
+        self.phabricator.task_comment(
+            self.task_id,
+            (f'Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} {action}:'
+                f'\n{self.actions}\n'),
+        )
 
     def propagate_dns(self, rollback: bool = False):
         """Run the sre.dns.netbox cookbook to propagate the DNS records."""

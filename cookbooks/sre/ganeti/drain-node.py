@@ -43,6 +43,8 @@ class GanetiDrainNode(CookbookBase):
         cookbook sre.ganeti.drain-node --cluster codfw --full ganeti2022.codfw.wmnet
     """
 
+    argument_task_required = False
+
     def argument_parser(self):
         """Parse command-line arguments for this module per spicerack API."""
         parser = super().argument_parser()
@@ -52,8 +54,6 @@ class GanetiDrainNode(CookbookBase):
                             help='If enabled, also migrate secondary instances')
         parser.add_argument('--reboot', action='store_true', default=False,
                             help='If enabled, offer a reboot after the node has been drained')
-        parser.add_argument('-t', '--task-id',
-                            help='An optional task ID to refer in the downtime message.')
         parser.add_argument('node', help='The FQDN of the Ganeti node to drain.')
 
         return parser
@@ -89,12 +89,9 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
             raise RuntimeError(
                 f'{self.node} is not a Ganeti server')
 
-        if args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-            self.task_id = args.task_id
-            self.message = f'Draining {self.node} of running VMs'
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        self.task_id = args.task_id
+        self.message = f'Draining {self.node} of running VMs'
 
     @property
     def runtime_description(self):
@@ -162,8 +159,7 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
                 self.offer_reboot_node()
                 return 0
 
-            if self.phabricator is not None:
-                self.phabricator.task_comment(self.task_id, self.message)
+            self.phabricator.task_comment(self.task_id, self.message)
             if not self.run_cmd(f'gnt-node migrate -f {self.node}'):
                 logger.info("Not all hosts could be migrated:")
                 self.update_plain_instances()
@@ -187,8 +183,7 @@ class GanetiDrainNodeRunner(CookbookRunnerBase):
                 logger.info(self.primary_instances)
                 raise RuntimeError(f'{self.node} cannot by fully drained due to running primary instances')
 
-            if self.phabricator is not None:
-                self.phabricator.task_comment(self.task_id, self.message)
+            self.phabricator.task_comment(self.task_id, self.message)
             self.run_cmd(
                 f'gnt-node evacuate -f -s {self.node}')
 

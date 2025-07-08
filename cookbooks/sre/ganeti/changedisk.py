@@ -29,6 +29,8 @@ class GanetiChangeDisk(CookbookBase):
         cookbook sre.ganeti.change-disk --cluster codfw --disktype plain --fqdn kubetcd2005.codfw.wmnet
     """
 
+    argument_task_required = False
+
     def argument_parser(self):
         """Parse command-line arguments for this module per spicerack API."""
         parser = super().argument_parser()
@@ -38,8 +40,6 @@ class GanetiChangeDisk(CookbookBase):
                             help='The disk type to switch to', required=True)
         parser.add_argument('--fqdn', help='The FQDN of the Ganeti VM.', required=True)
         parser.add_argument('--secondnode', help='The Ganeti server to become the secondary DRBD node.')
-        parser.add_argument('-t', '--task-id',
-                            help='An optional task ID to refer in the downtime message.')
 
         return parser
 
@@ -85,13 +85,10 @@ class GanetiChangeDiskRunner(CookbookRunnerBase):
             raise RuntimeError(
                 f'{self.fqdn} is not a Ganeti VM.')
 
-        if args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-            self.task_id = args.task_id
-            self.message = ('VM {vm} switching disk type to {dtype}\n').format(
-                vm=self.remote_vm, dtype=self.disktype)
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        self.task_id = args.task_id
+        self.message = ('VM {vm} switching disk type to {dtype}\n').format(
+            vm=self.remote_vm, dtype=self.disktype)
 
     @property
     def runtime_description(self):
@@ -113,8 +110,7 @@ class GanetiChangeDiskRunner(CookbookRunnerBase):
         ask_confirmation('Proceed?')
 
         with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
-            if self.phabricator is not None:
-                self.phabricator.task_comment(self.task_id, self.message)
+            self.phabricator.task_comment(self.task_id, self.message)
 
             self.run_cmd(
                 f'gnt-instance shutdown {self.fqdn}',

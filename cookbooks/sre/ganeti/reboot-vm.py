@@ -76,13 +76,10 @@ class RebootSingleVMRunner(CookbookRunnerBase):
         self.puppet = spicerack.puppet(self.remote_host)
         self.reason = spicerack.admin_reason('Rebooting VM' if not args.reason else args.reason)
 
-        if args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-            self.task_id = args.task_id
-            self.message = ('VM {vm} rebooted by {owner} with reason: {reason}\n').format(
-                vm=self.remote_host, owner=self.reason.owner, reason=args.reason)
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        self.task_id = args.task_id
+        self.message = ('VM {vm} rebooted by {owner} with reason: {reason}\n').format(
+            vm=self.remote_host, owner=self.reason.owner, reason=args.reason)
 
         self.depool = args.depool
 
@@ -94,8 +91,7 @@ class RebootSingleVMRunner(CookbookRunnerBase):
     def run(self):
         """Reboot the VM"""
         with self.alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=20)):
-            if self.phabricator is not None:
-                self.phabricator.task_comment(self.task_id, self.message)
+            self.phabricator.task_comment(self.task_id, self.message)
 
             if self.depool:
                 self.remote_host.run_async('depool')

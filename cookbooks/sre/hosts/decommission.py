@@ -134,13 +134,13 @@ class DecommissionHost(CookbookBase):
     """
 
     owner_team = "Infrastructure Foundations"
+    argument_task_required = True
 
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument('query', help=('Cumin query to match the host(s) to act upon. At most 5 at a time, with '
                                            '--force at most 20 at a time.'))
-        parser.add_argument('-t', '--task-id', required=True, help='the Phabricator task ID (e.g. T12345)')
         parser.add_argument('--force', action='store_true',
                             help='Bypass the default limit of 5 hosts at a time, but only up to 20 hosts.')
         parser.add_argument('--keep-mgmt-dns', action='store_true',

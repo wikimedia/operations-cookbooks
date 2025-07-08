@@ -18,11 +18,12 @@ class RemoveHosts(CookbookBase):
 
     """
 
+    argument_task_required = False
+
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument('query', help='Cumin query to match the host(s) to remove from DebMonitor')
-        parser.add_argument('-t', '--task-id', help='Optional Phabricator task ID (e.g. T123456) to log to')
 
         return parser
 
@@ -53,11 +54,8 @@ class RemoveHostsRunner(CookbookRunnerBase):
                 format(l=len(query_hosts), query_hosts=query_hosts))
             self.hosts = query_hosts
 
-        if args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-            self.task_id = args.task_id
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        self.task_id = args.task_id
 
         self.log_message = 'for {n} hosts: {hosts}'.format(n=len(self.hosts), hosts=self.hosts)
 
@@ -75,5 +73,4 @@ class RemoveHostsRunner(CookbookRunnerBase):
         phab_log = "Cookbook {name} run by {user}: {msg}".format(
             name=__name__, user=self.username, msg=self.log_message)
 
-        if self.phabricator is not None:
-            self.phabricator.task_comment(self.task_id, phab_log)
+        self.phabricator.task_comment(self.task_id, phab_log)

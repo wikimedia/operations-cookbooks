@@ -19,6 +19,8 @@ class Debug(CookbookBase):
         cookbook sre.network.debug -t T123456 interface 678
     """
 
+    argument_task_required = False
+
     def validate_object_id(self, value: str):
         """Ensure the user provides a correctly formated object_id"""
         try:
@@ -31,7 +33,6 @@ class Debug(CookbookBase):
     def argument_parser(self):
         """As specified by Spicerack API."""
         parser = super().argument_parser()
-        parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         parser.add_argument('entity', choices=['circuit', 'interface'])
         parser.add_argument('object_id',
                             type=self.validate_object_id,
@@ -52,10 +53,7 @@ class DebugRunner(CookbookRunnerBase):
         self.remote = spicerack.remote()
         self.args = args
         self.task_comment = []
-        if self.args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
     def run(self):
         """Required by Spicerack API."""
@@ -76,7 +74,7 @@ class DebugRunner(CookbookRunnerBase):
         elif self.args.entity == 'circuit':
             self.debug_circuit(self.args.object_id)
 
-        if self.phabricator is not None and self.task_comment:
+        if self.task_comment:
             self.phabricator.task_comment(
                 self.args.task_id,
                 f"===== Automated diagnostic {self.runtime_description}" + '\n'.join(self.task_comment))

@@ -48,6 +48,7 @@ class Reimage(CookbookBase):
     """
 
     owner_team = "Infrastructure Foundations"
+    argument_task_required = False
 
     def argument_parser(self):
         """As specified by Spicerack API."""
@@ -95,7 +96,6 @@ class Reimage(CookbookBase):
             '--move-vlan', action='store_true',
             help='Call the sre.hosts.move-vlan cookbook to migrate the host to the new VLAN during the reimage.'
                  'See https://wikitech.wikimedia.org/wiki/Vlan_migration for further information.')
-        parser.add_argument('-t', '--task-id', help='the Phabricator task ID to update and refer (i.e.: T12345)')
         parser.add_argument('--os', choices=OS_VERSIONS, required=True,
                             help='the Debian version to install. Mandatory parameter. One of %(choices)s.')
         parser.add_argument('-p', '--puppet-version', choices=(5, 7), type=int,
@@ -232,11 +232,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self.rollback_masks = False
         self.rollback_depool = False
 
-        if self.args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        else:
-            self.phabricator = None
-
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         # Load properties / attributes specific to either virtual
         # or physical hosts.
         self.dhcp_config: Union[DHCPConfMac, DHCPConfOpt82]
@@ -349,12 +345,11 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                                   f'You can also try typing "sudo install-console {self.fqdn}" to get a root shell, '
                                   'but depending on the failure this may not work.**')
         logger.error('Reimage executed with errors:\n%s\n', self.actions)
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.args.task_id,
-                (f'Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} executed with errors:'
-                 f'\n{self.actions}\n'),
-            )
+        self.phabricator.task_comment(
+            self.args.task_id,
+            (f'Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} executed with errors:'
+             f'\n{self.actions}\n'),
+        )
 
     def _get_output_filename(self, username):
         """Return the absolute path of the file to use for the cumin output."""
@@ -751,10 +746,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         print(f'Starting reimage on {self.host}. You can check progress via serial console '
               f'or by running `install-console {self.fqdn}` on any cumin host')
 
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.args.task_id,
-                f'Cookbook {__name__} was started by {self.reason.owner} {self.runtime_description}')
+        self.phabricator.task_comment(
+            self.args.task_id,
+            f'Cookbook {__name__} was started by {self.reason.owner} {self.runtime_description}')
 
         downtime_id_pre_install = ''
         if not self.args.new:
@@ -891,12 +885,11 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         # Comment on the Phabricator task
         logger.info('Reimage completed:\n%s\n', self.actions)
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.args.task_id,
-                (f'Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} completed:\n'
-                 f'{self.actions}\n'),
-            )
+        self.phabricator.task_comment(
+            self.args.task_id,
+            (f'Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} completed:\n'
+             f'{self.actions}\n'),
+        )
 
         if self.host_actions.has_failures:
             return 1
