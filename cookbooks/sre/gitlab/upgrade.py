@@ -104,10 +104,7 @@ class UpgradeRunner(CookbookRunnerBase):
         self.token = get_secret('GitLab API Token')
         self.gitlab_instance = gitlab.Gitlab(self.url, private_token=self.token)
 
-        if args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
         self.check_gitlab_version()
         self.fail_for_disk_space()
@@ -126,19 +123,17 @@ class UpgradeRunner(CookbookRunnerBase):
 
     def rollback(self):
         """Comment on phabricator in case of a failed run."""
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.task_id,
-                f"Cookbook {__name__} started by {self.admin_reason.owner} executed with errors:\n"
-                f"{self.runtime_description}\n"
-            )
+        self.phabricator.task_comment(
+            self.task_id,
+            f"Cookbook {__name__} started by {self.admin_reason.owner} executed with errors:\n"
+            f"{self.runtime_description}\n"
+        )
 
     def run(self):
         """Run the cookbook."""
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.task_id,
-                f'Cookbook {__name__} was started by {self.admin_reason.owner} {self.runtime_description}')
+        self.phabricator.task_comment(
+            self.task_id,
+            f'Cookbook {__name__} was started by {self.admin_reason.owner} {self.runtime_description}')
         try:
             broadcastmessage = self.gitlab_instance.broadcastmessages.create({
                 'message': f'Maintenance {self.message} starting soon.',
@@ -181,11 +176,10 @@ class UpgradeRunner(CookbookRunnerBase):
                 logger.info('Wait for blackbox checks and monitoring to catch up.')
                 time.sleep(180)
 
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.task_id,
-                f'Cookbook {__name__} started by {self.admin_reason.owner} {self.runtime_description} completed '
-                f'successfully {self.runtime_description}')
+        self.phabricator.task_comment(
+            self.task_id,
+            f'Cookbook {__name__} started by {self.admin_reason.owner} {self.runtime_description} completed '
+            f'successfully {self.runtime_description}')
 
         # Unlock backup and restore again
         unlock_backups_on_host(self.remote_host, BACKUP_DIRECTORY)

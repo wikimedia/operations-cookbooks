@@ -61,10 +61,7 @@ class UpgradeRunner(CookbookRunnerBase):
         self.task_id = args.task_id
         self.current_version = get_current_version(self.remote_host)
         self.target_version = args.version
-        if args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
         self.message = f" on VRTS host {self.remote_host}"
 
@@ -80,20 +77,18 @@ class UpgradeRunner(CookbookRunnerBase):
 
     def rollback(self):
         """Add a comment to the Phabricator task if cookbook failed"""
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.task_id,
-                f"Cookbook {__name__} started by {self.admin_reason.owner} executed with errors "
-                f"{self.runtime_description}\n",
-            )
+        self.phabricator.task_comment(
+            self.task_id,
+            f"Cookbook {__name__} started by {self.admin_reason.owner} executed with errors "
+            f"{self.runtime_description}\n",
+        )
 
     def run(self):
         """Run the cookbook"""
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.task_id,
-                f"Cookbook {__name__} was started by {self.admin_reason.owner} {self.runtime_description}",
-            )
+        self.phabricator.task_comment(
+            self.task_id,
+            f"Cookbook {__name__} was started by {self.admin_reason.owner} {self.runtime_description}",
+        )
 
         ask_confirmation(
             f"This will upgrade VRTS on {self.host} from {self.current_version} to {self.target_version}. "

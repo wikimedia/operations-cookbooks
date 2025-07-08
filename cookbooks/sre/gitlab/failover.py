@@ -50,6 +50,8 @@ class Failover(CookbookBase):
     cookbook sre.gitlab.failover --switch-from-host gitlab1003 --switch-to-host gitlab2002 -t T12345
     """
 
+    argument_task_required = False
+
     def argument_parser(self) -> ArgumentParser:
         """Parses arguments"""
         parser = super().argument_parser()
@@ -62,12 +64,6 @@ class Failover(CookbookBase):
             "--switch-to-host",
             required=True,
             help="Host that we want to switch to (e.g., existing gitlab-replica.wm.o, will become gitlab.wm.o)",
-        )
-        parser.add_argument(
-            "-t",
-            "--task-id",
-            required=False,
-            help="Optional task ID to refer to in the downtime message",
         )
 
         return parser
@@ -94,11 +90,8 @@ class FailoverRunner(CookbookRunnerBase):
         self.switch_to_host = spicerack.remote().query(f"{args.switch_to_host}.*")
         self.gitlab_token = get_secret("Gitlab API token")
         self.message = f"Failover of gitlab from {self.switch_from_host} to {self.switch_to_host}"
-        if args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-            self.task_id = args.task_id
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        self.task_id = args.task_id
 
         self.reason = self.spicerack.admin_reason(reason=self.message, task_id=self.task_id)
 
@@ -324,5 +317,4 @@ class FailoverRunner(CookbookRunnerBase):
 
     def maybe_task_comment(self, message: str) -> None:
         """Comments on a phabricator task with a message, if the task ID is set and we can access phabricator"""
-        if self.phabricator is not None:
-            self.phabricator.task_comment(self.task_id, message)
+        self.phabricator.task_comment(self.task_id, message)
