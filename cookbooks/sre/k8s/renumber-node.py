@@ -8,7 +8,6 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.k8s import Kubernetes
 from spicerack.remote import RemoteError
-from wmflib import phabricator
 from wmflib.interactive import ask_confirmation, confirm_on_failure
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -66,7 +65,6 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         """Renumber a single host."""
         self.args = args
         self.spicerack = spicerack
-        self.phabricator: Optional[phabricator.Phabricator] = None
 
         if "wikikube-worker" not in args.host and "kubestage" not in args.host:
             raise RuntimeError("Only wikikube-worker/kubestage nodes can be renumbered")
@@ -105,13 +103,10 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         self.host_actions = self.actions[self.remote_host]
         self.reason = self.spicerack.admin_reason(f"Renumbering {self.host}")
 
-        if args.task_id is not None:
-            self.phabricator = self.spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-            self.task_id = args.task_id
-            message = f"Cookbook {__name__} was started by {self.reason.owner} {self.runtime_description}\n"
-            self.post_to_phab(message)
-        else:
-            self.phabricator = None
+        self.phabricator = self.spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        self.task_id = args.task_id
+        message = f"Cookbook {__name__} was started by {self.reason.owner} {self.runtime_description}\n"
+        self.post_to_phab(message)
 
     @property
     def runtime_description(self) -> str:
@@ -125,13 +120,12 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
 
     def post_to_phab(self, message: Optional[str] = None) -> None:
         """Comment on the phabricator task"""
-        if self.phabricator is not None:
-            if message is None:
-                message = (
-                    f"Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} completed:\n"
-                    f"{self.actions}\n"
-                )
-            self.phabricator.task_comment(self.args.task_id, message)
+        if message is None:
+            message = (
+                f"Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} completed:\n"
+                f"{self.actions}\n"
+            )
+        self.phabricator.task_comment(self.args.task_id, message)
 
     def check_remote_host(self) -> None:
         """Check if the host exists, and is unique"""
@@ -224,7 +218,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         reimage_args = ["--move-vlan", "--os", self.args.os]
         if self.args.renamed:
             reimage_args.extend(["--new", "--puppet", "7"])
-        if self.phabricator:
+        if self.task_id:
             reimage_args.extend(["--task-id", self.task_id])
         reimage_args.append(self.host_short)
         logger.info("Running sre.hosts.reimage %s", " ".join(reimage_args))

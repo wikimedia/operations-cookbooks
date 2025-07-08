@@ -5,7 +5,6 @@ import logging
 import time
 from argparse import ArgumentParser, Namespace
 from datetime import timedelta
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
@@ -15,7 +14,6 @@ from wmflib.interactive import (
     confirm_on_failure,
     ensure_shell_is_durable,
 )
-from wmflib.phabricator import Phabricator
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
@@ -98,12 +96,7 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
         self.reason = spicerack.admin_reason(args.reason)
         self.spicerack_remote = spicerack.remote()
         self.confctl = self.spicerack.confctl("node")
-        if self.args.task_id is not None:
-            self.phabricator: Optional[Phabricator] = spicerack.phabricator(
-                PHABRICATOR_BOT_CONFIG_FILE
-            )
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
         # Query all control plane nodes (required to run etcd commands on) in this k8s cluster
         # and optionally filter the nodes to work on by the provided query.
@@ -144,15 +137,14 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
 
     def rollback(self):
         """Update the Phabricator task with the actions already taken."""
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.args.task_id,
-                (
-                    f"Cookbook {__name__} started by {self.reason.owner} "
-                    f"{self.runtime_description} executed with errors:"
-                    f"\n{self.spicerack.actions}\n"
-                ),
-            )
+        self.phabricator.task_comment(
+            self.args.task_id,
+            (
+                f"Cookbook {__name__} started by {self.reason.owner} "
+                f"{self.runtime_description} executed with errors:"
+                f"\n{self.spicerack.actions}\n"
+            ),
+        )
 
     def run(self) -> None:
         """Required by Spicerack API."""
@@ -283,11 +275,10 @@ class ReimageControlPlanesRunner(CookbookRunnerBase):
                 )
 
         # Post to phab when all reimages have been completed
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.args.task_id,
-                (
-                    f"Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} completed:"
-                    f"\n{self.spicerack.actions}\n"
-                ),
-            )
+        self.phabricator.task_comment(
+            self.args.task_id,
+            (
+                f"Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} completed:"
+                f"\n{self.spicerack.actions}\n"
+            ),
+        )

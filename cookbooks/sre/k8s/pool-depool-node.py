@@ -16,7 +16,6 @@ from spicerack.cookbook import (
 )
 from spicerack.k8s import Kubernetes
 from spicerack.remote import RemoteError, RemoteHosts
-from wmflib import phabricator
 from wmflib.decorators import retry
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -86,7 +85,6 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
         """Drain a single host and depool it"""
         self.args = args
         self.spicerack = spicerack
-        self.phabricator: Optional[phabricator.Phabricator] = None
         self.k8s_cluster = args.k8s_cluster
         self.actions = self.spicerack.actions
         self.reason = self.spicerack.admin_reason(
@@ -132,10 +130,7 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
             dry_run=spicerack.dry_run,
         )
 
-        if args.task_id is not None:
-            self.phabricator = self.spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        else:
-            self.phabricator = None
+        self.phabricator = self.spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
         if self.args.action == "check":
             self._action_check()
@@ -171,7 +166,7 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
         self, message: Optional[str] = None, downtime_id: Optional[str] = None
     ) -> None:
         """Comment on the phabricator task if we pool/depool"""
-        if self.phabricator is not None and self.args.action != "check":
+        if self.args.action != "check":
             if message is None:
                 message = (
                     f"Cookbook {__name__} started by {self.reason.owner} {self.runtime_description} completed:\n"

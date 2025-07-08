@@ -84,14 +84,13 @@ class RollReimageK8sNodesRunner(K8sBatchRunnerBase):
         res = super().run()
 
         # Post to phab when all reimages have been completed
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self._args.task_id,
-                (
-                    f"Cookbook {__name__} -- {self.runtime_description} completed:"
-                    f"\n{self._spicerack.actions}\n"
-                ),
-            )
+        self.phabricator.task_comment(
+            self._args.task_id,
+            (
+                f"Cookbook {__name__} -- {self.runtime_description} completed:"
+                f"\n{self._spicerack.actions}\n"
+            ),
+        )
 
         return res
 

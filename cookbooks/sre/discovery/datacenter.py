@@ -4,7 +4,6 @@ import logging
 import time
 
 from dataclasses import dataclass
-from typing import Optional
 
 from spicerack import Spicerack
 from spicerack.administrative import Reason
@@ -16,7 +15,6 @@ from spicerack.remote import RemoteHosts, RemoteExecutionError
 from spicerack.service import ServiceDiscoveryRecord, ServiceIPs
 from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import ask_input, ask_confirmation, confirm_on_failure, ensure_shell_is_durable, InputError
-from wmflib.phabricator import Phabricator
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.discovery import DC_IP_MAP
@@ -271,10 +269,7 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         self._recursors: RemoteHosts
         self._authdns: RemoteHosts
         self._recursors = self._authdns = spicerack.remote().query("A:dnsbox")
-        if self.task_id is not None:
-            self.phabricator: Optional[Phabricator] = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
         if self.action == "status":
             self.status()
@@ -318,10 +313,9 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
 
     def run(self):
         """Execute the desired action."""
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} started."
-            )
+        self.phabricator.task_comment(
+            self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} started."
+        )
         pool = self.action == "pool"
         progress = 0
         total_records = sum(len(groups) for groups in self.discovery_records.values())
@@ -360,10 +354,9 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
                 logger.warning("Skipping %s", record.name)
         if self.insecure:
             self._clean_all()
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} completed."
-            )
+        self.phabricator.task_comment(
+            self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} completed."
+        )
 
     def status(self):
         """Get service status in datacenter."""
@@ -408,10 +401,9 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
         """Roll back everything we've done."""
         if self.action == "status":
             return
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} failed."
-            )
+        self.phabricator.task_comment(
+            self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} failed."
+        )
         ask_confirmation("Do you wish to rollback to the state before the cookbook ran?")
 
         for record in self.discovery_records["active_passive"]:
@@ -423,10 +415,9 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
                 self._handle_active_active(record, record.state, self.initial_state[record.name])
         if self.insecure:
             self._clean_all()
-        if self.phabricator is not None:
-            self.phabricator.task_comment(
-                self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} rolled back."
-            )
+        self.phabricator.task_comment(
+            self.task_id, f"{self.reason.owner} - Cookbook {__name__} {self.runtime_description} rolled back."
+        )
 
     def _get_active_active_states(self, record: DiscoveryRecord, pool: bool):
         # Store the current state

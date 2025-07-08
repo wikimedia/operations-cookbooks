@@ -57,6 +57,7 @@ class MediaWikiSwitchDCBase(CookbookBase, metaclass=ABCMeta):
 
     runner_class: type["MediaWikiSwitchDCRunnerBase"]
     """The MediaWikiSwitchDCRunnerBase subclass type to construct in get_runner."""
+    argument_task_required = False
 
     def argument_parser(self) -> argparse.ArgumentParser:
         """Parse arguments."""
@@ -74,10 +75,6 @@ class MediaWikiSwitchDCBase(CookbookBase, metaclass=ABCMeta):
                 "already the passive datacenter. Automatically skip or invert, when feasible, the steps "
                 "that will disrupt DC_TO if they were run."
             ),
-        )
-        parser.add_argument(
-            "--task-id",
-            help="Optional Phabricator task ID to update and reference in administrative reasons.",
         )
         parser.add_argument(
             "dc_from",
@@ -124,7 +121,7 @@ class MediaWikiSwitchDCRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         self.reason = self.spicerack.admin_reason(
             "MediaWiki DC switchover" + (" live test" if self.live_test else ""), task_id=self.task_id
         )
-        self.phabricator = None if self.task_id is None else self.spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        self.phabricator = self.spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
     @property
     def runtime_description(self) -> str:
@@ -133,8 +130,6 @@ class MediaWikiSwitchDCRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
     def update_task(self, message: str):
         """If provided with a task ID, update the task with a comment including the provided message."""
-        if self.phabricator is None:
-            return
         self.phabricator.task_comment(
             self.task_id,
             f"{self.reason.owner} - Cookbook {self.__module__} {self.runtime_description} - {message}"

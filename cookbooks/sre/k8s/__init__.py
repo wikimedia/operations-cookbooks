@@ -5,7 +5,7 @@ from abc import ABCMeta
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from math import ceil
-from typing import Optional, Union
+from typing import Union
 
 from cumin import NodeSet
 from kubernetes.client.models import V1Taint
@@ -13,7 +13,6 @@ from spicerack import Spicerack
 from spicerack.cookbook import LockArgs
 from spicerack.k8s import KubernetesApiError, KubernetesNode
 from spicerack.remote import RemoteExecutionError, RemoteHosts
-from wmflib import phabricator
 
 from cookbooks.sre import (PHABRICATOR_BOT_CONFIG_FILE, SREBatchBase,
                            SRELBBatchRunnerBase)
@@ -370,7 +369,6 @@ class K8sBatchRunnerBase(SRELBBatchRunnerBase, metaclass=ABCMeta):
 
         k8s_metadata: dict with k8s-group, k8s-cluster
         """
-        self.phabricator: Optional[phabricator.Phabricator] = None
         # Init k8s_client early, as it is used in _hosts() which will be called by super().__init__
         # The cluster name expected here might be different from the one in the cumin alias
         # wikikube is an example of this as we call it wikikube-eqiad in cumin, but eqiad in k8s config
@@ -391,15 +389,14 @@ class K8sBatchRunnerBase(SRELBBatchRunnerBase, metaclass=ABCMeta):
         # minimal_cordon skips cordoning all nodes in the taint group, only cordoning the nodes that are to be rebooted
         self._minimal_cordon = args.minimal_cordon
 
-        if args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-            self.phabricator.task_comment(
-                args.task_id,
-                (
-                    f"Roll-{args.action} of nodes in {args.k8s_cluster} cluster started by {spicerack.username}:\n"
-                    + "\n".join([f"* {group}" for group in self.host_groups])
-                ),
-            )
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
+        self.phabricator.task_comment(
+            args.task_id,
+            (
+                f"Roll-{args.action} of nodes in {args.k8s_cluster} cluster started by {spicerack.username}:\n"
+                + "\n".join([f"* {group}" for group in self.host_groups])
+            ),
+        )
 
     @property
     def allowed_aliases(self) -> list:
