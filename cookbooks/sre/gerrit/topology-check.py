@@ -247,7 +247,7 @@ class TopologyCheckerRunner(CookbookRunnerBase):
     def _is_unit_active(self, host) -> bool:
         result = list(
             host.run_sync(
-                "systemctl is-active gerrit.service",
+                "systemctl show -p ActiveState --value gerrit.service",
                 is_safe=True,
                 print_progress_bars=False,
                 print_output=False,
