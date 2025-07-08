@@ -98,10 +98,7 @@ class DowntimeRunner(CookbookRunnerBase):
         else:
             self.puppet = None
 
-        if args.task_id is not None:
-            self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
-        else:
-            self.phabricator = None
+        self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
         if len(self.hosts) <= 5:
             hosts_message = str(self.hosts)
@@ -133,12 +130,11 @@ class DowntimeRunner(CookbookRunnerBase):
         logging.info('Downtiming %s', self.runtime_description)
         downtime_id = self.alerting_hosts.downtime(self.reason, duration=self.duration)
 
-        if self.phabricator is not None:
-            message = (f'Icinga downtime and Alertmanager silence (ID={downtime_id}) set by {self.reason.owner} '
-                       f'for {self.duration} on {len(self.hosts)} host(s) and their services with reason: '
-                       f'{self.reason.reason}\n```\n{self.hosts}\n```')
+        message = (f'Icinga downtime and Alertmanager silence (ID={downtime_id}) set by {self.reason.owner} '
+                   f'for {self.duration} on {len(self.hosts)} host(s) and their services with reason: '
+                   f'{self.reason.reason}\n```\n{self.hosts}\n```')
 
-            self.phabricator.task_comment(self.task_id, message)
+        self.phabricator.task_comment(self.task_id, message, raises=False)
 
     @retry(  # pylint: disable=no-value-for-parameter
         tries=10,
