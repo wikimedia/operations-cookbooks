@@ -53,9 +53,10 @@ class RollUpgradeHAProxyRunner(SRELBBatchRunnerBase):
         confirm_on_failure(apt_get.update)
         confirm_on_failure(apt_get.install, 'haproxy')
 
-        self._restart_daemons_action(hosts, reason)
         # Run any potential corrective measures.
         puppet.run()
+
+        self._restart_daemons_action(hosts, reason)
 
     @property
     def allowed_aliases(self) -> list:
