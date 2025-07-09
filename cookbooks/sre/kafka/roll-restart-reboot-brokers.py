@@ -3,8 +3,10 @@
 import logging
 from argparse import ArgumentParser, Namespace
 from datetime import timedelta
+from functools import cached_property
 
-from cumin import NodeSet
+from cumin import nodeset
+from kafka.admin import KafkaAdminClient
 from spicerack import Spicerack
 from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError, RemoteHosts
@@ -13,6 +15,7 @@ from wmflib.interactive import ask_confirmation
 from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
 
 logger = logging.getLogger(__name__)
+logging.getLogger("kafka").setLevel(logging.WARNING)
 
 CLUSTER_CHOICES = (
     "main-eqiad",
@@ -101,16 +104,57 @@ class RollingActionBrokersRunner(SREBatchRunnerBase):
         """Property to return a list of daemons to restart"""
         return ["kafka.service"]
 
+    @property
+    def kafka_connection_str(self) -> str:
+        """Returns the connection string for the currently acted upon kafka cluster"""
+        cluster_name, site = self._args.alias.replace("kafka-", "").split("-")
+        return (  # pylint: disable=protected-access
+            self._spicerack.kafka()
+            ._kafka_config[cluster_name][site]["brokers"]["string"]
+            .split(",")
+        )
+
+    @cached_property
+    def cluster_controller_host(self) -> str:
+        """Return the hostname of the controller of the kafka cluster being acted upon"""
+        kafka_admin = KafkaAdminClient(bootstrap_servers=self.kafka_connection_str)
+        cluster_state = kafka_admin.describe_cluster()
+        for broker_details in cluster_state["brokers"]:
+            if broker_details["node_id"] == cluster_state["controller_id"]:
+                return broker_details["host"]
+        raise RuntimeError(
+            f"No registered broker matched the kafka cluster controller {cluster_state['controller_id']}"
+        )
+
     def _hosts(self) -> list[RemoteHosts]:
         all_hosts = super()._hosts()[0]
-        to_exclude = NodeSet(self._args.exclude)
+        to_exclude = nodeset(self._args.exclude)
         remote_query = str(all_hosts.hosts - to_exclude)
         if len(to_exclude) > 0:
             ask_confirmation(
                 f"{self._args.action} will be executed for the following hosts: {remote_query}"
             )
+        remote = self._spicerack.remote()
+        hosts = remote.query(remote_query)
 
-        return [self._spicerack.remote().query(remote_query)]
+        # If the host currently acting as the cluster controller appears in the list of nodes that are going to be
+        # acted upon, make sure to act on that node last, by placing it in a subsequent batch. We do this to avoid
+        # causing controller elections as we rolling-restart/reboot the cluster, as outages have happened when a
+        # new broker currently being added to the cluster is elected controller.
+        # See https://phabricator.wikimedia.org/T399005
+        if self.cluster_controller_host not in hosts.hosts:
+            return [hosts]
+
+        controller = nodeset(self.cluster_controller_host)
+        logger.info(
+            "Scheduling %s of controller host %s in a separate batch",
+            self._args.action,
+            self.cluster_controller_host,
+        )
+        return [
+            hosts.get_subset(hosts.hosts - controller),
+            hosts.get_subset(controller),
+        ]
 
     @retry(
         tries=30,

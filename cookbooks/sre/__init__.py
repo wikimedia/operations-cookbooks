@@ -432,6 +432,9 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
                     )
                     break
                 try:
+                    logger.info(
+                        "Running action: %s on hosts %s", self._args.action, batch
+                    )
                     self.pre_action(batch)
                     self.action(batch)
                     self.post_action(batch)
