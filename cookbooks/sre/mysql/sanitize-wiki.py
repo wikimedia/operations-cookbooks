@@ -1,14 +1,16 @@
 """Cookbook for sanitizing new wikis in MariaDB."""
 
-from argparse import ArgumentParser
 import logging
+import re
+from argparse import ArgumentParser
 
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack import Spicerack
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.mysql import Instance as MInst
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+
 
 # NOTE: this scripts is written defensively. Please prioritize safety and readability,
 # minimize abstractions and state, enable type checking, do assertions, write tests
@@ -76,6 +78,8 @@ class SanitizeWiki(CookbookBase):
             action="store_true",
             help=help_text,
         )
+        # we are only adding wikis to s5 for the foreseeable future
+        group.add_argument("--section", default="s5", help="Section (defaults to s5)")
         return parser
 
     def get_runner(self, args):
@@ -90,7 +94,8 @@ class SanitizeWikiRunner(CookbookRunnerBase):
         """Initialize the runner."""
         ensure_shell_is_durable()
         self._wiki_names: list[str] = args.wiki
-        self.section = "s5"  # we are only adding wikis to s5 for the foreseeable future
+        ensure(re.match("s\d", args.section) is not None, f"Invalid section name '{args.section}'")
+        self.section = args.section
         self._san_sock_fn = f"/run/mysqld/mysqld.{self.section}.sock"
         self.mysql = spicerack.mysql()
         self.check_only = args.check_only
