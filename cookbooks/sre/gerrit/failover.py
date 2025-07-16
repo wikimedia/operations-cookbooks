@@ -49,18 +49,6 @@ class Failover(CookbookBase):
             help=warning,
         )
         warning = (
-            "This argument needs to be used with caution."
-            " It will run git fsck on all backed up repos."
-            " It take a long time to complete."
-        )
-        parser.add_argument(
-            "--fsck",
-            required=False,
-            default=False,
-            action='store_true',
-            help=warning,
-        )
-        warning = (
             "This argument is design to handle user"
             " migration between gerrit instances."
         )
@@ -108,7 +96,7 @@ class FailoverRunner(CookbookRunnerBase):
         self.dns = Dns()
         self.switch_from_host = spicerack.remote().query(f"{args.switch_from_host}.*")
         self.switch_to_host = spicerack.remote().query(f"{args.switch_to_host}.*")
-        self.gerrit_host_list = list(spicerack.remote().query("gerrit*"))
+        self.gerrit_host_list = list(spicerack.remote().query("gerrit*").hosts)
         self.message = f"from {self.switch_from_host} to {self.switch_to_host}"
         self.expected_src_address = self.dns.resolve_ipv4("gerrit.wikimedia.org")[0]
         msg = f"Retrieved source address: {self.expected_src_address}"
@@ -117,22 +105,25 @@ class FailoverRunner(CookbookRunnerBase):
         self.reason = self.spicerack.admin_reason(reason=self.message)
         self.args = args
         self.puppetserver = spicerack.puppet_server()
+
         # Hieradata lookups
         self.target_gerrit_user = self.puppetserver.hiera_lookup(
             self.switch_to_host.hosts[0],
             "profile::gerrit::daemon_user").splitlines()[-1]
         msg = f"Retrieved target gerrit user: {self.target_gerrit_user}"
         logger.info(msg)
-        self.source_gerrit_user = self.puppetserver.hiera_lookup(
+
+        self.source_gerrit_site = self.puppetserver.hiera_lookup(
             self.switch_from_host.hosts[0],
-            "profile::gerrit::daemon_user").splitlines()[-1]
-        msg = f"Retrieved target gerrit user: {self.target_gerrit_user}"
-        logger.info(msg)
-        self.target_gerrit_site = self.puppetserver.hiera_lookup(
-            self.switch_to_host.hosts[0],
             "profile::gerrit::gerrit_site").splitlines()[-1]
+        msg = f"Retrieved source gerrit site: {self.source_gerrit_site}"
+        if self.args.chown:
+            self.target_gerrit_site = self.puppetserver.hiera_lookup(
+                self.switch_to_host.hosts[0],
+                "profile::gerrit::gerrit_site").splitlines()[-1]
         msg = f"Retrieved target gerrit site: {self.target_gerrit_site}"
         logger.info(msg)
+
         self.src_git_dir = self.puppetserver.hiera_lookup(
             self.switch_from_host.hosts[0],
             "profile::gerrit::git_dir").splitlines()[-1]
@@ -149,25 +140,27 @@ class FailoverRunner(CookbookRunnerBase):
     def confirm_before_proceeding(self) -> None:
         """Make sure the user knows what the cookbook will do and they can check the hosts are correct."""
         ask_input(
-            f"This will migrate gerrit.wikimedia.org to {self.switch_to_host}. "
+            f"This will migrate gerrit.wikimedia.org from {self.switch_from_host} to {self.switch_to_host}. "
             f"Check that this is definitely what you want to do, by typing {self.switch_to_host}",
             choices=self.gerrit_host_list
         )
 
     def _pre_flight_check(self) -> None:
-        self.spicerack.run_cookbook("sre.gerrit.topology-check",
-                                    args=[
-                                        f"--source {self.args.switch_from_host}",
-                                        f"--replica {self.args.switch_to_host}",
-                                        "--full "
-                                    ], raises=True)
+        args = [
+            "--source", self.args.switch_to_host,
+            "--replica", self.args.switch_from_host,
+            "--full"
+        ]
+        if self.args.chown:
+            args.append("--chown")
+        self.spicerack.run_cookbook("sre.gerrit.topology-check", args=args, raises=True)
 
     def _post_sync_validate_new_source(self) -> None:
         logger.info("Running post-flight checks for the new source")
         self.spicerack.run_cookbook("sre.gerrit.topology-check",
                                     args=[
-                                        f"--source {self.args.switch_to_host}",
-                                        f"--replica {self.args.switch_from_host}",
+                                        "--source", self.args.switch_to_host,
+                                        "--replica", self.args.switch_from_host,
                                         "--full"
                                     ], raises=True)
 
@@ -182,8 +175,8 @@ class FailoverRunner(CookbookRunnerBase):
         if not self.args.rw:
             self.spicerack.run_cookbook("sre.gerrit.read-only-toggle",
                                         args=[
-                                            f"--host {host}",
-                                            f"--toggle {state}"
+                                            "--host", host,
+                                            "--toggle", state
                                         ], raises=True)
         else:
             ask_confirmation(
@@ -195,10 +188,10 @@ class FailoverRunner(CookbookRunnerBase):
         alerting_hosts = self.spicerack.alerting_hosts(
             self.switch_from_host.hosts | self.switch_to_host.hosts
         )
-        if not self.spicerack.dry_run:
-            alerting_hosts.downtime(self.reason, duration=timedelta(hours=4))
-            self.spicerack.puppet(self.switch_to_host).disable(self.reason)
-            self.spicerack.puppet(self.switch_from_host).disable(self.reason)
+        #  Skipped by dry-run/test-cookbook
+        alerting_hosts.downtime(self.reason, duration=timedelta(hours=4))
+        self.spicerack.puppet(self.switch_to_host).disable(self.reason)
+        self.spicerack.puppet(self.switch_from_host).disable(self.reason)
         ask_confirmation(
             "Run sudo -i authdns-update on ns0.wikimedia.org, review the diff but **do not commit yet.**. "
             "You will be asked later on to commit."
@@ -210,10 +203,13 @@ class FailoverRunner(CookbookRunnerBase):
             "Please run that command and confirm that it is running so I can toggle the read-only mode."
         )
         #  replication source being frozen, we will now wait for replication
-        self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0], state="on")
+
+        self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0].split('.')[0], state="on")
+
         ask_confirmation(
             "Please confirm replication is fully done."
         )
+
         # TODO offer a landing page either through Gerrit itself or through a http server
         self.switch_from_host.run_sync(
             "systemctl stop gerrit",
@@ -229,17 +225,12 @@ class FailoverRunner(CookbookRunnerBase):
         )
         # Freezing the target host to ensure consistency over restarts,
         # despite promotions/demotions
-        self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0], state="on")
+        self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0].split('.')[0], state="on")
+        #  TODO extract the local backup logic in another cookbook
         self._ensure_backup_on_both_sides()
-        if self.args.fsck:
-            self.spicerack.run_cookbook("sre.gerrit.fsck",
-                                        args=[
-                                            "--host",
-                                            f"{self.args.switch_from_host}.*"
-                                        ], raises=True, confirm=True,)
-
-        self.sync_files(idempotent=True)
-        if self.args.distrust:
+        if not self.args.distrust:
+            self.sync_files(idempotent=True)
+        else:
             self.confirm_before_proceeding()
             self.sync_files(idempotent=True, all_dirs=True)
         # After exchanging with Tyler on this, the conclusion was reached that Gerrit might leave
@@ -250,6 +241,7 @@ class FailoverRunner(CookbookRunnerBase):
             f"Please merge the change to set the **DNS records** for Gerrit primary on {self.switch_to_host}. "
             "I will trigger then a DNS cache wipe and ensure both Gerrit hosts are up to speed."
         )
+
         if not self.spicerack.dry_run:
             self._run_cookbook_dns_cache_wipe()
         #  Validates that all instances are seeing the same resource record version.
@@ -258,22 +250,25 @@ class FailoverRunner(CookbookRunnerBase):
             f"Please merge the change to set the **puppet role** for Gerrit primary on {self.switch_to_host}. "
             "When you hit go, we will re-enable puppet and execute a puppet run."
         )
+
         self.confirm_before_proceeding()
-        if not self.spicerack.dry_run:
-            self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
-            self._post_sync_validations()  # Will enable puppet on the new replica
+        self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
+        self._post_sync_validations()  # Will enable puppet on the new replica
 
         self.switch_to_host.run_sync(
             "systemctl restart gerrit",
             print_progress_bars=False, print_output=True, is_safe=False
         )
+
+        #####
         # TODO https://gerrit-review.googlesource.com/Documentation/rest-api-config.html#check-consistency on the source
+        ##
         ask_confirmation(
             "Please verify that the switchover to gerrit.wikimedia.org is operating as expected. "
             "Once this is done, we will re-enable read-write on all instances after your confirmation."
         )
-        self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0], state="off")
-        self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0], state="off")
+        self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0].split('.')[0], state="off")
+        self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0].split('.')[0], state="off")
 
     def _post_sync_validations(self) -> None:
         self._post_sync_validate_former_source()
@@ -289,7 +284,7 @@ class FailoverRunner(CookbookRunnerBase):
             self.spicerack.run_cookbook("sre.gerrit.topology-check",
                                         args=[
                                             "--systemd "
-                                            f"--host  {self.args.switch_from_host}",
+                                            "--host", self.args.switch_from_host,
                                         ], raises=True)
 
         self.switch_from_host.run_sync(
@@ -304,14 +299,13 @@ class FailoverRunner(CookbookRunnerBase):
         # TODO https://gerrit-review.googlesource.com/Documentation/rest-api-config.html#check-consistency on the repl
 
     def _ensure_dns_post_merge(self):
-        args = [
-            # the new source should be identified as such
-            f"--source {self.args.switch_to_host}",
-            f"--replica {self.args.switch_from_host}",
-            "--dns "
-        ]
         self.spicerack.run_cookbook("sre.gerrit.topology-check",
-                                    args=args, raises=True)
+                                    args=[
+                                        # the new source should be identified as such
+                                        "--source", self.args.switch_to_host,
+                                        "--replica", self.args.switch_from_host,
+                                        "--dns "
+                                    ], raises=True)
 
     @retry(
         tries=10,
@@ -323,11 +317,11 @@ class FailoverRunner(CookbookRunnerBase):
     def sync_files(self, idempotent=False, all_dirs=False) -> bool:
         """Transfers files from old to new Gerrit host."""
         logger.info("Starting to rsync to %s.", self.switch_to_host)
+        logger.warning("There will be a sync retry, expect no more than 10 of these.")
         command_sync_var_lib = (
             f"/usr/bin/rsync -avpPz --stats --delete {self.target_gerrit_site} "
             f" rsync://{self.switch_to_host}/gerrit-var-lib/"
         )
-
         if not all_dirs:
             command_sync_data = (
                 "/usr/bin/rsync -avpPz --stats --delete /srv/gerrit/ "
@@ -363,19 +357,20 @@ class FailoverRunner(CookbookRunnerBase):
                 self._rsync_no_changes(list(t)[0][1].message().decode("utf-8")) for t in transfers
             ]
             if all(ret):
+                if self.args.chown:
+                    cmd = (f"chown -R {self.target_gerrit_user}:{self.target_gerrit_user} "
+                           f"{GERRIT_DIR_PREFIX} {self.target_gerrit_site}")
+                    logger.info("chowning files as --chown has been passed. Will use the following:")
+                    logger.info(cmd)
+                    self.switch_to_host.run_sync(
+                        f"{cmd}",
+                        print_progress_bars=False, print_output=False, is_safe=False
+                    )
                 return True
             raise RuntimeError("Rsync showed changes, retrying")
-
-        if self.args.chown:
-            self.switch_to_host.run_sync(
-                f"chown -R {self.target_gerrit_user}:{self.target_gerrit_user} {GERRIT_DIR_PREFIX}",
-                print_progress_bars=False, print_output=False, is_safe=False
-            )
-
         return True
 
     def _rsync_no_changes(self, rsync_output: str) -> bool:
-        #  TODO revalidate idempotency
         """Check if rsync reports no changes in the transferred data."""
         patterns_expected_zero = {
             "Number of created files": 0,
@@ -393,12 +388,12 @@ class FailoverRunner(CookbookRunnerBase):
 
     def _ensure_backup_on_both_sides(self) -> bool:
         """Ensure backup on *both* Gerrit servers"""
-        # TODO check if enough space is available to perform local backup
         hosts = [self.switch_from_host, self.switch_to_host]
 
         for host in hosts:
             msg = f"Preparing local emergency backup on {host}"
             logger.info(msg)
+
             self._backup_dirs_on_host(host)
 
         return True
@@ -417,7 +412,7 @@ class FailoverRunner(CookbookRunnerBase):
             )
 
             rsync_cmd = (
-                "/usr/bin/rsync -aP --checksum --stats --delete "
+                "/usr/bin/rsync -aP --checksum --stats --delete-before "
                 f"{src} {dst}"
             )
             logger.info("Running backup rsync on %s: %s", host, rsync_cmd)
