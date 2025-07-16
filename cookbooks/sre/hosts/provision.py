@@ -1,4 +1,5 @@
 """Provision a new physical host setting up it's BIOS and management console."""
+# pylint: disable=too-many-lines
 import logging
 
 from collections import defaultdict
@@ -34,6 +35,7 @@ OLD_SERIAL_MODELS = (
 
 SUPERMICRO_AMD_DEVICE_SLUGS = (
     'as-2014s-tr',
+    'as-8125gs-tnmr2',
 )
 
 # T387577
@@ -52,6 +54,29 @@ SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS = (
 SUPERMICRO_UEFI_NIC_PXE_BIOS_FIRMWARES = (
     'BIOS_X12DDW-1B58_20240704_2.1_STDsp.bin',
     'BIOS_X12DDW-1B58_20250329_2.3_STDsp.bin',
+)
+
+SUPERMICRO_COM1_CONSOLE_REDIRECTION = (
+    'ssg-521e-e1cr24h-configj',
+    'as-8125gs-tnmr2',
+    'sys-111e-wr',
+)
+
+SUPERMICRO_UEFI_ONLY = (
+    'as-8125gs-tnmr2',
+)
+
+SUPERMICRO_UEFI_HTTP_BOOT_ORDER_ONLY = (
+    'as-8125gs-tnmr2',
+)
+
+SUPERMICRO_UEFI_LONG_BOOT_TIME = (
+    'as-8125gs-tnmr2',
+)
+
+SUPERMICRO_NO_FQDN_MANAGEMENT = (
+    'ssg-521e-e1cr24h-configj',
+    'as-8125gs-tnmr2',
 )
 
 # Hostname prefixes that usually need --enable-virtualization
@@ -193,7 +218,6 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
 
         self.mgmt_network_changes = {
             "HostName": self.args.host,
-            "FQDN": self.fqdn,
             "IPv4StaticAddresses": [{
                 "Address": str(self.redfish.interface.ip),
                 "Gateway": str(next(self.redfish.interface.network.hosts())),
@@ -208,6 +232,9 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             }
         }
 
+        if self.device_model_slug not in SUPERMICRO_NO_FQDN_MANAGEMENT:
+            self.mgmt_network_changes["FQDN"] = self.fqdn
+
         # From various tests it seems that the value of BootModeSelect
         # (EFI/Legacy) varies the allowed values of other BIOS options as well.
         # The idea is to patch these settings in a first round, wait for them
@@ -217,12 +244,21 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         # More info: https://phabricator.wikimedia.org/T365372#10213162
         self.bios_changes = {
             "Attributes": {
-                "BootModeSelect": 'UEFI' if self.args.uefi else 'Legacy',
-                "ConsoleRedirection": False,
                 "QuietBoot": False,
                 "LegacySerialRedirectionPort": "COM1",
             }
         }
+        if self.device_model_slug not in SUPERMICRO_UEFI_ONLY:
+            self.bios_changes["Attributes"]["BootModeSelect"] = "UEFI" if self.args.uefi else "Legacy"
+        if self.device_model_slug in SUPERMICRO_COM1_CONSOLE_REDIRECTION:
+            self.bios_changes["Attributes"]["COM1ConsoleRedirection"] = False
+            self.bios_changes["Attributes"]["SOL_COM2ConsoleRedirection"] = True
+        else:
+            self.bios_changes["Attributes"]["ConsoleRedirection"] = False
+
+        if self.device_model_slug in SUPERMICRO_UEFI_HTTP_BOOT_ORDER_ONLY:
+            self.bios_changes["Attributes"]["HTTPBootPolicy"] = "Apply to each LAN"
+            self.bios_changes["Attributes"]["CSMSupport"] = "Disabled"
 
         # Some Supermicro BIOS settings differ on servers with AMD CPUs.
         intel_virt_flag = "Enable" if self.args.enable_virtualization else "Disable"
@@ -380,11 +416,15 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         )
 
     def _reboot_chassis(self):
+        seconds = 300
+        if self.device_model_slug in SUPERMICRO_UEFI_LONG_BOOT_TIME:
+            seconds = 600
         logger.info(
-            'Rebooting the host with policy %s and waiting for 5 minutes', self.chassis_reset_policy
+            'Rebooting the host with policy %s and waiting for %d seconds',
+            self.chassis_reset_policy, seconds
         )
         self.redfish.chassis_reset(self.chassis_reset_policy)
-        sleep(300)
+        sleep(seconds)
 
     def _get_network_info(self):
         """Find registered network NICs and their port link statuses."""
@@ -445,21 +485,19 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
 
             logging.info("Retrieving BIOS settings (second round).")
             bios_attributes = self._get_bios_settings()
+
+            # Configure BIOS settings to enable/disable HTTP support during PXE.
+            self._configure_pxe_http_settings()
+            should_patch = self._found_diffs_bios_attributes(bios_attributes)
+
             # Note: It seems that Supermicro's BIOS settings assume
             # PXE via EFI configs, so we force 'Legacy' in all BIOS settings
             # having 'EFI' has value. It should be enough to force PXE via IPMI,
             # without setting any specific boot order.
             # More info: https://phabricator.wikimedia.org/T365372#10148864
-            self._config_pxe_bios_settings(bios_attributes)
-            should_patch = self._found_diffs_bios_attributes(bios_attributes)
-            if should_patch:
-                logger.info(
-                    "Found differences between our desired status and the current "
-                    "one, applying new BIOS settings (a reboot will be performed).")
-                self._patch_bios_settings()
-            else:
-                logger.info(
-                    "No BIOS settings applied since the config is already good.")
+            if self.device_model_slug not in SUPERMICRO_UEFI_HTTP_BOOT_ORDER_ONLY:
+                self._config_pxe_bios_settings(bios_attributes)
+                should_patch = self._found_diffs_bios_attributes(bios_attributes)
 
             logger.info("Applying Network changes to the BMC.")
             self.redfish.request(
@@ -470,7 +508,14 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             # As precaution we reboot after the BMC network settings are applied,
             # even if not strictly needed.
             if should_patch:
+                logger.info(
+                    "Found differences between our desired status and the current "
+                    "one, applying new BIOS settings (a reboot will be performed).")
+                self._patch_bios_settings()
                 self._reboot_chassis()
+            else:
+                logger.info(
+                    "No BIOS settings applied since the config is already good.")
         except RedfishError as e:
             ipv6_disabled_err = (
                 "The property StatelessAddressAutoConfig is a "
@@ -507,6 +552,19 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
                     f"Error while checking BIOS attribute {key}") from e
         return found_diffs
 
+    def _configure_pxe_http_settings(self):
+        """Set BIOS settings related to HTTP PXE support."""
+        if self.args.uefi:
+            self.bios_changes["Attributes"]['IPv4HTTPSupport'] = 'Enabled'
+            self.bios_changes["Attributes"]['IPv4PXESupport'] = 'Disabled'
+            self.bios_changes["Attributes"]['IPv6HTTPSupport'] = 'Disabled'
+            self.bios_changes["Attributes"]['IPv6PXESupport'] = 'Disabled'
+        else:
+            self.bios_changes["Attributes"]['IPv4HTTPSupport'] = 'Disabled'
+            self.bios_changes["Attributes"]['IPv4PXESupport'] = 'Enabled'
+            self.bios_changes["Attributes"]['IPv6HTTPSupport'] = 'Disabled'
+            self.bios_changes["Attributes"]['IPv6PXESupport'] = 'Disabled'
+
     def _config_pxe_bios_settings(self, bios_attributes: dict):  # pylint: disable=too-many-branches, too-many-locals
         """Set BIOS settings from EFI to Legacy, including riser's PCIe settings.
 
@@ -518,18 +576,9 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         if self.args.uefi:
             old_value = "Legacy"
             new_value = "EFI"
-            self.bios_changes["Attributes"]['IPv4HTTPSupport'] = 'Enabled'
-            self.bios_changes["Attributes"]['IPv4PXESupport'] = 'Disabled'
-            self.bios_changes["Attributes"]['IPv6HTTPSupport'] = 'Disabled'
-            self.bios_changes["Attributes"]['IPv6PXESupport'] = 'Disabled'
         else:
             old_value = "EFI"
             new_value = "Legacy"
-            self.bios_changes["Attributes"]['IPv4HTTPSupport'] = 'Disabled'
-            self.bios_changes["Attributes"]['IPv4PXESupport'] = 'Enabled'
-            self.bios_changes["Attributes"]['IPv6HTTPSupport'] = 'Disabled'
-            self.bios_changes["Attributes"]['IPv6PXESupport'] = 'Disabled'
-
         pxe_nic_devices = []
         for key, value in bios_attributes.items():
             if ((old_value == str(value) or key.startswith("RSC_")) and
@@ -602,7 +651,15 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
                 logger.info(
                     "Connecting to the BMC as user %s, with password %s",
                     bmc_username, label)
-                if label == "BMC_LABEL":
+                if label == "wmf_root_mgmt":
+                    # Most of the times DCops sets up the "root" account with
+                    # the related password, not the ADMIN one. It makes sense
+                    # to avoid yet another special case for them, and use "root"
+                    # here that is more consistent with what they do with Dell
+                    # servers as well.
+                    bmc_username = "root"
+                    bmc_password = password
+                elif label == "BMC_LABEL":
                     # The Supermicro vendor ships its servers with a unique BMC admin
                     # password, that is displayed in the server's label:
                     # https://www.supermicro.com/en/support/BMC_Unique_Password
