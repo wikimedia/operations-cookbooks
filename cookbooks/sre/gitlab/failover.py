@@ -88,7 +88,7 @@ class FailoverRunner(CookbookRunnerBase):
 
         self.switch_from_host = spicerack.remote().query(f"{args.switch_from_host}.*")
         self.switch_to_host = spicerack.remote().query(f"{args.switch_to_host}.*")
-        self.gitlab_token = get_secret("Gitlab API token")
+        self.gitlab_token = get_secret(f"Gitlab API token for host {self.switch_from_host}")
         self.message = f"Failover of gitlab from {self.switch_from_host} to {self.switch_to_host}"
         self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         self.task_id = args.task_id
