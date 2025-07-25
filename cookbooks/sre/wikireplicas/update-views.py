@@ -115,7 +115,7 @@ class UpdateWikireplicaViewsRunner(CookbookRunnerBase):
     def _run_maintain_views_on_host(self, remote_hosts: RemoteHosts):
         host_actions = self.actions[str(remote_hosts)]
 
-        maintain_views_options = "--replace-all --auto-depool"
+        maintain_views_options = "--replace --auto-depool"
 
         if self.clean:
             maintain_views_options += " --clean"
