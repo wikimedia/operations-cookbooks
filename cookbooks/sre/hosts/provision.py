@@ -812,6 +812,37 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
             }
         }
 
+        self.config_changes_idrac10 = {
+            'BIOS.Setup.1-1': {
+                'CpuInterconnectBusLinkPower': 'Enabled',
+                'EnergyPerformanceBias': 'BalancedPerformance',
+                'PcieAspmL1': 'Enabled',
+                'ProcC1E': 'Enabled',
+                'ProcCStates': 'Enabled',
+                'ProcPwrPerf': 'OsDbpm',
+                'SysProfile': 'PerfPerWattOptimizedOs',
+                'UncoreFrequency': 'DynamicUFS',
+                'UsbPorts': 'OnlyBackPortsOn',
+                'HttpDev1TlsMode': 'None',
+            },
+            'iDRAC.Embedded.1': {
+                'IPMILan.1#Enable': 'Enabled',
+                'IPv4.1#DHCPEnable': 'Disabled',
+                'IPv4.1#StaticAddress': str(self.redfish.interface.ip),
+                'IPv4.1#StaticDNS1': DNS_ADDRESS,
+                'IPv4.1#StaticGateway': str(next(self.redfish.interface.network.hosts())),
+                'IPv4.1#StaticNetmask': str(self.redfish.interface.netmask),
+                'Network.1#DNSRacName': self.args.host,
+                'Network.1#DNSDomainNameFromDHCP': 'Disabled',
+                'Network.1#StaticDNSDomainName': f'mgmt.{self.netbox_data["site"]["slug"]}.wmnet',
+                'WebServer.1#HostHeaderCheck': 'Disabled',
+            },
+        }
+
+        if self.redfish.generation >= self.redfish.idrac_10_min_gen:
+            logger.info("Using iDRAC 10 config changes.")
+            self.config_changes = self.config_changes_idrac10
+
         # Testing that the management password is correct connecting to the first physical cumin host
         cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
         try:
@@ -918,7 +949,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         self.redfish.check_connection()
         return self.redfish.scp_dump(allow_new_attributes=True)
 
-    def _config_host(self):
+    def _config_host(self):  # pylint: disable=too-many-branches
         """Provision the BIOS and iDRAC settings."""
         config = self._get_config()
         if config.model.lower() in OLD_SERIAL_MODELS:
@@ -941,6 +972,32 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
         if 'BiosNvmeDriver' in config.components['BIOS.Setup.1-1']:
             self.config_changes['BIOS.Setup.1-1']['BiosNvmeDriver'] = 'AllDrives'
+
+        if self.redfish.generation >= self.redfish.idrac_10_min_gen:
+            # In single CPU systems running on IDRAC 10 some options
+            # may not be tunable (for example, cpu virtualization enabled by default)
+            # or present at all (like ProcX2Apic that is only available on multi-CPU systems)
+            # UEFI seems also sometimes the only available BootMode.
+            if 'BootMode' in config.components['BIOS.Setup.1-1']:
+                self.config_changes['BIOS.Setup.1-1']['BootMode'] = 'Uefi' if self.args.uefi else 'Bios'
+            else:
+                logger.info('Skipping BootMode config in the BIOS, not available.')
+            if 'ProcVirtualization' in config.components['BIOS.Setup.1-1']:
+                self.config_changes['BIOS.Setup.1-1']['ProcVirtualization'] = \
+                    'Enabled' if self.args.enable_virtualization else 'Disabled'
+            else:
+                logger.info('Skipping ProcVirtualization config in the BIOS, not available.')
+            if 'ProcX2Apic' in config.components['BIOS.Setup.1-1']:
+                self.config_changes['BIOS.Setup.1-1']['ProcX2Apic'] = 'Disabled'
+            else:
+                logger.info('Skipping ProcX2Apic config in the BIOS, not available.')
+            # This option seems not present in modern IDRAC 10 hosts, but we have only
+            # tested single CPU ones so far.
+            # More info: T392851
+            if 'ServerPwr.1#PSRapidOn' in config.components['System.Embedded.1']:
+                self.config_changes['System.Embedded.1']['ServerPwr.1#PSRapidOn'] = 'Disabled'
+            else:
+                logger.info('Skipping ServerPwr.1#PSRapidOn config in System.Embedded.1, not available.')
 
         self._config_pxe(config)
         was_changed = config.update(self.config_changes)
@@ -1019,7 +1076,23 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
         return pxe_nic
 
-    def _config_pxe(self, config):
+    def _config_pxe_uefi_boot_order(self, config, boot_order_bios_key):
+        # Uefi have a dedicated/virtual NIC (HttpDevice), which match HttpDev1Interface
+        # The disk name may be prefixed by Disk.SATA or RAID. See T392851#11038584
+        disk_label = "Disk.SATAEmbedded.A-1"
+        extra_labels = []
+        for label in config.components['BIOS.Setup.1-1'].get(boot_order_bios_key).split(","):
+            stripped_label = label.strip()
+            if stripped_label.startswith("RAID."):
+                disk_label = stripped_label
+            elif stripped_label != 'NIC.HttpDevice.1-1':
+                extra_labels.append(stripped_label)
+        new_order = [disk_label, 'NIC.HttpDevice.1-1']
+        if extra_labels:
+            new_order += extra_labels
+        return new_order
+
+    def _config_pxe(self, config):  # pylint: disable=too-many-branches
         """Configure PXE or UEFI HTTP boot on the correct NIC automatically or ask the user if unable to detect it.
 
         Example keys names for DELL:
@@ -1037,7 +1110,13 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         """
         all_nics = sorted(key for key in config.components.keys() if key.startswith('NIC.'))
         if not all_nics:
-            raise RuntimeError('Unable to find any NIC.')
+            if self.redfish.generation >= self.redfish.idrac_10_min_gen:
+                nics_json = self.redfish.request(
+                    'GET', f'{self.redfish.system_manager}/EthernetInterfaces').json()
+                for nic_json in nics_json['Members']:
+                    all_nics.append(nic_json['@odata.id'].split('/')[-1])
+            else:
+                raise RuntimeError('Unable to find any NIC.')
         pxe_nic = self._get_pxe_nic(all_nics)
         if self.args.uefi:
             logger.info('Enabling UEFI HTTP boot on NIC %s', pxe_nic)
@@ -1052,23 +1131,25 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
         # Set SetBootOrderEn to disk, primary NIC
         if self.args.uefi:
-            # TODO to be verified
-            # Uefi have a dedicated/virtual NIC (HttpDevice), which match HttpDev1Interface
-            # As well as a different disk name
-            new_order = ['Disk.SATAEmbedded.A-1', 'NIC.HttpDevice.1-1']
+            # For some reason, on IDRAC 10, we can have something like the following:
+            # SetBootOrderEn => RAID.SL.1-2,NIC.HttpDevice.1-1,NIC.PxeDevice.1-1
+            # RAID.SL.1-2, NIC.HttpDevice.1-1, NIC.PxeDevice.1-1, Unknown.Unknown.4-1
+            # We don't really care about Unknown settings, but we need to count them.
+            new_boot_order_en = self._config_pxe_uefi_boot_order(config, 'SetBootOrderEn')
+            new_uefi_boot_seq = self._config_pxe_uefi_boot_order(config, 'UefiBootSeq')
         else:
-            new_order = ['HardDisk.List.1-1', pxe_nic]
+            new_boot_order_en = ['HardDisk.List.1-1', pxe_nic]
         # SetBootOrderEn defaults to comma-separated, but some hosts might differ
         separator = ', ' if ', ' in config.components['BIOS.Setup.1-1']['SetBootOrderEn'] else ','
-        self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = separator.join(new_order)
+        self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = separator.join(new_boot_order_en)
         if self.args.uefi:
             uefi_boot_seq = config.components['BIOS.Setup.1-1'].get('UefiBootSeq', ', ')
             # on my test host UefiBootSeq have a space after the coma while SetBootOrderEn doesn't
             separator = ',' if ',' in uefi_boot_seq and ', ' not in uefi_boot_seq else ', '
-            self.config_changes['BIOS.Setup.1-1']['UefiBootSeq'] = separator.join(new_order)
+            self.config_changes['BIOS.Setup.1-1']['UefiBootSeq'] = separator.join(new_uefi_boot_seq)
         else:
             # BiosBootSeq defaults to comma-space-separated, but some hosts might differ
             # Use a default if the host is in UEFI mode and dosn't have the setting at all.
             bios_boot_seq = config.components['BIOS.Setup.1-1'].get('BiosBootSeq', ', ')
             separator = ',' if ',' in bios_boot_seq and ', ' not in bios_boot_seq else ', '
-            self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_order)
+            self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_boot_order_en)
