@@ -295,8 +295,16 @@ class FailoverRunner(CookbookRunnerBase):
     def check_for_correct_dns(self) -> None:
         """Raises an exception if the IP addresses haven't changed since before the migration started"""
         # The tool underlying the wipe-cache cookbook takes space-separated arguments, but run_cookbook needs a list
+        from_hostname = urlparse(self.switch_from_gitlab_url).hostname
+        to_hostname = urlparse(self.switch_to_gitlab_url).hostname
+
+        if from_hostname is None or to_hostname is None:
+            raise ValueError("One of the GitLab URLs is missing a hostname.")
+
         self.spicerack.run_cookbook(
-            'sre.dns.wipe-cache', [" ".join([self.switch_from_gitlab_url, self.switch_to_gitlab_url])], raises=True
+            'sre.dns.wipe-cache',
+            args=[from_hostname, to_hostname],
+            raises=True,
         )
 
         switch_from_host_ips = sorted(self.dns.resolve_ips(urlparse(self.switch_from_gitlab_url).netloc))
