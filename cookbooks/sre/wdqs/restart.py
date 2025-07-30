@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 RESTART = {
     'wdqs': [
         'systemctl stop wdqs-updater',
-        'systemctl restart wdqs-blazegraph wdqs-categories',
+        'systemctl restart wdqs-blazegraph',
+        'systemctl list-unit-files wdqs-categories \
+         && systemctl restart wdqs-categories \
+         || echo wdqs-categories not on this host'
         'sleep 20',
         'systemctl start wdqs-updater'
     ],
