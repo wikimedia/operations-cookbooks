@@ -15,7 +15,7 @@ from cryptography import x509
 from cryptography.x509 import Certificate
 from cryptography.x509.oid import NameOID
 
-from wmflib.interactive import ensure_shell_is_durable
+from wmflib.interactive import ensure_shell_is_durable, get_secret
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class Tls(CookbookBase):
-    """Create or update a Junos or SONiC device's TLS certificate for TLS based management.
+    """Create or update a Junos or SR-Linux device's TLS certificate for TLS based management.
 
     Usage example:
         cookbook sre.network.tls lsw1-e8-eqiad
@@ -58,8 +58,6 @@ class TlsRunner(CookbookRunnerBase):
         self.dry_run = spicerack.dry_run
         self.remote = spicerack.remote()
         self.device = args.device
-        if not self.dry_run and not args.system:
-            ensure_shell_is_durable()
 
         self.netbox = spicerack.netbox()
         # TODO implement "any" selector
@@ -74,15 +72,23 @@ class TlsRunner(CookbookRunnerBase):
             raise RuntimeError(f'{self.device}: Missing primary IP in Netbox.') from exc
         if not self.device_fqdn:
             raise RuntimeError(f'{self.device}: Missing DNS name (FQDN) on primary IP in Netbox.')
-        self.remote_host = self.remote.query('D{' + self.device_fqdn + '}')
-        if self.netbox_device.device_type.manufacturer.slug == 'dell':
-            self.platform = 'sonic'
-            self.port = 8080
+
+        if self.netbox_device.device_type.manufacturer.slug == 'nokia':
+            self.platform = 'srlinux'
+            self.port = 443
+            self.username = 'admin'
+            self.remote_host = spicerack.requests_session(__name__)
+            self.remote_host.verify = False  # Needed when it's run on self-signed certs
         elif self.netbox_device.device_type.manufacturer.slug == 'juniper':
             self.platform = 'junos'
             self.port = 32767
+            self.remote_host = self.remote.query('D{' + self.device_fqdn + '}')
         else:
-            raise RuntimeError(f'{self.device}: invalid manufacturer, must be dell or juniper.')
+            raise RuntimeError(f'{self.device}: invalid manufacturer, must be Nokia or juniper.')
+
+        # Only required for Junos as Nokia does all the changes in an atomic way
+        if not self.dry_run and not args.system and self.platform == 'junos':
+            ensure_shell_is_durable()
 
         try:
             puppet_conf_raw = run(shlex.split("puppet config print --render-as json"),
@@ -117,8 +123,8 @@ class TlsRunner(CookbookRunnerBase):
 
         if new_cert_bundle:
             logger.info("%s: ⚙️ Deploy needed.", self.device)
-            if self.platform == 'sonic':
-                self.deploy_cert_sonic(new_cert_bundle)
+            if self.platform == 'srlinux':
+                self.deploy_cert_srlinux(new_cert_bundle)
             elif self.platform == 'junos':
                 self.deploy_cert_junos(new_cert_bundle)
             else:
@@ -214,10 +220,7 @@ class TlsRunner(CookbookRunnerBase):
                                                     print_progress_bars=False,
                                                     is_safe=True)
         else:
-            results_raw = self.remote_host.run_sync("cat ~/csr.pem",
-                                                    print_output=self.verbose,
-                                                    print_progress_bars=False,
-                                                    is_safe=True)
+            return ''  # not currently supported on Nokia
         result_parsed = parse_results(results_raw)
         logger.debug("Content of the device's stored CSR: %s.", result_parsed)
         if isinstance(result_parsed, str):
@@ -263,18 +266,116 @@ class TlsRunner(CookbookRunnerBase):
                                   print_output=self.verbose, print_progress_bars=False)
         logger.debug("Client certificate and key loaded on device.")
 
-    def deploy_cert_sonic(self, cert_bundle):
-        """Deploy the needed files on SONiC."""
-        logger.debug("Deploying everything on SONiC.")
-        if 'csr' in cert_bundle:
-            # Store the CSR in the a dir that survives upgrades/cleanup
-            self.remote_host.run_sync(f"echo '{cert_bundle['csr']}' > ~/csr.pem",
-                                      print_output=self.verbose, print_progress_bars=False)
-        self.remote_host.run_sync(f"echo '{cert_bundle['cert']}' | sudo tee /etc/sonic/cert/host/default.crt",
-                                  print_output=self.verbose, print_progress_bars=False)
-        if 'key' in cert_bundle:
-            self.remote_host.run_sync(f"echo '{cert_bundle['key']}' | sudo tee /etc/sonic/cert/keys/default.key",
-                                      print_output=self.verbose, print_progress_bars=False)
-        self.remote_host.run_sync("sudo service telemetry restart",
-                                  print_output=self.verbose, print_progress_bars=False)
-        logger.debug("Telemetry deamon restarted with new certificate.")
+    def deploy_cert_srlinux(self, cert_bundle):
+        """Deploy the needed certification on SR-Linux."""
+        logger.debug("Deploying everything on SR-Linux.")
+
+        # NOTE: Storing the CSR on the device is not supported
+        config: list[dict] = [
+            {
+                "action": "delete",
+                "path": "/system/tls/server-profile"
+            },
+            {
+                "action": "update",
+                "path": "/system/tls/server-profile[name=wmf-default]",
+                "value": {
+                    "key": cert_bundle['key'],
+                    "certificate": cert_bundle['cert']
+                }
+            },
+            {
+                "action": "update",
+                "path": "/system/tls/server-profile[name=wmf-default]",
+                "value": {
+                    "key": cert_bundle['key'],
+                    "certificate": cert_bundle['cert']
+                }
+            },
+            {
+                "action": "update",
+                "path": "/system/grpc-server[name=mgmt]/tls-profile",
+                "value": "wmf-default"
+            },
+            {
+                "action": "update",
+                "path": "/system/json-rpc-server/network-instance[name=mgmt]/https/tls-profile",
+                "value": "wmf-default"
+            }
+        ]
+
+        self.send_json_rpc_config(config)
+
+    def send_json_rpc_config(self, config: list[dict]):  # TODO: move to its own Spicerack module
+        """Send configuration commands to a device via JSON-RPC and systematically do a commit confirm.
+
+        If in dry-run, get a diff instead.
+        """
+        # Only ask for the password there so we don't ask for it too soon
+        password = get_secret(f"{self.username} password")
+        self.remote_host.auth = (self.username, password)
+
+        if self.dry_run:
+            diff_payload = {
+                "jsonrpc": "2.0",
+                "id": 0,
+                "method": "diff",
+                "params": {
+                    "commands": config,
+                    "output-format": "text"
+                }
+            }
+            response = self.send_jsonrpc_request(diff_payload)
+            if 'result' in response.json() and len(response.json()['result']) > 0:
+                logger.info("%s: In dry-run, showing diff:\n%s.", self.device, response.json()['result'][0])
+            else:
+                logger.info("%s: In dry-run and no diff to show (no change).", self.device)
+            return
+        commit_payload = {
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "set",
+            "params": {
+                "confirm-timeout": 10,  # in seconds
+                "commands": config
+            }
+        }
+        self.send_jsonrpc_request(commit_payload)
+        confirm_payload = {
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "set",
+            "params": {
+                "datastore": "tools",
+                "commands": [
+                    {
+                        "action": "update",
+                        "path": "/system/configuration/confirmed-accept"
+                    }
+                ]
+            }
+        }
+        self.send_jsonrpc_request(confirm_payload)
+        logger.debug('Commit confirmed on %s', self.device_fqdn)
+        persistant_payload = {
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "cli",
+            "params": {
+                "commands": [
+                    "save startup",
+                    "save rescue"
+                ]
+            }
+        }
+        self.send_jsonrpc_request(persistant_payload)
+        logger.debug('Config saved as startup and rescue on %s', self.device_fqdn)
+
+    def send_jsonrpc_request(self, payload: dict):
+        """Send a JSON-RPC request, verify that it went well and return the response."""
+        response = self.remote_host.post(f"https://{self.device_fqdn}:{self.port}/jsonrpc", json=payload)
+        if response.status_code >= 400:
+            raise RuntimeError(response.text)
+        if 'error' in response.json():
+            raise RuntimeError(response.json()['error']['message'])
+        return response
