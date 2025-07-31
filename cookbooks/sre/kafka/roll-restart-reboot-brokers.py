@@ -6,7 +6,6 @@ from datetime import timedelta
 from functools import cached_property
 
 from cumin import nodeset
-from kafka.admin import KafkaAdminClient
 from spicerack import Spicerack
 from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError, RemoteHosts
@@ -104,21 +103,12 @@ class RollingActionBrokersRunner(SREBatchRunnerBase):
         """Property to return a list of daemons to restart"""
         return ["kafka.service"]
 
-    @property
-    def kafka_connection_str(self) -> str:
-        """Returns the connection string for the currently acted upon kafka cluster"""
-        cluster_name, site = self._args.alias.replace("kafka-", "").split("-")
-        return (  # pylint: disable=protected-access
-            self._spicerack.kafka()
-            ._kafka_config[cluster_name][site]["brokers"]["string"]
-            .split(",")
-        )
-
     @cached_property
     def cluster_controller_host(self) -> str:
         """Return the hostname of the controller of the kafka cluster being acted upon"""
-        kafka_admin = KafkaAdminClient(bootstrap_servers=self.kafka_connection_str)
-        cluster_state = kafka_admin.describe_cluster()
+        cluster_name, site = self._args.alias.replace("kafka-", "").split("-")
+        admin_client = self._spicerack.kafka().admin_client(site=site, cluster_name=cluster_name)
+        cluster_state = admin_client.describe_cluster()
         for broker_details in cluster_state["brokers"]:
             if broker_details["node_id"] == cluster_state["controller_id"]:
                 return broker_details["host"]
