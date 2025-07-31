@@ -163,6 +163,14 @@ class FailoverRunner(CookbookRunnerBase):
             "and we will re-enable and run puppet."
         )
 
+        # Update home_page_url on the switch_from_host.
+        # switch_to_host is handled by the restore script already.
+        cmd = (
+            f'echo "ApplicationSetting.last.update(home_page_url: \'{self.switch_to_gitlab_url}/explore\')" '
+            '| /usr/bin/gitlab-rails console'
+        )
+        self.switch_from_host.run_sync(cmd, print_progress_bars=False, is_safe=False)
+
         self.switch_from_host.run_sync("gitlab-ctl deploy-page down", print_progress_bars=False, is_safe=False)
         unlock_backups_on_host(self.switch_from_host, BACKUP_DIRECTORY)
         self.spicerack.puppet(self.switch_from_host).run(enable_reason=self.reason)
