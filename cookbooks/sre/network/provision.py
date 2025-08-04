@@ -133,11 +133,14 @@ class ProvisionRunner(CookbookRunnerBase):
     @retry(tries=60, backoff_mode='linear', failure_message='Device still not reachable, keep polling')
     def _poll_device(self, remote_device):
         """Poll the device via SSH until its reachable with the Homer's key."""
-        command = 'show system uptime local'
+        if self.netbox_device.device_type.manufacturer.slug == 'nokia':
+            command = 'show version'
+        else:
+            command = 'show system uptime local'
         results = remote_device.run_sync(command, is_safe=True)
         for _, output in results:
             message = output.message().decode()
-            if 'booted' in message:
+            if 'booted' in message.lower():
                 break
 
             raise SpicerackError(f'Command "{command}" does not have "booted" in it, got: {message}')
