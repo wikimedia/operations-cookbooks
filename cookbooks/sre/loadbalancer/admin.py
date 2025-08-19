@@ -1,11 +1,12 @@
-"""Pool/repool liberica in one or multiple hosts."""
+"""Pool, depool, config_reload, & reboot liberica in one or multiple hosts."""
 import argparse
 import logging
 import time
 from datetime import datetime, timedelta
+from typing import cast
 
 from prometheus_client.parser import text_string_to_metric_families
-
+from cumin import NodeSet
 from spicerack import Spicerack, Reason
 from spicerack.decorators import retry
 from spicerack.remote import RemoteHosts
@@ -24,12 +25,14 @@ class LibericaAdmin(SREBatchBase):
         cookbook sre.loadbalancer.admin --query 'P{lvs4010.ulsfo.wmnet}' --reason "LB maintenance" depool
         cookbook sre.loadbalancer.admin --alias 'liberica-canary' \
                 --reason "deploy new service" config_reload
+        cookbook sre.loadbalancer.admin --query 'P{lvs4010.ulsfo.wmnet}' --reason 'LB host(s) maintenance' reboot
 
     """
 
     batch_default = 1
     batch_max = 1
-    valid_actions = ("pool", "depool", "config_reload")
+    grace_sleep = 30
+    valid_actions = ("pool", "depool", "config_reload", "reboot")
 
     def get_runner(self, args: argparse.Namespace):
         """Get the worker class."""
@@ -48,6 +51,7 @@ class LibericaAdminRunner(SREBatchRunnerBase):
         if args.task_id:
             reason += f" ({args.task_id})"
         self._puppet_reason = spicerack.admin_reason(reason)
+        self._pooled_hosts = cast(RemoteHosts, [])
 
     @property
     def allowed_aliases(self) -> list:
@@ -92,13 +96,20 @@ class LibericaAdminRunner(SREBatchRunnerBase):
         reload_cmd = "/bin/systemctl reload liberica-cp.service"
         confirm_on_failure(hosts.run_sync, reload_cmd)
 
+    def _reboot_action(self, hosts: RemoteHosts, reason: Reason) -> None:
+        super()._reboot_action(hosts, self._puppet_reason)
+
     def pre_action(self, hosts: RemoteHosts) -> None:
         """Raise a RuntimeError if the instance isn't on the expected state"""
         if self._args.action == "config_reload":
             return
 
-        expect_pooled = self._args.action == "depool"
-        self._validate_is_pooled(hosts, expect_pooled)
+        if self._args.action == "depool":
+            self._validate_is_pooled(hosts, True)
+        elif self._args.action == "reboot":
+            self._pooled_hosts = self._get_pooled(hosts)
+            self._depool_action(self._pooled_hosts, self._puppet_reason)
+            self._validate_is_pooled(hosts, False)
 
     def post_action(self, hosts: RemoteHosts) -> None:
         """Raise a RuntimeError if the instance isn't on the expected state"""
@@ -106,8 +117,11 @@ class LibericaAdminRunner(SREBatchRunnerBase):
             self._validate_succesful_config_reload(hosts)
             return
 
-        expect_pooled = self._args.action == "pool"
-        self._validate_is_pooled(hosts, expect_pooled)
+        if self._args.action == "pool":
+            self._validate_is_pooled(hosts, True)
+        elif self._args.action == "reboot" and len(self._pooled_hosts) > 0:
+            self._pool_action(self._pooled_hosts, self._puppet_reason)
+            self._validate_is_pooled(self._pooled_hosts, True)
 
     @retry(tries=15, delay=timedelta(seconds=3), backoff_mode="constant", exceptions=(RuntimeError,))
     def _validate_is_pooled(self, hosts: RemoteHosts, expect_pooled: bool) -> None:
@@ -115,6 +129,15 @@ class LibericaAdminRunner(SREBatchRunnerBase):
             pooled = self._is_pooled(fqdn)
             if pooled != expect_pooled:
                 raise RuntimeError(f"Unexpected pooled state on {fqdn}, want {expect_pooled}, got {pooled}")
+
+    @retry(tries=15, delay=timedelta(seconds=3), backoff_mode="constant", exceptions=(RuntimeError,))
+    def _get_pooled(self, remotehosts: RemoteHosts) -> RemoteHosts:
+        all_hosts = remotehosts.hosts
+        pooled_nodes = NodeSet()
+        for h in all_hosts:
+            if self._is_pooled(str(h)):
+                pooled_nodes.add(h)
+        return remotehosts.get_subset(pooled_nodes)
 
     def _is_pooled(self, host: str) -> bool:
         """Fetch gobgp metrics and check the number of advertised routes and peers"""
