@@ -71,9 +71,9 @@ class AddWikiRunner(CookbookRunnerBase):
         cloudcontrol = remote.query("A:cloudcontrol")
         control_host = next(cloudcontrol.split(len(cloudcontrol)))
 
-        index_cmd = f"/usr/local/sbin/maintain-replica-indexes --database {self.database}"
-        view_cmd = f"/usr/local/sbin/maintain-views --replace --databases {self.database}"
-        meta_p_cmd = f"/usr/local/sbin/maintain-meta_p --databases {self.database}"
+        index_cmd = f"/usr/bin/maintain-replica-indexes --database {self.database}"
+        view_cmd = f"/usr/bin/maintain-views --replace --databases {self.database}"
+        meta_p_cmd = f"/usr/bin/maintain-meta_p --databases {self.database}"
         wiki_dns_cmd = "/usr/local/sbin/wmcs-wikireplica-dns --aliases"
         logger.info("Generating views...")
         replicas.run_async(index_cmd, view_cmd)
