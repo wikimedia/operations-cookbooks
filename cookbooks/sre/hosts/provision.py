@@ -49,13 +49,6 @@ SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS = (
     'sys-110p-wtr-configa',
 )
 
-# See https://phabricator.wikimedia.org/T387577#10627655
-# and https://phabricator.wikimedia.org/T397415
-SUPERMICRO_UEFI_NIC_PXE_BIOS_FIRMWARES = (
-    'BIOS_X12DDW-1B58_20240704_2.1_STDsp.bin',
-    'BIOS_X12DDW-1B58_20250329_2.3_STDsp.bin',
-)
-
 SUPERMICRO_COM1_CONSOLE_REDIRECTION = (
     'ssg-521e-e1cr24h-configj',
     'as-8125gs-tnmr2',
@@ -189,7 +182,7 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             "P1_AIOMAOC_ATGC_i2TMLAN1OPROM"
         ]
 
-        if self.device_model_slug in SUPERMICRO_PXE_BUG_SLUGS:
+        if self.device_model_slug in SUPERMICRO_PXE_BUG_SLUGS and not self.args.uefi:
             ask_confirmation(
                 "Due to T387577, during the first configuration of the server "
                 "please run provision twice to set PXE to the right NIC/port.")
@@ -566,12 +559,18 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             self.bios_changes["Attributes"]['IPv6PXESupport'] = 'Disabled'
 
     def _config_pxe_bios_settings(self, bios_attributes: dict):  # pylint: disable=too-many-branches, too-many-locals
-        """Set BIOS settings from EFI to Legacy, including riser's PCIe settings.
+        """Set NIC BIOS settings to PXE.
 
-        Look for all BIOS settings with a value containing 'EFI' and set them
-        to Legacy. This is needed to allow NIC ports to PXE correctly in our
-        environment. Set also all options starting with "RSC_" to Legacy as well,
-        since the nomenclature is used for PCIe riser NICs.
+        Legacy Mode:
+
+        Configure the NIC which has link to PXE boot.
+
+        UEFI Mode:
+
+        Supermicro uses a shared UEFI driver to PXE boot all NICs. As a result
+        only one NIC is shown in the BIOS config when in UEFI mode, regardless
+        of the number NICs on the box. We configure that single device to PXE
+        boot, which in turn causes all the NICs to attempt PXE booting.
         """
         if self.args.uefi:
             old_value = "Legacy"
@@ -628,15 +627,11 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
                     self.bios_changes["Attributes"][nic] = "Disabled"
 
         logger.info("Set PXE to the NIC %s", pxe_nic)
-        if self.bios_firmware_filename in SUPERMICRO_UEFI_NIC_PXE_BIOS_FIRMWARES:
-            legacy_pxe_setting = "PXE"
-            uefi_pxe_setting = "PXE"
-        elif self.device_model_slug in SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS:
+        if self.device_model_slug in SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS:
             legacy_pxe_setting = "Legacy"
-            uefi_pxe_setting = "PXE"
         else:
             legacy_pxe_setting = "PXE"
-            uefi_pxe_setting = "EFI"
+        uefi_pxe_setting = "EFI"
         self.bios_changes["Attributes"][pxe_nic] = uefi_pxe_setting if self.args.uefi else legacy_pxe_setting
 
     def _try_bmc_password(self, bmc_username="ADMIN"):
