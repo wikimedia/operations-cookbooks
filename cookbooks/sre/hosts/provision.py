@@ -1,17 +1,28 @@
 """Provision a new physical host setting up it's BIOS and management console."""
 # pylint: disable=too-many-lines
 import logging
+import time
 
 from collections import defaultdict
 from pprint import pformat
 from time import sleep
-from typing import Union
+from typing import Union, cast
+from ipaddress import IPv4Address
+from abc import ABCMeta
 
 from spicerack.apiclient import APIClientResponseError
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.dhcp import DHCPConfMac, DHCPConfMgmt
 from spicerack.netbox import MANAGEMENT_IFACE_NAME
-from spicerack.redfish import ChassisResetPolicy, DellSCPPowerStatePolicy, DellSCPRebootPolicy, RedfishError
+from spicerack.redfish import (
+    ChassisResetPolicy,
+    DellSCPPowerStatePolicy,
+    DellSCPRebootPolicy,
+    Redfish,
+    RedfishDell,
+    RedfishError,
+    RedfishSupermicro,
+)
 from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, get_secret, ensure_shell_is_durable
 from cookbooks.sre.hosts import (
     SUPERMICRO_VENDOR_SLUG,
@@ -156,26 +167,89 @@ class Provision(CookbookBase):
         raise RuntimeError(f"The vendor {vendor} is currently not supported.")
 
 
-class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
-    """As required by Spicerack API."""
+class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):
+    """Shared Dell and Supermicro logic"""
 
-    def __init__(self, args, spicerack):  # pylint: disable=too-many-statements, too-many-branches
+    def __init__(self, args, spicerack):
         """Initiliaze the provision runner."""
-        ensure_shell_is_durable()
         self.args = args
-
-        self.spicerack = spicerack
         self.netbox = spicerack.netbox()
         self.netbox_server = spicerack.netbox_server(self.args.host)
         self.netbox_data = self.netbox_server.as_dict()
         self.fqdn = self.netbox_server.mgmt_fqdn
         self.ipmi = spicerack.ipmi(self.fqdn)
         self.remote = spicerack.remote()
+        self.vendor = self.netbox_data['device_type']['manufacturer']['slug']
         self.verbose = spicerack.verbose
         self.device_model_slug = self.netbox_data['device_type']['slug']
+        self.mgmt_password = spicerack.management_password()
+        if self.netbox_server.status in ('active', 'staged'):
+            self.chassis_reset_policy = ChassisResetPolicy.GRACEFUL_RESTART
+        else:
+            self.chassis_reset_policy = ChassisResetPolicy.FORCE_RESTART
+        self.redfish: Redfish
+
+    def _reboot_chassis(self):
+        """Reboot chassis and poll or wait for completion
+
+        Reboots the chassis and polls via Redfish for the completion of the
+        reboot. If the polling fails it falls back to a set timeout.
+
+        """
+        if self.device_model_slug in SUPERMICRO_UEFI_LONG_BOOT_TIME:
+            max_reboot_secs = 600
+        else:
+            max_reboot_secs = 300
+        self.redfish.chassis_reset(self.chassis_reset_policy)
+        logger.info('Waiting for chassis reboot to complete...')
+        start_time = time.time()
+        # TODO: Consider supporting older Supermicro models, which only return
+        # the intermediate state 'None'
+        pwr_states = {
+            'supermicro': [
+                'SystemHardwareInitializationComplete',
+                'MemoryInitializationStarted',
+            ],
+            'dell': [
+                'OSRunning',
+                'SystemHardwareInitializationComplete',
+            ]
+        }
+        # Watch for state transitions which signify the reboot is complete, we
+        # don't just watch for the final state, since we want to ensure the
+        # reboot occurred
+        while len(pwr_states[self.vendor]) > 0:
+            pwr_state = pwr_states[self.vendor].pop()
+            while (time.time() - start_time) < max_reboot_secs:
+                sleep(5)
+                try:
+                    sys_prop = self.redfish.request(
+                        'GET',
+                        self.redfish.system_manager,
+                    ).json()
+                    logger.info(
+                        'Reboot state: %s',
+                        sys_prop['BootProgress']['LastState'],
+                    )
+                    if sys_prop['BootProgress']['LastState'] == pwr_state:
+                        break
+                except RedfishError as e:
+                    logger.error("Error while retrieving system properties: %s", e)
+        logger.info('Reboot completed, duration %d seconds', time.time() - start_time)
+
+
+class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance-attributes
+    """As required by Spicerack API."""
+
+    redfish: RedfishSupermicro
+
+    def __init__(self, args, spicerack):  # pylint: disable=too-many-statements, too-many-branches
+        """Initiliaze the provision runner."""
+        super().__init__(args, spicerack)
+        ensure_shell_is_durable()
+        self.spicerack = spicerack
         self.bmc_firmware_filename = None
         self.bios_firmware_filename = None
-        self.mgmt_password = spicerack.management_password()
 
         self.uefi_only_devices = [
             # https://phabricator.wikimedia.org/T378368
@@ -190,24 +264,19 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
         # Init redfish with a fake password, since in __init__ we just need
         # some metadata about the host like IP etc..
         # The real initialization happens in run().
-        self.redfish = spicerack.redfish(self.args.host, 'fake')
+        self.redfish: RedfishSupermicro = spicerack.redfish(self.args.host, 'fake')
 
         # DHCP automation
         self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
         logger.info("Using the BMC's MAC address for the DHCP config.")
         self.dhcp_config: Union[DHCPConfMac, DHCPConfMgmt] = DHCPConfMac(
             hostname=self.fqdn,
-            ipv4=self.redfish.interface.ip,
+            ipv4=cast(IPv4Address, self.redfish.interface.ip),
             mac=self.netbox.api.dcim.interfaces.get(device=self.args.host, name=MANAGEMENT_IFACE_NAME).mac_address,
             ttys=0,
             distro="",
         )
         self._dhcp_active = False
-
-        if self.netbox_server.status in ('active', 'staged'):
-            self.chassis_reset_policy = ChassisResetPolicy.GRACEFUL_RESTART
-        else:
-            self.chassis_reset_policy = ChassisResetPolicy.FORCE_RESTART
 
         self.mgmt_network_changes = {
             "HostName": self.args.host,
@@ -337,9 +406,7 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
                 logger.info(
                     'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
                 )
-                self.redfish.chassis_reset(self.chassis_reset_policy)
-                # TODO: replace the sleep with auto-detection of the completiono of the RAID job.
-                sleep(180)
+                self._reboot_chassis()
 
         if not self.args.no_dhcp:
             self.dhcp.remove_configuration(self.dhcp_config)
@@ -407,17 +474,6 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             '/redfish/v1/Systems/1/Bios',
             json=self.bios_changes
         )
-
-    def _reboot_chassis(self):
-        seconds = 300
-        if self.device_model_slug in SUPERMICRO_UEFI_LONG_BOOT_TIME:
-            seconds = 600
-        logger.info(
-            'Rebooting the host with policy %s and waiting for %d seconds',
-            self.chassis_reset_policy, seconds
-        )
-        self.redfish.chassis_reset(self.chassis_reset_policy)
-        sleep(seconds)
 
     def _get_network_info(self):
         """Find registered network NICs and their port link statuses."""
@@ -686,29 +742,20 @@ class SupermicroProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many
             )
 
 
-class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
+class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance-attributes
     """As required by Spicerack API."""
 
     def __init__(self, args, spicerack):  # pylint: disable=too-many-statements, too-many-branches
         """Initiliaze the provision runner."""
+        super().__init__(args, spicerack)
         ensure_shell_is_durable()
-        self.args = args
-
-        self.netbox = spicerack.netbox()
-        self.netbox_server = spicerack.netbox_server(self.args.host)
-        self.netbox_data = self.netbox_server.as_dict()
-        self.fqdn = self.netbox_server.mgmt_fqdn
-        self.ipmi = spicerack.ipmi(self.fqdn)
-        self.remote = spicerack.remote()
-        self.verbose = spicerack.verbose
-        self.device_model_slug = self.netbox_data['device_type']['slug']
 
         if self.args.no_users:
             password = ''  # nosec
         else:
             password = DELL_DEFAULT
 
-        self.redfish = spicerack.redfish(
+        self.redfish: RedfishDell = spicerack.redfish(
             self.args.host, username='root', password=password)
 
         # DHCP automation
@@ -718,18 +765,14 @@ class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-insta
             serial=self.netbox_data['serial'],
             manufacturer=self.netbox_data['device_type']['manufacturer']['slug'],
             fqdn=self.fqdn,
-            ipv4=self.redfish.interface.ip,
+            ipv4=cast(IPv4Address, self.redfish.interface.ip),
         )
         self._dhcp_active = False
 
         if self.netbox_server.status in ('active', 'staged'):
             self.reboot_policy = DellSCPRebootPolicy.GRACEFUL
-            self.chassis_reset_policy = ChassisResetPolicy.GRACEFUL_RESTART
         else:
             self.reboot_policy = DellSCPRebootPolicy.FORCED
-            self.chassis_reset_policy = ChassisResetPolicy.FORCE_RESTART
-
-        self.mgmt_password = spicerack.management_password()
 
         self.platform_doc_link = (
             "https://wikitech.wikimedia.org/wiki/SRE/Dc-operations/"
@@ -827,9 +870,7 @@ class DellProvisionRunner(CookbookRunnerBase):  # pylint: disable=too-many-insta
                 logger.info(
                     'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
                 )
-                self.redfish.chassis_reset(self.chassis_reset_policy)
-                # TODO: replace the sleep with auto-detection of the completiono of the RAID job.
-                sleep(180)
+                self._reboot_chassis()
 
         try:
             self._config_host()
