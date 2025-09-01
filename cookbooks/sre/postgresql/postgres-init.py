@@ -9,6 +9,7 @@ import logging
 
 from datetime import timedelta
 
+from wmflib.interactive import ensure_shell_is_durable
 
 __owner_team__ = "Infrastructure Foundations"
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ def argument_parser():
 
 def run(args, spicerack):
     """Required by Spicerack API."""
+    ensure_shell_is_durable()
     # Make sure only a single postgresql replica is selected
     replica = spicerack.remote().query("{replica} and C:postgresql::slave".format(replica=args.replica))
     if len(replica) != 1:
