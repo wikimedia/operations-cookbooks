@@ -32,7 +32,6 @@ MEDIAWIKI_SERVICES = (
     "mw-api-int",
     "mw-jobrunner",
     "mw-parsoid",
-    "mw-wikifunctions",
 )
 # Read-only mediawiki services that are active-active by default and won't be touched by this switchover.
 MEDIAWIKI_RO_SERVICES = (
@@ -41,7 +40,6 @@ MEDIAWIKI_RO_SERVICES = (
     "mw-api-ext-ro",
     "mw-api-ext-next-ro",
     "mw-api-int-ro",
-    "mw-wikifunctions-ro",
     "mw-misc",
 )
 # Regex matching services to downtime, when disabling read-only checks on the MariaDB primaries. The blank is for the
