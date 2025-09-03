@@ -109,6 +109,18 @@ PROMETHEUS_MATCHERS: dict[str, list[dict[str, Union[str, int, float, bool]]]] = 
             "isRegex": False
         }
     ],
+    "dse-codfw": [
+        {
+            "name": "site",
+            "value": "codfw",
+            "isRegex": False
+        },
+        {
+            "name": "prometheus",
+            "value": "k8s-dse",
+            "isRegex": False
+        }
+    ],
     "dse-eqiad": [
         {
             "name": "site",
@@ -198,12 +210,19 @@ ALLOWED_CUMIN_ALIASES = {
         "control-plane": "ml-staging-master",
         "workers": "ml-staging-worker"
     },
+    "dse-codfw": {
+        "k8s-group": "dse-k8s",
+        "k8s-cluster": "dse-k8s-codfw",
+        "etcd": "dse-k8s-etcd-codfw",
+        "control-plane": "dse-k8s-master-codfw",
+        "workers": "dse-k8s-worker-codfw"
+    },
     "dse-eqiad": {
         "k8s-group": "dse-k8s",
         "k8s-cluster": "dse-k8s-eqiad",
-        "etcd": "dse-k8s-etcd",
-        "control-plane": "dse-k8s-master",
-        "workers": "dse-k8s-worker"
+        "etcd": "dse-k8s-etcd-eqiad",
+        "control-plane": "dse-k8s-master-eqiad",
+        "workers": "dse-k8s-worker-eqiad"
     },
     "aux-eqiad": {
         "k8s-group": "aux-k8s",
