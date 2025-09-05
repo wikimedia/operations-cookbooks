@@ -839,10 +839,6 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
             },
         }
 
-        if self.redfish.generation >= self.redfish.idrac_10_min_gen:
-            logger.info("Using iDRAC 10 config changes.")
-            self.config_changes = self.config_changes_idrac10
-
         # Testing that the management password is correct connecting to the first physical cumin host
         cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
         try:
@@ -951,6 +947,10 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
     def _config_host(self):  # pylint: disable=too-many-branches
         """Provision the BIOS and iDRAC settings."""
+        if self.redfish.generation >= self.redfish.idrac_10_min_gen:
+            logger.info("Using iDRAC 10 config changes.")
+            self.config_changes = self.config_changes_idrac10
+
         config = self._get_config()
         if config.model.lower() in OLD_SERIAL_MODELS:
             self.config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedirCom2'
