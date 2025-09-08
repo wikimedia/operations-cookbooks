@@ -12,7 +12,7 @@ from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
 logger = logging.getLogger(__name__)
 
 
-CLUSTER_CHOICES = ("cephosd",)
+CLUSTER_CHOICES = ("cephosd-codfw", "cephosd-eqiad")
 DAEMON_CHOICES = ("mon", "mgr", "osd", "mds", "radosgw", "crash")
 
 
@@ -27,14 +27,14 @@ class RollRestartRebootCeph(SREBatchBase):
     Usage example:
         # Restart all ceph services, one host after the other, in the whole cephosd cluster
         cookbook sre.ceph.roll-restart-reboot-servers \
-            --alias cephosd \
+            --alias cephosd-eqiad \
             --reason "Reload server config" \
             --task-id T12346 \
             restart_daemons
 
         # Restart the ceph-mgr service, one host after the other, in the whole cephosd cluster
         cookbook sre.ceph.roll-restart-reboot-servers \
-            --alias cephosd \
+            --alias cephosd-eqiad \
             --reason "Reload server config" \
             --task-id T12346 \
             --daemons mgr
@@ -50,7 +50,7 @@ class RollRestartRebootCeph(SREBatchBase):
 
         # Reboot one host after the other, in the whole cephosd cluster
         cookbook sre.ceph.roll-restart-reboot-servers \
-            --alias cephosd \
+            --alias cephosd-eqiad \
             --reason "Kernel upgrade" \
             --task-id T12346 \
             reboot
