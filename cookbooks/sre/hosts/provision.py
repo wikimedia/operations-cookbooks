@@ -70,8 +70,9 @@ SUPERMICRO_UEFI_ONLY = (
     'as-8125gs-tnmr2',
 )
 
-SUPERMICRO_UEFI_HTTP_BOOT_ORDER_ONLY = (
+SUPERMICRO_HTTP_BOOT_ORDER_ONLY = (
     'as-8125gs-tnmr2',
+    'as-2014s-tr',
 )
 
 SUPERMICRO_UEFI_LONG_BOOT_TIME = (
@@ -318,9 +319,8 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         else:
             self.bios_changes["Attributes"]["ConsoleRedirection"] = False
 
-        if self.device_model_slug in SUPERMICRO_UEFI_HTTP_BOOT_ORDER_ONLY:
+        if self.device_model_slug in SUPERMICRO_HTTP_BOOT_ORDER_ONLY:
             self.bios_changes["Attributes"]["HTTPBootPolicy"] = "Apply to each LAN"
-            self.bios_changes["Attributes"]["CSMSupport"] = "Disabled"
 
         # Some Supermicro BIOS settings differ on servers with AMD CPUs.
         intel_virt_flag = "Enable" if self.args.enable_virtualization else "Disable"
@@ -544,7 +544,13 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             # having 'EFI' has value. It should be enough to force PXE via IPMI,
             # without setting any specific boot order.
             # More info: https://phabricator.wikimedia.org/T365372#10148864
-            if self.device_model_slug not in SUPERMICRO_UEFI_HTTP_BOOT_ORDER_ONLY:
+            if self.device_model_slug not in SUPERMICRO_HTTP_BOOT_ORDER_ONLY:
+                # The CSMSupport enables the support for MBR in UEFI systems.
+                # So far we found out that recent ML nodes (various models) not supporting
+                # to set PXE to a specific devices in UEFI mode may or may not allow
+                # to tune this option.
+                if "CSMSupport" in bios_attributes:
+                    self.bios_changes["Attributes"]["CSMSupport"] = "Disabled"
                 self._config_pxe_bios_settings(bios_attributes)
                 should_patch = self._found_diffs_bios_attributes(bios_attributes)
 
