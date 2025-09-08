@@ -811,7 +811,6 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
                 'NIC.1#DNSRacName': self.args.host,
                 'NICStatic.1#DNSDomainFromDHCP': 'Disabled',
                 'NICStatic.1#DNSDomainName': f'mgmt.{self.netbox_data["site"]["slug"]}.wmnet',
-                'WebServer.1#HostHeaderCheck': 'Disabled',
             },
             'System.Embedded.1': {
                 'ServerPwr.1#PSRapidOn': 'Disabled',
@@ -841,7 +840,6 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
                 'Network.1#DNSRacName': self.args.host,
                 'Network.1#DNSDomainNameFromDHCP': 'Disabled',
                 'Network.1#StaticDNSDomainName': f'mgmt.{self.netbox_data["site"]["slug"]}.wmnet',
-                'WebServer.1#HostHeaderCheck': 'Disabled',
             },
         }
 
@@ -978,6 +976,9 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
         if 'BiosNvmeDriver' in config.components['BIOS.Setup.1-1']:
             self.config_changes['BIOS.Setup.1-1']['BiosNvmeDriver'] = 'AllDrives'
+
+        if 'WebServer.1#HostHeaderCheck' in config.components['iDRAC.Embedded.1']:
+            self.config_changes['iDRAC.Embedded.1']['WebServer.1#HostHeaderCheck'] = 'Disabled'
 
         if self.redfish.generation >= self.redfish.idrac_10_min_gen:
             # In single CPU systems running on IDRAC 10 some options
