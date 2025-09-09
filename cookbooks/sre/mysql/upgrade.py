@@ -6,6 +6,7 @@
 import logging
 from argparse import ArgumentParser, Namespace
 from datetime import datetime, timedelta
+from time import sleep
 
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -151,10 +152,12 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         ]
         self._run_scripts(host, scripts)
 
+        step("reboot", "Rebooting host")
         reboot_time = datetime.utcnow()
         host.reboot()
         host.wait_reboot_since(reboot_time)
 
+        step("mysql_upgrade", "Start MariaDB and run mysql_upgrade")
         scripts = [
             'systemctl set-environment MYSQLD_OPTS="--skip-slave-start"',
             "systemctl start mariadb",
@@ -162,6 +165,11 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
             "systemctl restart mariadb",
             'mysql -e "start slave;"',
         ]
+        self._run_scripts(host, scripts)
+
+        sleep(10)
+        step("restart_prom_exp", "Restarting Prometheus exporter")
+        scripts = ["systemctl restart prometheus-mysqld-exporter.service"]
         self._run_scripts(host, scripts)
 
         reason = f"Upgrade of {host} completed"
@@ -177,7 +185,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         step("wait_icinga_s", f"Waiting for icinga to go green for {fqdn}")
         self.icinga_hosts(host.hosts).wait_for_optimal()
 
-    def _run_scripts(self, host, scripts) -> None:
+    def _run_scripts(self, host, scripts: list[str]) -> None:
         for script in scripts:
             try:
                 confirm_on_failure(host.run_sync, script)
