@@ -64,6 +64,7 @@ SUPERMICRO_COM1_CONSOLE_REDIRECTION = (
     'ssg-521e-e1cr24h-configj',
     'as-8125gs-tnmr2',
     'sys-111e-wr',
+    'sys-121c-tn2r-configg',
 )
 
 SUPERMICRO_UEFI_ONLY = (
@@ -425,12 +426,20 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                 logger.info(
                     'Creating the root user on the BMC.')
                 self.redfish.add_account('root', self.mgmt_password)
-            logger.info(
-                "Updating the ADMIN user's password on the BMC.")
-            self.redfish.change_user_password('ADMIN', self.mgmt_password)
+
             logger.info(
                 "Updating the root user's password on the BMC.")
             self.redfish.change_user_password('root', self.mgmt_password)
+
+            try:
+                self.redfish.find_account("ADMIN")
+                logger.info(
+                    "Updating the ADMIN user's password on the BMC.")
+                self.redfish.change_user_password('ADMIN', self.mgmt_password)
+            except RedfishError as e:
+                logger.info(
+                    "The ADMIN user on the BMC is not present, skipping. "
+                    "More info: %s", e)
 
         sleep(10)  # Trying to avoid a race condition that seems to make IPMI fail right after changing the password
         self.ipmi.check_connection()
