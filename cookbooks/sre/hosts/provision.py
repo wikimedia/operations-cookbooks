@@ -237,6 +237,20 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):
                         break
                 except RedfishError as e:
                     logger.error("Error while retrieving system properties: %s", e)
+        bios_start_time = time.time()
+        # On Supermicro X13DDW-A the Redfish BIOS settings are not immediately
+        # available, even though the system has booted, poll until they
+        # available.
+        while (time.time() - bios_start_time) < max_reboot_secs:
+            try:
+                self.redfish.request(
+                    'GET',
+                    f"{self.redfish.system_manager}/Bios",
+                )
+                break
+            except RedfishError:
+                logger.info('Reboot: Redfish BIOS settings not available, polling')
+            sleep(5)
         logger.info('Reboot completed, duration %d seconds', time.time() - start_time)
 
 
