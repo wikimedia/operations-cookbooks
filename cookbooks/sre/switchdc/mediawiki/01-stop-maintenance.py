@@ -37,16 +37,20 @@ class StopMaintenanceJobsRunner(MediaWikiSwitchDCRunnerBase):
                 # we'll know everything's gone.
                 batch_api.delete_collection_namespaced_job(
                     'mw-script', body=client.V1DeleteOptions(propagation_policy='Foreground'))
-                # This is a stopgap until we upgrade the kubernetes
-                # library in spicerack to have support for cronjob
-                # objects which gives us delete_collection_namespaced_cron_job
-                batch_api.delete_collection_namespaced_job(
-                    'mw-cron', body=client.V1DeleteOptions(propagation_policy='Foreground'))
-                logger.info(
-                    ('Deleted Job objects for mw-cron in %s - manually verify that CronJobs '
-                     'are deleted'), self.dc_from)
-                logger.info(
-                    'kube-env admin %s; kubectl -n mw-cron delete cronjobs --all;', self.dc_from)
+                if hasattr(batch_api, "delete_collection_namespaced_cron_job"):
+                    batch_api.delete_collection_namespaced_cron_job(
+                        'mw-cron', body=client.V1DeleteOptions(propagation_policy='Foreground'))
+                else:
+                    # This is a stopgap until we upgrade the kubernetes
+                    # library in spicerack to have support for cronjob
+                    # objects which gives us delete_collection_namespaced_cron_job.
+                    batch_api.delete_collection_namespaced_job(
+                        'mw-cron', body=client.V1DeleteOptions(propagation_policy='Foreground'))
+                    logger.info(
+                        ('Deleted Job objects for mw-cron in %s - manually verify that CronJobs '
+                         'are deleted'), self.dc_from)
+                    logger.info(
+                        'kube-env admin %s; kubectl -n mw-cron delete cronjobs --all;', self.dc_from)
 
             for namespace in NAMESPACES:
                 _wait_for_jobs_to_stop(batch_api, namespace=namespace, dry_run=self.spicerack.dry_run)
