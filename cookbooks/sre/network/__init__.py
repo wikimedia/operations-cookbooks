@@ -505,10 +505,11 @@ def run_homer(queries: list, dry_run: bool = True) -> None:
 
     """
     environment = {"SSH_AUTH_SOCK": KEYHOLDER_SOCK}
-    action = 'diff' if dry_run else f"commit 'Ran from cookbook {__name__}'"
+    action = ['diff'] if dry_run else ["commit", f"Ran from cookbook {__name__}"]
 
     for query in queries:
         try:
-            run(['/usr/local/bin/homer', query, action], check=True, env=environment)
+            command = ['/usr/local/bin/homer', query] + action
+            run(command, check=True, env=environment)
         except CalledProcessError as e:
             logger.warning("Issue while running Homer on %s, please run it manually.\n%s", query, e)
