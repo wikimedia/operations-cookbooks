@@ -23,9 +23,6 @@ class StartMaintenanceJobsRunner(MediaWikiSwitchDCRunnerBase):
         """Required by base class API."""
         logger.info('Starting MediaWiki maintenance jobs in %s', self.dc_to)
 
-        mw_maintenance = self.spicerack.remote().query('A:mw-maintenance')
-        mw_maintenance.run_sync(f'run-puppet-agent --enable "{self.reason}"')
-
         # We have changed the primary_dc key value by now, so we can
         # safely recreate jobs in k8s. We should also clean up
         # existing resoures from the old jobs that might not be
@@ -35,11 +32,6 @@ class StartMaintenanceJobsRunner(MediaWikiSwitchDCRunnerBase):
         self.reapply_k8s("mw-cron", self.dc_from)
         # Create resources and restart crons in the to_dc
         self.reapply_k8s("mw-cron", self.dc_to)
-
-        mediawiki = self.spicerack.mediawiki()
-        # Verify timers are enabled in both DCs
-        mediawiki.check_periodic_jobs_enabled(self.dc_to)
-        mediawiki.check_periodic_jobs_enabled(self.dc_from)
 
     def reapply_k8s(self, service, dc):
         """Run apply for a given k8s service."""

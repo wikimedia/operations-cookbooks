@@ -25,7 +25,6 @@ class StopMaintenanceJobsRunner(MediaWikiSwitchDCRunnerBase):
             datacenters.append(self.dc_to)
         logger.info('Stopping MediaWiki maintenance jobs in %s', ', '.join(datacenters))
         for datacenter in datacenters:
-            self.spicerack.mediawiki().stop_periodic_jobs(datacenter)
             batch_api = self.spicerack.kubernetes('main', datacenter).api.batch()
             if self.spicerack.dry_run:
                 logger.info('Skipping deletion of %s Kubernetes jobs in %s, due to --dry-run',
