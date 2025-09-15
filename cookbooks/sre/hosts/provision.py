@@ -299,7 +299,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             "HostName": self.args.host,
             "IPv4StaticAddresses": [{
                 "Address": str(self.redfish.interface.ip),
-                "Gateway": str(next(self.redfish.interface.network.hosts())),
+                "Gateway": str(next(iter(self.redfish.interface.network.hosts()))),
                 "SubnetMask": str(self.redfish.interface.netmask)
             }],
             "StaticNameServers": [DNS_ADDRESS],
@@ -835,7 +835,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
                 'IPv4.1#DHCPEnable': 'Disabled',
                 'IPv4Static.1#Address': str(self.redfish.interface.ip),
                 'IPv4Static.1#DNS1': DNS_ADDRESS,
-                'IPv4Static.1#Gateway': str(next(self.redfish.interface.network.hosts())),
+                'IPv4Static.1#Gateway': str(next(iter(self.redfish.interface.network.hosts()))),
                 'IPv4Static.1#Netmask': str(self.redfish.interface.netmask),
                 'NIC.1#DNSRacName': self.args.host,
                 'NICStatic.1#DNSDomainFromDHCP': 'Disabled',
@@ -864,7 +864,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
                 'IPv4.1#DHCPEnable': 'Disabled',
                 'IPv4.1#StaticAddress': str(self.redfish.interface.ip),
                 'IPv4.1#StaticDNS1': DNS_ADDRESS,
-                'IPv4.1#StaticGateway': str(next(self.redfish.interface.network.hosts())),
+                'IPv4.1#StaticGateway': str(next(iter(self.redfish.interface.network.hosts()))),
                 'IPv4.1#StaticNetmask': str(self.redfish.interface.netmask),
                 'Network.1#DNSRacName': self.args.host,
                 'Network.1#DNSDomainNameFromDHCP': 'Disabled',
