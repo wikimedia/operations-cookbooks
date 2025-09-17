@@ -244,12 +244,12 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):
         # available.
         while (time.time() - bios_start_time) < max_reboot_secs:
             try:
-                self.redfish.request(
+                self.redfish.request(  # pylint: disable=expression-not-assigned
                     'GET',
                     f"{self.redfish.system_manager}/Bios",
-                )
+                ).json()['Attributes']
                 break
-            except RedfishError:
+            except (RedfishError, KeyError):
                 logger.info('Reboot: Redfish BIOS settings not available, polling')
             sleep(5)
         logger.info('Reboot completed, duration %d seconds', time.time() - start_time)
@@ -498,10 +498,14 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
 
     def _patch_bios_settings(self):
         logger.info("Applying BIOS settings...")
+        # The timeout was increased in T394357 since sretest2010
+        # took more time than the default 10 seconds to handle a PATCH
+        # call for BIOS settings.
         self.redfish.request(
             'PATCH',
             '/redfish/v1/Systems/1/Bios',
-            json=self.bios_changes
+            json=self.bios_changes,
+            timeout=30
         )
 
     def _get_network_info(self):
