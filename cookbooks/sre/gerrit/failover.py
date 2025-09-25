@@ -147,8 +147,8 @@ class FailoverRunner(CookbookRunnerBase):
 
     def _pre_flight_check(self) -> None:
         args = [
-            "--source", self.args.switch_to_host,
-            "--replica", self.args.switch_from_host,
+            "--source", self.args.switch_from_host,
+            "--replica", self.args.switch_to_host,
             "--full"
         ]
         if self.args.chown:
@@ -157,12 +157,27 @@ class FailoverRunner(CookbookRunnerBase):
 
     def _post_sync_validate_new_source(self) -> None:
         logger.info("Running post-flight checks for the new source")
-        self.spicerack.run_cookbook("sre.gerrit.topology-check",
-                                    args=[
-                                        "--source", self.args.switch_to_host,
-                                        "--replica", self.args.switch_from_host,
-                                        "--full"
-                                    ], raises=True)
+        if not self.spicerack.dry_run:
+            args = [
+                "--source", self.args.switch_to_host,
+                "--replica", self.args.switch_from_host,
+                "--full"
+            ]
+            if self.args.chown:
+                args.append("--chown")
+            self.spicerack.run_cookbook("sre.gerrit.topology-check", args=args, raises=True)
+        else:
+            # Using dry-run implies the topology will not change
+            #  we'll use the same source/replica as in pre-flight
+            #  to avoid throwing an error.
+            args = [
+                "--source", self.args.switch_from_host,
+                "--replica", self.args.switch_to_host,
+                "--full"
+            ]
+            if self.args.chown:
+                args.append("--chown")
+            self.spicerack.run_cookbook("sre.gerrit.topology-check", args=args, raises=True)
 
     def _run_cookbook_dns_cache_wipe(self) -> None:
         self.spicerack.run_cookbook("sre.dns.wipe-cache",
@@ -304,7 +319,7 @@ class FailoverRunner(CookbookRunnerBase):
                                         # the new source should be identified as such
                                         "--source", self.args.switch_to_host,
                                         "--replica", self.args.switch_from_host,
-                                        "--dns "
+                                        "--dns"
                                     ], raises=True)
 
     @retry(
