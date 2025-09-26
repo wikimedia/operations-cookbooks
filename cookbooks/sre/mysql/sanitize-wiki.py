@@ -41,6 +41,11 @@ def step(slug: str, msg: str) -> None:
     log.info("[%s.%s] %s", SLUG, slug, msg)
 
 
+def run(hosts, cmd: str, is_safe=False) -> None:
+    log.info(f"Running '{cmd}' on {hosts}")
+    hosts._remote_hosts.run_sync(cmd, print_progress_bars=False, is_safe=is_safe)  # pylint: disable=protected-access
+
+
 class SanitizeWiki(CookbookBase):
     """Manage sanitization in MariaDB for one or multiple new wiki(s).
 
@@ -155,27 +160,25 @@ class SanitizeWikiRunner(CookbookRunnerBase):
             self.logger.info("Skipping redacting for %s", wiki_name)
             return
 
-        self.sanitarium_hosts._remote_hosts.run_sync(command)  # pylint: disable=protected-access
+        run(self.sanitarium_hosts, command)
 
     def _check_and_drop_private_data_on_hosts(self, clouddbs=False) -> None:
-        step("check_priv", "Check private data")
+        step("check_priv", "Check private data on sanitarium")
         check_command = f"/usr/local/sbin/check_private_data.py -S {self._san_sock_fn}"
-        drop_command = f"{check_command} | /usr/local/bin/mysql -S {self._san_sock_fn}"
-        run_on_san = self.sanitarium_hosts._remote_hosts.run_sync  # pylint: disable=protected-access
-        step("check", "Check private data")
-        run_on_san(check_command, is_safe=True)
+        run(self.sanitarium_hosts, check_command, is_safe=True)
 
         ask_confirmation("Proceed with dropping private data?")
         step("drop_privdata", "Drop private data")
-        run_on_san(drop_command, is_safe=False)
+        drop_command = f"{check_command} | /usr/local/bin/mysql -S {self._san_sock_fn}"
+        run(self.sanitarium_hosts, drop_command)
 
         if not clouddbs:
             self.logger.info("Skipping checking on clouddbs.")
             return
 
         if not self.only_grant_and_view:
-            step("check", "Check private data")
-            self.clouddb_hosts._remote_hosts.run_sync(check_command)  # pylint: disable=protected-access
+            step("check", "Check private data on clouddb")
+            run(self.clouddb_hosts, check_command)
 
     def _setup_clouddb(self, wiki_name: str) -> None:
         """Set up permissions and view database on clouddb hosts for a specific wiki."""
