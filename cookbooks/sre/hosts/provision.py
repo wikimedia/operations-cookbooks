@@ -984,7 +984,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
     def _config_host(self):  # pylint: disable=too-many-branches
         """Provision the BIOS and iDRAC settings."""
-        if self.redfish.generation >= self.redfish.idrac_10_min_gen:
+        if self.redfish.hw_model >= 10:
             logger.info("Using iDRAC 10 config changes.")
             self.config_changes = self.config_changes_idrac10
 
@@ -1013,7 +1013,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         if 'WebServer.1#HostHeaderCheck' in config.components['iDRAC.Embedded.1']:
             self.config_changes['iDRAC.Embedded.1']['WebServer.1#HostHeaderCheck'] = 'Disabled'
 
-        if self.redfish.generation >= self.redfish.idrac_10_min_gen:
+        if self.redfish.hw_model >= 10:
             # In single CPU systems running on IDRAC 10 some options
             # may not be tunable (for example, cpu virtualization enabled by default)
             # or present at all (like ProcX2Apic that is only available on multi-CPU systems)
@@ -1150,7 +1150,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         """
         all_nics = sorted(key for key in config.components.keys() if key.startswith('NIC.'))
         if not all_nics:
-            if self.redfish.generation >= self.redfish.idrac_10_min_gen:
+            if self.redfish.hw_model >= 10:
                 nics_json = self.redfish.request(
                     'GET', f'{self.redfish.system_manager}/EthernetInterfaces').json()
                 for nic_json in nics_json['Members']:
