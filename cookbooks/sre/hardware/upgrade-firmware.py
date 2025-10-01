@@ -26,7 +26,6 @@ from spicerack.redfish import (
     ChassisResetPolicy,
     DellSCPPowerStatePolicy,
     RedfishError,
-    Redfish,
     RedfishDell,
 )
 from wmflib.config import load_yaml_config
@@ -294,7 +293,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         return driver_version, firmware_path
 
     def _get_version_odata(
-        self, redfish_host: Redfish, driver_category: DellDriverCategory, odata_id: str
+        self, redfish_host: RedfishDell, driver_category: DellDriverCategory, odata_id: str
     ) -> version.Version:
         """Get the current version
 
@@ -343,7 +342,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
     # TODO: consider moving to spicerack.redfish
     def get_version(
         self,
-        redfish_host: Redfish,
+        redfish_host: RedfishDell,
         driver_category: DellDriverCategory,
         *,
         odata_id: Optional[str],
@@ -371,7 +370,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                 f"Unsupported driver_category: {driver_category}"
             ) from error
 
-    def upload_file(self, redfish_host: Redfish, file_handle: BufferedReader) -> str:
+    def upload_file(self, redfish_host: RedfishDell, file_handle: BufferedReader) -> str:
         """Upload a file to idrac via rdfish.
 
         Arguments:
@@ -428,7 +427,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         return f"{message}\n{extended_message}"
 
     @staticmethod
-    def simple_update(redfish_host: Redfish, upload_id: str):
+    def simple_update(redfish_host: RedfishDell, upload_id: str):
         """Upgrade firmware version to
 
         Arguments:
@@ -497,7 +496,12 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             exceptions=(RedfishError,),
         )(redfish_host.check_connection)()
 
-        return redfish_host.poll_task(job_id)
+        return retry(
+            tries=60,
+            delay=timedelta(seconds=30),
+            backoff_mode="linear",
+            exceptions=(RedfishError,),
+        )(redfish_host.poll_task)(job_id)
 
     def _ask_confirmation(self, message: str) -> None:
         """Wrapper around ask confirmation
@@ -570,7 +574,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     def _update(  # pylint: disable=too-many-arguments
         self,
-        redfish_host: Redfish,
+        redfish_host: RedfishDell,
         netbox_host: NetboxServer,
         driver_type: DellDriverType,
         driver_category: DellDriverCategory,
@@ -638,7 +642,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         )
 
         # TODO: make the following the default when everything is on 4.40+
-        if redfish_host.firmware_version >= version.Version('4.40'):
+        if redfish_host.hw_model >= 10 or redfish_host.firmware_version >= version.Version('4.40'):
             return target_version, redfish_host.upload_file(firmware_file)
 
         if extract_payload:
@@ -666,7 +670,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
     )
     def _check_version(
         self,
-        redfish_host: Redfish,
+        redfish_host: RedfishDell,
         target_version: version.Version,
         driver_category: DellDriverCategory,
         *,
@@ -693,7 +697,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             return False
         return True
 
-    def update_idrac(self, redfish_host: Redfish, netbox_host: NetboxServer) -> bool:
+    def update_idrac(self, redfish_host: RedfishDell, netbox_host: NetboxServer) -> bool:
         """Update the idrac to the latest version.
 
         Arguments:
@@ -752,7 +756,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             )
         return status
 
-    def _reboot(self, redfish_host: Redfish, netbox_host: NetboxServer) -> None:
+    def _reboot(self, redfish_host: RedfishDell, netbox_host: NetboxServer) -> None:
         """Reboot the host
 
         Arguments:
@@ -774,7 +778,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                 logger.error("The sre.hosts.reboot-single cookbook failed for host %s", netbox_host.fqdn)
                 ask_confirmation("Are you sure you want to proceed anyway?")
 
-    def update_bios(self, redfish_host: Redfish, netbox_host: NetboxServer) -> bool:
+    def update_bios(self, redfish_host: RedfishDell, netbox_host: NetboxServer) -> bool:
         """Update the bios to the latest version.
 
         Arguments:
@@ -803,7 +807,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         self.poll_id(redfish_host, job_id, True)
         return self._check_version(redfish_host, target_version, driver_category)
 
-    def _get_members(self, redfish_host: Redfish, odata_id: str, key: str = "Members") -> list[str]:
+    def _get_members(self, redfish_host: RedfishDell, odata_id: str, key: str = "Members") -> list[str]:
         """Get a list of hw member odata.id's.
 
         Arguments:
@@ -837,7 +841,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         return list_picker(results)
 
-    def _filter_ssds(self, redfish_host: Redfish, members: list[str]) -> Optional[str]:
+    def _filter_ssds(self, redfish_host: RedfishDell, members: list[str]) -> Optional[str]:
         """Filter the list of SSDs controllers from a list of storages.
 
         The upgrade is applied to all disks in a controller.
@@ -862,7 +866,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         return list_picker(results)
 
     @staticmethod
-    def _filter_network(redfish_host: Redfish, members: list[str]) -> Optional[str]:
+    def _filter_network(redfish_host: RedfishDell, members: list[str]) -> Optional[str]:
         """Filter the list of network members to only the one with a link status
 
         Arguments:
@@ -894,7 +898,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         return results[selection]
 
     def _get_hw_member(
-        self, redfish_host: Redfish, driver_category: DellDriverCategory
+        self, redfish_host: RedfishDell, driver_category: DellDriverCategory
     ) -> Optional[str]:
         """Get the member to upgrade.
 
@@ -923,7 +927,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     def update_driver(  # pylint: disable=too-many-return-statements
         self,
-        redfish_host: Redfish,
+        redfish_host: RedfishDell,
         netbox_host: NetboxServer,
         driver_category: DellDriverCategory,
     ) -> bool:
@@ -935,7 +939,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             driver_category: The driver category to get
 
         """
-        if redfish_host.firmware_version < version.Version('4'):
+        if redfish_host.hw_model < 10 and redfish_host.firmware_version < version.Version('4'):
             logger.error('iDRAC version (%s) is too low to preform driver upgrades.  '
                          'please upgrade iDRAC first')
             return False
@@ -972,7 +976,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     def update_ssd_driver(
         self,
-        redfish_host: Redfish,
+        redfish_host: RedfishDell,
         netbox_host: NetboxServer,
     ) -> bool:
         """Update a driver to the latest version on all SSDs of a controller.
@@ -982,7 +986,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             netbox_host: The netbox host to act on.
 
         """
-        if redfish_host.firmware_version < version.Version('4'):
+        if redfish_host.hw_model < 10 and redfish_host.firmware_version < version.Version('4'):
             logger.error('iDRAC version (%s) is too low to preform driver upgrades.  '
                          'please upgrade iDRAC first')
             return False
@@ -1055,7 +1059,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                          redfish_host.hostname, redfish_host.generation)
             return None
 
-        if redfish_host.firmware_version < version.Version('3.30.30.30'):
+        if redfish_host.hw_model < 10 and redfish_host.firmware_version < version.Version('3.30.30.30'):
             logger.error('%s: SKIPPING - iDRAC version (%s) is too low to perform updates.  '
                          'please upgrade iDRAC to version 3.30.30.30 before proceeding',
                          redfish_host.hostname, redfish_host.firmware_version)
