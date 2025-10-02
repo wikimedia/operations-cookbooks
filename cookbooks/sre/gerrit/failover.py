@@ -38,7 +38,7 @@ class Failover(CookbookBase):
         warning = (
             "This argument needs to be used with caution."
             " We will distrust gerrit's replication to run rsync."
-            " This means that the directory containing git data will **NOT**"
+            " This means that the directory containing git data will"
             " be replicated via rsync through this cookbook."
         )
         parser.add_argument(
@@ -268,7 +268,9 @@ class FailoverRunner(CookbookRunnerBase):
 
         self.confirm_before_proceeding()
         self.spicerack.puppet(self.switch_to_host).run(enable_reason=self.reason)
-        self._post_sync_validations()  # Will enable puppet on the new replica
+        self._post_sync_validations()
+        # Now that puppet has run on the new primary, we'll run the post-sync validations on the new replica
+        # this method will first enable puppet and run a topology check to ensure everything is up to snuff.
 
         self.switch_to_host.run_sync(
             "systemctl restart gerrit",
@@ -298,7 +300,7 @@ class FailoverRunner(CookbookRunnerBase):
             # if so, it is OK to enable puppet and have that --replica flag, and double check it
             self.spicerack.run_cookbook("sre.gerrit.topology-check",
                                         args=[
-                                            "--systemd "
+                                            "--systemd"
                                             "--host", self.args.switch_from_host,
                                         ], raises=True)
 
