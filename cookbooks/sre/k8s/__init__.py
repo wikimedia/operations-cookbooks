@@ -330,14 +330,21 @@ def etcd_cluster_healthy(remote: RemoteHosts) -> bool:
 
 def kubectl_version(ctrl_node: RemoteHosts) -> dict[str, dict[str, str]]:
     """Return kubectl version output from a control plane as a dict."""
+    # Spicerack RemoteHosts.run_sync joins stdout and stderr so we need to
+    # redirect stderr to /dev/null to avoid kubectl warnings/errors cluttering
+    # the JSON output.
     result = ctrl_node.run_sync(
-        "/usr/bin/kubectl version -o=json",
+        "/usr/bin/kubectl version -o=json 2>/dev/null",
         print_progress_bars=False,
         is_safe=True,
         print_output=False,
     )
     _, output = next(result)
-    version_info = json.loads(output.message())
+    message = output.message()
+    try:
+        version_info = json.loads(message)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Failed to parse kubectl version output: '{message}' with {exc}") from exc
     return version_info
 
 

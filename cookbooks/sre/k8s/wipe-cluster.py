@@ -317,12 +317,18 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
         # Additional sanity check: ensure that the cluster has been initialized
         # with the expected kubernetes version before proceeding.
         # We don't know which version to expect, so we ask the user.
-        k8s_version = kubectl_version(ctrl_node)
-        server_version = k8s_version["serverVersion"]["gitVersion"]
-        ask_confirmation(
-            f"The cluster is back up with Kubernetes {server_version}, "
-            "does this look good to you?"
-        )
+        try:
+            k8s_version = kubectl_version(ctrl_node)
+            server_version = k8s_version["serverVersion"]["gitVersion"]
+            ask_confirmation(
+                f"The cluster is back up with Kubernetes {server_version}, "
+                "does this look good to you?"
+            )
+        except RuntimeError as exc:
+            ask_confirmation(
+                f"Failed to get kubernetes version: {exc}. "
+                "Please check the cluster state manually (kubectl version)."
+            )
 
         # Update labels of control-plane nodes
         nodes = " ".join(self.control_plane_nodes.hosts)
