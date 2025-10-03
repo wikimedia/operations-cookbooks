@@ -323,7 +323,7 @@ class PrepareSection:
 class Prepare(DatabaseCookbookBase):
     """Perform all the Database related preparatory steps before the switch datacenter.
 
-    By default actions are performed for each core sections (sX, x1, RW esX):
+    By default actions are performed for each core sections (sX, xX, RW esX):
         * Downtime the whole database section.
         * Disable puppet on the master of the secondary datacanter.
         * Disable GTID on the master of the secondary datacenter.
