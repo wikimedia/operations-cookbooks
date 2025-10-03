@@ -578,12 +578,15 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             # without setting any specific boot order.
             # More info: https://phabricator.wikimedia.org/T365372#10148864
             if self.device_model_slug not in SUPERMICRO_HTTP_BOOT_ORDER_ONLY:
-                # The CSMSupport enables the support for MBR in UEFI systems.
-                # So far we found out that recent ML nodes (various models) not supporting
-                # to set PXE to a specific devices in UEFI mode may or may not allow
-                # to tune this option.
+                # The CSMSupport option enables the support of MBR in UEFI systems.
+                # https://en.wikipedia.org/wiki/UEFI#CSM_booting
+                # If this option is not enabled then Supermicro does not present
+                # the option to switch to Legacy boot, i.e. it is required for MBR mode
                 if "CSMSupport" in bios_attributes:
-                    self.bios_changes["Attributes"]["CSMSupport"] = "Disabled"
+                    if self.args.uefi:
+                        self.bios_changes["Attributes"]["CSMSupport"] = "Disabled"
+                    else:
+                        self.bios_changes["Attributes"]["CSMSupport"] = "Enabled"
                 self._config_pxe_bios_settings(bios_attributes)
                 should_patch = self._found_diffs_bios_attributes(bios_attributes)
 
