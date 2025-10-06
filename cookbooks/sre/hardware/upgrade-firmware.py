@@ -1005,13 +1005,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             DellDriverCategory.SSD,
             odata_id=controller,
         )
-        if job_id is None:
-            logger.error('%s: no job_id for member (%s)', netbox_host.fqdn, controller)
-            return False
-
-        if self.no_reboot:
-            logger.info('%s: skipping reboot due to no-reboot (%s)', netbox_host.fqdn, controller)
-            return True
 
         drive_uris = self._get_members(redfish_host, controller, "Drives")
         to_update = False
@@ -1022,7 +1015,18 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                     to_update = True
 
         if not to_update:
-            logger.info('%s: skipping reboot version already correct for all SSDs (%s)', netbox_host.fqdn, controller)
+            logger.info('%s: version already correct for all SSDs (%s)', netbox_host.fqdn, controller)
+            return True
+
+        if job_id is None:
+            logger.error('%s: no job_id for member (%s)', netbox_host.fqdn, controller)
+            if to_update:
+                logger.error(
+                    '%s: the target version is not correct on all SSDs, and no update job was triggered.')
+            return False
+
+        if self.no_reboot:
+            logger.info('%s: skipping reboot due to no-reboot (%s)', netbox_host.fqdn, controller)
             return True
 
         self._reboot(redfish_host, netbox_host)
