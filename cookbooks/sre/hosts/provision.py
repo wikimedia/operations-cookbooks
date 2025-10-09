@@ -1121,22 +1121,6 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
         return pxe_nic
 
-    def _config_pxe_uefi_boot_order(self, config, boot_order_bios_key):
-        # Uefi have a dedicated/virtual NIC (HttpDevice), which match HttpDev1Interface
-        # The disk name may be prefixed by Disk.SATA or RAID. See T392851#11038584
-        disk_label = "Disk.SATAEmbedded.A-1"
-        extra_labels = []
-        for label in config.components['BIOS.Setup.1-1'].get(boot_order_bios_key).split(","):
-            stripped_label = label.strip()
-            if stripped_label.startswith("RAID."):
-                disk_label = stripped_label
-            elif stripped_label != 'NIC.HttpDevice.1-1':
-                extra_labels.append(stripped_label)
-        new_order = [disk_label, 'NIC.HttpDevice.1-1']
-        if extra_labels:
-            new_order += extra_labels
-        return new_order
-
     def _config_pxe(self, config):  # pylint: disable=too-many-branches
         """Configure PXE or UEFI HTTP boot on the correct NIC automatically or ask the user if unable to detect it.
 
@@ -1175,26 +1159,17 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
                     self.config_changes[nic] = {'LegacyBootProto': 'NONE'}
 
         # Set SetBootOrderEn to disk, primary NIC
-        if self.args.uefi:
-            # For some reason, on IDRAC 10, we can have something like the following:
-            # SetBootOrderEn => RAID.SL.1-2,NIC.HttpDevice.1-1,NIC.PxeDevice.1-1
-            # RAID.SL.1-2, NIC.HttpDevice.1-1, NIC.PxeDevice.1-1, Unknown.Unknown.4-1
-            # We don't really care about Unknown settings, but we need to count them.
-            new_boot_order_en = self._config_pxe_uefi_boot_order(config, 'SetBootOrderEn')
-            new_uefi_boot_seq = self._config_pxe_uefi_boot_order(config, 'UefiBootSeq')
-        else:
-            new_boot_order_en = ['HardDisk.List.1-1', pxe_nic]
-        # SetBootOrderEn defaults to comma-separated, but some hosts might differ
-        separator = ', ' if ', ' in config.components['BIOS.Setup.1-1']['SetBootOrderEn'] else ','
-        self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = separator.join(new_boot_order_en)
-        if self.args.uefi:
-            uefi_boot_seq = config.components['BIOS.Setup.1-1'].get('UefiBootSeq', ', ')
-            # on my test host UefiBootSeq have a space after the coma while SetBootOrderEn doesn't
-            separator = ',' if ',' in uefi_boot_seq and ', ' not in uefi_boot_seq else ', '
-            self.config_changes['BIOS.Setup.1-1']['UefiBootSeq'] = separator.join(new_uefi_boot_seq)
-        else:
+        # We do it only for Legacy since in UEFI the debian installer takes
+        # care of setting the right first-boot option.
+        # Corner cases like T406964 are also handled/solved simply not
+        # touching the boot config.
+        if not self.args.uefi:
+            new_boot_order = ['HardDisk.List.1-1', pxe_nic]
+            # SetBootOrderEn defaults to comma-separated, but some hosts might differ
+            separator = ', ' if ', ' in config.components['BIOS.Setup.1-1']['SetBootOrderEn'] else ','
+            self.config_changes['BIOS.Setup.1-1']['SetBootOrderEn'] = separator.join(new_boot_order)
             # BiosBootSeq defaults to comma-space-separated, but some hosts might differ
             # Use a default if the host is in UEFI mode and dosn't have the setting at all.
             bios_boot_seq = config.components['BIOS.Setup.1-1'].get('BiosBootSeq', ', ')
             separator = ',' if ',' in bios_boot_seq and ', ' not in bios_boot_seq else ', '
-            self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_boot_order_en)
+            self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_boot_order)
