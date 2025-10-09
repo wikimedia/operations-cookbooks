@@ -1012,6 +1012,9 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             drive = redfish_host.request("get", drive_uri).json()
             if drive["MediaType"] == "SSD":
                 if not drive["Revision"].endswith(str(target_version)):
+                    logger.error(
+                        '%s: The drive at URI %s runs an unexpected version (%s).',
+                        netbox_host.fqdn, drive_uri, drive["Revision"])
                     to_update = True
 
         if not to_update:
