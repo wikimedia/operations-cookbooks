@@ -475,6 +475,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         else:
             uuid = ''
             mac = ''
+        if self.args.pxe_media:
+            installer_suffix = f"{self.args.os}-{self.args.pxe_media}"
+        else:
+            installer_suffix = f"{self.args.os}-installer"
         if self.is_uefi:
             # After the iPXE boot loader is fetched via UEFI HTTP Boot, iPXE
             # tries to fetch autoexec.ipxe from the base directory of the boot
@@ -494,7 +498,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 # HACK: root-path is used by ipxe to construct the installer URL
                 # we could in the future have ipxe query the os version via some
                 # other method.
-                'root-path': f'{self.args.os}-installer',
+                'root-path': installer_suffix,
                 'vendor-class-identifier': 'HTTPClient',
             }
             # Prevent the debian-installer from receiving the filename in our
@@ -513,7 +517,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 logger.info('Force pxelinux.0 and TFTP only for DHCP settings.')
                 dhcp_filename = f"/srv/tftpboot/{self.args.os}-installer/pxelinux.0"
                 dhcp_options = {
-                    "pxelinux.pathprefix": f"/srv/tftpboot/{self.args.os}-installer/"
+                    "pxelinux.pathprefix": f"/srv/tftpboot/{installer_suffix}/"
                 }
             else:
                 dhcp_filename = ""
