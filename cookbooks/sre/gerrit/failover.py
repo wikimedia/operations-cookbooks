@@ -242,7 +242,7 @@ class FailoverRunner(CookbookRunnerBase):
         # despite promotions/demotions
         self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0].split('.')[0], state="on")
         #  TODO extract the local backup logic in another cookbook
-        self._ensure_backup_on_both_sides()
+        self._ensure_local_backup()
         if not self.args.distrust:
             self.sync_files(idempotent=True)
         else:
@@ -402,9 +402,9 @@ class FailoverRunner(CookbookRunnerBase):
         logger.info("Idempotency of rsync confirmed.")
         return True
 
-    def _ensure_backup_on_both_sides(self) -> bool:
-        """Ensure backup on *both* Gerrit servers"""
-        hosts = [self.switch_from_host, self.switch_to_host]
+    def _ensure_local_backup(self) -> bool:
+        """Ensure backup on the source Gerrit server"""
+        hosts = [self.switch_from_host]
 
         for host in hosts:
             msg = f"Preparing local emergency backup on {host}"
