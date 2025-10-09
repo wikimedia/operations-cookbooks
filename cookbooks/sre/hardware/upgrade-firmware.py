@@ -306,6 +306,14 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             str: The version string matching the specific odata_id
 
         """
+        # NOTE: SSD Drive firmware versions are treated as a single minimal
+        # value per storage controller. The present code does not account for
+        # different drive models attached to the same controller, which would
+        # have different firmware revisions.
+        #
+        # TODO:
+        #  - Rework version logic to operate on a per drive basis.
+        #  - Don't leak the prefixed version to the user: `1+dz03` vs `DZ03`
         if driver_category == DellDriverCategory.SSD:
             drive_uris = self._get_members(redfish_host, odata_id, "Drives")
             drive_versions = set()
@@ -1006,16 +1014,15 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             odata_id=controller,
         )
 
-        drive_uris = self._get_members(redfish_host, controller, "Drives")
         to_update = False
-        for drive_uri in drive_uris:
-            drive = redfish_host.request("get", drive_uri).json()
-            if drive["MediaType"] == "SSD":
-                if not drive["Revision"].lower().endswith(str(target_version).lower()):
-                    logger.error(
-                        '%s: The drive at URI %s runs an unexpected version (%s).',
-                        netbox_host.fqdn, drive_uri, drive["Revision"])
-                    to_update = True
+        current_version = self.get_version(
+            redfish_host, DellDriverCategory.SSD, odata_id=controller
+        )
+        if current_version != target_version:
+            logger.error(
+                '%s: Some drives under controller %s run an unexpected version (%s). ',
+                netbox_host.fqdn, controller, current_version)
+            to_update = True
 
         if not to_update:
             logger.info('%s: version already correct for all SSDs (%s)', netbox_host.fqdn, controller)
@@ -1034,16 +1041,17 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         self._reboot(redfish_host, netbox_host)
         self.poll_id(redfish_host, job_id, True)
-        drive_uris = self._get_members(redfish_host, controller, "Drives")
         failed = False
-        for drive_uri in drive_uris:
-            drive = redfish_host.request("get", drive_uri).json()
-            if drive["MediaType"] == "SSD":
-                logger.info("Drive %s has now revision %s, to be compared with target version %s (ends with)",
-                            drive["Id"], drive["Revision"], target_version)
-                if not drive["Revision"].endswith(str(target_version)):
-                    logger.error("Drive %s was not upgraded to target version %s", drive["Id"], target_version)
-                    failed = True
+        current_version = self.get_version(
+            redfish_host, DellDriverCategory.SSD, odata_id=controller
+        )
+        if current_version != target_version:
+            logger.error(
+                '%s: Some drives under controller %s were not upgraded to target version (%s)',
+                netbox_host.fqdn,
+                controller,
+                target_version)
+            failed = True
 
         return not failed
 
