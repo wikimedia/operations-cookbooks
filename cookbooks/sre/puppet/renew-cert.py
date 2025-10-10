@@ -61,6 +61,9 @@ class RenewCertRunner(CookbookRunnerBase):
             raise RuntimeError(f'Only a single server should match the query, got {len(hosts)}')
 
         self.host = str(hosts.hosts[0])
+        if self.host.startswith('puppetserver'):
+            raise RuntimeError(
+                'The cookbook does not support puppetservers, please check T405580 for more info.')
         self.spicerack = spicerack
         self.session = spicerack.requests_session(__name__)
         self.alerting_hosts = spicerack.alerting_hosts(hosts.hosts)
