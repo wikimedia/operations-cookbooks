@@ -427,17 +427,23 @@ class FailoverRunner(CookbookRunnerBase):
                 print_progress_bars=False,
                 print_output=False,
             )
-
-            rsync_cmd = (
-                "/usr/bin/rsync -aP --checksum --stats --delete-before "
-                f"{src} {dst}"
-            )
+            if not self.spicerack.dry_run:
+                rsync_cmd = (
+                    "/usr/bin/rsync -a --delete-before "
+                    f"{src} {dst}"
+                )
+            else:
+                rsync_cmd = (
+                    "/usr/bin/rsync -a --dry-run --delete-before "
+                    f"{src} {dst}"
+                )
             logger.info("Running backup rsync on %s: %s", host, rsync_cmd)
+
             host.run_sync(
                 rsync_cmd,
                 print_progress_bars=False,
                 print_output=True,
-                is_safe=False
+                is_safe=True
             )
             if self.spicerack.dry_run:
                 logger.info("Would have run backup rsync on %s: %s", host, rsync_cmd)
