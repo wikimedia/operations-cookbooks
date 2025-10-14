@@ -300,8 +300,8 @@ class FailoverRunner(CookbookRunnerBase):
             # if so, it is OK to enable puppet and have that --replica flag, and double check it
             self.spicerack.run_cookbook("sre.gerrit.topology-check",
                                         args=[
-                                            "--systemd"
                                             "--host", self.args.switch_from_host,
+                                            "--systemd",
                                         ], raises=True)
 
         self.switch_from_host.run_sync(
