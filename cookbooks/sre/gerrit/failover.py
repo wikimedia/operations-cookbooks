@@ -211,10 +211,13 @@ class FailoverRunner(CookbookRunnerBase):
             "Run sudo -i authdns-update on ns0.wikimedia.org, review the diff but **do not commit yet.**. "
             "You will be asked later on to commit."
         )
-        cmd = "watch ssh gerrit.wikimedia.org -p 29418 gerrit show-queue --by-queue --wide"
+        ask_confirmation(
+            f"Please merge the change to set the **puppet role** for Gerrit primary on {self.switch_to_host}. "
+        )
+        cmd = "sudo tail -fn0 /var/log/gerrit/replication_log"
         ask_confirmation(
             "I will make the source instance read-only after you confirm that "
-            f"{cmd} returns no more pending replication thread. "
+            f"{cmd} returns no more in progress replication. "
             "Please run that command and confirm that it is running so I can toggle the read-only mode."
         )
         #  replication source being frozen, we will now wait for replication
@@ -262,7 +265,6 @@ class FailoverRunner(CookbookRunnerBase):
         #  Validates that all instances are seeing the same resource record version.
         self._ensure_dns_post_merge()
         ask_confirmation(
-            f"Please merge the change to set the **puppet role** for Gerrit primary on {self.switch_to_host}. "
             "When you hit go, we will re-enable puppet and execute a puppet run."
         )
 
