@@ -338,13 +338,11 @@ class FailoverRunner(CookbookRunnerBase):
         logger.info("Starting to rsync to %s.", self.switch_to_host)
         logger.warning("There will be a sync retry, expect no more than 10 of these.")
         command_sync_var_lib = (
-            f"/usr/bin/rsync -avpPz --stats --delete {self.source_gerrit_site} "
+            f"/usr/bin/rsync -avpPz --stats --delete {self.source_gerrit_site}/ "
             f" rsync://{self.switch_to_host}/gerrit-var-lib/"
         )
         if self.args.chown:
-            logger.info("chowning files as --chown has been passed.")
-            user = self.target_gerrit_user
-            command_sync_var_lib += f" --no-o --no-g --chown={user}:{user} "
+            command_sync_var_lib += " --no-o --no-g "
         if not all_dirs:
             command_sync_data = (
                 "/usr/bin/rsync -avpPz --stats --delete /srv/gerrit/ "
@@ -359,9 +357,7 @@ class FailoverRunner(CookbookRunnerBase):
                 " --exclude=*.hprof "
             )
         if self.args.chown:
-            logger.info("chowning files as --chown has been passed.")
-            user = self.target_gerrit_user
-            command_sync_data += f" --no-o --no-g --chown={user}:{user} "
+            command_sync_data += " --no-o --no-g "
 
         if self.spicerack.dry_run:
             logger.info(
@@ -384,6 +380,15 @@ class FailoverRunner(CookbookRunnerBase):
                 self._rsync_no_changes(list(t)[0][1].message().decode("utf-8")) for t in transfers
             ]
             if all(ret):
+                if self.args.chown:
+                    cmd = (f"chown -R {self.target_gerrit_user}:{self.target_gerrit_user} "
+                           f"{GERRIT_DIR_PREFIX} {self.target_gerrit_site}")
+                    logger.info("chowning files as --chown has been passed. Will use the following:")
+                    logger.info(cmd)
+                    self.switch_to_host.run_sync(
+                        f"{cmd}",
+                        print_progress_bars=False, print_output=False, is_safe=False
+                    )
                 return True
             raise RuntimeError("Rsync showed changes, retrying")
         return True
