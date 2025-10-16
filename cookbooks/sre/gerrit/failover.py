@@ -96,7 +96,7 @@ class FailoverRunner(CookbookRunnerBase):
         self.dns = Dns()
         self.switch_from_host = spicerack.remote().query(f"{args.switch_from_host}.*")
         self.switch_to_host = spicerack.remote().query(f"{args.switch_to_host}.*")
-        self.gerrit_host_list = list(spicerack.remote().query("gerrit*").hosts)
+        self.all_gerrit_hosts = spicerack.remote().query("gerrit*")
         self.message = f"from {self.switch_from_host} to {self.switch_to_host}"
         self.expected_src_address = self.dns.resolve_ipv4("gerrit.wikimedia.org")[0]
         msg = f"Retrieved source address: {self.expected_src_address}"
@@ -142,7 +142,7 @@ class FailoverRunner(CookbookRunnerBase):
         ask_input(
             f"This will migrate gerrit.wikimedia.org from {self.switch_from_host} to {self.switch_to_host}. "
             f"Check that this is definitely what you want to do, by typing {self.switch_to_host}",
-            choices=self.gerrit_host_list
+            choices=list(self.all_gerrit_hosts)
         )
 
     def _pre_flight_check(self) -> None:
@@ -205,8 +205,8 @@ class FailoverRunner(CookbookRunnerBase):
         )
         #  Skipped by dry-run/test-cookbook
         alerting_hosts.downtime(self.reason, duration=timedelta(hours=4))
-        self.spicerack.puppet(self.switch_to_host).disable(self.reason)
-        self.spicerack.puppet(self.switch_from_host).disable(self.reason)
+        self.spicerack.puppet(self.all_gerrit_hosts).disable(self.reason)
+        #  disabling puppet across all instances so we control the critical steps.
         ask_confirmation(
             "Run sudo -i authdns-update on ns0.wikimedia.org, review the diff but **do not commit yet.**. "
             "You will be asked later on to commit."
@@ -288,6 +288,8 @@ class FailoverRunner(CookbookRunnerBase):
         )
         self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0].split('.')[0], state="off")
         self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0].split('.')[0], state="off")
+        logger.info("Running puppet-agent one last time across all Gerrit instances.")
+        self.spicerack.puppet(self.all_gerrit_hosts).run(enable_reason=self.reason)
 
     def _post_sync_validations(self) -> None:
         self._post_sync_validate_former_source()
