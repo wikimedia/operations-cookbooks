@@ -227,14 +227,6 @@ class FailoverRunner(CookbookRunnerBase):
         ask_confirmation(
             "Please confirm replication is fully done."
         )
-
-        # TODO offer a landing page either through Gerrit itself or through a http server
-        self.switch_from_host.run_sync(
-            "systemctl stop gerrit",
-            print_progress_bars=False,
-            print_output=True,
-            is_safe=False
-        )
         self.switch_to_host.run_sync(
             "systemctl stop gerrit",
             print_progress_bars=False,
