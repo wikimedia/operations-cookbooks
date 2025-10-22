@@ -373,7 +373,9 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
     def run(self):
         """Run the cookbook."""
         if not self.args.no_switch:
-            if self.args.homer:
+            # Find switch vendor, as we force Homer usage if it is Nokia
+            nb_switch = self.netbox.api.dcim.devices.get(name=self.netbox_server.switches[0])
+            if self.args.homer or nb_switch.device_type.manufacturer.slug == "nokia":
                 # TODO: doesn't work for virtual-chassis
                 run_homer(queries=[f'{hostname}.*' for hostname in self.netbox_server.switches],
                           dry_run=self.spicerack.dry_run)
