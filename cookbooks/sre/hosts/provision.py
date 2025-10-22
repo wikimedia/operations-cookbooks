@@ -176,6 +176,7 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):
     def __init__(self, args, spicerack):
         """Initiliaze the provision runner."""
         self.args = args
+        self.dry_run = spicerack.dry_run
         self.netbox = spicerack.netbox()
         self.netbox_server = spicerack.netbox_server(self.args.host)
         self.netbox_data = self.netbox_server.as_dict()
@@ -191,6 +192,18 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):
         else:
             self.chassis_reset_policy = ChassisResetPolicy.FORCE_RESTART
         self.redfish: Redfish
+
+    def run(self):
+        """Run common switch setup"""
+        if not self.args.no_switch:
+            # Find switch vendor, as we force Homer usage if it is Nokia
+            nb_switch = self.netbox.api.dcim.devices.get(name=self.netbox_server.switches[0])
+            if self.args.homer or nb_switch.device_type.manufacturer.slug == "nokia":
+                # TODO: doesn't work for virtual-chassis
+                run_homer(queries=[f'{hostname}.*' for hostname in self.netbox_server.switches],
+                          dry_run=self.dry_run)
+            else:
+                configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
 
     def _reboot_chassis(self):
         """Reboot chassis and poll or wait for completion
@@ -372,15 +385,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
 
     def run(self):
         """Run the cookbook."""
-        if not self.args.no_switch:
-            # Find switch vendor, as we force Homer usage if it is Nokia
-            nb_switch = self.netbox.api.dcim.devices.get(name=self.netbox_server.switches[0])
-            if self.args.homer or nb_switch.device_type.manufacturer.slug == "nokia":
-                # TODO: doesn't work for virtual-chassis
-                run_homer(queries=[f'{hostname}.*' for hostname in self.netbox_server.switches],
-                          dry_run=self.spicerack.dry_run)
-            else:
-                configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
+        super().run()
 
         if not self.args.no_dhcp:
             self.dhcp.push_configuration(self.dhcp_config)
@@ -905,8 +910,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
     def run(self):
         """Run the cookbook."""
-        if not self.args.no_switch:
-            configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
+        super().run()
 
         if not self.args.no_dhcp:
             self.dhcp.push_configuration(self.dhcp_config)
