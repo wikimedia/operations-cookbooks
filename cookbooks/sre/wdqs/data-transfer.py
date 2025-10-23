@@ -248,8 +248,8 @@ class DataTransferRunner(CookbookRunnerBase):
                 if self.force:
                     for file in files:
                         self.r_dest.run_sync('rm -fv {}'.format(file))
-
-                    self.r_dest.run_sync('rm -fv /srv/wdqs/data_loaded')
+                    if bg_instance_name != 'categories':
+                        self.r_dest.run_sync('rm -fv /srv/wdqs/data_loaded')
 
                 self.transfer_datafiles(data_path, files)
 
