@@ -71,7 +71,6 @@ class DataTransfer(CookbookBase):
     """Transfer journal files from one host to another.
 
     Use lvs-strategy to determine which hosts to depool & repool.
-    Use force when wanting to delete existing jnl files.
     """
 
     argument_reason_required = True
@@ -88,7 +87,6 @@ class DataTransfer(CookbookBase):
         parser.add_argument('--downtime', type=int, default=6, help="Hours of downtime")
         parser.add_argument('--lvs-strategy', required=True, help='which hosts to depool/repool', choices=LVS_STRATEGY)
         parser.add_argument('--encrypt', action='store_true', help='Enable encryption on transfer')
-        parser.add_argument('--force', action='store_true', help='Delete files on target before transfer')
         parser.add_argument('--no-check-graph-type', action='store_true', help="Don't check hosts have same graph type"
                             " (use this for initial host setup)")
 
@@ -124,7 +122,6 @@ class DataTransferRunner(CookbookRunnerBase):
         self.task_id = args.task_id
         self.lvs_strategy = args.lvs_strategy
         self.encrypt = args.encrypt
-        self.force = args.force
         self.no_check_graph_type = args.no_check_graph_type
 
         self.prometheus = spicerack.prometheus()
@@ -150,10 +147,6 @@ class DataTransferRunner(CookbookRunnerBase):
         msg = f"({self.task_id}, {self.reason}) xfer {self.blazegraph_instance} from {self.r_source} -> {self.r_dest}"
         if self.encrypt:
             msg += " w/ encryption"
-        if self.encrypt and self.force:
-            msg += " and"
-        if self.force:
-            msg += " w/ force delete existing files"
 
         msg += f", repooling {self.lvs_strategy} afterwards"
 
@@ -245,11 +238,10 @@ class DataTransferRunner(CookbookRunnerBase):
 
                 data_path = instance['data_path']
 
-                if self.force:
-                    for file in files:
-                        self.r_dest.run_sync('rm -fv {}'.format(file))
-                    if bg_instance_name != 'categories':
-                        self.r_dest.run_sync('rm -fv /srv/wdqs/data_loaded')
+                for file in files:
+                    self.r_dest.run_sync('rm -fv {}'.format(file))
+                if bg_instance_name != 'categories':
+                    self.r_dest.run_sync('rm -fv /srv/wdqs/data_loaded')
 
                 self.transfer_datafiles(data_path, files)
 
