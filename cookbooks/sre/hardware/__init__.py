@@ -40,7 +40,7 @@ def extract_version(firmware_file: Path) -> version.Version:
     # The firmware file has has the driver type in the path
     try:
         pattern = {
-            'IDRAC': r'(?P<version>(\d{1,2}\.){3}\d{1,2})_\w{3}$',
+            'IDRAC': r'(?P<version>(\d{1,2}\.){3}\d{1,3})_\w{3}$',
             'BIOS': r'(?P<version>(\d{1,2}\.){2}\d{1,2})(?:_\d+)?$',
             'NETWORK': r'(?P<version>(\d{1,2}\.){2,3}\d{1,2})(?:_\d+)?$',
         }[firmware_file.parent.name]
