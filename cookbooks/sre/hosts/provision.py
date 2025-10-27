@@ -1,7 +1,6 @@
 """Provision a new physical host setting up it's BIOS and management console."""
 # pylint: disable=too-many-lines
 import logging
-import time
 
 from collections import defaultdict
 from pprint import pformat
@@ -26,7 +25,8 @@ from spicerack.redfish import (
 from wmflib.interactive import ask_confirmation, ask_input, confirm_on_failure, get_secret, ensure_shell_is_durable
 from cookbooks.sre.hosts import (
     SUPERMICRO_VENDOR_SLUG,
-    DELL_VENDOR_SLUG
+    DELL_VENDOR_SLUG,
+    reboot_chassis
 )
 from cookbooks.sre.network import configure_switch_interfaces, run_homer
 
@@ -205,68 +205,6 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):
             else:
                 configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
 
-    def _reboot_chassis(self):
-        """Reboot chassis and poll or wait for completion
-
-        Reboots the chassis and polls via Redfish for the completion of the
-        reboot. If the polling fails it falls back to a set timeout.
-
-        """
-        if self.device_model_slug in SUPERMICRO_UEFI_LONG_BOOT_TIME:
-            max_reboot_secs = 600
-        else:
-            max_reboot_secs = 300
-        self.redfish.chassis_reset(self.chassis_reset_policy)
-        logger.info('Waiting for chassis reboot to complete...')
-        start_time = time.time()
-        # TODO: Consider supporting older Supermicro models, which only return
-        # the intermediate state 'None'
-        pwr_states = {
-            'supermicro': [
-                'SystemHardwareInitializationComplete',
-                'MemoryInitializationStarted',
-            ],
-            'dell': [
-                'OSRunning',
-                'SystemHardwareInitializationComplete',
-            ]
-        }
-        # Watch for state transitions which signify the reboot is complete, we
-        # don't just watch for the final state, since we want to ensure the
-        # reboot occurred
-        while len(pwr_states[self.vendor]) > 0:
-            pwr_state = pwr_states[self.vendor].pop()
-            while (time.time() - start_time) < max_reboot_secs:
-                sleep(5)
-                try:
-                    sys_prop = self.redfish.request(
-                        'GET',
-                        self.redfish.system_manager,
-                    ).json()
-                    logger.info(
-                        'Reboot state: %s',
-                        sys_prop['BootProgress']['LastState'],
-                    )
-                    if sys_prop['BootProgress']['LastState'] == pwr_state:
-                        break
-                except RedfishError as e:
-                    logger.error("Error while retrieving system properties: %s", e)
-        bios_start_time = time.time()
-        # On Supermicro X13DDW-A the Redfish BIOS settings are not immediately
-        # available, even though the system has booted, poll until they
-        # available.
-        while (time.time() - bios_start_time) < max_reboot_secs:
-            try:
-                self.redfish.request(  # pylint: disable=expression-not-assigned
-                    'GET',
-                    f"{self.redfish.system_manager}/Bios",
-                ).json()['Attributes']
-                break
-            except (RedfishError, KeyError):
-                logger.info('Reboot: Redfish BIOS settings not available, polling')
-            sleep(5)
-        logger.info('Reboot completed, duration %d seconds', time.time() - start_time)
-
 
 class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance-attributes
     """As required by Spicerack API."""
@@ -434,7 +372,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                 logger.info(
                     'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
                 )
-                self._reboot_chassis()
+                reboot_chassis(self.vendor, self.redfish)
 
         if not self.args.no_dhcp:
             self.dhcp.remove_configuration(self.dhcp_config)
@@ -567,7 +505,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                     "Found differences between our desired status and the current "
                     "one, applying new BIOS settings (a reboot will be performed).")
                 self._patch_bios_settings()
-                self._reboot_chassis()
+                reboot_chassis(self.vendor, self.redfish)
             else:
                 logger.info(
                     "No BIOS settings applied since the config is already good.")
@@ -610,7 +548,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                     "Found differences between our desired status and the current "
                     "one, applying new BIOS settings (a reboot will be performed).")
                 self._patch_bios_settings()
-                self._reboot_chassis()
+                reboot_chassis(self.vendor, self.redfish)
             else:
                 logger.info(
                     "No BIOS settings applied since the config is already good.")
@@ -943,7 +881,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
                 logger.info(
                     'Rebooting the host with policy %s and waiting for 3 minutes', self.chassis_reset_policy
                 )
-                self._reboot_chassis()
+                reboot_chassis(self.vendor, self.redfish)
 
         try:
             self._config_host()
