@@ -99,7 +99,7 @@ class SanitizeWikiRunner(CookbookRunnerBase):
         """Initialize the runner."""
         ensure_shell_is_durable()
         self._wiki_names: list[str] = args.wiki
-        ensure(re.match("s\d", args.section) is not None, f"Invalid section name '{args.section}'")
+        ensure(re.fullmatch(r"s\d", args.section) is not None, f"Invalid section name '{args.section}'")
         self.section = args.section
         self._san_sock_fn = f"/run/mysqld/mysqld.{self.section}.sock"
         self.mysql = spicerack.mysql()
@@ -139,8 +139,11 @@ class SanitizeWikiRunner(CookbookRunnerBase):
                 self.logger.info("Processing wiki: %s", wiki)
                 self._redact_sanitarium_data(wiki)
 
-        if not self.check_only and not self.only_grant_and_view:
-            self._check_and_drop_private_data_on_hosts(clouddbs=False)
+            wikis = ", ".join(self._wiki_names)
+            self._update_phab(f"Wikis {wikis} redacted")
+
+            if not self.only_grant_and_view:
+                self._check_and_drop_private_data_on_hosts(clouddbs=False)
 
         self._check_and_drop_private_data_on_hosts(clouddbs=True)
 
@@ -148,6 +151,9 @@ class SanitizeWikiRunner(CookbookRunnerBase):
             step("grant_and_view", "Grant permissions and create view database on clouddb")
             for wiki in self._wiki_names:
                 self._setup_clouddb(wiki)
+
+            wikis = ", ".join(self._wiki_names)
+            self._update_phab(f"Wikis {wikis} set up on clouddb")
 
         self.logger.info("Sanitization completed for all wikis")
 
@@ -191,6 +197,6 @@ class SanitizeWikiRunner(CookbookRunnerBase):
             self.logger.info("Running '%s' on %s on %s", grant_query, instance, host)
             instance.run_query(grant_query, is_safe=False)
 
-    def _notify_cloud_services(self) -> None:
-        msg = f"Sanitization of section {self.section} completed - {self._admin_reason.owner}"
+    def _update_phab(self, msg: str) -> None:
+        msg = f"Section {self.section}: {msg} - {self._admin_reason.owner}"
         self._phab.task_comment(self._task_id, msg)
