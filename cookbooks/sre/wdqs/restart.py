@@ -63,6 +63,6 @@ def run(args, spicerack):
             if args.no_depool:
                 commands = base_commands
             else:
-                commands = ['depool', 'sleep 180', *base_commands, 'pool']
+                commands = ['depool', 'sleep 60', *base_commands, 'pool']
 
             remote_hosts.run_async(*commands, batch_size=1)
