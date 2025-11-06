@@ -253,7 +253,7 @@ def test_run(
                 'mysql -e "STOP SLAVE;"',
                 "service mariadb stop",  # TODO systemctl
                 "rm -rf /srv/sqldata/",
-                "chown -R mysql. /srv/*",
+                "chown -R mysql:mysql /srv/*",
                 'systemctl set-environment MYSQLD_OPTS="--skip-slave-start"',
                 "systemctl start mariadb",
                 'mysql -e "STOP SLAVE; RESET SLAVE ALL"',
@@ -268,7 +268,7 @@ def test_run(
             if "CHANGE MASTER TO" in cmd:
                 return ""
 
-        assert 0, f"Unmocked call to _run {host} '{cmd}' {a} {kw}"
+        assert 0, f"Unexpected call to _run {host} with params '{cmd}' {a} {kw} that needs mocking"
 
     m_run.side_effect = _run
 

@@ -159,13 +159,12 @@ def _remotehosts_query(remote: Remote, query, fqdn: str) -> RemoteHosts:
 def _fetch_db_remotehost(remote: Remote, fqdn: str) -> RemoteHosts:
     parse_db_host_fqdn(fqdn)
     query = "A:db-all and not A:db-multiinstance and P{%s}" % fqdn
-    log.debug("Searching remote '%s'", query)
+    log.info("Searching remote '%s'", query)
     ensure(len(fqdn) > 0, "Empty fqdn in _fetch_db_remotehost")
     return _remotehosts_query(remote, query, fqdn)
 
 
 def _parse_replication_status(replication_status: str) -> Tuple[str, int]:
-    # TODO: use XML format?
     binlog_file_matches = re.findall(r"\sMaster_Log_File:\s*(\S+)", replication_status)
     repl_position_matches = re.findall(r"\sExec_Master_Log_Pos:\s*(\d+)", replication_status)
 
@@ -186,11 +185,19 @@ def _fetch_replication_status(host: RemoteHosts) -> Tuple[str, int]:
 
 
 def _run(host: RemoteHosts, cmd: str, is_safe: bool = False) -> str:
-    out = confirm_on_failure(host.run_sync, cmd, is_safe=is_safe, print_progress_bars=False, print_output=True)
-    try:
-        return list(out)[0][1].message().decode("utf-8")
-    except (IndexError, TypeError):
-        return ""
+    while True:
+        try:
+            log.info(f"Running '{cmd}'")
+            out = host.run_sync(cmd, is_safe=is_safe, print_output=False, print_progress_bars=False)
+            try:
+                return list(out)[0][1].message().decode("utf-8")
+            except (IndexError, TypeError):
+                return ""
+        except Exception as e:
+            log.info(f"Exception: {e}")
+            r = input("Press s to skip, anything else to retry\n").strip().lower()
+            if r == "s":
+                return ""
 
 
 @contextmanager
@@ -290,12 +297,12 @@ def _fetch_pooling_status(dbctl: Dbctl, hostname: str, fqdn: str) -> Tuple[str, 
     return (sec_name, bool(sd["pooled"]), bool(sd.get("candidate_master")))
 
 
-def _wait_for_replication_lag_to_lower(log: Logger, instance: MInst) -> None:
+def _wait_for_replication_lag_to_lower(instance: MInst) -> None:
     while True:
         try:
             replag = int(instance.replication_lag())
         except Exception:  # pylint: disable=W0718
-            log.debug("Unable to extract replication lag", exc_info=True)
+            log.info("Unable to extract replication lag", exc_info=True)
             time.sleep(10)
             continue
 
@@ -304,7 +311,7 @@ def _wait_for_replication_lag_to_lower(log: Logger, instance: MInst) -> None:
             return
 
         if (replag is None) or (replag > 1.0):
-            log.debug(f"Replication lag: {replag}s - waiting 10s to catch up")
+            log.info(f"Replication lag: {replag}s - waiting 10s to catch up")
             time.sleep(10)
 
 
@@ -340,7 +347,10 @@ def _fetch_netbox_data(spicerack: Spicerack, hn: str) -> Tuple[bool, str, str]:
     n = spicerack.netbox_server(hn)
     nd = n.as_dict()
     datacenter = nd["site"]["slug"]
-    rack_name = nd["rack"]["name"]
+    if "rack" in nd:
+        rack_name = nd["rack"]["name"]
+    else:
+        rack_name = ""
     return (n.status == "active", datacenter, rack_name)
 
 
@@ -382,6 +392,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         self.source_hostname, self.source_fqdn = parse_db_host_fqdn(args.source)
         self.source_host = _fetch_db_remotehost(self.remote, self.source_fqdn)
+        self.source_minst = get_db_instance(self._mysql, self.source_fqdn)
 
         self.target_hostname, self.target_fqdn = parse_db_host_fqdn(args.target)
         self.target_host = _fetch_db_remotehost(self.remote, self.target_fqdn)
@@ -396,7 +407,6 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self.pool_in_target = not args.nopool
 
         self.puppet = spicerack.puppet
-        self.logger = logging.getLogger(__name__)
 
         # Other prep
         self.tp_options = dict(transferpy.transfer.parse_configurations(transferpy.transfer.CONFIG_FILE))
@@ -513,8 +523,27 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         target_alerter = self.alerting_hosts(self.target_host.hosts)
         target_downtime_id = target_alerter.downtime(self.admin_reason, duration=timedelta(hours=8))
+
         step("clone", "Running the cloning tool")
-        self._run_clone()
+        src_binlog_fn, src_repl_position = self._run_clone()
+
+        # # First focus on getting the source db back in production asap, target can/should wait # #
+
+        step("catchup_repl_s", f"Catching up replication lag on {self.source_fqdn} before removing icinga downtime")
+        _wait_for_replication_lag_to_lower(self.source_minst)
+
+        step("wait_icinga_s", f"Waiting for icinga to go green for {self.source_fqdn}")
+        self._source_icinga_host.wait_for_optimal()
+
+        step("icinga", f"Removing icinga downtime for {self.source_fqdn}")
+        source_alerter.remove_downtime(source_downtime_id)
+
+        step("pool", f"Pooling in source {self.source_fqdn}")
+        pool_in_instance(self._run_cookbook, self.source_fqdn, self.source_hostname, self.phabricator_task_id)
+
+        # # Now the target # #
+
+        self._prepare_target(src_binlog_fn, src_repl_position)
 
         step("zarc", f"Adding {self.target_fqdn} to Zarcillo")
         _add_host_to_zarcillo(
@@ -526,24 +555,9 @@ class CloneMySQLRunner(CookbookRunnerBase):
             self.primary_section,
         )
 
-        # First focus on getting the source db back in production asap, target can/should wait:
-
-        step("catchup_repl_s", f"Catching up replication lag on {self.source_fqdn} before removing icinga downtime")
-        _wait_for_replication_lag_to_lower(self.logger, get_db_instance(self._mysql, self.source_fqdn))
-
-        step("wait_icinga_s", f"Waiting for icinga to go green for {self.source_fqdn}")
-        self._source_icinga_host.wait_for_optimal()
-
-        step("icinga", f"Removing icinga downtime for {self.source_fqdn}")
-        source_alerter.remove_downtime(source_downtime_id)
-
-        step("pool", f"Pooling in source {self.source_fqdn}")
-        pool_in_instance(self._run_cookbook, self.source_fqdn, self.source_hostname, self.phabricator_task_id)
-
-        # Now the target:
-
         step("catchup_repl_t", f"Catching up replication lag on {self.target_fqdn}")
-        _wait_for_replication_lag_to_lower(self.logger, get_db_instance(self._mysql, self.target_fqdn))
+        self.target_minst = get_db_instance(self._mysql, self.target_fqdn)
+        _wait_for_replication_lag_to_lower(self.target_minst)
 
         # TODO: wait until the host shows up on prometheus?
 
@@ -569,53 +583,61 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self._phab.task_comment(self.phabricator_task_id, msg)
         step("done", "Done")
 
-    def _run_clone(self) -> None:
+    def _run_clone(self) -> Tuple[str, int]:
         """
         Run the cloning process. Most of the heavy lifting is done by transfer.py
         """
-        self.logger.info("Running STOP SLAVE on %s", self.source_hostname)
-        self._run_scripts(self.source_host, ['mysql -e "STOP SLAVE;"'])
+        # Many commands need to be executed locally using mysql instead of pymysql
+        log.info(f"[{self.source_hostname}] Stop replication")
+        scripts = [
+            'mysql -e "STOP SLAVE;"',
+        ]
+        self._run_scripts(self.source_host, scripts)
+
         # Sleep for a second to make sure the position is updated
         time.sleep(1)
 
-        binlog_file, repl_position = _fetch_replication_status(self.source_host)
+        src_binlog_fn, src_repl_position = _fetch_replication_status(self.source_host)
 
-        self.logger.info("Stopping mariadb on %s", self.source_hostname)
+        log.info(f"[{self.source_hostname}] Stopping mariadb")
         _run(self.source_host, "service mariadb stop")
 
-        self.logger.info("Running STOP SLAVE on %s", self.target_hostname)
+        # Use ssh as root here as pymysql could fail due to permission not yet set on a new host
+        log.info("Running STOP SLAVE on %s", self.target_hostname)
         _run(self.target_host, 'mysql -e "STOP SLAVE;"')
 
-        self.logger.info("Stopping mariadb on %s", self.target_hostname)
+        log.info(f"[{self.target_hostname}] Stopping mariadb")
         _run(self.target_host, "service mariadb stop")
 
-        self.logger.info("Removing /srv/sqldata on %s", self.target_hostname)
+        log.info(f"[{self.target_hostname}] Removing /srv/sqldata")
         _run(self.target_host, "rm -rf /srv/sqldata/")
 
-        self.logger.info("Starting transfer")
-        t = Transferer(
-            str(self.source_host),
-            "/srv/sqldata",
-            [str(self.target_host)],
-            ["/srv/"],
-            self.tp_options,
-        )
-
-        # transfer.py produces a lot of log chatter, cf T330882
-        self.logger.debug("Starting transferpy, expect cumin errors")
+        log.info("Starting transfer")
+        t = Transferer(str(self.source_host), "/srv/sqldata", [str(self.target_host)], ["/srv/"], self.tp_options)
         r = t.run()
-        self.logger.debug("Transferpy complete")
         if r[0] != 0:
             raise RuntimeError("Transfer failed")
+        log.info("Transfer complete")
 
+        log.info(f"[{self.source_hostname}] Starting mariadb")
         scripts = [
-            "chown -R mysql. /srv/*",
+            "systemctl start mariadb",
+            'mysql -e "START SLAVE;"',
+        ]
+        self._run_scripts(self.source_host, scripts)
+
+        return (src_binlog_fn, src_repl_position)
+
+    def _prepare_target(self, binlog_file: str, repl_position: int) -> None:
+        """Configure replication, catch up, run mysql_upgrade, switch to GTID"""
+        tgt = self.target_hostname
+        scripts = [
+            "chown -R mysql:mysql /srv/*",
             'systemctl set-environment MYSQLD_OPTS="--skip-slave-start"',
             "systemctl start mariadb",
             'mysql -e "STOP SLAVE; RESET SLAVE ALL"',
         ]
         self._run_scripts(self.target_host, scripts)
-
         sql = (
             f"CHANGE MASTER TO master_host='{self.primary_host}', "
             f"master_port=3306, master_ssl=1, master_log_file='{binlog_file}', "
@@ -628,9 +650,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
             'mysql -e "START SLAVE;"',
         ]
         self._run_scripts(self.target_host, scripts)
-
-        _wait_for_replication_lag_to_lower(self.logger, get_db_instance(self._mysql, self.target_fqdn))
-
+        _wait_for_replication_lag_to_lower(get_db_instance(self._mysql, self.target_fqdn))
         scripts = [
             'mysql -e "STOP SLAVE;"',
             "mysql_upgrade --force",
@@ -638,17 +658,19 @@ class CloneMySQLRunner(CookbookRunnerBase):
             'mysql -e "START SLAVE;"',
         ]
         self._run_scripts(self.target_host, scripts)
-        scripts = [
-            "systemctl start mariadb",
-            "systemctl restart mariadb",
-            'mysql -e "START SLAVE;"',
-        ]
-        self._run_scripts(self.source_host, scripts)
+
+    def _log_replica_status(self, tx, hn: str) -> None:
+        tx.execute("SHOW REPLICA STATUS")
+        status = tx.fetchone()
+        st_io = {status["Slave_IO_Running"]}
+        st_run = {status["Slave_SQL_Running"]}
+        st_lag = {status["Seconds_Behind_Master"]}
+        log.info(f"[{hn}] IO={st_io} SQL={st_run} Lag={st_lag}")
 
     def _run_scripts(self, host: RemoteHosts, scripts: List[str]) -> None:
         for script in scripts:
             try:
                 _run(host, script)
             except AbortError:
-                self.logger.error("%s: execution aborted", script)
+                log.error("%s: execution aborted", script)
                 raise
