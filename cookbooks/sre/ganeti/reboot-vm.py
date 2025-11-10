@@ -103,7 +103,7 @@ class RebootSingleVMRunner(CookbookRunnerBase):
             if not self.args.skip_puppet_check:
                 self.puppet.wait_since(reboot_time)
             try:
-                self.icinga_hosts.wait_for_optimal()
+                self.icinga_hosts.wait_for_optimal(skip_acked=True)
                 icinga_ok = True
             except IcingaError:
                 logger.error(
