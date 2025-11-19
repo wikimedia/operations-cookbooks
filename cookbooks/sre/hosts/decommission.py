@@ -198,7 +198,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
                     raise RuntimeError(f'Mismatched FQDN {fqdn} does not match Netbox FQDN {netbox_fqdn}')
             except NetboxError:
                 spicerack.actions[fqdn].warning(
-                    f'//Missing DNSName in Nebox for {hostname}, unable to verify it.//')
+                    f'//Missing DNSName in Netbox for {hostname}, unable to verify it.//')
 
             try:
                 self.dns.resolve_ips(fqdn)
