@@ -740,6 +740,8 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         )
         self._dhcp_active = False
 
+        self.all_nics: list = []
+
         if self.netbox_server.status in ('active', 'staged'):
             self.reboot_policy = DellSCPRebootPolicy.GRACEFUL
         else:
@@ -971,6 +973,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
                 logger.info('Skipping ServerPwr.1#PSRapidOn config in System.Embedded.1, not available.')
 
         self._config_pxe(config)
+        self._disable_lldp(config)
         was_changed = config.update(self.config_changes)
         if not was_changed:
             logger.warning('Skipping update of BIOS/iDRAC, all settings have already the correct values')
@@ -1047,6 +1050,33 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
         return pxe_nic
 
+    def _all_nics(self, config) -> list:
+        """Return a list of all the server's NIC in a "NIC." format.
+
+        Arguments:
+            config (spicerack.redfish.RedfishDellSCP): the configuration to modify.
+
+        Returns:
+            list: The list of NICs.
+
+        Raises:
+            RuntimeError: if unable to find any NIC.
+
+        """
+        if self.all_nics:
+            return self.all_nics
+        all_nics = sorted(key for key in config.components.keys() if key.startswith('NIC.'))
+        if not all_nics:
+            if self.redfish.hw_model >= 10:
+                nics_json = self.redfish.request(
+                    'GET', f'{self.redfish.system_manager}/EthernetInterfaces').json()
+                for nic_json in nics_json['Members']:
+                    all_nics.append(nic_json['@odata.id'].split('/')[-1])
+            else:
+                raise RuntimeError('Unable to find any NIC.')
+        self.all_nics = all_nics
+        return all_nics
+
     def _config_pxe(self, config):  # pylint: disable=too-many-branches
         """Configure PXE or UEFI HTTP boot on the correct NIC automatically or ask the user if unable to detect it.
 
@@ -1063,15 +1093,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
             config (spicerack.redfish.RedfishDellSCP): the configuration to modify.
 
         """
-        all_nics = sorted(key for key in config.components.keys() if key.startswith('NIC.'))
-        if not all_nics:
-            if self.redfish.hw_model >= 10:
-                nics_json = self.redfish.request(
-                    'GET', f'{self.redfish.system_manager}/EthernetInterfaces').json()
-                for nic_json in nics_json['Members']:
-                    all_nics.append(nic_json['@odata.id'].split('/')[-1])
-            else:
-                raise RuntimeError('Unable to find any NIC.')
+        all_nics = self._all_nics(config)
         pxe_nic = self._get_pxe_nic(all_nics)
         if self.uefi:
             logger.info('Enabling UEFI HTTP boot on NIC %s', pxe_nic)
@@ -1099,3 +1121,17 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
             bios_boot_seq = config.components['BIOS.Setup.1-1'].get('BiosBootSeq', ', ')
             separator = ',' if ',' in bios_boot_seq and ', ' not in bios_boot_seq else ', '
             self.config_changes['BIOS.Setup.1-1']['BiosBootSeq'] = separator.join(new_boot_order)
+
+    def _disable_lldp(self, config):
+        """Disable LLDP embeded on Broadcom NICs as they conflict with the OS LLDP deamon.
+
+        Arguments:
+            config (spicerack.redfish.RedfishDellSCP): the configuration to modify.
+
+        """
+        all_nics = self._all_nics(config)
+        nic = self._get_pxe_nic(all_nics)
+        for attribute in ('Broadcom_LLDPNearestBridge', 'Broadcom_LLDPNearestNonTPMRBridge'):
+            if config.components[nic].get(attribute, '') == 'Enabled':
+                self.config_changes[nic][attribute] = 'Disabled'
+                logger.info('Disabled LLDP on nic %s, attribute %s', nic, attribute)
