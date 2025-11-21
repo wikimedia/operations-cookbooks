@@ -98,6 +98,9 @@ class LibericaAdminRunner(SREBatchRunnerBase):
 
     def _reboot_action(self, hosts: RemoteHosts, reason: Reason) -> None:
         super()._reboot_action(hosts, self._puppet_reason)
+        if len(self._pooled_hosts) > 0:
+            self._pool_action(self._pooled_hosts, self._puppet_reason)
+            self._validate_is_pooled(self._pooled_hosts, True)
 
     def pre_action(self, hosts: RemoteHosts) -> None:
         """Raise a RuntimeError if the instance isn't on the expected state"""
@@ -119,9 +122,6 @@ class LibericaAdminRunner(SREBatchRunnerBase):
 
         if self._args.action == "pool":
             self._validate_is_pooled(hosts, True)
-        elif self._args.action == "reboot" and len(self._pooled_hosts) > 0:
-            self._pool_action(self._pooled_hosts, self._puppet_reason)
-            self._validate_is_pooled(self._pooled_hosts, True)
 
     @retry(tries=15, delay=timedelta(seconds=3), backoff_mode="constant", exceptions=(RuntimeError,))
     def _validate_is_pooled(self, hosts: RemoteHosts, expect_pooled: bool) -> None:
