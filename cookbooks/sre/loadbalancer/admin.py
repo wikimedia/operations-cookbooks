@@ -33,6 +33,7 @@ class LibericaAdmin(SREBatchBase):
     batch_max = 1
     grace_sleep = 30
     valid_actions = ("pool", "depool", "config_reload", "reboot")
+    disable_puppet_on_reboot = True
 
     def get_runner(self, args: argparse.Namespace):
         """Get the worker class."""
