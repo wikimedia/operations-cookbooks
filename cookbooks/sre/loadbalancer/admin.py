@@ -43,6 +43,8 @@ class LibericaAdmin(SREBatchBase):
 class LibericaAdminRunner(SREBatchRunnerBase):
     """Controller class for Liberica admin operations"""
 
+    disable_puppet_on_reboot = True
+
     def __init__(self, args: argparse.Namespace, spicerack: Spicerack) -> None:
         """Initializes the parent class, also adds an http session"""
         super().__init__(args, spicerack)
