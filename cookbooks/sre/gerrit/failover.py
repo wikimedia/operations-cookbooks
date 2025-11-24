@@ -12,7 +12,7 @@ from wmflib.interactive import ensure_shell_is_durable, ask_confirmation, ask_in
 from wmflib.dns import Dns
 from cookbooks.sre import CookbookBase, CookbookRunnerBase, PHABRICATOR_BOT_CONFIG_FILE
 
-from . import GERRIT_DIR_PREFIX, GERRIT_BACKUP_PREFIX, GERRIT_DIRS
+from . import GERRIT_DIR_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +179,12 @@ class FailoverRunner(CookbookRunnerBase):
                 args.append("--chown")
             self.spicerack.run_cookbook("sre.gerrit.topology-check", args=args, raises=True)
 
+    def _run_cookbook_localbackup(self, source) -> None:
+        self.spicerack.run_cookbook("sre.gerrit.localbackup",
+                                    args=[
+                                        "--source", source,
+                                    ], raises=True)
+
     def _run_cookbook_dns_cache_wipe(self) -> None:
         self.spicerack.run_cookbook("sre.dns.wipe-cache",
                                     args=[
@@ -236,8 +242,7 @@ class FailoverRunner(CookbookRunnerBase):
         # Freezing the target host to ensure consistency over restarts,
         # despite promotions/demotions
         self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0].split('.')[0], state="on")
-        #  TODO extract the local backup logic in another cookbook
-        self._ensure_local_backup()
+        self._run_cookbook_localbackup(source=self.switch_from_host.hosts[0].split('.')[0])
         if not self.args.distrust:
             self.sync_files(idempotent=True)
         else:
@@ -402,48 +407,3 @@ class FailoverRunner(CookbookRunnerBase):
                 return False
         logger.info("Idempotency of rsync confirmed.")
         return True
-
-    def _ensure_local_backup(self) -> bool:
-        """Ensure backup on the source Gerrit server"""
-        hosts = [self.switch_from_host]
-
-        for host in hosts:
-            msg = f"Preparing local emergency backup on {host}"
-            logger.info(msg)
-
-            self._backup_dirs_on_host(host)
-
-        return True
-
-    def _backup_dirs_on_host(self, host) -> None:
-        for directory in GERRIT_DIRS:
-            src = f"{GERRIT_DIR_PREFIX}{directory}/"
-            dst = f"{GERRIT_BACKUP_PREFIX}{directory}/"
-
-            # Ensure destination exists before rsync; mkdir is idempotent.
-            host.run_sync(
-                f"/bin/mkdir -p {dst}",
-                is_safe=True,
-                print_progress_bars=False,
-                print_output=False,
-            )
-            if not self.spicerack.dry_run:
-                rsync_cmd = (
-                    "/usr/bin/rsync -a --delete-before "
-                    f"{src} {dst}"
-                )
-            else:
-                rsync_cmd = (
-                    "/usr/bin/rsync -a --dry-run --delete-before "
-                    f"{src} {dst}"
-                )
-            logger.info("Running backup rsync on %s: %s", host, rsync_cmd)
-
-            host.run_sync(
-                rsync_cmd,
-                print_progress_bars=False,
-                print_output=True,
-                is_safe=True
-            )
-            if self.spicerack.dry_run:
-                logger.info("Would have run backup rsync on %s: %s", host, rsync_cmd)
