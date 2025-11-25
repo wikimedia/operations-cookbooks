@@ -252,6 +252,16 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.is_uefi = self.redfish.is_uefi
             if not self.is_uefi:
                 self.ipmi: Ipmi = self.spicerack.ipmi(self.mgmt_fqdn)
+            # Nokia currently cannot insert the server-connected port in Option 82, so force --no82 in that case
+            nb_switch = self.netbox.api.dcim.devices.get(name=self.netbox_server.switches[0])
+            if nb_switch.device_type.manufacturer.slug == "nokia":
+                if not self.is_uefi:
+                    raise RuntimeError(
+                        'Host is in BIOS mode but needs to be UEFI as it is '
+                        'connected to a Nokia switch (see T410910)'
+                    )
+                self.args.no82 = True
+                logger.info('The option --no82 has been forced as device is connected to Nokia switch')
             self.identifier = self._get_host_identifier() if self.args.no82 else ''
             self.dhcp_config = self._get_dhcp_config_baremetal(force_tftp=self.use_tftp, identifier=self.identifier)
 
