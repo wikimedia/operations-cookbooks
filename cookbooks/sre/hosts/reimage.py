@@ -255,11 +255,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             # Nokia currently cannot insert the server-connected port in Option 82, so force --no82 in that case
             nb_switch = self.netbox.api.dcim.devices.get(name=self.netbox_server.switches[0])
             if nb_switch.device_type.manufacturer.slug == "nokia":
-                if not self.is_uefi:
-                    raise RuntimeError(
-                        'Host is in BIOS mode but needs to be UEFI as it is '
-                        'connected to a Nokia switch (see T410910)'
-                    )
                 self.args.no82 = True
                 logger.info('The option --no82 has been forced as device is connected to Nokia switch')
             self.identifier = self._get_host_identifier() if self.args.no82 else ''
@@ -489,20 +484,22 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             installer_suffix = f"{self.args.os}-{self.args.pxe_media}"
         else:
             installer_suffix = f"{self.args.os}-installer"
+        dhcp_filename_ipxe = ''
+        # After the iPXE boot loader is fetched via UEFI HTTP Boot, iPXE
+        # tries to fetch autoexec.ipxe from the base directory of the boot
+        # loader URL. However, on some Dell servers iPXE is not able to
+        # obtain the domain name server, though this works on Supermicro
+        # servers and via Grub. Consequently, iPXE is not able to resolve
+        # the boot URL and pull down autoexec.ipxe. As a workaround, use
+        # the IP:
+        # - iPXE bug report: https://github.com/ipxe/ipxe/issues/1316
+        # - Failed: Dell R440 Bios version: 2.22.1, purchased 2019-04-01
+        # - Succeeded: Dell R450 Bios version: 1.15.2, purchased 2023-04-10
+        # We could re-evaluate this hack as old hardware ages out of the
+        # fleet.
+        apt_ip = self.dns.resolve_ipv4('apt.wikimedia.org')[0]
+        # UEFI boot
         if self.is_uefi:
-            # After the iPXE boot loader is fetched via UEFI HTTP Boot, iPXE
-            # tries to fetch autoexec.ipxe from the base directory of the boot
-            # loader URL. However, on some Dell servers iPXE is not able to
-            # obtain the domain name server, though this works on Supermicro
-            # servers and via Grub. Consequently, iPXE is not able to resolve
-            # the boot URL and pull down autoexec.ipxe. As a workaround, use
-            # the IP:
-            # - iPXE bug report: https://github.com/ipxe/ipxe/issues/1316
-            # - Failed: Dell R440 Bios version: 2.22.1, purchased 2019-04-01
-            # - Succeeded: Dell R450 Bios version: 1.15.2, purchased 2023-04-10
-            # We could re-evaluate this hack as old hardware ages out of the
-            # fleet.
-            apt_ip = self.dns.resolve_ipv4('apt.wikimedia.org')[0]
             dhcp_filename = f'http://{apt_ip}/efiboot/snponly.efi'
             dhcp_options = {
                 # HACK: root-path is used by ipxe to construct the installer URL
@@ -515,24 +512,38 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             # DHCP offer as the debian-installer will try to load any URL as a
             # preseed config
             dhcp_filename_exclude_vendor = "d-i"
+        # Legacy MBR boot
         else:
-            # This is a workaround to avoid PXE booting issues, like
-            # "Failed to load ldlinux.c32" before getting to Debian Install.
-            # More info: https://phabricator.wikimedia.org/T363576#9997915
-            # We also got confirmation from Supermicro/Broadcom that they
-            # don't support lpxelinux.0, so for this vendor we force the TFTP flag
-            # even if it wasn't set.
-            if force_tftp or \
-                    self.netbox_data['device_type']['manufacturer']['slug'] == SUPERMICRO_VENDOR_SLUG:
-                logger.info('Force pxelinux.0 and TFTP only for DHCP settings.')
-                dhcp_filename = f"/srv/tftpboot/{self.args.os}-installer/pxelinux.0"
+            # via iPXE
+            if uuid:
+                dhcp_filename = '/srv/tftpboot/ipxe/undionly.kpxe'
                 dhcp_options = {
-                    "pxelinux.pathprefix": f"/srv/tftpboot/{installer_suffix}/"
+                    # HACK: root-path is used by ipxe to construct the installer URL
+                    # we could in the future have ipxe query the os version via some
+                    # other method.
+                    'root-path': installer_suffix,
                 }
+                dhcp_filename_ipxe = f'http://{apt_ip}/efiboot/autoexec.ipxe'
+                dhcp_filename_exclude_vendor = ""
+            # via Debian's pxelinux
             else:
-                dhcp_filename = ""
-                dhcp_options = {}
-            dhcp_filename_exclude_vendor = ""
+                # This is a workaround to avoid PXE booting issues, like
+                # "Failed to load ldlinux.c32" before getting to Debian Install.
+                # More info: https://phabricator.wikimedia.org/T363576#9997915
+                # We also got confirmation from Supermicro/Broadcom that they
+                # don't support lpxelinux.0, so for this vendor we force the TFTP flag
+                # even if it wasn't set.
+                if force_tftp or \
+                        self.netbox_data['device_type']['manufacturer']['slug'] == SUPERMICRO_VENDOR_SLUG:
+                    logger.info('Force pxelinux.0 and TFTP only for DHCP settings.')
+                    dhcp_filename = f"/srv/tftpboot/{self.args.os}-installer/pxelinux.0"
+                    dhcp_options = {
+                        "pxelinux.pathprefix": f"/srv/tftpboot/{installer_suffix}/"
+                    }
+                else:
+                    dhcp_filename = ""
+                    dhcp_options = {}
+                dhcp_filename_exclude_vendor = ""
 
         if mac:
             return DHCPConfMac(
@@ -558,6 +569,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 dhcp_options=dhcp_options,
                 dhcp_filename=dhcp_filename,
                 dhcp_filename_exclude_vendor=dhcp_filename_exclude_vendor,
+                dhcp_filename_ipxe=dhcp_filename_ipxe,
             )
 
         netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
@@ -598,7 +610,12 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         """Perform the OS reinstall."""
         pxe_reboot_time = datetime.utcnow()
 
-        di_cmdline_pattern = 'BOOT_IMAGE=debian-installer'
+        # iPXE based boot
+        if self.identifier:
+            di_cmdline_pattern = 'preseed/url='
+        # pxelinux based boot
+        else:
+            di_cmdline_pattern = 'BOOT_IMAGE=debian-installer'
 
         if self.virtual:
             # Prepare a Ganeti VM for reboot and PXE boot for
@@ -612,7 +629,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             # Prepare a physical host for reboot and PXE or UEFI HTTP boot
             # for reimaging.
             if self.is_uefi:
-                di_cmdline_pattern = 'preseed/url='
                 self.redfish.force_http_boot_once()
                 self.host_actions.success('Forced UEFI HTTP Boot for next reboot')
                 self.redfish.chassis_reset(ChassisResetPolicy.FORCE_RESTART)
