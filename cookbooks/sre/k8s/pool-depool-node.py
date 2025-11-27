@@ -2,7 +2,7 @@
 
 import logging
 import re
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, Namespace, ArgumentTypeError
 from datetime import timedelta
 from typing import Optional
 
@@ -17,12 +17,53 @@ from spicerack.cookbook import (
 from spicerack.k8s import Kubernetes
 from spicerack.remote import RemoteError, RemoteHosts
 from wmflib.decorators import retry
+from wmflib.interactive import ask_confirmation
+from wmflib.constants import CORE_DATACENTERS
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts.downtime import enrich_argument_parser_with_downtime_duration
 from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES
 
 logger = logging.getLogger(__name__)
+
+
+def validate_rack_format(rack_string: str) -> str:
+    """Validates that the rack argument is one letter followed by one or more digits, e.g., A1, B5, C10.
+
+    This format only applies to our core datacenters.
+    """
+    if not re.fullmatch(r"[A-Z]\d+", rack_string, re.IGNORECASE):
+        raise ArgumentTypeError(
+            f"Invalid rack format: '{rack_string}'. "
+            "Must be one letter followed by a number (e.g., A1, B5, C10)."
+        )
+    return rack_string.upper()
+
+
+def format_hosts_for_confirmation(hosts_list: list[str]) -> str:
+    """Formats the list of hosts for use in an ask_confirmation message.
+
+    Limits the display to the first 10 hosts with a count of the remainder.
+    """
+    hosts_number = len(hosts_list)
+
+    # Prepare the list for display (up to 10 hosts)
+    if hosts_number > 10:
+        displayed_hosts = hosts_list[:10]
+        suffix = "\n  ... and {} more host(s)".format(hosts_number - 10)
+    else:
+        displayed_hosts = hosts_list
+        suffix = ""
+
+    # Format the list with bullet points
+    hosts_display = "\n  - ".join(displayed_hosts)
+
+    confirmation_message = (
+        f"This action will apply to the following {hosts_number} hosts:\n"
+        f"  - {hosts_display}{suffix}\n\n"
+        f"Do you want to proceed?"
+    )
+    return confirmation_message
 
 
 class PoolDepoolK8sNodes(CookbookBase):
@@ -52,7 +93,8 @@ class PoolDepoolK8sNodes(CookbookBase):
     def argument_parser(self) -> ArgumentParser:
         """Parse arguments"""
         parser = super().argument_parser()
-        parser.add_argument(
+        required_group = parser.add_argument_group(title='required arguments')
+        required_group.add_argument(
             "--k8s-cluster",
             required=True,
             help="K8s cluster the nodes are part of",
@@ -70,9 +112,19 @@ class PoolDepoolK8sNodes(CookbookBase):
 
         action_check = actions.add_parser("check")
         for action in (action_pool, action_depool, action_check):
-            action.add_argument(
+            group = action.add_mutually_exclusive_group(required=True)
+            group.add_argument(
                 "hosts",
-                help="Hosts to be pooled/depooled/checked (specified in Cumin query syntax)",
+                nargs="?",  # optional positionally, but enforced by the group
+                default=None,
+                help="Hosts to be pooled/depooled/checked (specified in Cumin query syntax)."
+                " Cannot be used with the '--rack' flag."
+            )
+            group.add_argument(
+                "--rack",
+                type=validate_rack_format,
+                help="Rack name (e.g. C5) to pool/depool/check all worker nodes for."
+                " Cannot be used with 'hosts' argument."
             )
 
         return parser
@@ -97,15 +149,45 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
                 days=args.days, hours=args.hours, minutes=args.minutes
             )
 
+        hosts_query = args.hosts  # Start with the user-provided host query
+        self.hosts_target = f"'{args.hosts}'"  # For the repool message
+
+        if args.rack:
+            # k8s_cluster names typically end with the datacenter code (e.g., "wikikube-codfw")
+            site_name = self.k8s_cluster.split('-')[-1]
+            if site_name not in CORE_DATACENTERS:
+                raise ValueError(
+                    "Unknown data center provided in k8s_cluster parameter, "
+                    "allowed values: " + str(CORE_DATACENTERS)
+                )
+
+            # If --rack is provided, use the Netbox query format.
+            hosts_query = f'P:netbox::host%location ~ "{args.rack}.*{site_name}"'
+            self.hosts_target = f"--rack '{args.rack}'"  # For the repool message
+
+        # Ensure we have a query to run
+        if not hosts_query:
+            # This should be caught by the args validation, but for safety:
+            raise ValueError("Must specify hosts or a rack name.")
+        logger.info("Using hosts query: '%s'", hosts_query)
+
         try:
             self.remote_hosts: RemoteHosts = spicerack.remote().query(
-                f"D{{{args.hosts}}} and (A:{ALLOWED_CUMIN_ALIASES[self.k8s_cluster]['workers']} "
+                f"P{{{hosts_query}}} and (A:{ALLOWED_CUMIN_ALIASES[self.k8s_cluster]['workers']} "
                 f"or A:{ALLOWED_CUMIN_ALIASES[self.k8s_cluster]['control-plane']})"
             )
         except RemoteError as exc:
             raise RuntimeError(
-                f"Cannot find the hosts {args.hosts} among any k8s nodes in cluster {self.k8s_cluster}"
+                f"No host found among any k8s nodes in cluster {self.k8s_cluster}"
+                f" for Cumin query: {hosts_query} "
             ) from exc
+
+        # Add a guardrail in case there were too many hosts selected
+        if len(self.remote_hosts.hosts) > 1:
+            # Use the helper function to format the message
+            confirmation_message = format_hosts_for_confirmation(self.remote_hosts.hosts)
+
+            ask_confirmation(confirmation_message)
 
         self.confctl = self.spicerack.confctl("node")
         self.confctl_services = self.confctl.filter_objects(
@@ -159,7 +241,7 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
         return (
             f"To repool the nodes and remove the downtime, run:\n"
             f"`cookbook sre.k8s.pool-depool-node --k8s-cluster '{self.args.k8s_cluster}' "
-            f"{extra_args}pool --downtime-id {downtime_id} '{self.args.hosts}'`\n"
+            f"{extra_args}pool --downtime-id {downtime_id} '{self.hosts_target}'`\n"
         )
 
     def post_to_phab(
