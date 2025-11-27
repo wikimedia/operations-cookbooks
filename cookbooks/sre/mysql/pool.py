@@ -336,7 +336,9 @@ class PoolDepoolRunner(CookbookRunnerBase):
         self.phabricator.task_comment(self.task_id, msg)
 
     def _fetch_current_pooling(self, i: str, percentage: int) -> set[tuple[bool, bool]]:
+        ensure("." not in i, f"dbctl.instance.get not supporting FQDN {i}")
         instance = self.dbctl.instance.get(i)
+        ensure(instance is not None, f"dbctl instance for {i} not found")
         current_pooling = {
             (section["pooled"], section["percentage"] >= percentage) for section in instance.sections.values()
         }
@@ -346,7 +348,8 @@ class PoolDepoolRunner(CookbookRunnerBase):
         """Gradually pool the instance with increasing percentages."""
         sleep_duration = 5 if self.dry_run else 900
         for percentage in self.steps:
-            current_pooling = self._fetch_current_pooling(self.args.instance, percentage)
+            hostname, _dc, _fqdn = validate_hostname_extract_dc_fqdn(self.args.instance)
+            current_pooling = self._fetch_current_pooling(hostname, percentage)
             # Skip if all the sections are pooled with a percentage equal or greater than the percentage to set
             if len(current_pooling) == 1 and current_pooling.pop() == (True, True):
                 msg = "Skipping pooling instance %s at %d%%: instance already pooled with higher percentage"
