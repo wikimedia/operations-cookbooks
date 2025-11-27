@@ -32,4 +32,4 @@ class MapsRestartRebootRunner(SRELBBatchRunnerBase):
     @property
     def restart_daemons(self):
         """Return a list of daemons to restart when using the restart action"""
-        return ['kartotherian', 'nginx', 'postgresql']
+        return ['postgresql']
