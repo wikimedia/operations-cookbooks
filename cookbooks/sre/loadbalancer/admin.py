@@ -2,7 +2,7 @@
 import argparse
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import cast
 
 from prometheus_client.parser import text_string_to_metric_families
@@ -42,8 +42,6 @@ class LibericaAdmin(SREBatchBase):
 
 class LibericaAdminRunner(SREBatchRunnerBase):
     """Controller class for Liberica admin operations"""
-
-    disable_puppet_on_reboot = True
 
     def __init__(self, args: argparse.Namespace, spicerack: Spicerack) -> None:
         """Initializes the parent class, also adds an http session"""
@@ -100,10 +98,13 @@ class LibericaAdminRunner(SREBatchRunnerBase):
         confirm_on_failure(hosts.run_sync, reload_cmd)
 
     def _reboot_action(self, hosts: RemoteHosts, reason: Reason) -> None:
-        super()._reboot_action(hosts, self._puppet_reason)
-        if len(self._pooled_hosts) > 0:
-            self._pool_action(self._pooled_hosts, self._puppet_reason)
-            self._validate_is_pooled(self._pooled_hosts, True)
+        reboot_time = datetime.now(timezone.utc)
+        if not self._spicerack.dry_run:
+            confirm_on_failure(hosts.reboot, batch_size=len(hosts))
+            hosts.wait_reboot_since(reboot_time, print_progress_bars=False)
+            if len(self._pooled_hosts) > 0:
+                self._pool_action(self._pooled_hosts, self._puppet_reason)
+                self._validate_is_pooled(self._pooled_hosts, True)
 
     def pre_action(self, hosts: RemoteHosts) -> None:
         """Raise a RuntimeError if the instance isn't on the expected state"""
