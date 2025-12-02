@@ -139,7 +139,7 @@ class Provision(CookbookBase):
                   "management passwords also for the first connection"))
         parser.add_argument('--enable-virtualization', action='store_true',
                             help='Keep virtualization capabilities on. They are turned off if not speficied.')
-        parser.add_argument('--uefi', action='store_true', help='Set boot mode to UEFI and HTTP')
+        parser.add_argument('--legacy', action='store_true', help='Set boot mode to Legacy / MBR.')
         parser.add_argument('--homer', action='store_true', help='Use Homer to configure the switches')
         parser.add_argument('host', help='Short hostname of the host to provision, not FQDN')
 
@@ -170,7 +170,7 @@ class Provision(CookbookBase):
         raise RuntimeError(f"The vendor {vendor} is currently not supported.")
 
 
-class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):
+class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):  # pylint: disable=too-many-instance-attributes
     """Shared Dell and Supermicro logic"""
 
     def __init__(self, args, spicerack):
@@ -187,6 +187,7 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):
         self.verbose = spicerack.verbose
         self.device_model_slug = self.netbox_data['device_type']['slug']
         self.mgmt_password = spicerack.management_password()
+        self.uefi = not self.args.legacy
         if self.netbox_server.status in ('active', 'staged'):
             self.chassis_reset_policy = ChassisResetPolicy.GRACEFUL_RESTART
         else:
@@ -224,7 +225,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             "P1_AIOMAOC_ATGC_i2TMLAN1OPROM"
         ]
 
-        if self.device_model_slug in SUPERMICRO_PXE_BUG_SLUGS and not self.args.uefi:
+        if self.device_model_slug in SUPERMICRO_PXE_BUG_SLUGS and not self.uefi:
             ask_confirmation(
                 "Due to T387577, during the first configuration of the server "
                 "please run provision twice to set PXE to the right NIC/port.")
@@ -279,7 +280,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             }
         }
         if self.device_model_slug not in SUPERMICRO_UEFI_ONLY:
-            self.bios_changes["Attributes"]["BootModeSelect"] = "UEFI" if self.args.uefi else "Legacy"
+            self.bios_changes["Attributes"]["BootModeSelect"] = "UEFI" if self.uefi else "Legacy"
         if self.device_model_slug in SUPERMICRO_COM1_CONSOLE_REDIRECTION:
             self.bios_changes["Attributes"]["COM1ConsoleRedirection"] = False
             self.bios_changes["Attributes"]["SOL_COM2ConsoleRedirection"] = True
@@ -528,7 +529,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                 # If this option is not enabled then Supermicro does not present
                 # the option to switch to Legacy boot, i.e. it is required for MBR mode
                 if "CSMSupport" in bios_attributes:
-                    if self.args.uefi:
+                    if self.uefi:
                         self.bios_changes["Attributes"]["CSMSupport"] = "Disabled"
                     else:
                         self.bios_changes["Attributes"]["CSMSupport"] = "Enabled"
@@ -590,7 +591,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
 
     def _configure_pxe_http_settings(self):
         """Set BIOS settings related to HTTP PXE support."""
-        if self.args.uefi:
+        if self.uefi:
             self.bios_changes["Attributes"]['IPv4HTTPSupport'] = 'Enabled'
             self.bios_changes["Attributes"]['IPv4PXESupport'] = 'Disabled'
             self.bios_changes["Attributes"]['IPv6HTTPSupport'] = 'Disabled'
@@ -615,7 +616,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         of the number NICs on the box. We configure that single device to PXE
         boot, which in turn causes all the NICs to attempt PXE booting.
         """
-        if self.args.uefi:
+        if self.uefi:
             old_value = "Legacy"
             new_value = "EFI"
         else:
@@ -675,7 +676,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         else:
             legacy_pxe_setting = "PXE"
         uefi_pxe_setting = "EFI"
-        self.bios_changes["Attributes"][pxe_nic] = uefi_pxe_setting if self.args.uefi else legacy_pxe_setting
+        self.bios_changes["Attributes"][pxe_nic] = uefi_pxe_setting if self.uefi else legacy_pxe_setting
 
     def _try_bmc_password(self, bmc_username="ADMIN"):
         """Test the known BMC passwords, find a working one and configure Redfish."""
@@ -769,7 +770,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         # BIOS/iDRAC/etc.. settings for Dell hosts.
         self.config_changes = {
             'BIOS.Setup.1-1': {
-                'BootMode': 'Uefi' if self.args.uefi else 'Bios',
+                'BootMode': 'Uefi' if self.uefi else 'Bios',
                 'CpuInterconnectBusLinkPower': 'Enabled',
                 'EnergyPerformanceBias': 'BalancedPerformance',
                 'PcieAspmL1': 'Enabled',
@@ -944,7 +945,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
             self.config_changes['BIOS.Setup.1-1']['SerialComm'] = 'OnConRedir'
             self.config_changes['BIOS.Setup.1-1']['SerialPortAddress'] = 'Com2'
 
-        if self.args.uefi:
+        if self.uefi:
             self.config_changes['BIOS.Setup.1-1']['HttpDev1EnDis'] = 'Enabled'
             self.config_changes['BIOS.Setup.1-1']['HttpDev1DhcpEnDis'] = 'Enabled'
             self.config_changes['BIOS.Setup.1-1']['HttpDev1DnsDhcpEnDis'] = 'Enabled'
@@ -966,7 +967,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
             # or present at all (like ProcX2Apic that is only available on multi-CPU systems)
             # UEFI seems also sometimes the only available BootMode.
             if 'BootMode' in config.components['BIOS.Setup.1-1']:
-                self.config_changes['BIOS.Setup.1-1']['BootMode'] = 'Uefi' if self.args.uefi else 'Bios'
+                self.config_changes['BIOS.Setup.1-1']['BootMode'] = 'Uefi' if self.uefi else 'Bios'
             else:
                 logger.info('Skipping BootMode config in the BIOS, not available.')
             if 'ProcVirtualization' in config.components['BIOS.Setup.1-1']:
@@ -1089,7 +1090,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
             else:
                 raise RuntimeError('Unable to find any NIC.')
         pxe_nic = self._get_pxe_nic(all_nics)
-        if self.args.uefi:
+        if self.uefi:
             logger.info('Enabling UEFI HTTP boot on NIC %s', pxe_nic)
             self.config_changes['BIOS.Setup.1-1']['HttpDev1Interface'] = pxe_nic
         else:
@@ -1105,7 +1106,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         # care of setting the right first-boot option.
         # Corner cases like T406964 are also handled/solved simply not
         # touching the boot config.
-        if not self.args.uefi:
+        if not self.uefi:
             new_boot_order = ['HardDisk.List.1-1', pxe_nic]
             # SetBootOrderEn defaults to comma-separated, but some hosts might differ
             separator = ', ' if ', ' in config.components['BIOS.Setup.1-1']['SetBootOrderEn'] else ','
