@@ -11,7 +11,6 @@
 # TODO: add instance-level locking
 
 # TODO: detect if target is moving to a new section and ask for confirmation
-# TODO: upsert entries in zarcillo
 # TODO: allow setting non-core group in zarcillo
 # TODO support both hostnames and fqdn
 
@@ -131,18 +130,22 @@ def check_db_role_on_zarcillo(mysql: Mysql, fqdn: str, expect_db_is_master: bool
     return section_row["section"]
 
 
-def ensure_db_not_in_zacillo(mysql: Mysql, fqdn: str, hostname: str) -> None:
+def check_if_already_in_zacillo(mysql: Mysql, fqdn: str, hostname: str) -> None:
+    # TODO: use Zarcillo's API
     sql = "SELECT COUNT(*) AS cnt FROM instances WHERE server = %s"
     r = query_zarcillo_one_row(mysql, sql, (fqdn,))
-    ensure(r["cnt"] == 0, f"{fqdn} found in instances table on zarcillo")
+    if r["cnt"] > 0:
+        log.info(f"{fqdn} found in instances table on zarcillo")
 
     sql = "SELECT COUNT(*) AS cnt FROM section_instances WHERE instance = %s"
     r = query_zarcillo_one_row(mysql, sql, (hostname,))
-    ensure(r["cnt"] == 0, f"{hostname} found in section_instances table on zarcillo")
+    if r["cnt"] > 0:
+        log.info(f"{hostname} found in section_instances table on zarcillo")
 
     sql = "SELECT COUNT(*) AS cnt FROM masters WHERE instance = %s"
     r = query_zarcillo_one_row(mysql, sql, (hostname,))
-    ensure(r["cnt"] == 0, f"{hostname} found in masters table on zarcillo")
+    if r["cnt"] > 0:
+        log.info(f"{hostname} found in masters table on zarcillo")
 
 
 # occasional "spicerack.remote.RemoteError: No hosts provided" has been raised
@@ -222,20 +225,23 @@ def transaction(ins: MInst, dbname: str) -> Generator[DictCursor, None, None]:
 
 
 def _add_host_to_zarcillo(mysql: Mysql, hostname: str, fqdn: str, datacenter: str, rack: str, section: str) -> None:
+    # TODO: use Zarcillo's API
     z_inst = connect_to_zarcillo(mysql)
 
-    # TODO: delete previous entries / upsert
     with z_inst.cursor() as (_conn, cursor):
         cursor.execute("SET SESSION binlog_format=ROW;")
 
     with transaction(z_inst, "zarcillo") as tx:
 
+        tx.execute("DELETE FROM instances WHERE name = %s", (hostname,))
         sql = """INSERT INTO instances (name, server, port, `group`) VALUES (%s, %s, 3306, 'core')"""
         tx.execute(sql, (hostname, fqdn))
 
+        tx.execute("DELETE FROM section_instances WHERE instance = %s AND section = %s", (hostname, section))
         sql = """INSERT INTO section_instances (instance, section) VALUES (%s,%s)"""
         tx.execute(sql, (hostname, section))
 
+        tx.execute("DELETE FROM servers WHERE fqdn = %s", (fqdn,))
         sql = """INSERT INTO servers (fqdn, hostname, dc, rack) VALUES (%s, %s, %s, %s)"""
         tx.execute(sql, (fqdn, hostname, datacenter, rack))
 
@@ -333,8 +339,6 @@ class CloneMySQL(CookbookBase):
         parser.add_argument("--target", help="Cumin query to match the host of the target.", required=True)
         # TODO switch to task-id
         parser.add_argument("--nopool", action="store_true", help="Do not pool in target host")
-        h = "Do not check if target host already exists in zarcillo"
-        parser.add_argument("--ignore-existing", action="store_true", help=h)
         return parser
 
     def get_runner(self, args):
@@ -441,8 +445,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         step("check", "Running pre-flight checks")
 
-        if not args.ignore_existing:
-            ensure_db_not_in_zacillo(self._mysql, self.target_fqdn, self.target_hostname)
+        check_if_already_in_zacillo(self._mysql, self.target_fqdn, self.target_hostname)
 
         # TODO: check if target is pooled in
 
