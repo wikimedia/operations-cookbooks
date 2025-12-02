@@ -4,7 +4,7 @@ from spicerack.cookbook import CookbookBase, CookbookInitSuccess, CookbookRunner
 from wmflib.constants import ALL_DATACENTERS, DATACENTER_NUMBERING_PREFIX, US_DATACENTERS
 from wmflib.interactive import ask_confirmation
 
-SERVICES = ("text-addrs", "text-next", "upload-addrs", "ncredir-addrs")
+SERVICES = ("text-addrs", "text-next", "upload-addrs", "ncredir-addrs", "gerrit-addrs")
 
 DEPOOL_THRESHOLD = .5
 
