@@ -117,8 +117,8 @@ class Reimage(CookbookBase):
             '--force', action='store_true',
             help="Skip the first confirmation prompt, don't ask to --move-vlan, unset --new if host is in PuppetDB.")
         parser.add_argument(
-            '--no82', action='store_true',
-            help='Do not use DHCP option 82 to identify a physical host (but instead UUID or MAC).')
+            '--opt82', action='store_true', default=False,
+            help='Use DHCP option 82 to identify a physical host rather than its UUID or MAC.')
 
         return parser
 
@@ -252,12 +252,12 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.is_uefi = self.redfish.is_uefi
             if not self.is_uefi:
                 self.ipmi: Ipmi = self.spicerack.ipmi(self.mgmt_fqdn)
-            # Nokia currently cannot insert the server-connected port in Option 82, so force --no82 in that case
+            # Nokia currently cannot insert the server-connected port in
+            # Option 82, so error if --opt82 is set
             nb_switch = self.netbox.api.dcim.devices.get(name=self.netbox_server.switches[0])
-            if nb_switch.device_type.manufacturer.slug == "nokia":
-                self.args.no82 = True
-                logger.info('The option --no82 has been forced as device is connected to Nokia switch')
-            self.identifier = self._get_host_identifier() if self.args.no82 else ''
+            if nb_switch.device_type.manufacturer.slug == "nokia" and self.args.opt82:
+                raise RuntimeError('Using --opt82 is incompatible with the Nokia switch connected to this device')
+            self.identifier = '' if self.args.opt82 else self._get_host_identifier()
             self.dhcp_config = self._get_dhcp_config_baremetal(force_tftp=self.use_tftp, identifier=self.identifier)
 
         self._validate()
