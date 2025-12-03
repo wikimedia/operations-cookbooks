@@ -8,8 +8,6 @@ import time
 
 from datetime import datetime
 from pathlib import Path
-from textwrap import dedent
-from typing import Union
 
 from requests.exceptions import RequestException
 
@@ -22,10 +20,9 @@ from spicerack.exceptions import SpicerackError
 from spicerack.ganeti import Ganeti, GanetiRAPI, GntInstance
 from spicerack.icinga import IcingaError
 from spicerack.ipmi import Ipmi
-from spicerack.puppet import PuppetMaster, PuppetServer
 from spicerack.redfish import ChassisResetPolicy, RedfishError
 from spicerack.remote import RemoteError, RemoteExecutionError, RemoteCheckError
-from wmflib.interactive import AbortError, ask_confirmation, ask_input, confirm_on_failure, ensure_shell_is_durable
+from wmflib.interactive import AbortError, ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
 from cookbooks.sre.puppet import get_puppet_fact
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -99,9 +96,6 @@ class Reimage(CookbookBase):
                  'See https://wikitech.wikimedia.org/wiki/Vlan_migration for further information.')
         parser.add_argument('--os', choices=OS_VERSIONS, required=True,
                             help='the Debian version to install. Mandatory parameter. One of %(choices)s.')
-        parser.add_argument('-p', '--puppet-version', choices=(5, 7), type=int,
-                            help=('The puppet version to use when reimaging a new host and --new is set. '
-                                  'Is autodetected for existing hosts. One of %(choices)s.'))
         parser.add_argument('host', help='Short hostname of the host to be reimaged, not FQDN')
         parser.add_argument(
             '--use-http-for-dhcp', action='store_true', default=False,
@@ -124,9 +118,6 @@ class Reimage(CookbookBase):
 
     def get_runner(self, args):
         """As required by Spicerack API."""
-        if not args.new and args.puppet_version is not None:
-            raise RuntimeError("-p/--puppet-version can be specified only when --new is set")
-
         return ReimageRunner(args, self.spicerack)
 
 
@@ -188,16 +179,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             raise RuntimeError(
                 f'Expected 1 host for query {self.fqdn} but got {len(self.remote_host)}: {self.remote_host}')
 
-        if args.puppet_version is None and args.new:
-            if args.os in ('buster', 'bullseye'):
-                args.puppet_version = int(ask_input("Select puppet version to install with", ('5', '7')))
-            else:
-                logger.info('Puppet 7 auto-selected on >= Bookworm')
-                args.puppet_version = 7
-
-        if args.puppet_version == 7 and args.os == 'buster':
-            raise RuntimeError('Puppet 7 is not supported on buster you must first upgrade the os.')
-
         if not self.args.force and not self.virtual and not self.args.move_vlan and \
                 self.netbox_server.access_vlan in LEGACY_VLANS and \
                 not self.host.startswith('ganeti'):
@@ -223,9 +204,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         # The same as self.puppet but using the SSH key valid only during installation before the first Puppet run
         self.puppet_installer = spicerack.puppet(self.remote_installer)
         self.puppet_configmaster = spicerack.puppet(self.remote.query('O:config_master'))
-        self.puppet_master = spicerack.puppet_master()
         self.puppet_server = spicerack.puppet_server()
-        self.new_puppet_server = self._get_puppet_server()
 
         self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
 
@@ -319,39 +298,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         # Something is very wrong if the MAC is in none of the 3 locations
         logger.error('Can\'t find the host\'s MAC address in Netbox, Redfish or PuppetDB.')
         return ''
-
-    def _get_puppet_server(self) -> Union[PuppetMaster, PuppetServer]:
-        """Validate that the puppet version is set correctly."""
-        if self.args.new:
-            if self.args.puppet_version == 7:
-                ask_confirmation(dedent(
-                    f"""\
-                    Unless the host's role has been already migrated to Puppet 7,
-                    to migrate this host change its hiera values to:
-
-                    hieradata/hosts/{self.host}.yaml
-                        profile::puppet::agent::force_puppet7: true
-
-                    Press continue when the change is merged
-                    """
-                ))
-        else:
-            has_puppet7 = self.puppet_server.hiera_lookup(self.fqdn, "profile::puppet::agent::force_puppet7")
-            logger.info("Lookup result for force_puppet7: %s", has_puppet7)
-            if has_puppet7 == "true":
-                self.args.puppet_version = 7
-            else:
-                self.args.puppet_version = int(ask_input(
-                    "The cookbook is now forcing Puppet 5. To confirm "
-                    "it was expected, please select the puppet version to "
-                    "install with", ('5', '7')
-                ))
-
-        if self.args.puppet_version == 5:
-            logger.info("Return the Puppet Master handle (puppet_version 5).")
-            return self.spicerack.puppet_master()
-
-        return self.spicerack.puppet_server()
 
     @property
     def runtime_description(self):
@@ -650,14 +596,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                              f'with: sudo install-console {self.fqdn}')
         self.host_actions.success('Host up (Debian installer)')
 
-        puppet_version_cmd = f"printf {self.args.puppet_version} > /tmp/puppet_version"
-        try:
-            self.remote_installer.run_sync(puppet_version_cmd, print_output=False, print_progress_bars=False)
-        except RemoteExecutionError:
-            ask_confirmation('Unable to set the puppet version inside the Debian installer, please do manually '
-                             f'with: sudo install-console {self.fqdn}\n{puppet_version_cmd}')
-        self.host_actions.success(f'Add puppet_version metadata ({self.args.puppet_version}) to Debian installer')
-
         # Reset boot media allowing the newly installed OS to boot.
         if self.virtual:
             self.ganeti_instance.set_boot_media('disk')
@@ -861,7 +799,6 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         # Clear both old Puppet5 and new Puppet7 infra in all cases, it doesn't fail if the host is not present
         self.puppet_server.delete(self.fqdn)
-        self.puppet_master.delete(self.fqdn)
 
         self.host_actions.success('Removed from Puppet and PuppetDB if present and deleted any certificates')
         self.debmonitor.host_delete(self.fqdn)
@@ -876,8 +813,8 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         self._mask_units()
         fingerprint = self.puppet_installer.regenerate_certificate()[self.fqdn]
         self.host_actions.success('Generated Puppet certificate')
-        self.new_puppet_server.wait_for_csr(self.fqdn)
-        self.new_puppet_server.sign(self.fqdn, fingerprint)
+        self.puppet_server.wait_for_csr(self.fqdn)
+        self.puppet_server.sign(self.fqdn, fingerprint)
         self.host_actions.success('Signed new Puppet certificate')
 
         self._populate_puppetdb()
