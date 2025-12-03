@@ -4,15 +4,11 @@ This cookbook manages Gerrit failover operations between two hosts.
 """
 
 import logging
-import re
 from datetime import timedelta
 from argparse import ArgumentParser
-from spicerack.decorators import retry
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation, ask_input
 from wmflib.dns import Dns
 from cookbooks.sre import CookbookBase, CookbookRunnerBase, PHABRICATOR_BOT_CONFIG_FILE
-
-from . import GERRIT_DIR_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -104,31 +100,6 @@ class FailoverRunner(CookbookRunnerBase):
         self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         self.reason = self.spicerack.admin_reason(reason=self.message)
         self.args = args
-        self.puppetserver = spicerack.puppet_server()
-
-        # Hieradata lookups
-        self.target_gerrit_user = self.puppetserver.hiera_lookup(
-            self.switch_to_host.hosts[0],
-            "profile::gerrit::daemon_user").splitlines()[-1]
-        msg = f"Retrieved target gerrit user: {self.target_gerrit_user}"
-        logger.info(msg)
-
-        self.source_gerrit_site = self.puppetserver.hiera_lookup(
-            self.switch_from_host.hosts[0],
-            "profile::gerrit::gerrit_site").splitlines()[-1]
-        msg = f"Retrieved source gerrit site: {self.source_gerrit_site}"
-        if self.args.chown:
-            self.target_gerrit_site = self.puppetserver.hiera_lookup(
-                self.switch_to_host.hosts[0],
-                "profile::gerrit::gerrit_site").splitlines()[-1]
-        msg = f"Retrieved target gerrit site: {self.target_gerrit_site}"
-        logger.info(msg)
-
-        self.src_git_dir = self.puppetserver.hiera_lookup(
-            self.switch_from_host.hosts[0],
-            "profile::gerrit::git_dir").splitlines()[-1]
-        msg = f"Retrieved target gerrit data dir for rsync exclusion: {self.src_git_dir}"
-        logger.info(msg)
         self._pre_flight_check()
         self.confirm_before_proceeding()
 
@@ -140,9 +111,9 @@ class FailoverRunner(CookbookRunnerBase):
     def confirm_before_proceeding(self) -> None:
         """Make sure the user knows what the cookbook will do and they can check the hosts are correct."""
         ask_input(
-            f"This will migrate gerrit.wikimedia.org from {self.switch_from_host} to {self.switch_to_host}. "
-            f"Check that this is definitely what you want to do, by typing {self.switch_to_host}",
-            choices=list(self.all_gerrit_hosts)
+            f"This will migrate gerrit.wikimedia.org from {self.args.switch_from_host} to {self.args.switch_to_host}. "
+            f"Check that this is definitely what you want to do, by typing {self.args.switch_to_host}",
+            choices=[self.args.switch_to_host],
         )
 
     def _pre_flight_check(self) -> None:
@@ -184,6 +155,11 @@ class FailoverRunner(CookbookRunnerBase):
                                     args=[
                                         "--source", source,
                                     ], raises=True)
+
+    def _run_cookbook_sync_instances(self, args) -> None:
+        logger.info("Will run sync-instances cookbook with: %s", args)
+        self.spicerack.run_cookbook("sre.gerrit.sync-instances",
+                                    args=args, raises=True)
 
     def _run_cookbook_dns_cache_wipe(self) -> None:
         self.spicerack.run_cookbook("sre.dns.wipe-cache",
@@ -228,7 +204,7 @@ class FailoverRunner(CookbookRunnerBase):
         )
         #  replication source being frozen, we will now wait for replication
 
-        self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0].split('.')[0], state="on")
+        self._run_cookbook_ro_toggle(host=self.args.switch_from_host, state="on")
 
         ask_confirmation(
             "Please confirm replication is fully done."
@@ -241,16 +217,20 @@ class FailoverRunner(CookbookRunnerBase):
         )
         # Freezing the target host to ensure consistency over restarts,
         # despite promotions/demotions
-        self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0].split('.')[0], state="on")
-        self._run_cookbook_localbackup(source=self.switch_from_host.hosts[0].split('.')[0])
-        if not self.args.distrust:
-            self.sync_files(idempotent=True)
-        else:
-            self.confirm_before_proceeding()
-            self.sync_files(idempotent=True, all_dirs=True)
-        # After exchanging with Tyler on this, the conclusion was reached that Gerrit might leave
-        # some replication behind during the replication process.
-        # We should make sure nothing is left behind while switching hosts.
+        self._run_cookbook_ro_toggle(host=self.args.switch_to_host, state="on")
+        self._run_cookbook_localbackup(source=self.args.switch_from_host)
+        self.confirm_before_proceeding()
+
+        sync_args = ["--source", self.args.switch_from_host,
+                     "--replica", self.args.switch_to_host,
+                     "--verbose",]
+
+        if self.args.distrust:
+            sync_args.append("--distrust")
+        if self.args.chown:
+            sync_args.append("--chown")
+
+        self._run_cookbook_sync_instances(sync_args)
 
         ask_confirmation(
             f"Please merge the change to set the **DNS records** for Gerrit primary on {self.switch_to_host}. "
@@ -283,8 +263,8 @@ class FailoverRunner(CookbookRunnerBase):
             "Please verify that the switchover to gerrit.wikimedia.org is operating as expected. "
             "Once this is done, we will re-enable read-write on all instances after your confirmation."
         )
-        self._run_cookbook_ro_toggle(host=self.switch_to_host.hosts[0].split('.')[0], state="off")
-        self._run_cookbook_ro_toggle(host=self.switch_from_host.hosts[0].split('.')[0], state="off")
+        self._run_cookbook_ro_toggle(host=self.args.switch_to_host, state="off")
+        self._run_cookbook_ro_toggle(host=self.args.switch_from_host, state="off")
         logger.info("Running puppet-agent one last time across all Gerrit instances.")
         self.spicerack.puppet(self.all_gerrit_hosts).run(enable_reason=self.reason)
 
@@ -306,7 +286,7 @@ class FailoverRunner(CookbookRunnerBase):
                                         ], raises=True)
 
         self.switch_from_host.run_sync(
-            "systemctl start gerrit",
+            "systemctl restart gerrit",
             print_progress_bars=False, print_output=True, is_safe=False
         )
         ask_confirmation(
@@ -324,86 +304,3 @@ class FailoverRunner(CookbookRunnerBase):
                                         "--replica", self.args.switch_from_host,
                                         "--dns"
                                     ], raises=True)
-
-    @retry(
-        tries=10,
-        delay=timedelta(seconds=3),
-        backoff_mode="constant",
-        failure_message="Waiting for rsync to be idempotent",
-        exceptions=(RuntimeError,),
-    )
-    def sync_files(self, idempotent=False, all_dirs=False) -> bool:
-        """Transfers files from old to new Gerrit host."""
-        logger.info("Starting to rsync to %s.", self.switch_to_host)
-        logger.warning("There will be a sync retry, expect no more than 10 of these.")
-        command_sync_var_lib = (
-            f"/usr/bin/rsync -avpPz --stats --delete {self.source_gerrit_site}/ "
-            f" rsync://{self.switch_to_host}/gerrit-var-lib/"
-        )
-        if self.args.chown:
-            command_sync_var_lib += " --no-o --no-g "
-        if not all_dirs:
-            command_sync_data = (
-                "/usr/bin/rsync -avpPz --stats --delete /srv/gerrit/ "
-                f"rsync://{self.switch_to_host}/gerrit-data/ "
-                " --exclude=*.hprof "
-                f" --exclude {self.src_git_dir} "
-            )
-        else:
-            command_sync_data = (
-                "/usr/bin/rsync -avpPz --stats --delete /srv/gerrit/ "
-                f" rsync://{self.switch_to_host}/gerrit-data/ "
-                " --exclude=*.hprof "
-            )
-        if self.args.chown:
-            command_sync_data += " --no-o --no-g "
-
-        if self.spicerack.dry_run:
-            logger.info(
-                "Would have run rsync commands %s and %s",
-                command_sync_var_lib,
-                command_sync_data
-            )
-        transfers = [
-            self.switch_from_host.run_sync(
-                command_sync_var_lib,
-                print_progress_bars=False, print_output=False, is_safe=False
-            ),
-            self.switch_from_host.run_sync(
-                command_sync_data,
-                print_progress_bars=False, print_output=False, is_safe=False
-            )
-        ]
-        if idempotent and not self.spicerack.dry_run:
-            ret = [
-                self._rsync_no_changes(list(t)[0][1].message().decode("utf-8")) for t in transfers
-            ]
-            if all(ret):
-                if self.args.chown:
-                    cmd = (f"chown -R {self.target_gerrit_user}:{self.target_gerrit_user} "
-                           f"{GERRIT_DIR_PREFIX} {self.target_gerrit_site}")
-                    logger.info("chowning files as --chown has been passed. Will use the following:")
-                    logger.info(cmd)
-                    self.switch_to_host.run_sync(
-                        f"{cmd}",
-                        print_progress_bars=False, print_output=False, is_safe=False
-                    )
-                return True
-            raise RuntimeError("Rsync showed changes, retrying")
-        return True
-
-    def _rsync_no_changes(self, rsync_output: str) -> bool:
-        """Check if rsync reports no changes in the transferred data."""
-        patterns_expected_zero = {
-            "Number of created files": 0,
-            "Number of deleted files": 0,
-            "Number of regular files transferred": 0,
-        }
-
-        for label, expected in patterns_expected_zero.items():
-            pattern = rf"{re.escape(label)}:\s+(\d+)"
-            match = re.search(pattern, rsync_output)
-            if not match or int(match.group(1)) != expected:
-                return False
-        logger.info("Idempotency of rsync confirmed.")
-        return True
