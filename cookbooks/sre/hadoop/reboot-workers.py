@@ -5,7 +5,7 @@ import time
 
 from datetime import datetime, timedelta
 
-from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
+from wmflib.interactive import confirm_on_failure, ensure_shell_is_durable
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 
@@ -33,8 +33,8 @@ class RebootHadoopWorkers(CookbookBase):
       (a sort of hacky drain procedure).
     - wait some minutes to give a chance to the jvm containers to finish (if they
       don't it is not a big problem, jobs in Hadoop can be rescheduled).
-    - stop the HDFS datanode on the host (safer that abruptively reboot, from the point
-      of view of corrupted HDFS blocks).
+    - stop the HDFS datanode on the host (safer than abruptively rebooting,
+      from the point of view of corrupted HDFS blocks).
     - stop the HDFS journalnode (if running on the host).
     - reboot
     - wait for the host to boot
@@ -57,6 +57,8 @@ class RebootHadoopWorkers(CookbookBase):
         parser.add_argument('--workers-cumin-query', required=False, help='A cumin query string to select '
                             'the Hadoop workers to work on. This overrides the selection of the '
                             'cluster argument. It should used be when only a few hosts need to be rebooted.')
+        parser.add_argument('--dry-run', action='store_true',
+                            help='Dry run mode: print what would be done without actually rebooting hosts.')
 
         return parser
 
@@ -87,6 +89,7 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
         self.reboot_batch_size = args.batch_size
         self.yarn_nm_sleep_seconds = args.yarn_nm_sleep_seconds
         self.workers_cumin_query = args.workers_cumin_query
+        self.dry_run = args.dry_run
         self.reason = spicerack.admin_reason('Reboot.')
 
     @property
@@ -96,6 +99,20 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
 
     def _reboot_hadoop_workers(self, hadoop_workers_batch, stop_journal_daemons=False):
         """Reboot a batch of Hadoop workers"""
+        if self.dry_run:
+            logger.info('[DRY RUN] Would process batch: %s', hadoop_workers_batch.hosts)
+            logger.info('[DRY RUN] Would set downtime for: %s', hadoop_workers_batch.hosts)
+            logger.info('[DRY RUN] Would disable puppet on: %s', hadoop_workers_batch.hosts)
+            logger.info('[DRY RUN] Would stop Yarn Nodemanagers on: %s', hadoop_workers_batch.hosts)
+            logger.info('[DRY RUN] Would wait %s seconds (skipped in dry-run)', self.yarn_nm_sleep_seconds)
+            logger.info('[DRY RUN] Would stop HDFS Datanodes on: %s', hadoop_workers_batch.hosts)
+            if stop_journal_daemons:
+                logger.info('[DRY RUN] Would stop HDFS Journalnode on: %s', hadoop_workers_batch.hosts)
+            logger.info('[DRY RUN] Would reboot hosts: %s', hadoop_workers_batch.hosts)
+            logger.info('[DRY RUN] Would wait for reboot to complete (skipped in dry-run)')
+            logger.info('[DRY RUN] Would enable puppet on: %s', hadoop_workers_batch.hosts)
+            return
+
         with self.spicerack.alerting_hosts(hadoop_workers_batch.hosts).downtimed(
                 self.reason, duration=timedelta(minutes=60)):
             puppet = self.spicerack.puppet(hadoop_workers_batch)
@@ -127,21 +144,37 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
         """Reboot all Hadoop workers of a given cluster"""
         if self.workers_cumin_query:
             hadoop_workers = self.spicerack_remote.query(self.cluster_cumin_alias)
+            # The override should always be a subset of the cumin cluster alias.
             hadoop_workers_override = self.spicerack_remote.query(self.workers_cumin_query)
-            hadoop_workers = hadoop_workers.get_subset(
-                hadoop_workers.hosts.intersection(hadoop_workers_override.hosts))
-            ask_confirmation(
-                'The user chose to limit the number of Hadoop workers to reboot. '
-                'This option does not care about Journal nodes and it will only reboot '
-                'hosts following the batch size ({}). This means that more than one Journal node '
-                'may potentially be rebooted at the same time. Please check the list of hosts ({}) '
-                'before proceeding: {}'.format(self.reboot_batch_size, len(hadoop_workers), hadoop_workers))
+            hadoop_workers = hadoop_workers.get_subset(hadoop_workers_override.hosts)
 
-            worker_hostnames_n_slices = math.ceil(len(hadoop_workers.hosts) / self.reboot_batch_size)
-            logger.info('Rebooting Hadoop workers')
-            for hadoop_workers_batch in hadoop_workers.split(worker_hostnames_n_slices):
-                logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
-                self._reboot_hadoop_workers(hadoop_workers_batch)
+            # Separate journal nodes from regular workers
+            hadoop_hdfs_journal_workers = self.spicerack_remote.query(self.hdfs_jn_cumin_alias)
+            # Only extract journal nodes if any exist in the override (get_subset fails on empty sets)
+            journal_hosts_in_override = hadoop_workers_override.hosts.intersection(
+                hadoop_hdfs_journal_workers.hosts)
+            hadoop_hdfs_jn_workers_override = hadoop_workers_override.get_subset(
+                journal_hosts_in_override) if journal_hosts_in_override else None
+            hadoop_workers_no_journal = hadoop_workers.get_subset(
+                hadoop_workers.hosts - hadoop_hdfs_journal_workers.hosts)
+
+            # Reboot regular workers in batches
+            if hadoop_workers_no_journal:
+                worker_hostnames_n_slices = math.ceil(len(hadoop_workers_no_journal.hosts) / self.reboot_batch_size)
+                logger.info('Rebooting Hadoop workers NOT running a HDFS Journalnode')
+                for hadoop_workers_batch in hadoop_workers_no_journal.split(worker_hostnames_n_slices):
+                    logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
+                    self._reboot_hadoop_workers(hadoop_workers_batch)
+
+            # Reboot journal nodes one at a time
+            if hadoop_hdfs_jn_workers_override:
+                logger.info('Rebooting Hadoop workers running a HDFS Journalnode')
+                # Using the following loop to iterate over every HDFS JournalNode
+                # one at the time.
+                for hadoop_workers_batch in hadoop_hdfs_jn_workers_override.split(
+                        len(hadoop_hdfs_jn_workers_override.hosts)):
+                    logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
+                    self._reboot_hadoop_workers(hadoop_workers_batch, stop_journal_daemons=True)
 
         else:
             # The test cluster have few worker nodes, all running HDFS Datanodes
@@ -161,8 +194,8 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
             logger.info('Rebooting Hadoop workers running a HDFS Journalnode')
             # Using the following loop to iterate over every HDFS JournalNode
             # one at the time.
-            hadoop_hdfs_journal_workers = self.spicerack_remote.query(self.hdfs_jn_cumin_alias)
-            for hadoop_workers_batch in hadoop_hdfs_journal_workers.split(len(hadoop_hdfs_journal_workers.hosts)):
+            hdfs_journal_workers = self.spicerack_remote.query(self.hdfs_jn_cumin_alias)
+            for hadoop_workers_batch in hdfs_journal_workers.split(len(hdfs_journal_workers.hosts)):
                 logger.info("Currently processing: %s", hadoop_workers_batch.hosts)
                 self._reboot_hadoop_workers(hadoop_workers_batch, stop_journal_daemons=True)
 
