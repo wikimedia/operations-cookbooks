@@ -37,8 +37,10 @@ class Upgrade(CookbookBase):
     - Pause Runners
     - Check for remaining background migrations
     - Downtime host
+    - Mask services which require GitLab
     - Install new Debian gitlab-ce package
     - Wait for GitLab and Unpause Runners
+    - Unmask services
 
     Usage example:
         cookbook sre.gitlab.upgrade --host gitlab1004 --version 15.4.4-ce.0 -r 'some reason' -t T12345
@@ -170,11 +172,13 @@ class UpgradeRunner(CookbookRunnerBase):
             # Also create a downtime for the service name (like gitlab.wikimedia.org)
             with self.service_alerting_hosts.downtimed(self.admin_reason,
                                                        duration=timedelta(minutes=DOWNTIME_DURATION)):
+                self.remote_host.run_sync("systemctl mask sync-gitlab-group-with-ldap.service")
                 self.install_debian_package()
                 unpause_runners(paused_runners, dry_run=self.spicerack.dry_run)
                 broadcastmessage.delete()
                 logger.info('Wait for blackbox checks and monitoring to catch up.')
                 time.sleep(180)
+                self.remote_host.run_sync("systemctl unmask sync-gitlab-group-with-ldap.service")
 
         self.phabricator.task_comment(
             self.task_id,
