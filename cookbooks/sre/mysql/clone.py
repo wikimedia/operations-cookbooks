@@ -4,7 +4,6 @@
 # pylint: disable=R0913,R0917
 # flake8: noqa: D103
 
-# NOTE: For this initial iteration we expect the target host to be a new host
 # TODO: when enabling support for `misc` both source/target/primary might not be known to dbctl
 
 # TODO: add cluster-wide soft locking
@@ -38,6 +37,7 @@ from wmflib.interactive import AbortError, confirm_on_failure, ensure_shell_is_d
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
+hostname_regex = re.compile(r"[a-z][a-z-]*[a-z](\d{4})")
 
 log = logging.getLogger(__name__)
 
@@ -160,11 +160,37 @@ def _remotehosts_query(remote: Remote, query, fqdn: str) -> RemoteHosts:
 
 
 def _fetch_db_remotehost(remote: Remote, fqdn: str) -> RemoteHosts:
-    parse_db_host_fqdn(fqdn)
     query = "A:db-all and not A:db-multiinstance and P{%s}" % fqdn
     log.info("Searching remote '%s'", query)
     ensure(len(fqdn) > 0, "Empty fqdn in _fetch_db_remotehost")
     return _remotehosts_query(remote, query, fqdn)
+
+
+def validate_hostname_extract_dc_fqdn(hn_or_fqdn: str) -> tuple[str, str, str]:
+    """Given a hostname or FQDN, validates it and return the hostname, DC and FQDN"""
+    if "." in hn_or_fqdn:
+        hn, tmp_dc, _ = hn_or_fqdn.split(".", 2)
+    else:
+        hn, tmp_dc = hn_or_fqdn, ""
+
+    m = hostname_regex.fullmatch(hn)
+    if not m:
+        raise ValueError(f"Invalid hostname '{hn}'")
+
+    dcnum = m.group(1)[0]
+    if dcnum == "1":
+        dc = "eqiad"
+    elif dcnum == "2":
+        dc = "codfw"
+    else:
+        raise ValueError(f"Invalid hostname '{hn}'")
+
+    fqdn = f"{hn}.{dc}.wmnet"
+
+    if "." in hn_or_fqdn:
+        ensure(tmp_dc == dc and fqdn == hn_or_fqdn, f"Invalid FQDN '{hn_or_fqdn}'")
+
+    return (hn, dc, fqdn)
 
 
 def _parse_replication_status(replication_status: str) -> Tuple[str, int]:
@@ -335,8 +361,8 @@ class CloneMySQL(CookbookBase):
     def argument_parser(self) -> ArgumentParser:
         """CLI parsing, as required by the Spicerack API."""
         parser = super().argument_parser()
-        parser.add_argument("--source", help="Cumin query to match the host of the source.", required=True)
-        parser.add_argument("--target", help="Cumin query to match the host of the target.", required=True)
+        parser.add_argument("--source", help="Source (hostname or FQDN)", required=True)
+        parser.add_argument("--target", help="Target (hostname or FQDN)", required=True)
         # TODO switch to task-id
         parser.add_argument("--nopool", action="store_true", help="Do not pool in target host")
         return parser
@@ -394,11 +420,11 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self._phab = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         self._run_cookbook = spicerack.run_cookbook
 
-        self.source_hostname, self.source_fqdn = parse_db_host_fqdn(args.source)
+        self.source_hostname, src_dc, self.source_fqdn = validate_hostname_extract_dc_fqdn(args.source)
         self.source_host = _fetch_db_remotehost(self.remote, self.source_fqdn)
         self.source_minst = get_db_instance(self._mysql, self.source_fqdn)
 
-        self.target_hostname, self.target_fqdn = parse_db_host_fqdn(args.target)
+        self.target_hostname, tgt_dc, self.target_fqdn = validate_hostname_extract_dc_fqdn(args.target)
         self.target_host = _fetch_db_remotehost(self.remote, self.target_fqdn)
 
         primary_fqdn = _fetch_primary_fqdn(self._mysql, self.source_fqdn)
@@ -419,7 +445,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         (src_active, src_site, _) = _fetch_netbox_data(spicerack, self.source_hostname)
         (tgt_active, self.target_site, self.target_rack_name) = _fetch_netbox_data(spicerack, self.target_hostname)
-        (_, prim_site, _) = _fetch_netbox_data(spicerack, self.primary_hostname)
+        (_, prim_site, _) = validate_hostname_extract_dc_fqdn(self.primary_hostname)
 
         ensure(self.target_site == prim_site, f"Target site {self.target_site} does not match primary {prim_site}")
 

@@ -126,7 +126,7 @@ yamlconf = dict(replication_user="ru", replication_password="rp")
 @patch("cookbooks.sre.mysql.clone._run", autospec=True)
 @patch("cookbooks.sre.mysql.clone.load_yaml_config", autospec=True, return_value=yamlconf)
 @patch("cookbooks.sre.mysql.clone.get_db_instance", autospec=True)
-@patch("cookbooks.sre.mysql.clone._remotehosts_query", autospec=True)
+@patch("cookbooks.sre.mysql.clone._remotehosts_query")
 @patch("spicerack.Spicerack", autospec=True)
 def test_run(
     m_sr,
@@ -144,9 +144,9 @@ def test_run(
     m_sr.run_cookbook = mock.Mock()
 
     def netbox(hn):
-        if hn in ["db001", "db002", "db003"]:
+        if hn in ["db1001", "db1002", "db1003"]:
             m = MagicMock()
-            m.as_dict.return_value = {"site": {"slug": "meow"}, "rack": {"name": "RN"}}
+            m.as_dict.return_value = {"site": {"slug": "eqiad"}, "rack": {"name": "RN"}}
             m.status = "active"
             return m
 
@@ -156,41 +156,41 @@ def test_run(
 
     def gdbi(_, fqdn):
         m = MagicMock(spec=MInst)
-        if fqdn == "db002.eqiad.wmnet":  # source
-            m.show_slave_status.return_value = dict(Master_Host="db001.eqiad.wmnet")  # primary
+        if fqdn == "db1002.eqiad.wmnet":  # source
+            m.show_slave_status.return_value = dict(Master_Host="db1001.eqiad.wmnet")  # primary
             return m
 
         elif fqdn == "db1215.eqiad.wmnet":  # zarcillo
 
             def x(sql, par, database=""):
                 assert database == "zarcillo"
-                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM instances WHERE server = %s", ("db003.eqiad.wmnet",)):
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM instances WHERE server = %s", ("db1003.eqiad.wmnet",)):
                     return dict(cnt=0)
 
-                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM section_instances WHERE instance = %s", ("db003",)):
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM section_instances WHERE instance = %s", ("db1003",)):
                     return dict(cnt=0)
 
-                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM masters WHERE instance = %s", ("db003",)):
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM masters WHERE instance = %s", ("db1003",)):
                     return dict(cnt=0)
 
-                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM masters WHERE instance = %s", ("db002",)):
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM masters WHERE instance = %s", ("db1002",)):
                     return dict(cnt=0)
 
-                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM masters WHERE instance = %s", ("db001",)):
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM masters WHERE instance = %s", ("db1001",)):
                     return dict(cnt=1)
 
-                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM instances WHERE server = %s", ("db002.eqiad.wmnet",)):
+                if (sql, par) == ("SELECT COUNT(*) AS cnt FROM instances WHERE server = %s", ("db1002.eqiad.wmnet",)):
                     return dict(cnt=1)
 
                 if (sql, par) == (
                     "SELECT name, port, `group` FROM instances WHERE server = %s",
-                    ("db002.eqiad.wmnet",),
+                    ("db1002.eqiad.wmnet",),
                 ):
                     return dict(name="foo:123", server="", port=3306)
 
                 if (sql, par) == (
                     "SELECT name, port, `group` FROM instances WHERE server = %s",
-                    ("db001.eqiad.wmnet",),
+                    ("db1001.eqiad.wmnet",),
                 ):
                     return dict(name="foo:444", server="", port=3306)
 
@@ -205,8 +205,8 @@ def test_run(
             m.fetch_one_row = x
             return m
 
-        if fqdn == "db003.eqiad.wmnet":  # target
-            # m.show_slave_status.return_value = dict(Master_Host="db001.eqiad.wmnet")  # primary
+        if fqdn == "db1003.eqiad.wmnet":  # target
+            # m.show_slave_status.return_value = dict(Master_Host="db1001.eqiad.wmnet")  # primary
             return m
 
         assert 0, f"Unmocked netbox get_db_instance for {fqdn}"
@@ -214,27 +214,26 @@ def test_run(
     m_gdbi.side_effect = gdbi
 
     args = Namespace(
-        source="db002.eqiad.wmnet", target="db003.eqiad.wmnet", task_id="T0", nopool=True, ignore_existing=False
+        source="db1002.eqiad.wmnet", target="db1003.eqiad.wmnet", task_id="T0", nopool=True, ignore_existing=False
     )
 
     # mock sr.dbctl().instance.get(...).sections
     m_sr.dbctl.return_value.instance.get.return_value.sections = {"s3": {"pooled": True, "candidate_master": False}}
 
     # mock _remotehosts_query
-    src = MagicMock(spec=RemoteHosts, __name="src", name="src")
-    tgt = MagicMock(spec=RemoteHosts, __name="tgt", name="tgt")
-    pri = MagicMock(spec=RemoteHosts, __name="pri", name="pri")
-
     def mrq(remote, query, fqdn):
-        assert fqdn in ["db002.eqiad.wmnet", "db003.eqiad.wmnet", "db001.eqiad.wmnet"]
-        idx_num = int(fqdn[4])
-        return [None, pri, src, tgt][idx_num]
+        lookup = {"db1002.eqiad.wmnet": "src", "db1003.eqiad.wmnet": "tgt", "db1001.eqiad.wmnet": "pri"}
+        kind = lookup[fqdn]
+        mock_hosts = MagicMock(name=f"Mock RemoteHosts for {fqdn} as {kind}")
+        mock_hosts.hosts = [fqdn]
+        mock_hosts.__kind = kind
+        return mock_hosts
 
     m_remotehosts_query.side_effect = mrq
 
     # mock _run
     def _run(host, cmd, *a, **kw):
-        n = host.__name
+        n = host.__kind
         if (n, cmd) == ("src", r'mysql -e "SHOW SLAVE STATUS\G"'):
             return "\nMaster_Log_File: foo\nExec_Master_Log_Pos: 4"
         if n == "src":
