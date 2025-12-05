@@ -35,7 +35,9 @@ def step(slug: str, msg: str) -> None:
 
 
 def check_section(section: str) -> str:
-    ensure(re.fullmatch(r"pc\d+", section) is not None, "Invalid section")
+    match = re.fullmatch(r"(pc|ms)\d+", section)
+    url = "https://wikitech.wikimedia.org/wiki/MariaDB/Troubleshooting#Depooling_a_parsercache_or_mainstash_host"
+    ensure(match is not None, f"Invalid section, see {url}")
     return section
 
 
@@ -135,6 +137,9 @@ def set_weight_in_dbctl(dbctl: Dbctl, reason, fqdns: list, weight: int) -> bool:
 
 def depool(spicerack: Spicerack, args: Namespace, alerting_hosts: IcingaHosts, dbctl: Dbctl, fqdns: list) -> None:
     reason = spicerack.admin_reason(args.reason or "Depooling", args.task_id)
+    fq = ", ".join(sorted(fqdns))
+    desc = f"depool all hosts in '{args.section}': {fq}"
+    log.info(f"Preparing to {desc}")
 
     if getattr(args, "downtime_hours", 0):
         step("pool", "Setting Icinga downtime")
@@ -144,14 +149,16 @@ def depool(spicerack: Spicerack, args: Namespace, alerting_hosts: IcingaHosts, d
 
     if changed:
         update_phabricator(fqdns, args, spicerack, reason, "Depooled")
-        fq = ", ".join(sorted(fqdns))
-        log.info(f"Depooled {fq}")
+        log.info(f"Completed {desc}")
     else:
-        log.info(f"No changes to dbctl were made. Perhaps the hosts were already depooled?")
+        log.info("No changes to dbctl were made. Perhaps the hosts were already depooled?")
 
 
 def pool(spicerack: Spicerack, args: Namespace, alerting_hosts: IcingaHosts, dbctl: Dbctl, fqdns: list) -> None:
     reason = spicerack.admin_reason(args.reason or "Pooling", args.task_id)
+    fq = ", ".join(sorted(fqdns))
+    desc = f"pool all hosts in '{args.section}': {fq}"
+    log.info(f"Preparing to {desc}")
 
     run_icinga_checks = not getattr(args, "skip_icinga_checks", False)
     if run_icinga_checks:
@@ -166,10 +173,9 @@ def pool(spicerack: Spicerack, args: Namespace, alerting_hosts: IcingaHosts, dbc
 
     if changed:
         update_phabricator(fqdns, args, spicerack, reason, "Pooled")
-        fq = ", ".join(sorted(fqdns))
-        log.info(f"Pooled in {fq}")
+        log.info(f"Completed {desc}")
     else:
-        log.info(f"No changes to dbctl were made. Perhaps the hosts were already pooled in?")
+        log.info("No changes to dbctl were made. Perhaps the hosts were already pooled in?")
 
 
 def run(args: Namespace, spicerack: Spicerack) -> None:
@@ -184,9 +190,9 @@ def run(args: Namespace, spicerack: Spicerack) -> None:
     alerting_hosts = spicerack.icinga_hosts(fqdns)
 
     if args.action == "show":
-        pass
+        return
 
-    elif args.action == "depool":
+    if args.action == "depool":
         depool(spicerack, args, alerting_hosts, dbctl, fqdns)
 
     elif args.action == "pool":
