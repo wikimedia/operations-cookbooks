@@ -224,6 +224,7 @@ class SyncInstancesRunner(CookbookRunnerBase):
         # If we distrust replication: rsync everything under /srv/gerrit
 
         logger.info("Running rsync on /var/lib data: %s", command_sync_var_lib)
+        self.confirm_before_proceeding()
         self.switch_from_host.run_sync(
             command_sync_var_lib,
             print_progress_bars=False,
@@ -232,6 +233,7 @@ class SyncInstancesRunner(CookbookRunnerBase):
         )
 
         logger.info("Running rsync on git/data dir: %s", command_sync_data)
+        self.confirm_before_proceeding()
         self.switch_from_host.run_sync(
             command_sync_data,
             print_progress_bars=False,
