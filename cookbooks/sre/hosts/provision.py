@@ -65,6 +65,7 @@ SUPERMICRO_COM1_CONSOLE_REDIRECTION = (
     'as-8125gs-tnmr2',
     'sys-111e-wr',
     'sys-121c-tn2r-configg',
+    '121c-tn10r-oto-80'
 )
 
 SUPERMICRO_UEFI_ONLY = (
