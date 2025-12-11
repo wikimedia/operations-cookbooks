@@ -258,7 +258,7 @@ class UpgradeRunner(CookbookRunnerBase):
         for _, output in results:
             lines = output.message().decode()
             # command returns 0 if no remaining background migrations were found
-            if lines[0] == "0":
+            if not lines:
                 logger.info('No remaining background migrations found')
                 break
             raise RuntimeError("Background migration running currently")
