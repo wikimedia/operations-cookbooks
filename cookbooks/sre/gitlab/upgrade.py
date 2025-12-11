@@ -252,8 +252,9 @@ class UpgradeRunner(CookbookRunnerBase):
     def fail_for_background_migrations(self):
         """Check for remaining background migrations"""
         logger.info('Check for remaining background migrations')
-        results = self.remote_host.run_sync("gitlab-rails runner -e production "
-                                            "'puts Gitlab::BackgroundMigration.remaining'", is_safe=True)
+        results = self.remote_host.run_sync("gitlab-psql -t -c "
+                                            "'SELECT job_class_name, table_name, column_name, job_arguments FROM "
+                                            "batched_background_migrations WHERE status NOT IN(3, 6);'", is_safe=True)
         for _, output in results:
             lines = output.message().decode()
             # command returns 0 if no remaining background migrations were found
