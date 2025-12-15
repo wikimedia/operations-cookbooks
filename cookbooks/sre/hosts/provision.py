@@ -679,35 +679,24 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         uefi_pxe_setting = "EFI"
         self.bios_changes["Attributes"][pxe_nic] = uefi_pxe_setting if self.uefi else legacy_pxe_setting
 
-    def _try_bmc_password(self, bmc_username="ADMIN"):
+    def _try_bmc_password(self):
         """Test the known BMC passwords, find a working one and configure Redfish."""
-        passwords_to_test = {
-            "wmf_root_mgmt": self.mgmt_password,
-            "calvin": SUPERMICRO_DEFAULT,
-            "BMC_LABEL": None
+        credentials_to_test = {
+            "wmf_root_mgmt": ("root", self.mgmt_password),
+            "calvin": ("ADMIN", SUPERMICRO_DEFAULT),
+            "BMC_LABEL": ("ADMIN", None),
         }
-        for label, password in passwords_to_test.items():
+        for label, (bmc_username, bmc_password) in credentials_to_test.items():
             try:
                 logger.info(
-                    "Connecting to the BMC as user %s, with password %s",
-                    bmc_username, label)
-                if label == "wmf_root_mgmt":
-                    # Most of the times DCops sets up the "root" account with
-                    # the related password, not the ADMIN one. It makes sense
-                    # to avoid yet another special case for them, and use "root"
-                    # here that is more consistent with what they do with Dell
-                    # servers as well.
-                    bmc_username = "root"
-                    bmc_password = password
-                elif label == "BMC_LABEL":
+                    "Connecting to the BMC as user %s (%s)", bmc_username, label)
+                if label == "BMC_LABEL":
                     # The Supermicro vendor ships its servers with a unique BMC admin
                     # password, that is displayed in the server's label:
                     # https://www.supermicro.com/en/support/BMC_Unique_Password
                     bmc_password = get_secret(
                         "Please insert the BMC ADMIN Password written on "
                         "the server's label.")
-                else:
-                    bmc_password = password
                 self.redfish = self.spicerack.redfish(
                     self.args.host, username=bmc_username, password=bmc_password)
                 self.redfish.check_connection()
