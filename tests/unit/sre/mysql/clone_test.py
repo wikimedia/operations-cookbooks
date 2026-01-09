@@ -9,11 +9,13 @@ tox -e py311-unit -- tests/unit/sre/mysql/clone_test.py -vv
 # flake8: noqa: D103
 
 from argparse import Namespace
+from pytest import fixture
 from unittest import mock
 from unittest.mock import MagicMock, patch
-
+import logging
 import pytest
-from spicerack.remote import RemoteHosts
+
+# from spicerack.remote import RemoteHosts
 
 from cookbooks.sre.mysql.clone import (
     MInst,
@@ -22,6 +24,25 @@ from cookbooks.sre.mysql.clone import (
     _check_if_target_is_already_on_dbctl,
     CloneMySQLRunner,
 )
+
+log = logging.getLogger()
+
+# # fixtures
+
+
+@fixture(autouse=True)
+def mock_durable_shell():
+    with (patch("cookbooks.sre.mysql.clone.ensure_shell_is_durable", autospec=True),):
+        yield
+
+
+@fixture(autouse=True)
+def set_logging(caplog):
+    caplog.set_level(logging.DEBUG)
+    caplog.handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
+
+
+# # tests
 
 
 def test_parse_db_host_fqdn():
@@ -119,7 +140,6 @@ yamlconf = dict(replication_user="ru", replication_password="rp")
 
 @patch("cookbooks.sre.mysql.clone.time.sleep")
 @patch("cookbooks.sre.mysql.clone.retry", autospec=True)
-@patch("cookbooks.sre.mysql.clone.ensure_shell_is_durable", autospec=True)
 @patch("cookbooks.sre.mysql.clone.ask_confirmation", autospec=True)
 @patch("cookbooks.sre.mysql.clone._add_host_to_zarcillo", autospec=True)
 @patch("cookbooks.sre.mysql.clone.Transferer", autospec=True)
@@ -137,9 +157,9 @@ def test_run(
     m_xfr,
     m_add_host_zarc,
     m_ask_conf,
-    m_ensure_shell,
     m_retry,
     m_sleep,
+    caplog,
 ):
     m_sr.run_cookbook = mock.Mock()
 
@@ -276,3 +296,35 @@ def test_run(
     runner = CloneMySQLRunner(args, m_sr)
 
     runner.run()
+
+    exp = """\
+INFO Searching remote 'A:db-all and not A:db-multiinstance and P{db1002.eqiad.wmnet}'
+INFO Searching remote 'A:db-all and not A:db-multiinstance and P{db1003.eqiad.wmnet}'
+INFO Searching remote 'A:db-all and not A:db-multiinstance and P{db1001.eqiad.wmnet}'
+INFO [cookbooks.sre.mysql.clone.check] Running pre-flight checks
+INFO [cookbooks.sre.mysql.clone.check] Checking current pooling status
+WARNING db1003 is already pooled in according to {'s3': {'pooled': True, 'candidate_master': False}}
+INFO [cookbooks.sre.mysql.clone.depool] Depooling source db1002.eqiad.wmnet
+INFO [cookbooks.sre.mysql.clone.depool] Depooling target db1003.eqiad.wmnet
+INFO [cookbooks.sre.mysql.clone.icinga] Disabling monitoring for source and target host
+INFO [cookbooks.sre.mysql.clone.clone] Running the cloning tool
+INFO [db1002] Stopping replication using STOP SLAVE
+INFO [db1002] Stopping mariadb
+INFO [db1003] Stopping replication using STOP SLAVE
+INFO [db1003] Stopping mariadb
+INFO [db1003] Removing /srv/sqldata
+INFO Starting transfer
+INFO Transfer complete
+INFO [db1002] Starting mariadb
+INFO [cookbooks.sre.mysql.clone.catchup_repl_s] [db1002] Catching up replication lag before removing icinga downtime
+INFO Replication is healthy
+INFO [cookbooks.sre.mysql.clone.wait_icinga_s] [db1002] Waiting for icinga to go green
+INFO [cookbooks.sre.mysql.clone.icinga] [db1002] Removing icinga downtime
+INFO [cookbooks.sre.mysql.clone.pool] [db1002] Pooling in source host
+INFO Replication is healthy
+INFO [cookbooks.sre.mysql.clone.zarc] [db1003] Adding host to Zarcillo
+INFO [cookbooks.sre.mysql.clone.catchup_repl_t] [db1003] Catching up replication lag
+INFO Replication is healthy
+INFO [cookbooks.sre.mysql.clone.done] Done
+"""
+    assert caplog.text == exp

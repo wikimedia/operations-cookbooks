@@ -558,23 +558,23 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         # # First focus on getting the source db back in production asap, target can/should wait # #
 
-        step("catchup_repl_s", f"Catching up replication lag on {self.source_fqdn} before removing icinga downtime")
+        step("catchup_repl_s", f"[{self.source_hostname}] Catching up replication lag before removing icinga downtime")
         _wait_for_replication_lag_to_lower(self.source_minst)
 
-        step("wait_icinga_s", f"Waiting for icinga to go green for {self.source_fqdn}")
+        step("wait_icinga_s", f"[{self.source_hostname}] Waiting for icinga to go green")
         self._source_icinga_host.wait_for_optimal()
 
-        step("icinga", f"Removing icinga downtime for {self.source_fqdn}")
+        step("icinga", f"[{self.source_hostname}] Removing icinga downtime")
         source_alerter.remove_downtime(source_downtime_id)
 
-        step("pool", f"Pooling in source {self.source_fqdn}")
+        step("pool", f"[{self.source_hostname}] Pooling in source host")
         pool_in_instance(self._run_cookbook, self.source_fqdn, self.source_hostname, self.phabricator_task_id)
 
         # # Now the target # #
 
         self._prepare_target(src_binlog_fn, src_repl_position)
 
-        step("zarc", f"Adding {self.target_fqdn} to Zarcillo")
+        step("zarc", f"[{self.target_hostname}] Adding host to Zarcillo")
         _add_host_to_zarcillo(
             self._mysql,
             self.target_hostname,
@@ -584,7 +584,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
             self.primary_section,
         )
 
-        step("catchup_repl_t", f"Catching up replication lag on {self.target_fqdn}")
+        step("catchup_repl_t", f"[{self.target_hostname}] Catching up replication lag")
         self.target_minst = get_db_instance(self._mysql, self.target_fqdn)
         _wait_for_replication_lag_to_lower(self.target_minst)
 
@@ -605,7 +605,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
                 step("wait", f"Waiting {to_wait} seconds before pooling in target {self.target_fqdn}")
                 time.sleep(to_wait)
 
-            step("pool", f"Pooling in target {self.target_fqdn}")
+            step("pool", f"[{self.target_hostname}] Pooling in target host")
             pool_in_instance(self._run_cookbook, self.target_fqdn, self.target_hostname, self.phabricator_task_id)
 
         msg = f"Finished cloning {self.source_fqdn} to {self.target_fqdn} - {self.admin_reason.owner}"
@@ -617,7 +617,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
         Run the cloning process. Most of the heavy lifting is done by transfer.py
         """
         # Many commands need to be executed locally using mysql instead of pymysql
-        log.info(f"[{self.source_hostname}] Stop replication")
+        log.info(f"[{self.source_hostname}] Stopping replication using STOP SLAVE")
         scripts = [
             'mysql -e "STOP SLAVE;"',
         ]
@@ -632,7 +632,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
         _run(self.source_host, "service mariadb stop")
 
         # Use ssh as root here as pymysql could fail due to permission not yet set on a new host
-        log.info("Running STOP SLAVE on %s", self.target_hostname)
+        log.info(f"[{self.target_hostname}] Stopping replication using STOP SLAVE")
         _run(self.target_host, 'mysql -e "STOP SLAVE;"')
 
         log.info(f"[{self.target_hostname}] Stopping mariadb")
