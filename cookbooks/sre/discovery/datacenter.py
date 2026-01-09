@@ -530,8 +530,8 @@ class DiscoveryDcRouteRunner(CookbookRunnerBase):
             if service.state != "production":
                 logger.debug("Skipping %s, as its state %s is not production", service.name, service.state)
                 continue
-            if service.name in EXCLUDED_SERVICES and self.do_filter:
-                logger.info("Skipping excluded service %s: %s", service.name, EXCLUDED_SERVICES[service.name])
+            if service.exclude_from_switchover and self.do_filter:
+                logger.info("Skipping excluded service %s", service.name)
                 continue
             for record in service.discovery:
                 complete_record = DiscoveryRecord(service_name=service.name, record=record, ips=service.ip)
