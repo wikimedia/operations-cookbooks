@@ -557,7 +557,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         pxe_reboot_time = datetime.utcnow()
 
         # iPXE based boot
-        if self.identifier:
+        if hasattr(self, 'identifier') and self.identifier:
             di_cmdline_pattern = 'preseed/url='
         # pxelinux based boot
         else:
