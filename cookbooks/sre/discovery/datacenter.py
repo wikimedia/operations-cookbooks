@@ -22,25 +22,6 @@ from cookbooks.sre.switchdc.mediawiki import MEDIAWIKI_SERVICES
 
 
 logger = logging.getLogger(__name__)
-# This is used in DiscoveryDcRouteRunner._get_all_services, but might be of use for
-# other cookbooks too, so make it a module constant.
-EXCLUDED_SERVICES = {
-    "docker-registry": "swift replica goes codfw => eqiad and needs manual switching",
-    "releases": "not a 'service', strictly speaking, thus excluded",
-    "puppetdb-api": "not a 'service', strictly speaking, thus excluded",
-    "helm-charts": "not a 'service', strictly speaking, thus excluded",
-    "toolhub": "T288685: needs to match m5 database cluster replication",
-    "wdqs": "T329193: capacity limitations in codfw",
-    "wdqs-ssl": "T329193: capacity limitations in codfw",
-    "apt": "T330849: needs additional Puppet change, not in scope for bi-annual switchovers",
-    "netbox": "T234997: caused issues on last switchover, should stay in eqiad",
-    "k8s-ingress-staging": "should stay in eqiad",
-    "k8s-ingress-aux": "no cluster in codfw",
-    "k8s-ingress-ml-staging": "no cluster in eqiad",
-    "k8s-ingress-dse": "no cluster in codfw",
-    "kibana7": "T375544: requires manual switching (backup / restore)",
-    "swift-https": "T370962: Capacity issues serving single-DC - revisit with a validated capacity model (T376516)",
-}
 
 
 @dataclass(frozen=True)
