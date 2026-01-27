@@ -316,11 +316,13 @@ INFO [db1003] Removing /srv/sqldata
 INFO Starting transfer
 INFO Transfer complete
 INFO [db1002] Starting mariadb
+INFO [cookbooks.sre.mysql.clone.conf] [db1003] Configure and start replication
 INFO [cookbooks.sre.mysql.clone.catchup_repl_s] [db1002] Catching up replication lag before removing icinga downtime
 INFO Replication is healthy
 INFO [cookbooks.sre.mysql.clone.wait_icinga_s] [db1002] Waiting for icinga to go green
 INFO [cookbooks.sre.mysql.clone.icinga] [db1002] Removing icinga downtime
 INFO [cookbooks.sre.mysql.clone.pool] [db1002] Pooling in source host
+INFO [cookbooks.sre.mysql.clone.upgrade] [db1003] Run mysql_upgrade then configure GTID
 INFO Replication is healthy
 INFO [cookbooks.sre.mysql.clone.zarc] [db1003] Adding host to Zarcillo
 INFO [cookbooks.sre.mysql.clone.catchup_repl_t] [db1003] Catching up replication lag

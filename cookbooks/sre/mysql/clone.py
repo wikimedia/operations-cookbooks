@@ -556,6 +556,9 @@ class CloneMySQLRunner(CookbookRunnerBase):
         step("clone", "Running the cloning tool")
         src_binlog_fn, src_repl_position = self._run_clone()
 
+        step("conf", f"[{self.target_hostname}] Configure and start replication")
+        self._configure_target_start_repl(src_binlog_fn, src_repl_position)
+
         # # First focus on getting the source db back in production asap, target can/should wait # #
 
         step("catchup_repl_s", f"[{self.source_hostname}] Catching up replication lag before removing icinga downtime")
@@ -572,7 +575,8 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         # # Now the target # #
 
-        self._prepare_target(src_binlog_fn, src_repl_position)
+        step("upgrade", f"[{self.target_hostname}] Run mysql_upgrade then configure GTID")
+        self._upgrade_target_set_gtid()
 
         step("zarc", f"[{self.target_hostname}] Adding host to Zarcillo")
         _add_host_to_zarcillo(
@@ -657,9 +661,8 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         return (src_binlog_fn, src_repl_position)
 
-    def _prepare_target(self, binlog_file: str, repl_position: int) -> None:
-        """Configure replication, catch up, run mysql_upgrade, switch to GTID"""
-        tgt = self.target_hostname
+    def _configure_target_start_repl(self, binlog_file: str, repl_position: int) -> None:
+        """Configure replication, catch up"""
         scripts = [
             "chown -R mysql:mysql /srv/*",
             'systemctl set-environment MYSQLD_OPTS="--skip-slave-start"',
@@ -679,6 +682,9 @@ class CloneMySQLRunner(CookbookRunnerBase):
             'mysql -e "START SLAVE;"',
         ]
         self._run_scripts(self.target_host, scripts)
+
+    def _upgrade_target_set_gtid(self) -> None:
+        """Run mysql_upgrade, switch to GTID"""
         _wait_for_replication_lag_to_lower(get_db_instance(self._mysql, self.target_fqdn))
         scripts = [
             'mysql -e "STOP SLAVE;"',
