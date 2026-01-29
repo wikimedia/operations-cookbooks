@@ -6,7 +6,7 @@ from enum import Enum, auto
 from time import sleep
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.elasticsearch_cluster import ElasticsearchClusterCheckError
+from spicerack.elasticsearch_cluster import ElasticsearchClusterCheckError, OperationType
 from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import ask_confirmation
 
@@ -190,7 +190,10 @@ class RollingOperationRunner(CookbookRunnerBase):
 
             logger.info('(Group %d) Fetch %d node(s) from %s to perform the %s operation',
                         groups_restarted, self.nodes_per_run, self.clustergroup, self.operation)
-            nodes = self.elasticsearch_clusters.get_next_clusters_nodes(self.start_datetime, self.nodes_per_run)
+            operation_type = OperationType.REBOOT if self.operation is Operation.REBOOT else OperationType.RESTART
+            nodes = self.elasticsearch_clusters.get_next_clusters_nodes(
+                self.start_datetime, self.nodes_per_run, operation=operation_type
+            )
             if nodes is None:
                 break
 
