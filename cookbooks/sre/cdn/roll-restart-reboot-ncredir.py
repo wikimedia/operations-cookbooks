@@ -32,7 +32,7 @@ class NCRedirRestartRebootRunner(SRELBBatchRunnerBase):
         """Required by SREBatchRunnerBase"""
         aliases = ['ncredir']
         for dc in ALL_DATACENTERS:
-            aliases.append(f'ncredir-{dc}')
+            aliases.append(f'A:ncredir-{dc}')
         return aliases
 
     @property
