@@ -36,6 +36,10 @@ SUPPORTED_VENDORS = [DELL_VENDOR_SLUG, SUPERMICRO_VENDOR_SLUG]
 
 # For per rack vlan migration
 LEGACY_VLANS = (
+    'private1-c-eqiad',
+    'private1-d-eqiad',
+    'analytics1-c-eqiad',
+    'analytics1-d-eqiad',
     'private1-a-codfw',
     'private1-b-codfw',
     'private1-c-codfw',
