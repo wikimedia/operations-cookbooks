@@ -55,7 +55,7 @@ class FirmwareUpgrade(CookbookBase):
         parser = super().argument_parser()
         parser.add_argument(
             "--no-reboot",
-            help="don't perform any reboots. Updates will not be installed unless the user preforms a manual reboot",
+            help="don't perform any reboots. Updates will not be installed unless the user performs a manual reboot",
             action="store_true",
             default=False,
         )
@@ -522,7 +522,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             ask_confirmation(message)
 
     def _rollback(self):
-        """Preform a rollback"""
+        """Perform a rollback"""
         # TODO: if evrything goes wrong perform a rollback via ipmi
         # racadm rollback iDRAC.Embedded.1-1
         # racadm rollback BIOS.Setup.1-1
@@ -948,8 +948,8 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         if redfish_host.hw_model < 10 and redfish_host.firmware_version < version.Version('4'):
-            logger.error('iDRAC version (%s) is too low to preform driver upgrades.  '
-                         'please upgrade iDRAC first')
+            logger.error('iDRAC version (%s) and firmware (%s) is too low to perform driver upgrades.  '
+                         'please upgrade iDRAC first', redfish_host.hw_model, redfish_host.firmware_version)
             return False
 
         member = self._get_hw_member(redfish_host, driver_category)
@@ -995,8 +995,8 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         if redfish_host.hw_model < 10 and redfish_host.firmware_version < version.Version('4'):
-            logger.error('iDRAC version (%s) is too low to preform driver upgrades.  '
-                         'please upgrade iDRAC first')
+            logger.error('iDRAC version (%s) and firmware (%s) is too low to perform driver upgrades.  '
+                         'please upgrade iDRAC first', redfish_host.hw_model, redfish_host.firmware_version)
             return False
 
         controller = self._get_hw_member(redfish_host, DellDriverCategory.SSD)
@@ -1032,7 +1032,8 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             logger.error('%s: no job_id for member (%s)', netbox_host.fqdn, controller)
             if to_update:
                 logger.error(
-                    '%s: the target version is not correct on all SSDs, and no update job was triggered.')
+                    '%s: the target version is not correct on all SSDs, and no update job was triggered.',
+                    target_version)
             return False
 
         if self.no_reboot:
