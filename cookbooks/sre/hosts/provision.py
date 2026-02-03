@@ -753,61 +753,59 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         )
 
         # BIOS/iDRAC/etc.. settings for Dell hosts.
-        self.config_changes = {
-            'BIOS.Setup.1-1': {
-                'BootMode': 'Uefi' if self.uefi else 'Bios',
-                'CpuInterconnectBusLinkPower': 'Enabled',
-                'EnergyPerformanceBias': 'BalancedPerformance',
-                'PcieAspmL1': 'Enabled',
-                'ProcC1E': 'Enabled',
-                'ProcCStates': 'Enabled',
-                'ProcPwrPerf': 'OsDbpm',
-                'ProcVirtualization': 'Enabled' if self.args.enable_virtualization else 'Disabled',
-                'ProcX2Apic': 'Disabled',
-                'SysProfile': 'PerfPerWattOptimizedOs',
-                'UncoreFrequency': 'DynamicUFS',
-                'UsbPorts': 'OnlyBackPortsOn',
-            },
-            'iDRAC.Embedded.1': {
-                'IPMILan.1#Enable': 'Enabled',
-                'IPv4.1#DHCPEnable': 'Disabled',
-                'IPv4Static.1#Address': str(self.redfish.interface.ip),
-                'IPv4Static.1#DNS1': DNS_ADDRESS,
-                'IPv4Static.1#Gateway': str(next(iter(self.redfish.interface.network.hosts()))),
-                'IPv4Static.1#Netmask': str(self.redfish.interface.netmask),
-                'NIC.1#DNSRacName': self.args.host,
-                'NICStatic.1#DNSDomainFromDHCP': 'Disabled',
-                'NICStatic.1#DNSDomainName': f'mgmt.{self.netbox_data["site"]["slug"]}.wmnet',
-            },
-            'System.Embedded.1': {
-                'ServerPwr.1#PSRapidOn': 'Disabled',
-            }
+        self.config_changes: dict = defaultdict(dict)
+        self.config_changes['BIOS.Setup.1-1'] = {
+            'BootMode': 'Uefi' if self.uefi else 'Bios',
+            'CpuInterconnectBusLinkPower': 'Enabled',
+            'EnergyPerformanceBias': 'BalancedPerformance',
+            'PcieAspmL1': 'Enabled',
+            'ProcC1E': 'Enabled',
+            'ProcCStates': 'Enabled',
+            'ProcPwrPerf': 'OsDbpm',
+            'ProcVirtualization': 'Enabled' if self.args.enable_virtualization else 'Disabled',
+            'ProcX2Apic': 'Disabled',
+            'SysProfile': 'PerfPerWattOptimizedOs',
+            'UncoreFrequency': 'DynamicUFS',
+            'UsbPorts': 'OnlyBackPortsOn',
+        }
+        self.config_changes['iDRAC.Embedded.1'] = {
+            'IPMILan.1#Enable': 'Enabled',
+            'IPv4.1#DHCPEnable': 'Disabled',
+            'IPv4Static.1#Address': str(self.redfish.interface.ip),
+            'IPv4Static.1#DNS1': DNS_ADDRESS,
+            'IPv4Static.1#Gateway': str(next(iter(self.redfish.interface.network.hosts()))),
+            'IPv4Static.1#Netmask': str(self.redfish.interface.netmask),
+            'NIC.1#DNSRacName': self.args.host,
+            'NICStatic.1#DNSDomainFromDHCP': 'Disabled',
+            'NICStatic.1#DNSDomainName': f'mgmt.{self.netbox_data["site"]["slug"]}.wmnet',
+        }
+        self.config_changes['System.Embedded.1'] = {
+            'ServerPwr.1#PSRapidOn': 'Disabled',
         }
 
-        self.config_changes_idrac10 = {
-            'BIOS.Setup.1-1': {
-                'CpuInterconnectBusLinkPower': 'Enabled',
-                'EnergyPerformanceBias': 'BalancedPerformance',
-                'PcieAspmL1': 'Enabled',
-                'ProcC1E': 'Enabled',
-                'ProcCStates': 'Enabled',
-                'ProcPwrPerf': 'OsDbpm',
-                'SysProfile': 'PerfPerWattOptimizedOs',
-                'UncoreFrequency': 'DynamicUFS',
-                'UsbPorts': 'OnlyBackPortsOn',
-                'HttpDev1TlsMode': 'None',
-            },
-            'iDRAC.Embedded.1': {
-                'IPMILan.1#Enable': 'Enabled',
-                'IPv4.1#DHCPEnable': 'Disabled',
-                'IPv4.1#StaticAddress': str(self.redfish.interface.ip),
-                'IPv4.1#StaticDNS1': DNS_ADDRESS,
-                'IPv4.1#StaticGateway': str(next(iter(self.redfish.interface.network.hosts()))),
-                'IPv4.1#StaticNetmask': str(self.redfish.interface.netmask),
-                'Network.1#DNSRacName': self.args.host,
-                'Network.1#DNSDomainNameFromDHCP': 'Disabled',
-                'Network.1#StaticDNSDomainName': f'mgmt.{self.netbox_data["site"]["slug"]}.wmnet',
-            },
+        self.config_changes_idrac10: dict = defaultdict(dict)
+        self.config_changes_idrac10['BIOS.Setup.1-1'] = {
+            'CpuInterconnectBusLinkPower': 'Enabled',
+            'EnergyPerformanceBias': 'BalancedPerformance',
+            'PcieAspmL1': 'Enabled',
+            'ProcC1E': 'Enabled',
+            'ProcCStates': 'Enabled',
+            'ProcPwrPerf': 'OsDbpm',
+            'SysProfile': 'PerfPerWattOptimizedOs',
+            'UncoreFrequency': 'DynamicUFS',
+            'UsbPorts': 'OnlyBackPortsOn',
+            'HttpDev1TlsMode': 'None',
+        }
+        self.config_changes_idrac10['iDRAC.Embedded.1'] = {
+            'IPMILan.1#Enable': 'Enabled',
+            'IPv4.1#DHCPEnable': 'Disabled',
+            'IPv4.1#StaticAddress': str(self.redfish.interface.ip),
+            'IPv4.1#StaticDNS1': DNS_ADDRESS,
+            'IPv4.1#StaticGateway': str(next(iter(self.redfish.interface.network.hosts()))),
+            'IPv4.1#StaticNetmask': str(self.redfish.interface.netmask),
+            'Network.1#DNSRacName': self.args.host,
+            'Network.1#DNSDomainNameFromDHCP': 'Disabled',
+            'Network.1#StaticDNSDomainName': f'mgmt.{self.netbox_data["site"]["slug"]}.wmnet',
         }
 
         # Testing that the management password is correct connecting to the first physical cumin host
@@ -974,7 +972,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
         self._config_pxe(config)
         self._disable_lldp(config)
-        was_changed = config.update(self.config_changes)
+        was_changed = config.update(dict(self.config_changes))
         if not was_changed:
             logger.warning('Skipping update of BIOS/iDRAC, all settings have already the correct values')
             return
@@ -989,7 +987,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
         logger.info('Checking if all the changes were applied successfully')
         config = self._get_config()
-        was_changed = config.update(self.config_changes)
+        was_changed = config.update(dict(self.config_changes))
         if was_changed:
             raise RuntimeError(
                 'Not all changes were applied successfully, see the ones '
