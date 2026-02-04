@@ -1,11 +1,19 @@
 """Pool or depool a DB from dbctl."""
 
+# pylint: disable=missing-docstring,too-many-instance-attributes,R0913,R0917
+# pylint: disable=logging-fstring-interpolation,no-else-raise,broad-exception-caught
+# pylint: disable=raise-missing-from,redefined-outer-name
+# pydocstyle: disable=D101,D103,D202
+
+from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass, fields
+from datetime import timedelta
+from time import sleep, monotonic
+from typing import Any, Tuple
+import json
 import logging
 import re
-from argparse import ArgumentParser, Namespace
-from datetime import datetime, timedelta
-from time import sleep
-from typing import Any
+from urllib.request import urlopen
 
 from conftool.extensions.dbconfig.action import ActionResult
 from conftool.extensions.dbconfig.entities import Instance as DBCInst
@@ -20,11 +28,95 @@ from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
-hostname_regex = re.compile(r"[a-z][a-z-]*[a-z](\d{4})")
-logger = logging.getLogger(__name__)
-
 # TODO: improve handling of spurious changes, right now it bails out
-# TODO: check for mysql/metrics errors during the repooling operation?
+
+# TODO: use httpx ideally
+
+
+hostname_regex = re.compile(r"[a-z][a-z-]*[a-z](\d{4})")
+logger = logging.getLogger(__name__)  # TODO: rename to log
+
+
+@dataclass
+class InstanceMetadata:
+    """Instance metadata"""
+
+    alerts: list
+    dc: str
+    instance_group: str
+    instance_name: str
+    is_candidate_on_dbctl: bool | None
+    is_lagging: bool
+    # kernel_version: str | None
+    lag: float
+    mariadb_version: str | None
+    pooled_value: int
+    preferred_candidate: bool
+    role: str
+    section_kind: str
+    section: str
+    tags: list
+    uptime_human: str
+    uptime_s: int
+
+
+def _jget(url: str) -> dict:
+    """Fetch json dict"""
+    logger.debug(f"Fetching {url}")
+    with urlopen(url, timeout=5) as resp:  # nosec B310
+        j = json.loads(resp.read())
+    return j
+
+
+def fetch_host_instance_from_zarcillo(hn: str) -> InstanceMetadata:
+    """Fetch InstanceMetadata"""
+    url = f"https://zarcillo.wikimedia.org/api/v1/instances/{hn}"
+    j = _jget(url)
+    if "instances" not in j:
+        raise RuntimeError(f"Unexpected response {j}")
+
+    icnt = len(j["instances"])
+    if icnt > 1:
+        raise RuntimeError(f"{icnt} instances found on {hn}. Multi-instance hosts are not supported.")
+    elif icnt < 1:
+        raise RuntimeError(f"No instances found on {hn}.")
+
+    i = j["instances"][0]
+    # logger.debug(f"Received {i}")
+
+    field_names = {f.name for f in fields(InstanceMetadata)}
+    d = {k: v for k, v in i.items() if k in field_names}
+
+    d["section_kind"], _ = extract_section_kind_and_method(i["section"])
+
+    return InstanceMetadata(**d)
+
+
+def extract_section_kind_and_method(section_name: str) -> Tuple[str, str]:
+    """Extract section king e.g. s3 -> s and pooling method"""
+    kind = section_name.rstrip("0123456789")
+    # unsupported:
+    # "analytics_meta",
+    # "backup1-codfw",
+    # "backup1-eqiad",
+    # "labservices",
+    # "labtestservices",
+    # "m",
+    # "matomo",
+    # "tendril",
+    # "staging",
+    # "test-s",
+    supported = {
+        "ms": "pc",  # parsercache cookbook
+        "pc": "pc",  # parsercache cookbook
+        "es": "s",
+        "s": "s",
+        "x": "s",
+    }
+    if kind not in supported:
+        raise RuntimeError(f"Unsupported section kind: {kind}")
+
+    return kind, supported[kind]
 
 
 def ensure(condition: bool, msg: str) -> None:
@@ -55,16 +147,15 @@ def validate_hostname_extract_dc_fqdn(hn_or_fqdn: str) -> tuple[str, str, str]:
         hn, tmp_dc = hn_or_fqdn, ""
 
     m = hostname_regex.fullmatch(hn)
-    if not m:
+    if m is None:
         raise ValueError(f"Invalid hostname '{hn}'")
 
     dcnum = m.group(1)[0]
+    ensure(dcnum in ("1", "2"), f"Invalid hostname '{hn}'")
     if dcnum == "1":
         dc = "eqiad"
-    elif dcnum == "2":
-        dc = "codfw"
     else:
-        raise ValueError(f"Invalid hostname '{hn}'")
+        dc = "codfw"
 
     fqdn = f"{hn}.{dc}.wmnet"
 
@@ -242,6 +333,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
         self.task_id = args.task_id
         self.dry_run = spicerack.dry_run
         self._mysql = spicerack.mysql()
+        self._run_cookbook = spicerack.run_cookbook
 
         if self.pool:
             if self.args.slow:
@@ -282,11 +374,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
     @property
     def runtime_description(self) -> str:
         """Return a nicely formatted string that represents the cookbook action."""
-        suffix = ""
-        if self.pool:
-            adj = "slowly" if self.args.slow else "quickly" if self.args.fast else "gradually"
-            suffix = f" {adj} with {len(self.steps)} steps"
-        return f"{self.args.instance}{suffix} - {self.reason.reason}"
+        return f"{self.args.operation} {self.args.instance}: {self.reason.reason}"
 
     @property
     def lock_args(self) -> LockArgs:
@@ -294,6 +382,10 @@ class PoolDepoolRunner(CookbookRunnerBase):
         # TTL includes both the sleep time (900s) plus the potential retries for wait_diff_clean (30*30s) for each step
         ttl = 1800 * len(self.steps) if self.pool else 60
         return LockArgs(suffix=self.args.instance, concurrency=1, ttl=ttl)
+
+    def _update_phabricator(self, status: str, desc: str) -> None:
+        msg = f"{status} {desc} by {self.reason.owner}: {self.reason.reason}"
+        self.phabricator.task_comment(self.task_id, msg)
 
     def check_action_result(self, action_result: ActionResult, message: str) -> None:
         """Raise on failure and log any messages present in an ActionResult instance."""
@@ -306,34 +398,87 @@ class PoolDepoolRunner(CookbookRunnerBase):
         if not action_result.success:
             raise RuntimeError(f"Failed to {message}")
 
+    def _pool_s_or_es(self) -> None:
+        if self.args.skip_safety_checks is False:
+
+            _poll_icinga_notification_status(self._icinga_host, self._hostname)
+            logger.debug("Waiting for icinga to go green")
+            self._icinga_host.wait_for_optimal()
+
+        self._update_phabricator("Starting", f"pool of {self.args.instance}")
+        self.gradual_pooling()
+
+    def _depool_s_or_es(self) -> None:
+        msg = "depool instance {self.args.instance}"
+        self.wait_diff_clean()
+
+        ar, dbctl_conf = self.dbctl.config.generate()
+        self.check_action_result(ar, "Failed to generate dbctl conf")
+        _check_depooling_last_instance(dbctl_conf, self.args.instance, self.args.nocheck_external_loads)
+        ret = self.dbctl.instance.depool(self.args.instance)
+        self.check_action_result(ret, msg)
+        self.commit_change(msg)
+
+        self.wait_for_connection_drain()
+
+    def _pool_pc_or_ms(self, section: str) -> None:
+        if self.args.skip_safety_checks:
+            raise RuntimeError("Flag not supported")
+
+        cmar = []
+        if self.args.reason:
+            cmar.extend(["--reason", self.args.reason])
+
+        if self.args.task_id:
+            cmar.extend(["--task-id", self.args.task_id])
+
+        cmar.extend([section, "pool"])
+        self._run_cookbook("sre.mysql.parsercache", cmar)
+
+    def _depool_pc_or_ms(self, section: str) -> None:
+        cmar = []
+        if self.args.reason:
+            cmar.extend(["--reason", self.args.reason])
+
+        if self.args.task_id:
+            cmar.extend(["--task-id", self.args.task_id])
+
+        cmar.extend([section, "depool"])
+        self._run_cookbook("sre.mysql.parsercache", cmar)
+
     def run(self) -> None:
         """As required by the Spicerack API."""
-        if self.pool:
-            if self.args.skip_safety_checks is False:
-                _poll_icinga_notification_status(self._icinga_host, self._hostname)
-                logger.debug("Waiting for icinga to go green")
-                self._icinga_host.wait_for_optimal()
+        try:
+            imeta = fetch_host_instance_from_zarcillo(self.args.instance)
+            section = imeta.section
+        except Exception as e:
+            logger.error(f"Error {e}")
+            logger.info("If you want to continue anyway input the section: ")
+            section = input("Section: ").strip().lower()
 
-            msg = f"Start pool of {self.runtime_description} - {self.reason.owner}"
-            self.phabricator.task_comment(self.task_id, msg)
+        _, pool_method = extract_section_kind_and_method(section)
 
-            self.gradual_pooling()
+        if pool_method == "pc":
+            de = "" if self.pool else "de"
+            logger.info("Using parsercache cookbook")
+            logger.info(f"The whole '{section}' section will be {de}pooled")
+            if self.pool:
+                self._pool_pc_or_ms(section)
+            else:
+                self._depool_pc_or_ms(section)
 
-        else:
-            msg = "depool instance {self.args.instance}"
-            self.wait_diff_clean()
+            # currently parsercache cookbook does its own phab updating
+            # self._update_phabricator("Completed", msg)
 
-            ar, dbctl_conf = self.dbctl.config.generate()
-            self.check_action_result(ar, "Failed to generate dbctl conf")
-            _check_depooling_last_instance(dbctl_conf, self.args.instance, self.args.nocheck_external_loads)
-            ret = self.dbctl.instance.depool(self.args.instance)
-            self.check_action_result(ret, msg)
-            self.commit_change(msg)
+        elif pool_method == "s":
+            if self.pool:
+                msg = f"pooling of {self.args.instance}"
+                self._pool_s_or_es()
+            else:
+                msg = f"depooling of {self.args.instance}"
+                self._depool_s_or_es()
 
-            self.wait_for_connection_drain()
-
-        msg = f"Completed {self.args.operation} of {self.runtime_description} - {self.reason.owner}"
-        self.phabricator.task_comment(self.task_id, msg)
+            self._update_phabricator("Completed", msg)
 
     def _fetch_current_pooling(self, i: str, percentage: int) -> set[tuple[bool, bool]]:
         ensure("." not in i, f"dbctl.instance.get not supporting FQDN {i}")
@@ -396,9 +541,9 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
         NOTE: this does not support misc databases
         """
-        timeout = datetime.utcnow() + timedelta(hours=1)
+        timeout = monotonic() + 3600
         logger.info("Monitoring number of wikiuser* connections")
-        while datetime.utcnow() < timeout:
+        while monotonic() < timeout:
             wikiuser_cnt = _fetch_instance_connections_count_wikiusers(self._mysql_instance)
             if wikiuser_cnt == 0 or self.dry_run:
                 logger.info("Connection drain completed")
