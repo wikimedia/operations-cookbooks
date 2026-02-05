@@ -413,7 +413,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             distro=self.args.os
         )
 
-    def _get_dhcp_config_baremetal(
+    def _get_dhcp_config_baremetal(  # pylint: disable=too-many-locals
         self, force_tftp: bool = False, identifier: str = ""
     ) -> DHCPConfiguration:
         """Instantiate a DHCP configuration to be used for the reimage."""
@@ -490,11 +490,14 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                     dhcp_filename = ""
                     dhcp_options = {}
                 dhcp_filename_exclude_vendor = ""
-
+        # Reload the host from Netbox
+        #  In case its IP changed with --move-vlan
+        #  And also used lower down for `netbox_iface`
+        netbox_server = self.spicerack.netbox_server(self.host, read_write=True)
         if mac:
             return DHCPConfMac(
                 hostname=self.host,
-                ipv4=ipaddress.IPv4Interface(self.netbox_server.primary_ip4_address).ip,
+                ipv4=ipaddress.IPv4Interface(netbox_server.primary_ip4_address).ip,
                 mac=mac,
                 ttys=1,
                 distro=self.args.os,
@@ -507,7 +510,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         if uuid:
             return DHCPConfUUID(
                 hostname=self.host,
-                ipv4=ipaddress.IPv4Interface(self.netbox_server.primary_ip4_address).ip,
+                ipv4=ipaddress.IPv4Interface(netbox_server.primary_ip4_address).ip,
                 uuid=uuid,
                 ttys=1,
                 distro=self.args.os,
@@ -517,7 +520,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                 dhcp_filename_exclude_vendor=dhcp_filename_exclude_vendor,
                 dhcp_filename_ipxe=dhcp_filename_ipxe,
             )
-
+        # TODO: remove direct Netbox API calls as soon as we decom DHCP option 82
         netbox_host = self.netbox.api.dcim.devices.get(name=self.host)
         netbox_iface = netbox_host.primary_ip.assigned_object
         # If it's a ganeti host the primary IP is on a bridge, we get the physical port that is a member
@@ -540,7 +543,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         )
         return DHCPConfOpt82(
             hostname=self.host,
-            ipv4=ipaddress.IPv4Interface(netbox_host.primary_ip4).ip,
+            ipv4=ipaddress.IPv4Interface(netbox_server.primary_ip4_address).ip,
             switch_hostname=switch_hostname,
             switch_iface=f'{switch_iface}.0',  # In Netbox we have just the main interface
             vlan=switch_iface.untagged_vlan.name,
