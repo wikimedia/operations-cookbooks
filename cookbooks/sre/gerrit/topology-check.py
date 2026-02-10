@@ -15,10 +15,11 @@ import logging
 from argparse import ArgumentParser, Namespace
 from datetime import timedelta
 
-from spicerack.decorators import retry
 from spicerack.cookbook import CookbookInitSuccess
-from wmflib.interactive import ensure_shell_is_durable
+from spicerack.decorators import retry
 from wmflib.dns import Dns
+from wmflib.interactive import ensure_shell_is_durable
+
 from cookbooks.sre import CookbookBase, CookbookRunnerBase
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,7 @@ class GerritTopologyChecker(CookbookBase):
             default=False,
             help=(
                 "Only verify that --source and --replica resolve "
-                "gerrit.wikimedia.org to the same A/AAAA record and exit. "
+                "gerrit.discovery.wmnet to the same CNAME record and exit. "
                 "Must be used together with --source and --replica."
             ),
         )
@@ -105,13 +106,13 @@ class TopologyCheckerRunner(CookbookRunnerBase):
             self.dns = Dns()
             self.src = spicerack.remote().query(f"{args.source}.*")
             self.replica = spicerack.remote().query(f"{args.replica}.*")
-            self.service_ip = self.dns.resolve_ipv4("gerrit.wikimedia.org")[0]
-            logger.info("Authoritative A record for gerrit.wikimedia.org: %s", self.service_ip)
+            self.service_cname = self.dns.resolve_cname("gerrit.discovery.wmnet")
+            logger.info("Authoritative CNAME record for gerrit.discovery.wmnet: %s", self.service_cname)
 
             self._assert_dns_consistent()
             raise CookbookInitSuccess(
-                "DNS validation succeeded: both hosts resolve gerrit.wikimedia.org to "
-                f"{self.service_ip}."
+                "DNS validation succeeded: both hosts resolve gerrit.discovery.wmnet to "
+                f"{self.service_cname}."
             )
 
         if self.args.systemd:
@@ -130,8 +131,8 @@ class TopologyCheckerRunner(CookbookRunnerBase):
         self.replica_user = (
             puppet.hiera_lookup(self.replica.hosts[0], "profile::gerrit::daemon_user").splitlines()[-1]
         )
-        self.service_ip = self.dns.resolve_ipv4("gerrit.wikimedia.org")[0]
-        logger.info("Authoritative A record for gerrit.wikimedia.org: %s", self.service_ip)
+        self.service_cname = self.dns.resolve_cname("gerrit.discovery.wmnet")
+        logger.info("Authoritative CNAME record for gerrit.discovery.wmnet: %s", self.service_cname)
 
     def parse_and_validate_args(self, args: Namespace) -> Namespace:
         """Validate CLI flags combinations.
@@ -278,7 +279,7 @@ class TopologyCheckerRunner(CookbookRunnerBase):
     def _dig(self, host, fqdn: str) -> str:
         result = list(
             host.run_sync(
-                f"dig +short {fqdn}",
+                f"dig CNAME +short {fqdn}",
                 is_safe=True,
                 print_progress_bars=False,
                 print_output=False,
@@ -296,9 +297,9 @@ class TopologyCheckerRunner(CookbookRunnerBase):
     def _assert_dns_consistent(self) -> None:
         inconsistent = {}
         for host in (self.src, self.replica):
-            ip = self._dig(host, "gerrit.wikimedia.org")
-            if ip != self.service_ip:
-                inconsistent[host.hosts[0].name] = ip
+            cname = self._dig(host, "gerrit.discovery.wmnet").removesuffix(".")
+            if cname != self.service_cname:
+                inconsistent[str(host)] = cname
         if inconsistent:
             raise RuntimeError(f"DNS resolution mismatch: {inconsistent}")
-        logger.info("Both hosts resolve gerrit.wikimedia.org → %s", self.service_ip)
+        logger.info("Both hosts resolve gerrit.discovery.wmnet → %s", self.service_cname)

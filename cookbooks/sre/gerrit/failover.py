@@ -4,11 +4,12 @@ This cookbook manages Gerrit failover operations between two hosts.
 """
 
 import logging
-from datetime import timedelta
 from argparse import ArgumentParser
-from wmflib.interactive import ensure_shell_is_durable, ask_confirmation, ask_input
-from wmflib.dns import Dns
-from cookbooks.sre import CookbookBase, CookbookRunnerBase, PHABRICATOR_BOT_CONFIG_FILE
+from datetime import timedelta
+
+from wmflib.interactive import ask_confirmation, ask_input, ensure_shell_is_durable
+
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE, CookbookBase, CookbookRunnerBase
 
 logger = logging.getLogger(__name__)
 
@@ -89,14 +90,10 @@ class FailoverRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
 
         self.spicerack = spicerack
-        self.dns = Dns()
         self.switch_from_host = spicerack.remote().query(f"{args.switch_from_host}.*")
         self.switch_to_host = spicerack.remote().query(f"{args.switch_to_host}.*")
         self.all_gerrit_hosts = spicerack.remote().query("gerrit*")
         self.message = f"from {self.switch_from_host} to {self.switch_to_host}"
-        self.expected_src_address = self.dns.resolve_ipv4("gerrit.wikimedia.org")[0]
-        msg = f"Retrieved source address: {self.expected_src_address}"
-        logger.info(msg)
         self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         self.reason = self.spicerack.admin_reason(reason=self.message)
         self.args = args
@@ -141,6 +138,7 @@ class FailoverRunner(CookbookRunnerBase):
             # Using dry-run implies the topology will not change
             #  we'll use the same source/replica as in pre-flight
             #  to avoid throwing an error.
+            logger.info("Running post-flight checks for the old source, dry-run mode is enabled")
             args = [
                 "--source", self.args.switch_from_host,
                 "--replica", self.args.switch_to_host,
@@ -165,7 +163,8 @@ class FailoverRunner(CookbookRunnerBase):
         self.spicerack.run_cookbook("sre.dns.wipe-cache",
                                     args=[
                                         "gerrit.wikimedia.org",
-                                        "gerrit-replica.wikimedia.org"
+                                        "gerrit-replica.wikimedia.org",
+                                        "gerrit.discovery.wmnet"
                                     ], raises=True)
 
     def _run_cookbook_ro_toggle(self, host, state) -> None:
