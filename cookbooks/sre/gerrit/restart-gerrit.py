@@ -7,8 +7,8 @@ with appropriate downtime handling.
 import logging
 import time
 from argparse import ArgumentParser
-from datetime import timedelta
 
+from spicerack.alertmanager import AlertmanagerError
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from cookbooks.sre import CookbookBase, CookbookRunnerBase
@@ -62,9 +62,23 @@ class RestartRunner(CookbookRunnerBase):
         """Returns a nicely formatted message describing what we're doing."""
         return self.message
 
+    def _restart_service(self):
+        """Helper to execute the actual restart logic."""
+        logger.info("Restarting gerrit service on %s", self.args.host)
+        self.target_host.remote().run_sync(
+            "systemctl restart gerrit",
+            print_progress_bars=False,
+            print_output=True,
+            is_safe=False
+        )
+        if not self.spicerack.dry_run:
+            logger.info("Waiting 60 seconds for monitoring to catch up...")
+            time.sleep(60)
+        else:
+            logger.info("Skipping monitoring wait because of dry run.")
+
     def run(self) -> None:
         """Entrypoint to execute cookbook."""
-        alerting_hosts = self.spicerack.alerting_hosts(self.target_host.remote().hosts)
         alertmanager = self.spicerack.alertmanager()
 
         matchers = [
@@ -72,26 +86,22 @@ class RestartRunner(CookbookRunnerBase):
         ]
 
         logger.info("Setting downtime for %s", self.args.host)
+        with self.target_host.alerting().downtimed(self.reason):
+            try:
+                with alertmanager.downtimed(reason=self.reason, matchers=matchers):
+                    ask_confirmation(
+                        f"About to restart Gerrit on {self.args.host}. "
+                        "Full downtime active (Host + Alertmanager). Proceed?"
+                    )
+                    self._restart_service()
 
-        with alerting_hosts.downtimed(self.reason, duration=timedelta(minutes=15)):
-            with alertmanager.downtimed(reason=self.reason, duration=timedelta(minutes=15), matchers=matchers):
+            except AlertmanagerError as e:
+                logger.warning("Exception thrown downtiming alerts. Reason: %s", e)
 
                 ask_confirmation(
-                    f"About to restart the 'gerrit' service on {self.args.host}. "
-                    "Alerts have been downtimed. Proceed?"
+                    f"WARNING: Failed to issue downtime for: {TARGET_ALERTS} "
+                    "Proceed anyway?"
                 )
-
-                logger.info("Restarting gerrit service on %s", self.args.host)
-                self.target_host.remote().run_sync(
-                    "systemctl restart gerrit",
-                    print_progress_bars=False,
-                    print_output=True,
-                    is_safe=False
-                )
-                if not self.spicerack.dry_run:
-                    logger.info("Waiting 60 seconds for monitoring to catch up...")
-                    time.sleep(60)
-                else:
-                    logger.info("Skipping monitoring wait because of dry run.")
+                self._restart_service()
 
         logger.info("Gerrit restart completed successfully. Downtimes removed.")
