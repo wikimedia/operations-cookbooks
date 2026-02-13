@@ -173,10 +173,11 @@ class SanitizeWikiRunner(CookbookRunnerBase):
         check_command = f"/usr/local/sbin/check_private_data.py -S {self._san_sock_fn}"
         run(self.sanitarium_hosts, check_command, is_safe=True)
 
-        ask_confirmation("Proceed with dropping private data?")
-        step("drop_privdata", "Drop private data")
-        drop_command = f"{check_command} | /usr/local/bin/mysql -S {self._san_sock_fn}"
-        run(self.sanitarium_hosts, drop_command)
+        if not self.check_only:
+            ask_confirmation("Proceed with dropping private data?")
+            step("drop_privdata", "Drop private data")
+            drop_command = f"{check_command} | /usr/local/bin/mysql -S {self._san_sock_fn}"
+            run(self.sanitarium_hosts, drop_command)
 
         if not clouddbs:
             self.logger.info("Skipping checking on clouddbs.")
