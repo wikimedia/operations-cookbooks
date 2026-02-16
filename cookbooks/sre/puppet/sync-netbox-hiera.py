@@ -160,7 +160,7 @@ class NetboxHiera(CookbookBase):
 
     Run the script that generates hiera data on the Netbox host to update the
     exposed git repository with the data and then deploy them to the
-    puppetmaster hosts, reloading apache.
+    puppet server hosts, reloading apache.
 
     Usage example:
         cookbook sre.puppet.sync-netbox-hiera -t T12345 'Decommissioned mw12[22-35]'
@@ -218,7 +218,6 @@ class NetboxHieraRunner(CookbookRunnerBase):
         self.logger = getLogger(__name__)
         self.args = args
         self.reposync = spicerack.reposync("netbox-hiera")
-        self.puppetmasters = spicerack.remote().query("A:puppetmaster")
         self.puppetservers = spicerack.remote().query("A:puppetserver")
         self.reason = spicerack.admin_reason(args.message, task_id=args.task_id)
         self._uri = f"{config['api_url']}graphql/"
@@ -550,25 +549,10 @@ class NetboxHieraRunner(CookbookRunnerBase):
         ]
         confirm_on_failure(self.puppetservers.run_sync, *commands)
 
-    def update_puppetmasters(self, hexsha: str) -> None:
-        """Update the puppet masters to a specific hash
-
-        Arguments:
-            hexsha (str): The hexsha to checkout
-
-        """
-        client_repo_dir = "/srv/netbox-hiera"
-        commands = [
-            f"git -C {client_repo_dir} fetch",
-            f"git -C {client_repo_dir} merge --ff-only {hexsha}",
-        ]
-        confirm_on_failure(self.puppetmasters.run_sync, *commands)
-
     def run(self) -> int:
         """Generate data"""
         if self.args.sha:
             self.reposync.force_sync()
-            self.update_puppetmasters(self.args.sha)
             self.update_puppetservers(self.args.sha)
             return 0
         try:
@@ -583,7 +567,6 @@ class NetboxHieraRunner(CookbookRunnerBase):
             )
         if self.args.check:
             return 1
-        self.update_puppetmasters(self.reposync.hexsha)
         self.update_puppetservers(self.reposync.hexsha)
         return 0
 
