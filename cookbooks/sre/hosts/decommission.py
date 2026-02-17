@@ -121,7 +121,7 @@ class DecommissionHost(CookbookBase):
       - Update Netbox state to Decommissioning and delete all non-mgmt interfaces
         and related IPs
     - Remove it from DebMonitor
-    - Remove it from Puppet master and PuppetDB
+    - Remove it from Puppet server and PuppetDB
     - If virtual host (Ganeti VM), issue a VM removal that will destroy the VM.
       Can take few minutes.
     - Run the sre.dns.netbox cookbook if the DC DNS records have been migrated
@@ -249,7 +249,6 @@ class DecommissionHostRunner(CookbookRunnerBase):
     def _decommission_host(self, fqdn):  # noqa: MC0001 # pylint: disable=too-many-statements
         """Perform all the decommissioning actions on a single host and return its switch if physical."""
         hostname = fqdn.split('.')[0]
-        puppet_master = self.spicerack.puppet_master()
         puppet_server = self.spicerack.puppet_server()
 
         debmonitor = self.spicerack.debmonitor()
@@ -345,9 +344,8 @@ class DecommissionHostRunner(CookbookRunnerBase):
         debmonitor.host_delete(fqdn)
         self.spicerack.actions[fqdn].success('Removed from DebMonitor')
 
-        puppet_master.delete(fqdn)
         puppet_server.delete(fqdn)
-        self.spicerack.actions[fqdn].success('Removed from Puppet master and PuppetDB')
+        self.spicerack.actions[fqdn].success('Removed from Puppet server and PuppetDB')
 
         if netbox_server.virtual:
             logger.info('Issuing Ganeti remove command, it can take up to 15 minutes...')
