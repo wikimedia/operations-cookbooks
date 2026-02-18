@@ -1,6 +1,6 @@
-"""Gerrit failover cookbook.
+"""Gerrit switchover cookbook.
 
-This cookbook manages Gerrit failover operations between two hosts.
+This cookbook manages Gerrit switchover operations between two hosts.
 """
 
 import logging
@@ -14,8 +14,8 @@ from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE, CookbookBase, CookbookRun
 logger = logging.getLogger(__name__)
 
 
-class Failover(CookbookBase):
-    """Performs a failover from one Gerrit host to another."""
+class Switchover(CookbookBase):
+    """Performs a switchover from one Gerrit host to another."""
 
     argument_task_required = False
 
@@ -72,14 +72,14 @@ class Failover(CookbookBase):
 
     def get_runner(self, args):
         """Creates Spicerack runner."""
-        return FailoverRunner(args, self.spicerack)
+        return SwitchoverRunner(args, self.spicerack)
 
 # Avoid raising Too many instance attributes (15/14)
 # pylint: disable=too-many-instance-attributes
 
 
-class FailoverRunner(CookbookRunnerBase):
-    """Runner class for executing Failover."""
+class SwitchoverRunner(CookbookRunnerBase):
+    """Runner class for executing Switchover."""
 
     # Customize Cookbook lock
     max_concurrency = 1
@@ -197,9 +197,9 @@ class FailoverRunner(CookbookRunnerBase):
         )
         cmd = "sudo tail -fn0 /var/log/gerrit/replication_log"
         ask_confirmation(
-            "I will make the source instance read-only after you confirm that "
+            "Please confirm with "
             f"{cmd} returns no more in progress replication. "
-            "Please run that command and confirm that it is running so I can toggle the read-only mode."
+            "The next step will toggle ON read-only mode."
         )
         #  replication source being frozen, we will now wait for replication
 
