@@ -197,14 +197,12 @@ class SwitchoverRunner(CookbookRunnerBase):
         )
         cmd = "sudo tail -fn0 /var/log/gerrit/replication_log"
         ask_confirmation(
-            "Please confirm with "
-            f"{cmd} returns no more in progress replication. "
-            "The next step will toggle ON read-only mode."
+            "Please run "
+            f"{cmd} and confirm here when its done. "
+            "The next step will toggle ON read-only mode "
         )
         #  replication source being frozen, we will now wait for replication
-
         self._run_cookbook_ro_toggle(host=self.args.switch_from_host, state="on")
-
         ask_confirmation(
             "Please confirm replication is fully done."
         )
