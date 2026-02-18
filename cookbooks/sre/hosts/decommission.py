@@ -30,7 +30,7 @@ from cookbooks.sre.hosts import (
     DEPLOYMENT_CHARTS_REPO_PATH,
     AUTHDNS_REPO_PATH,
 )
-from cookbooks.sre.network import configure_switch_interfaces
+from cookbooks.sre.network import configure_switch_interfaces, run_homer
 
 
 logger = logging.getLogger(__name__)
@@ -246,7 +246,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return 'for hosts {}'.format(self.decom_hosts)
 
-    def _decommission_host(self, fqdn):  # noqa: MC0001 # pylint: disable=too-many-statements
+    def _decommission_host(self, fqdn):  # noqa: MC0001 # pylint: disable=too-many-statements,too-many-branches
         """Perform all the decommissioning actions on a single host and return its switch if physical."""
         hostname = fqdn.split('.')[0]
         puppet_server = self.spicerack.puppet_server()
@@ -334,7 +334,13 @@ class DecommissionHostRunner(CookbookRunnerBase):
                 '[Netbox] Set status to Decommissioning, deleted all non-mgmt IPs,  '
                 'updated switch interfaces (disabled, removed vlans, etc)')
 
-            configure_switch_interfaces(self.remote, netbox, netbox_data, self.spicerack.verbose)
+            # Find switch vendor, as we force Homer usage if it is Nokia
+            nb_switch = netbox.api.dcim.devices.get(name=netbox_server.switches[0])
+            if nb_switch.device_type.manufacturer.slug == "nokia":
+                run_homer(queries=[f'{hostname}.*' for hostname in netbox_server.switches],
+                          dry_run=self.spicerack.dry_run)
+            else:
+                configure_switch_interfaces(self.remote, netbox, netbox_data, self.spicerack.verbose)
             self.spicerack.actions[fqdn].success('Configured the linked switch interface(s)')
 
         if not self.spicerack.dry_run:
