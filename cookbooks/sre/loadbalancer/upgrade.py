@@ -92,7 +92,7 @@ class RollUpgradeLibericaRunner(SREBatchRunnerBase):
     @property
     def runtime_description(self) -> str:
         """pretty-print message"""
-        msg = f"{self._args.action}ing {self._query()}"
+        msg = f"{self._args.action} {self._query()}"
         if self._args.task_id:
             msg += f" ({self._args.task_id})"
         return msg
