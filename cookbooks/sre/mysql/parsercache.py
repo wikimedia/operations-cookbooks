@@ -16,7 +16,6 @@ from spicerack.remote import RemoteHosts
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
-
 # pylint: disable=missing-docstring
 # pylint: disable=R0913,R0917
 # flake8: noqa: D103

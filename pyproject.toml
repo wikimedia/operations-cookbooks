@@ -1,0 +1,130 @@
+# Please keep tool blocks sorted alphabetically
+
+[tool.black]
+line-length = 120
+
+
+[tool.isort]
+line_length = 120
+profile = "black"
+
+
+[tool.pylsp-mypy]
+enabled = true
+live_mode = true
+
+
+[tool.ruff]
+# Minimum python version to support
+target-version = "py311"
+
+# Exclude commonly ignored directories
+exclude = [
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "build",
+    "dist",
+    "site-packages",
+    "venv",
+]
+
+# Same as Black
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",  # Pycodestyle errors
+    "F",  # Pyflakes
+    "ERA",  # Eradicate
+    "YTT",  # Flake8 2020
+    "A",  # Flake8 builtins
+    "T10",  # Flake8 debugger
+    "EXE",  # Flake8 executable
+    "G",  # Flake8 logging format
+    "PIE",  # Flake8 pie
+    "T20",  # Flake8 print
+    "SLOT",  # Flake8 slots
+    "TID",  # Flake8 tidy imports
+    "I",  # Isort
+    "W",  # Pycodestyle warnings
+
+    # "S",  # Flake8 bandit                             4
+    # "B",  # Flake8 bugbear                           16
+    # "PL",  # Pylint                                   4
+    # 
+    # "ANN",  # Flake8 annotations                     15
+    # "BLE",  # Flake8 blind except                    13
+    # "FBT",  # Flake8 boolean trap                    94
+    # "COM",  # Flake8 commas
+    # "C4",  # Flake8 comprehensions
+    # "DTZ",  # Flake8 datetimez
+    # "ISC",  # Flake8 implicit string concat          11
+    # "INP",  # Flake8 no pep420                       11
+    # "PT",  # Flake8 pytest style                     19
+    # "SLF",  # Flake8 self - private member access     7
+    # "SIM",  # Flake8 simplify                        24
+    # "ARG",  # Flake8 unused arguments                19
+    # "PTH",  # Flake8 use pathlib                      9
+    # "RUF",  # Ruff specific rules                    50  
+    # "TRY",  # Tryceratops                             6
+]
+
+ignore = [
+    "ANN001",  # Missing type annotation for function argument
+    "ANN201",  # Missing return type annotation for public function
+    "ANN202",  # Missing return type annotation for private function
+    "ANN204",  # Missing return type annotation for special method `__init__`
+    "ANN401",  # Allow Any type hint
+    "C408",    # Unnecessary `dict()` call (rewrite as a literal)
+    "COM812",  # Trailing commas enforced by the formatter
+    "D200",    # One-line docstring should fit on one line
+    "D205",    # 1 blank line required between summary line and description
+    "D212",    # Multi-line docstring summary should start at the first line
+    "D400",    # First line should end with a period
+    "D415",    # First line should end with a period, question mark, or exclamation point
+    "ERA001",  # Commented-out code
+    "G004",    # Logging statement uses f-string
+    "I001",    # Import block is un-sorted
+    "PLR",     # Ignore Pylint refactor rules - we run pylint directly
+    "PTH123",  # Do not force to use Path in all cases
+    "Q000",    # Allow to use the built-in open() function
+    "S101",    # Use of `assert` detected
+    "S603",    # Subprocess calls without shell=True
+    "SIM108",  # Don't force ternary operator always
+    "T201",    # Allow print() calls
+    "TRY003",  # Allow exception classes that don't define a common message
+    "TRY400",  # Allow to log just the error message and not the full exception traceback
+
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "ANN",     # Ignore type hints checks in tests
+    "ARG001",  # Unused function argument
+    "B011",    # Do not `assert False`
+    "E501",    # Long lines
+    "INP001",  # File `tests/unit/test_import.py` is part of an implicit namespace package.
+    "PT015",   # Assertion always fails, replace with `pytest.fail()`
+    "S101",    # Allow asserts
+    "S106",    # Allow hardcoded fake passwords in tests
+]
+
+[tool.ruff.lint.flake8-bandit]
+check-typed-exception = true
+
+[tool.ruff.format]
+docstring-code-format = true

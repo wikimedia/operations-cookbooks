@@ -225,7 +225,7 @@ class PeeringRunner(CookbookRunnerBase):
                 commands.append((f"set protocols bgp group {'IX' + str(peer_ip.version)} neighbor {peer_ip}"
                                  f" family {inet} unicast prefix-limit teardown 80"))
 
-            if not session['router_fqdn'] in all_commands:
+            if session['router_fqdn'] not in all_commands:
                 all_commands[session['router_fqdn']] = commands
             else:
                 all_commands[session['router_fqdn']].extend(commands)

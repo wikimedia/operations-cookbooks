@@ -16,13 +16,11 @@
 # TODO support both hostnames and fqdn
 
 import logging
-import re
 import sys
 import time
 from argparse import ArgumentParser
 from contextlib import contextmanager
 from datetime import timedelta
-from logging import Logger
 from typing import Tuple, Dict, Generator, List
 
 import transferpy.transfer
@@ -34,7 +32,6 @@ from spicerack.decorators import retry
 from spicerack.mysql import Instance as MInst, Mysql
 from spicerack.remote import Remote, RemoteHosts, RemoteError
 from transferpy.Transferer import Transferer
-from wmflib.config import load_yaml_config
 from wmflib.interactive import AbortError, confirm_on_failure, ensure_shell_is_durable, ask_confirmation
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE

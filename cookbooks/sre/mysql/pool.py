@@ -9,7 +9,7 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, fields
 from datetime import timedelta
 from time import sleep, monotonic
-from typing import Any, Tuple
+from typing import Any, Tuple, Optional
 import json
 import logging
 import re
@@ -45,11 +45,11 @@ class InstanceMetadata:
     dc: str
     instance_group: str
     instance_name: str
-    is_candidate_on_dbctl: bool | None
+    is_candidate_on_dbctl: Optional[bool]
     is_lagging: bool
     # kernel_version: str | None
     lag: float
-    mariadb_version: str | None
+    mariadb_version: Optional[str]
     pooled_value: int
     preferred_candidate: bool
     role: str

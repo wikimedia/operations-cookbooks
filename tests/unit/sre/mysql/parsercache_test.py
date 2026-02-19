@@ -12,9 +12,8 @@ import logging
 from argparse import Namespace
 from pytest import fixture
 from unittest import mock
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import cookbooks.sre.mysql.parsercache
 from cookbooks.sre.mysql.parsercache import pool, depool
 
 log = logging.getLogger()

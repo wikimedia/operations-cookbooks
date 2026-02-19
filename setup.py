@@ -35,10 +35,6 @@ extras_require = {
         "types-setuptools",
         "setuptools<82.0.0",
     ],
-    "prospector": [
-        "prospector[with_everything]==1.16.1",  # pinned
-        "pytest>=6.1.0",
-    ],
 }
 
 setup_requires = [
