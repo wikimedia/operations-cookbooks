@@ -108,7 +108,7 @@ class RollReimageK8sNodesRunner(K8sBatchRunnerBase):
             hostname = node.split('.')[0]  # reimage takes just the hostname, not the FQDN
             # skip initial confirmation, as we ask once at the beginning;
             # pass --new, as the reimage cookbook unsets it when not needed
-            reimage_args = ['--force', '--new', '--puppet', '7', '--os', self._args.os, hostname]
+            reimage_args = ['--force', '--new', '--os', self._args.os, hostname]
 
             self._spicerack.run_cookbook('sre.hosts.reimage', reimage_args, confirm=True)
 
