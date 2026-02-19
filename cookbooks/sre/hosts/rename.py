@@ -71,7 +71,6 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
         self.old_fqdn = self.netbox_server.fqdn
         self.remote_host = spicerack.remote().query(self.old_fqdn)
         self.puppet = spicerack.puppet(self.remote_host)
-        self.puppet_master = spicerack.puppet_master()
         self.puppet_server = spicerack.puppet_server()
         self.debmonitor = spicerack.debmonitor()
         self.run_cookbook = spicerack.run_cookbook
@@ -129,7 +128,6 @@ class RenameRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-att
 
         self.debmonitor.host_delete(self.old_fqdn)
         self.host_actions.success('✔️ Removed from DebMonitor')
-        self.puppet_master.delete(self.old_fqdn)
         self.puppet_server.delete(self.old_fqdn)
         self.host_actions.success('✔️ Removed from Puppet master and PuppetDB')
         # Too late for a rollback, setting it back to False

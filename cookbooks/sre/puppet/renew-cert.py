@@ -2,10 +2,7 @@
 from datetime import timedelta
 from logging import getLogger
 
-from packaging.version import Version
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-
-from cookbooks.sre.puppet import get_puppet_version
 
 logger = getLogger(__name__)
 
@@ -68,22 +65,13 @@ class RenewCertRunner(CookbookRunnerBase):
         self.session = spicerack.requests_session(__name__)
         self.alerting_hosts = spicerack.alerting_hosts(hosts.hosts)
         self.puppet = spicerack.puppet(hosts)
-        self.puppet_master = self._get_puppet_server()
+        self.puppet_server = self.spicerack.puppet_server()
         self.reason = spicerack.admin_reason('Renew puppet certificate')
 
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
         return f'for {self.host}: {self.reason}'
-
-    def _get_puppet_server(self):
-        """Return the correct class based on the target host puppet version."""
-        puppet_version = get_puppet_version(self.session, self.host.split('.', maxsplit=1)[0])
-        if puppet_version is None:
-            raise RuntimeError(f"Unable to get puppet version for {self.host}")
-        if puppet_version < Version("7"):
-            return self.spicerack.puppet_master()
-        return self.spicerack.puppet_server()
 
     def run(self):
         """Renew the certificate"""
@@ -95,9 +83,9 @@ class RenewCertRunner(CookbookRunnerBase):
 
     def _run(self):
         """Run all the actual steps to renew the certificate."""
-        self.puppet_master.destroy(self.host)
+        self.puppet_server.destroy(self.host)
         fingerprints = self.puppet.regenerate_certificate()
-        self.puppet_master.wait_for_csr(self.host)
-        self.puppet_master.sign(self.host, fingerprints[self.host])
+        self.puppet_server.wait_for_csr(self.host)
+        self.puppet_server.sign(self.host, fingerprints[self.host])
         if not self.installer:
             self.puppet.run(enable_reason=self.reason, quiet=True)
