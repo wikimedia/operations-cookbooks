@@ -50,6 +50,9 @@ class RollReimageK8sNodes(K8sBatchBase):
         parser.add_argument(
             '--os', choices=OS_VERSIONS, required=True,
             help='the Debian version to install.')
+        parser.add_argument(
+            '--exclude-target-os', action='store_true',
+            help='exclude hosts that are already running the target OS version.')
 
         # TODO --new is complicated because _hosts() won't work when the nodes aren't in puppet.
         # I will add support for it after the basic version is merged.
@@ -60,6 +63,9 @@ class RollReimageK8sNodes(K8sBatchBase):
 
     def get_runner(self, args: Namespace) -> "RollReimageK8sNodesRunner":
         """As specified by Spicerack API."""
+        # K8sBatchRunnerBase can exclude hosts based on their OS version, so set the target OS version to be excluded
+        if args.exclude_target_os:
+            args.exclude_os = args.os
         # TODO check the taint thing here maybe?
         return RollReimageK8sNodesRunner(args, self.spicerack)
 

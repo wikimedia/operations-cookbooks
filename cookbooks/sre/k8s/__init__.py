@@ -16,6 +16,7 @@ from spicerack.remote import RemoteExecutionError, RemoteHosts
 
 from cookbooks.sre import (PHABRICATOR_BOT_CONFIG_FILE, SREBatchBase,
                            SRELBBatchRunnerBase)
+from cookbooks.sre.hosts import OS_VERSIONS
 
 __owner_team__ = "ServiceOps"
 
@@ -370,6 +371,13 @@ class K8sBatchBase(SREBatchBase, metaclass=ABCMeta):
         )
 
         parser.add_argument(
+            "--exclude-os",
+            choices=OS_VERSIONS,
+            help="exclude hosts that are already running this OS version.",
+            default=None,
+        )
+
+        parser.add_argument(
             "--minimal-cordon",
             action="store_true",
             help="Only cordon the nodes that are to be rebooted, not all nodes in the taint group",
@@ -406,6 +414,7 @@ class K8sBatchRunnerBase(SRELBBatchRunnerBase, metaclass=ABCMeta):
         # Dictionary containing KubernetesNode instances for all hosts
         self._all_k8s_nodes: dict[str, KubernetesNode] = {}
         self.exclude = args.exclude
+        self.exclude_os = args.exclude_os
         super().__init__(args, spicerack)
 
         # _host_group_idx stores the index of the host group currently in progress
@@ -453,6 +462,21 @@ class K8sBatchRunnerBase(SRELBBatchRunnerBase, metaclass=ABCMeta):
         for node_name in working_hosts:
             try:
                 k8s_node = self._get_node_cli(node_name)
+                _node = k8s_node._node  # pylint: disable=W0212
+                # TODO: Add os_image property to KubernetesNode in spicerack
+                if (
+                    self.exclude_os
+                    and _node.status
+                    and _node.status.node_info
+                    and _node.status.node_info.os_image
+                    and self.exclude_os in _node.status.node_info.os_image
+                ):
+                    self.logger.info(
+                        "Excluding node %s as it is already running the target OS version %s",
+                        node_name,
+                        self.exclude_os,
+                    )
+                    continue
                 # Error out if a node is cordoned as we can't tell what cordoned it and why
                 if not k8s_node.is_schedulable():
                     raise RuntimeError(
