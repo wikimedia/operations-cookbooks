@@ -46,6 +46,11 @@ class MigrateServiceIPIP(CookbookBase):
             choices=CORE_DATACENTERS,
             help="Target datacenter. One of %(choices)s.",
         )
+        parser.add_argument(
+            '--skip-puppet-on-realservers',
+            action='store_true',
+            help="Skip running puppet on realservers. Use when you are sure puppet already ran."
+        )
         realservers = parser.add_mutually_exclusive_group(required=True)
         realservers.add_argument(
             "--role",
@@ -72,6 +77,8 @@ class MigrateServiceIPIP(CookbookBase):
 class MigrateServiceIPIPRunner(CookbookRunnerBase):
     """As required by Spicerack API."""
 
+    # pylint: disable=too-many-instance-attributes
+
     IPIP_OUTER_SRC_IP = "172.16.1.1"
 
     def __init__(self, args, spicerack):
@@ -87,6 +94,7 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
         self.role = args.role
         self.alias = args.alias
         self.dc = args.dc
+        self.run_puppet_on_realservers = not args.skip_puppet_on_realservers
         self.fqdn = getfqdn()
         self.dns = spicerack.dns()
         catalog = spicerack.service_catalog()
@@ -175,7 +183,8 @@ class MigrateServiceIPIPRunner(CookbookRunnerBase):
             Press continue when the change is merged
             """
         ))
-        self.realservers_puppet.run(timeout=600)
+        if self.run_puppet_on_realservers:
+            self.realservers_puppet.run(timeout=600)
         self.lvs_puppet.run()
 
     @retry(backoff_mode='constant', delay=timedelta(seconds=1), exceptions=(RuntimeError,))
