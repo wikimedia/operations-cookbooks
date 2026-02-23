@@ -631,6 +631,12 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                 logger.info("BIOS - Found a NIC device: %s", key)
                 pxe_nic_devices.append(key)
 
+        if len(pxe_nic_devices) == 0:
+            raise RuntimeError(
+                "No NIC devices found among the BIOS settings, please check if "
+                "they are racked and configured properly."
+            )
+
         if len(pxe_nic_devices) == 1:
             pxe_nic = pxe_nic_devices[0]
         else:
