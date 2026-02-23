@@ -61,13 +61,13 @@ class DNSAdminRunner(CookbookRunnerBase):
 
         self.pooled_state = "yes" if self.args.action == "pool" else "no"
         self.reason = self.args.reason if self.args.reason is not None else "no reason specified"
-        self.task_id = self.args.task_id if self.args.task_id is not None else "no task ID specified"
+        self.task_id = self.args.task_id if self.args.task_id else "no task ID specified"
         self.service = "|".join(self.args.service) if self.args.service is not None else self.args.service
 
         self.action_string = (
-            f"{self.args.action} site {self.args.site} for service: {self.service}"
+            f"{self.args.action} {self.args.site} for service: {self.service}"
             if self.service is not None
-            else f"{self.args.action} site {self.args.site}"
+            else f"{self.args.action} {self.args.site}"
         )
 
         # Before we proceed, print the current admin_state as seen by confctl.
