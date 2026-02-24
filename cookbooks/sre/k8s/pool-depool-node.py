@@ -40,19 +40,19 @@ def validate_rack_format(rack_string: str) -> str:
     return rack_string.upper()
 
 
-def format_hosts_for_confirmation(hosts_list: list[str]) -> str:
+def format_hosts_for_confirmation(hosts: NodeSet) -> str:
     """Formats the list of hosts for use in an ask_confirmation message.
 
     Limits the display to the first 10 hosts with a count of the remainder.
     """
-    hosts_number = len(hosts_list)
+    hosts_number = len(hosts)
 
     # Prepare the list for display (up to 10 hosts)
     if hosts_number > 10:
-        displayed_hosts = hosts_list[:10]
+        displayed_hosts = hosts[:10]
         suffix = "\n  ... and {} more host(s)".format(hosts_number - 10)
     else:
-        displayed_hosts = hosts_list
+        displayed_hosts = hosts
         suffix = ""
 
     # Format the list with bullet points
