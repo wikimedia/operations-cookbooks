@@ -4,7 +4,7 @@ import logging
 import re
 from argparse import ArgumentParser, Namespace, ArgumentTypeError
 from datetime import timedelta
-from typing import Optional
+from typing import Any, Optional, Iterator
 
 from cumin import NodeSet
 from spicerack import Spicerack
@@ -16,6 +16,7 @@ from spicerack.cookbook import (
 )
 from spicerack.k8s import Kubernetes
 from spicerack.remote import RemoteError, RemoteHosts
+from spicerack.netbox import NetboxServer
 from wmflib.decorators import retry
 from wmflib.interactive import ask_confirmation
 from wmflib.constants import CORE_DATACENTERS
@@ -38,6 +39,21 @@ def validate_rack_format(rack_string: str) -> str:
             "Must be one letter followed by a number (e.g., A1, B5, C10)."
         )
     return rack_string.upper()
+
+
+def rack_has_l2_lvs_adjacency(site: str, rack: str) -> bool:
+    """Checks if the given rack has L2 adjacency between the nodes and the LVS boxes.
+
+    This is true for all rack but those in row E and F in codfw.
+    """
+    if site not in CORE_DATACENTERS:
+        raise ValueError(
+            f"Unknown data center: {site}. Allowed values: {CORE_DATACENTERS}"
+        )
+    rack_row = validate_rack_format(rack)[:1]
+    if site == "codfw" and rack_row in ("E", "F"):
+        return False
+    return True
 
 
 def format_hosts_for_confirmation(hosts: NodeSet) -> str:
@@ -70,13 +86,13 @@ class PoolDepoolK8sNodes(CookbookBase):
     """Change pooled status of nodes in a Kubernetes cluster
 
     Workflow:
-    - Set the nodes pool status to inactive
+    - Set the nodes pool status to inactive (if requited, won't happen for rows without LVS L2 adjacency)
     - Cordon all nodes (to prevent evicted pods from being scheduled on other to be depooled nodes)
     - For each node (one by one):
       - Drain node
     Or:
     - Uncordon the nodes
-    - Set their pooled status to yes
+    - Set their pooled status to yes (if required, won't happen for rows without LVS L2 adjacency)
 
     Usage example:
         cookbook sre.k8s.pool-depool-node --k8s-cluster wikikube-codfw pool wikikube-worker200[1-5].codfw.wmnet
@@ -189,20 +205,25 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
 
             ask_confirmation(confirmation_message)
 
-        self.confctl = self.spicerack.confctl("node")
-        self.confctl_services = self.confctl.filter_objects(
-            {}, name="|".join(self.remote_hosts.hosts.striter())
-        )
-        if not self.confctl_services:
-            raise RuntimeError(
-                f"No confctl objects found for hosts {self.remote_hosts.hosts}"
-            )
-        # Get the expected number of BGP sessions for each host from netbox
-        self.expected_bgp_session_counts: dict[str, int] = {}
+        # Collect netbox info for all hosts
+        self.netbox_info: dict[str, Any] = {}
         for host in self.remote_hosts.hosts:
-            self.expected_bgp_session_counts[host] = (
-                self._get_expected_bgp_session_count(host)
+            self.netbox_info[host] = self._get_netbox_info(host)
+
+        # If all hosts are in racks without L2 adjacency, we won't find any confctl services
+        self.confctl = self.spicerack.confctl("node")
+        self.confctl_services: Iterator[Any] = iter([])
+        if any(info["has_l2_lvs_adjacency"] for info in self.netbox_info.values()):
+            # Hosts without LVS L2 adjacency won't appear in confctl, so keeping them in the query is safe
+            self.confctl_services = self.confctl.filter_objects(
+                {}, name="|".join(self.remote_hosts.hosts.striter())
             )
+            if not self.confctl_services:
+                raise RuntimeError(
+                    f"No confctl objects found for hosts {self.remote_hosts.hosts}"
+                )
+        else:
+            logger.info("All selected hosts are in racks without LVS L2 adjacency, skipping confctl service lookup")
 
         self.k8s_cli = Kubernetes(
             group=ALLOWED_CUMIN_ALIASES[self.k8s_cluster]["k8s-group"],
@@ -259,12 +280,23 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
 
             self.phabricator.task_comment(self.args.task_id, message)
 
-    def _get_expected_bgp_session_count(self, host: str) -> int:
-        """Check how many BGP sessions are expected for this host (new and old topology)"""
-        logger.info("Getting vlan info for %s from netbox", host)
+    def _get_netbox_info(self, host: str) -> dict[str, Any]:
+        """Get the netbox information required for this cookbook for a given host"""
         netbox_server = self.spicerack.netbox_server(
             host.split(".")[0], read_write=False
         )
+        rack = netbox_server.as_dict()['rack']['name']
+        site = netbox_server.as_dict()['site']['slug']
+        netbox_info = {
+            "has_l2_lvs_adjacency": rack_has_l2_lvs_adjacency(site, rack),
+            "bgp_session_count": self._get_expected_bgp_session_count(netbox_server),
+        }
+        logger.info("Netbox info for %s: %s", host, netbox_info)
+        return netbox_info
+
+    def _get_expected_bgp_session_count(self, netbox_server: NetboxServer) -> int:
+        """Check how many BGP sessions are expected for this host (new and old topology)"""
+        host = netbox_server.fqdn
         if netbox_server.virtual:
             # Ganeti VMs always peer with the core routers like the old VLANs
             return 4
@@ -303,7 +335,7 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
 
             for node in nodeset:
                 try:
-                    expected_sessions = self.expected_bgp_session_counts[node]
+                    expected_sessions = self.netbox_info[node]['bgp_session_count']
                 except KeyError as exc:
                     raise KeyError(
                         f"Unknown expected session count for {node}"
@@ -371,7 +403,9 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
                 duration=self.downtime_duration,
             )
         logger.info("Depooling %s from %s", self.remote_hosts.hosts, self.k8s_cluster)
-        self.confctl.update_objects({"pooled": "inactive"}, self.confctl_services)
+        # If all nodes are in racks without LVS L2 adjacency, we won't have confctl services
+        if self.confctl_services:
+            self.confctl.update_objects({"pooled": "inactive"}, self.confctl_services)
         self._k8s_node_action(self.remote_hosts.hosts, "cordon")
         logger.info("Draining %s", self.remote_hosts.hosts)
         self._k8s_node_action(self.remote_hosts.hosts, "drain")
@@ -388,9 +422,11 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
         logger.info("Checking calicoctl node status")
         self.wait_for_calico_node_status_ok(self.remote_hosts)
         logger.info("Pooling %s in %s", self.remote_hosts.hosts, self.k8s_cluster)
-        self.confctl.update_objects(
-            {"pooled": "yes", "weight": 10}, self.confctl_services
-        )
+        # If all nodes are in racks without LVS L2 adjacency, we won't have confctl services
+        if self.confctl_services:
+            self.confctl.update_objects(
+                {"pooled": "yes", "weight": 10}, self.confctl_services
+            )
         self._k8s_node_action(self.remote_hosts.hosts, "uncordon")
         self.actions[str(self.remote_hosts.hosts)].success(
             f"Host {self.remote_hosts.hosts} pooled in {self.k8s_cluster}"
