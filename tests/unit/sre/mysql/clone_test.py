@@ -32,7 +32,9 @@ log = logging.getLogger()
 
 @fixture(autouse=True)
 def mock_durable_shell():
-    with (patch("cookbooks.sre.mysql.clone.ensure_shell_is_durable", autospec=True),):
+    with (
+        patch("cookbooks.sre.mysql.clone.ensure_shell_is_durable", autospec=True),
+    ):
         yield
 
 
@@ -139,7 +141,6 @@ yamlconf = dict(replication_user="ru", replication_password="rp")
 
 
 @patch("cookbooks.sre.mysql.clone.time.sleep")
-@patch("cookbooks.sre.mysql.clone.retry", autospec=True)
 @patch("cookbooks.sre.mysql.clone.ask_confirmation", autospec=True)
 @patch("cookbooks.sre.mysql.clone._add_host_to_zarcillo", autospec=True)
 @patch("cookbooks.sre.mysql.clone.Transferer", autospec=True)
@@ -157,11 +158,12 @@ def test_run(
     m_xfr,
     m_add_host_zarc,
     m_ask_conf,
-    m_retry,
     m_sleep,
     caplog,
 ):
     m_sr.run_cookbook = mock.Mock()
+    m_sr.dry_run = False
+    m_sr.api_client = mock.MagicMock()
 
     def netbox(hn):
         if hn in ["db1001", "db1002", "db1003"]:
@@ -173,6 +175,13 @@ def test_run(
         assert 0, f"Unmocked netbox {hn}"
 
     m_sr.netbox_server = netbox
+
+    def log_request(req_type: str, url: str, json=None, timeout=None):
+        json["duration_seconds"] = "<redacted>"
+        log.debug(f"POST {url} {json}")
+        return MagicMock(name="posted")
+
+    m_sr.api_client().request.side_effect = log_request
 
     def gdbi(_, fqdn):
         m = MagicMock(spec=MInst)
@@ -304,6 +313,7 @@ INFO Searching remote 'A:db-all and not A:db-multiinstance and P{db1001.eqiad.wm
 INFO [cookbooks.sre.mysql.clone.check] Running pre-flight checks
 INFO [cookbooks.sre.mysql.clone.check] Checking current pooling status
 WARNING db1003 is already pooled in according to {'s3': {'pooled': True, 'candidate_master': False}}
+DEBUG POST /api/v1/host_clone_record {'source_host': 'db1002', 'dest_host': 'db1003', 'section': 's3', 'flags': 'nopool', 'status': 'running', 'duration_seconds': '<redacted>'}
 INFO [cookbooks.sre.mysql.clone.depool] Depooling source db1002.eqiad.wmnet
 INFO [cookbooks.sre.mysql.clone.depool] Depooling target db1003.eqiad.wmnet
 INFO [cookbooks.sre.mysql.clone.icinga] Disabling monitoring for source and target host
@@ -328,5 +338,6 @@ INFO [cookbooks.sre.mysql.clone.zarc] [db1003] Adding host to Zarcillo
 INFO [cookbooks.sre.mysql.clone.catchup_repl_t] [db1003] Catching up replication lag
 INFO Replication is healthy
 INFO [cookbooks.sre.mysql.clone.done] Done
+DEBUG POST /api/v1/host_clone_record {'source_host': 'db1002', 'dest_host': 'db1003', 'section': 's3', 'flags': 'nopool', 'status': 'completed', 'duration_seconds': '<redacted>'}
 """
     assert caplog.text == exp

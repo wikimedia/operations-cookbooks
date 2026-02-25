@@ -24,10 +24,11 @@ from typing import Tuple, Dict, Generator, List
 
 import transferpy.transfer
 from pymysql.cursors import DictCursor
-from spicerack import Spicerack
+
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.dbctl import Dbctl
 from spicerack.decorators import retry
+from spicerack import Spicerack
 from spicerack.mysql import Instance as MInst, Mysql
 from spicerack.remote import Remote, RemoteHosts, RemoteError
 from transferpy.Transferer import Transferer
@@ -257,7 +258,6 @@ def _add_host_to_zarcillo(mysql: Mysql, hostname: str, fqdn: str, datacenter: st
         cursor.execute("SET SESSION binlog_format=ROW;")
 
     with transaction(z_inst, "zarcillo") as tx:
-
         tx.execute("DELETE FROM instances WHERE name = %s", (hostname,))
         sql = """INSERT INTO instances (name, server, port, `group`) VALUES (%s, %s, 3306, 'core')"""
         tx.execute(sql, (hostname, fqdn))
@@ -413,6 +413,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
 
         self._mysql = spicerack.mysql()
+        self._zarc_api_client = spicerack.api_client("https://zarcillo.wikimedia.org/")
         self.alerting_hosts = spicerack.alerting_hosts
         self.admin_reason = spicerack.admin_reason("MySQL Clone")
         self.remote = spicerack.remote()
@@ -510,10 +511,43 @@ class CloneMySQLRunner(CookbookRunnerBase):
         """Required by the Spicerack API."""
         # Guard against useless conftool messages
         logging.getLogger("conftool").setLevel(logging.WARNING)
-
+        t0 = time.monotonic()
         print("Open Grafana for the source: %s" % gen_grafana_mysql_url(self.source_hostname))
         print("Open Grafana for the target: %s" % gen_grafana_mysql_url(self.target_hostname))
 
+        try:
+            self._record_clone_on_zarcillo("running", 0)
+            self._perform_clone()
+            self._record_clone_on_zarcillo("completed", time.monotonic() - t0)
+
+        except Exception:
+            self._record_clone_on_zarcillo("failed", time.monotonic() - t0)
+            raise
+
+        except KeyboardInterrupt:
+            self._record_clone_on_zarcillo("interrupted", time.monotonic() - t0)
+            raise
+
+    def _record_clone_on_zarcillo(self, status: str, duration_s: float) -> None:
+        """POST a clone event to Zarcillo.
+        https://zarcillo.wikimedia.org/api/v1/host_clone_record
+
+        Retries on network issues or HTTP error status codes
+        """
+        # status values: running completed failed interrupted
+        flags = "" if self.pool_in_target else "nopool"  # meh
+        data = dict(
+            source_host=self.source_hostname,
+            dest_host=self.target_hostname,
+            section=self.primary_section,
+            flags=flags,
+            status=status,
+            duration_seconds=duration_s,
+        )
+        resp = self._zarc_api_client.request("POST", "/api/v1/host_clone_record", json=data)
+        resp.raise_for_status()
+
+    def _perform_clone(self):
         msg = f"Started cloning {self.source_fqdn} to {self.target_fqdn} - {self.admin_reason.owner}"
         self._phab.task_comment(self.phabricator_task_id, msg)
 
@@ -600,10 +634,10 @@ class CloneMySQLRunner(CookbookRunnerBase):
             step("icinga", f"Removing icinga downtime for {self.target_fqdn}")
             target_alerter.remove_downtime(target_downtime_id)
 
-            t0 = time.time()
+            t1 = time.time()
             _wait_until_target_dbctl_conf_is_good(self._dbctl, self.target_hostname, self.primary_section)
 
-            to_wait = 3600 - (time.time() - t0)
+            to_wait = 3600 - (time.time() - t1)
             if to_wait > 0:
                 step("wait", f"Waiting {to_wait} seconds before pooling in target {self.target_fqdn}")
                 time.sleep(to_wait)
@@ -613,6 +647,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         msg = f"Finished cloning {self.source_fqdn} to {self.target_fqdn} - {self.admin_reason.owner}"
         self._phab.task_comment(self.phabricator_task_id, msg)
+
         step("done", "Done")
 
     def _run_clone(self) -> Tuple[str, int]:
