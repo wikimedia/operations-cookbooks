@@ -46,7 +46,7 @@ class FirmwareUpgrade(CookbookBase):
     """Audit and possibly update firmware.
 
     Usage example:
-        cookbook sre.hosts.firmware 'example1001*'
+        cookbook sre.hardware.upgrade-firmware 'example1001*'
 
     """
 
