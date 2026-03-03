@@ -15,7 +15,7 @@ from spicerack.cookbook import (
     CookbookInitSuccess,
 )
 from spicerack.k8s import Kubernetes
-from spicerack.remote import RemoteError, RemoteHosts
+from spicerack.remote import RemoteError, RemoteHosts, RemoteExecutionError
 from spicerack.netbox import NetboxServer
 from wmflib.decorators import retry
 from wmflib.interactive import ask_confirmation
@@ -318,18 +318,31 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
 
     def check_calico_node_status(self, remote_hosts: RemoteHosts) -> bool:
         """Check calicoctl node status"""
-        results = remote_hosts.run_sync(
-            "calicoctl node status",
-            is_safe=True,
-            print_progress_bars=False,
-            print_output=False,
-        )
         all_nodes_ok: bool = True
+        try:
+            results = remote_hosts.run_sync(
+                "calicoctl node status",
+                is_safe=True,
+                print_progress_bars=False,
+                print_output=False,
+            )
+        except RemoteExecutionError as exc:
+            # If calicoctl returns an exit code =! 0 it will trigger an exception in run_sync
+            # but the exception will still contain the results from all hosts.
+            # So we log an error, but continue processing the results in order to produce a more
+            # useful message than "Cumin execution failed"
+            all_nodes_ok = False
+            results = exc.results
+            logger.error("Error running calicoctl node status, exit_code=%d", exc.retcode)
+
         for nodeset, output in results:
             established_count = 0
             # Just count the number of established sessions
+            str_output = []
             for line in output.lines():
-                if "Established" in line.decode():
+                line = line.decode()
+                str_output.append(line)
+                if "Established" in line:
                     established_count += 1
 
             for node in nodeset:
@@ -343,6 +356,7 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
                 if established_count != expected_sessions:
                     msg = f"{node}: Expected {expected_sessions} established BGP sessions, got {established_count}"
                     logger.warning(msg)
+                    logger.warning("calicoctl output for %s:\n%s", node, "\n".join(str_output))
                     all_nodes_ok = False
         return all_nodes_ok
 
