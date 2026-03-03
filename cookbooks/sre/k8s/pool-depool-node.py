@@ -199,10 +199,9 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
             ) from exc
 
         # Add a guardrail in case there were too many hosts selected
-        if len(self.remote_hosts.hosts) > 1:
+        if len(self.remote_hosts.hosts) > 1 and args.action != "check":
             # Use the helper function to format the message
             confirmation_message = format_hosts_for_confirmation(self.remote_hosts.hosts)
-
             ask_confirmation(confirmation_message)
 
         # Collect netbox info for all hosts
