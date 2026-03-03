@@ -162,9 +162,9 @@ class SwitchoverRunner(CookbookRunnerBase):
     def _run_cookbook_dns_cache_wipe(self) -> None:
         self.spicerack.run_cookbook("sre.dns.wipe-cache",
                                     args=[
-                                        "gerrit.wikimedia.org",
-                                        "gerrit-replica.wikimedia.org",
                                         "gerrit.discovery.wmnet"
+                                        "gerrit-replica.discovery.wmnet"
+                                        "gerrit-spare.discovery.wmnet"
                                     ], raises=True)
 
     def _run_cookbook_ro_toggle(self, host, state) -> None:
