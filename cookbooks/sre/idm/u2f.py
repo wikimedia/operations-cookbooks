@@ -58,7 +58,7 @@ class U2fRunner(CookbookRunnerBase):
             self.modify_command = f'/usr/local/bin/modify-mfa --disable {args.username}'
         if args.reset_token:
             self.reset_command = f'/usr/local/sbin/cas-remove-u2f --force {args.username}'
-            self.message = f"reset-token {self.modify_command.split('--',1)[1]}"
+            self.message = f"reset-token {self.modify_command.split('--', 1)[1]}"
         else:
             self.message = self.modify_command.split('--', 1)[1]
 
