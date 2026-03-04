@@ -12,18 +12,11 @@ from spicerack.remote import RemoteExecutionError, RemoteHosts
 from wmflib.interactive import ask_confirmation
 
 from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
+from . import CLUSTER_CHOICES, get_cluster_controller_host, get_preferred_replica_election_command
+
 
 logger = logging.getLogger(__name__)
 logging.getLogger("kafka").setLevel(logging.WARNING)
-
-CLUSTER_CHOICES = (
-    "main-eqiad",
-    "main-codfw",
-    "jumbo-eqiad",
-    "logging-eqiad",
-    "logging-codfw",
-    "test-eqiad",
-)
 
 
 class RollRestartRebootBrokers(SREBatchBase):
@@ -87,6 +80,10 @@ class RollingActionBrokersRunner(SREBatchRunnerBase):
             "and make sure that topic partition leaders are well balanced and that all brokers "
             "are up and running."
         )
+        # Note: this is needed for the transition period between Kafka 1.1 and 3.5
+        # TODO: remove me when all clusters will run on 3.5+
+        controller_remote = spicerack.remote().query(self.cluster_controller_host)
+        self.preferred_replica_command = get_preferred_replica_election_command(controller_remote)
 
     @property
     def allowed_aliases(self) -> list[str]:
@@ -106,15 +103,7 @@ class RollingActionBrokersRunner(SREBatchRunnerBase):
     @cached_property
     def cluster_controller_host(self) -> str:
         """Return the hostname of the controller of the kafka cluster being acted upon"""
-        cluster_name, site = self._args.alias.replace("kafka-", "").split("-")
-        admin_client = self._spicerack.kafka().admin_client(site=site, cluster_name=cluster_name)
-        cluster_state = admin_client.describe_cluster()
-        for broker_details in cluster_state["brokers"]:
-            if broker_details["node_id"] == cluster_state["controller_id"]:
-                return broker_details["host"]
-        raise RuntimeError(
-            f"No registered broker matched the kafka cluster controller {cluster_state['controller_id']}"
-        )
+        return get_cluster_controller_host(self._spicerack, self._args.alias.replace("kafka-", ""))
 
     def _hosts(self) -> list[RemoteHosts]:
         all_hosts = super()._hosts()[0]
@@ -183,6 +172,6 @@ class RollingActionBrokersRunner(SREBatchRunnerBase):
         ]
         if not self._args.no_election:
             scripts.append(
-                "source /etc/profile.d/kafka.sh; kafka preferred-replica-election"
+                f"source /etc/profile.d/kafka.sh; {self.preferred_replica_command}"
             )
         return scripts
