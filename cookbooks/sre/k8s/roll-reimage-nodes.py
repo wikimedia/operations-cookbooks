@@ -73,8 +73,6 @@ class RollReimageK8sNodes(K8sBatchBase):
 class RollReimageK8sNodesRunner(K8sBatchRunnerBase):
     """Perform rolling reimages on a set of nodes."""
 
-    depool_threshold = 6  # Maximum allowed batch size
-
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Initialize the runner."""
         super().__init__(args, spicerack)
@@ -106,9 +104,8 @@ class RollReimageK8sNodesRunner(K8sBatchRunnerBase):
         Called by the parent class for each batch.
 
         At this point, we are:
-        - cordoned and drained (by K8sBatchRunnerBase.pre_action)
+        - cordoned, drained, and depooled (by K8sBatchRunnerBase.pre_action)
         - downtimed (by SREBatchRunnerBase.action, which called this)
-        - depooled (by SRELBBatchRunnerBase.action, which called SREBatchBaseRunner.action)
         """
         for node in hosts.hosts:
             hostname = node.split('.')[0]  # reimage takes just the hostname, not the FQDN

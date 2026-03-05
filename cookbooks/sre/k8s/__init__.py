@@ -17,7 +17,7 @@ from spicerack.netbox import NetboxServer
 from spicerack.remote import RemoteExecutionError, RemoteHosts
 
 from cookbooks.sre import (PHABRICATOR_BOT_CONFIG_FILE, SREBatchBase,
-                           SRELBBatchRunnerBase)
+                           SREBatchRunnerBase)
 from cookbooks.sre.hosts import OS_VERSIONS
 
 __owner_team__ = "ServiceOps"
@@ -432,17 +432,8 @@ class K8sBatchBase(SREBatchBase, metaclass=ABCMeta):
         return parser
 
 
-class K8sBatchRunnerBase(SRELBBatchRunnerBase, metaclass=ABCMeta):
-    """k8s version of SRELBBatchRunnerBase. To be used with SREBatchBase."""
-
-    # Seconds to sleep after the depool.
-    # This happens after nodes have been drained
-    depool_sleep = 35
-    # Seconds to sleep before the repool.
-    # As this happens prior to uncordoning, we can rely on grace_sleep and don't wait for repool.
-    repool_sleep = 0
-    # Set pooled=inactive to avoid scap docker_pull failing on the rebooting nodes
-    depool_status = "inactive"
+class K8sBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
+    """k8s version of SREBatchRunnerBase. To be used with SREBatchBase."""
 
     def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
         """Initialize the runner.
@@ -570,10 +561,6 @@ class K8sBatchRunnerBase(SRELBBatchRunnerBase, metaclass=ABCMeta):
         """Uncordon a kubernetes node"""
         self._k8s_node_action(node_name, "uncordon")
 
-    def _drain(self, node_name: str) -> None:
-        """Drain a kubernetes node"""
-        self._k8s_node_action(node_name, "drain")
-
     def _batchsize(self, number_of_hosts: int) -> int:
         """Adjust the batch size to be no more than 20% of the host in each node/taint group"""
         orig_batchsize = super()._batchsize(number_of_hosts)
@@ -598,28 +585,29 @@ class K8sBatchRunnerBase(SRELBBatchRunnerBase, metaclass=ABCMeta):
         self._first_batch = True
 
     def pre_action(self, hosts: RemoteHosts) -> None:
-        """Cordon all nodes in this batch first, then drain them
-
-        Cordoning first is to prevent evicted Pods from being scheduled on nodes
-        that are to be rebooted in this batch.
-        """
+        """Cordon, drain, and depool all nodes in this batch"""
         # The node(s) will be drained prior to being depooled. Not ideal but okay for now.
-        for node_name in hosts.hosts:
-            self._cordon(node_name)
-        for node_name in hosts.hosts:
-            self._drain(node_name)
+        depool_args = ["--k8s-cluster", self._args.k8s_cluster, "depool", f"{str(hosts)}"]
+        self._spicerack.run_cookbook('sre.k8s.pool-depool-node', depool_args)
 
     def post_action(self, hosts: RemoteHosts) -> None:
-        """Uncordon all node in this batch and cordon all nodes in this taint group that still need reboots
+        """Uncordon and repool all nodes in this batch and cordon all nodes in this taint group that still need reboots
 
         Cordoning all remaining (to be processed) nodes of this taint group prevents evicted Pods to be
         scheduled there (and evicted again).
         """
+        failed_hosts = NodeSet()
         for node_name in hosts.hosts:
             if self._spicerack.actions[node_name].has_failures:
-                self.logger.warning("Leaving host %s cordoned due to reimage failure", node_name)
-            else:
-                self._uncordon(node_name)
+                self.logger.warning("Leaving host %s cordoned and depooled due to reimage failure", node_name)
+                failed_hosts.add(node_name)
+        pool_args = [
+            "--k8s-cluster",
+            self._args.k8s_cluster,
+            "pool",
+            f"{str(hosts.hosts - failed_hosts)}"
+        ]
+        self._spicerack.run_cookbook('sre.k8s.pool-depool-node', pool_args)
 
         # If this was the first batch in the host group, cordon all nodes that still need work
         # to prevent evicted Pod's from being scheduled there.
