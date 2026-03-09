@@ -17,8 +17,10 @@ class SetReadOnlyRunner(MediaWikiSwitchDCRunnerBase):
         """Required by base class API."""
         logger.info('Set MediaWiki in read-only in %s and %s', self.dc_from, self.dc_to)
 
+        # During the live test, the non-primary DC is set to read-only. This does have production
+        # impact, but it is minimal. It's a good idea to complete the live test promptly.
         if self.live_test:
-            prefix = '[DRY-RUN] '
+            prefix = '[NON-PRIMARY-DC] '
         else:
             prefix = ''
 

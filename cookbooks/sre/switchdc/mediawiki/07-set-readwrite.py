@@ -17,7 +17,7 @@ class SetReadWriteRunner(MediaWikiSwitchDCRunnerBase):
         mediawiki = self.spicerack.mediawiki()
         prefix = ''
         if self.live_test:
-            prefix = '[DRY-RUN] '
+            prefix = '[NON-PRIMARY-DC] '
 
         for dc in (self.dc_to, self.dc_from):
             logger.info('Set MediaWiki in read-write in %s', dc)
