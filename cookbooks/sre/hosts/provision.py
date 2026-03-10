@@ -74,6 +74,12 @@ SUPERMICRO_NO_FQDN_MANAGEMENT = (
     'sys-111c-nr',
 )
 
+# Some Supermicro models are UEFI-only and the BMC don't
+# allow to set any PXE setting for NICs in the BIOS.
+SUPERMICRO_NO_BIOS_PXE_NIC_SETTINGS = (
+    'as-8125gs-tnmr2'
+)
+
 # Hostname prefixes that usually need --enable-virtualization
 VIRT_PREFIXES = ('ganeti', 'cloudvirt')
 logger = logging.getLogger(__name__)
@@ -613,7 +619,10 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             self.bios_changes["Attributes"]['IPv6HTTPSupport'] = 'Disabled'
             self.bios_changes["Attributes"]['IPv6PXESupport'] = 'Disabled'
 
-    def _config_pxe_bios_settings(self, bios_attributes: dict):  # pylint: disable=too-many-branches, too-many-locals
+    # pylint: disable=too-many-branches
+    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-nested-blocks
+    def _config_pxe_bios_settings(self, bios_attributes: dict):
         """Set NIC BIOS settings to PXE.
 
         Legacy Mode:
@@ -649,9 +658,18 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                 pxe_nic_devices.append(key)
 
         if len(pxe_nic_devices) == 0:
+            if self.device_model_slug in SUPERMICRO_NO_BIOS_PXE_NIC_SETTINGS:
+                logger.info(
+                    "The model %s doesn't allow to set PXE BIOS settings, skipping.",
+                    self.device_model_slug
+                )
+                return
             raise RuntimeError(
                 "No NIC devices found among the BIOS settings, please check if "
-                "they are racked and configured properly."
+                "they are racked and configured properly. Some recent UEFI-only "
+                "hosts don't require this step since the BMC will try every NIC "
+                "until a positive reply is returned. Follow up with Infrastructure "
+                "Foundations when you read this."
             )
 
         if len(pxe_nic_devices) == 1:
@@ -688,6 +706,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                     self.bios_changes["Attributes"][nic] = "Disabled"
 
         logger.info("Set PXE to the NIC %s", pxe_nic)
+
         if self.device_model_slug in SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS:
             legacy_pxe_setting = "Legacy"
         else:
