@@ -195,6 +195,21 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):  # pylint: disable
             else:
                 configure_switch_interfaces(self.remote, self.netbox, self.netbox_data, self.verbose)
 
+    def check_serial(self) -> None:
+        """Compare Redfish and Netbox serial and raise if they mismatch"""
+        redfish_serial = self.redfish.system_info.get('SerialNumber', '')
+        # Dell sometimes have the serial in SerialNumber, sometime in SKU...
+        redfish_sku = self.redfish.system_info.get('SKU', '')
+        netbox_serial = self.netbox_data.get('serial', '')
+        if (not redfish_serial and not redfish_sku) or not netbox_serial:
+            logging.info("Couldn't fetch Netbox or Redfish serials to compare them.")
+            return
+        if netbox_serial not in (redfish_serial, redfish_sku):
+            raise RuntimeError(
+                (f"Server's serial is different between Netbox ({netbox_serial})"
+                 f" and Redfish ({redfish_serial} or {redfish_sku})"))
+        logging.debug("Netbox and Redfish serials match")
+
 
 class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance-attributes
     """As required by Spicerack API."""
@@ -340,6 +355,8 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         # later on.
         self.bmc_firmware_filename = bmc_response["Oem"]["Supermicro"]["UniqueFilename"]
         self.bios_firmware_filename = bios_response["Oem"]["Supermicro"]["UniqueFilename"]
+
+        self.check_serial()
 
         self._config_host()
 
@@ -855,6 +872,8 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
                 raise RuntimeError(error_msg) from e
 
         confirm_on_failure(check_connection)
+
+        self.check_serial()
 
         if self._detect_hw_raid():
             action = ask_input(
