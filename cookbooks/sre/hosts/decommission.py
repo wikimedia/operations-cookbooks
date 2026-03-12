@@ -145,6 +145,7 @@ class DecommissionHost(CookbookBase):
                             help='Bypass the default limit of 5 hosts at a time, but only up to 20 hosts.')
         parser.add_argument('--keep-mgmt-dns', action='store_true',
                             help='Do not remove DNS names from management addresses')
+        parser.add_argument('--homer', action='store_true', help='Use Homer to configure the switches')
 
         return parser
 
@@ -153,7 +154,7 @@ class DecommissionHost(CookbookBase):
         return DecommissionHostRunner(args, self.spicerack)
 
 
-class DecommissionHostRunner(CookbookRunnerBase):
+class DecommissionHostRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-attributes
     """Decommission host runner."""
 
     def __init__(self, args, spicerack):
@@ -233,6 +234,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
 
         self.spicerack = spicerack
         self.task_id = args.task_id
+        self.homer = args.homer
         self.keep_mgmt_dns = args.keep_mgmt_dns
         self.puppet_server = spicerack.puppet_server().remote_hosts
         self.kerberos_kadmin = self.remote.query(KERBEROS_KADMIN_CUMIN_ALIAS)
@@ -336,7 +338,7 @@ class DecommissionHostRunner(CookbookRunnerBase):
 
             # Find switch vendor, as we force Homer usage if it is Nokia
             nb_switch = netbox.api.dcim.devices.get(name=netbox_server.switches[0])
-            if nb_switch.device_type.manufacturer.slug == "nokia":
+            if self.homer or nb_switch.device_type.manufacturer.slug == "nokia":
                 run_homer(queries=[f'{hostname}.*' for hostname in netbox_server.switches],
                           dry_run=self.spicerack.dry_run)
             else:
