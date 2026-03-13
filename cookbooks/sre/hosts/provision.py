@@ -287,23 +287,9 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         # proper values to be selected).
         # Please do not add any EFI/Boot/etc.. related setting in here.
         # More info: https://phabricator.wikimedia.org/T365372#10213162
-        self.bios_changes = {
-            "Attributes": {
-                "QuietBoot": False,
-                "LegacySerialRedirectionPort": "COM1",
-            }
-        }
+        self.bios_changes: dict = {"Attributes": {}}
         if self.device_model_slug not in SUPERMICRO_UEFI_ONLY:
             self.bios_changes["Attributes"]["BootModeSelect"] = "UEFI" if self.uefi else "Legacy"
-
-        # Some Supermicro BIOS settings differ on servers with AMD CPUs.
-        intel_virt_flag = "Enable" if self.args.enable_virtualization else "Disable"
-        amd_virt_flag = "Enabled" if self.args.enable_virtualization else "Disabled"
-        if self.device_model_slug not in SUPERMICRO_AMD_DEVICE_SLUGS:
-            self.bios_changes["Attributes"]["SerialPort2Attribute"] = "SOL"
-            self.bios_changes["Attributes"]["IntelVirtualizationTechnology"] = intel_virt_flag
-        else:
-            self.bios_changes["Attributes"]["SVMMode"] = amd_virt_flag
 
         # Testing that the management password is correct connecting to the first physical cumin host
         cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
@@ -502,6 +488,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                 return nic_device
         return None
 
+    # pylint: disable=too-many-branches
     def _config_host(self):
         """Provision the BIOS and BMC settings."""
         try:
@@ -524,6 +511,21 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
 
             # Configure BIOS settings to enable/disable HTTP support during PXE.
             self._configure_pxe_http_settings()
+
+            # Some Supermicro BIOS settings differ on servers with AMD CPUs.
+            intel_virt_flag = "Enable" if self.args.enable_virtualization else "Disable"
+            amd_virt_flag = "Enabled" if self.args.enable_virtualization else "Disabled"
+            if self.device_model_slug not in SUPERMICRO_AMD_DEVICE_SLUGS:
+                self.bios_changes["Attributes"]["SerialPort2Attribute"] = "SOL"
+                self.bios_changes["Attributes"]["IntelVirtualizationTechnology"] = intel_virt_flag
+            else:
+                self.bios_changes["Attributes"]["SVMMode"] = amd_virt_flag
+
+            if "QuietBoot" in bios_attributes:
+                self.bios_changes["Attributes"]["QuietBoot"] = False
+
+            if "LegacySerialRedirectionPort" in bios_attributes:
+                self.bios_changes["Attributes"]["LegacySerialRedirectionPort"] = "COM1"
 
             if "HTTPBootPolicy" in bios_attributes:
                 self.bios_changes["Attributes"]["HTTPBootPolicy"] = "Apply to each LAN"
