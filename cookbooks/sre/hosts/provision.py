@@ -44,6 +44,11 @@ OLD_SERIAL_MODELS = (
     'poweredge r740xd2',
 )
 
+VETTED_BIOS_ENDPOINTS = [
+    "/redfish/v1/Systems/1/Bios/SD",
+    "/redfish/v1/Systems/1/Bios"
+]
+
 SUPERMICRO_AMD_DEVICE_SLUGS = (
     'as-2014s-tr',
     'as-8125gs-tnmr2',
@@ -226,6 +231,10 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         self.spicerack = spicerack
         self.bmc_firmware_filename = None
         self.bios_firmware_filename = None
+        # In recent (X13+) firmware versions the BIOS endpoint is different,
+        # and old one is read-only. Use this flag to figure out only the first
+        # time what is the right endpoint to use.
+        self.bios_endpoint = ""
 
         self.uefi_only_devices = [
             # https://phabricator.wikimedia.org/T378368
@@ -419,12 +428,48 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             has_raid = True
         return has_raid
 
-    def _get_bios_settings(self):
+    def _get_bios_endpoint(self):
+        """Get the right BIOS Redfish endpoint to use across X12 and X13 models."""
         try:
-            logger.info("Retrieving updated BIOS settings...")
+            logger.info("Finding the right Bios endpoint to use...")
             bios_settings = self.redfish.request(
                 'GET',
                 '/redfish/v1/Systems/1/Bios',
+            ).json()
+            try:
+                bios_endpoint = bios_settings['@Redfish.Settings']['SettingsObject']['@odata.id']
+                if bios_endpoint in VETTED_BIOS_ENDPOINTS:
+                    logger.info("The Bios are potentially located in %s, checking...", bios_endpoint)
+                    bios_settings_vetted_endpoint = self.redfish.request(
+                        'GET', bios_endpoint,
+                    ).json()
+                    # Sometimes the Attributes field is not present, sometimes it is with value {}
+                    if "Attributes" in bios_settings_vetted_endpoint and bios_settings_vetted_endpoint["Attributes"]:
+                        logger.info(
+                            "Found Attributes value in %s, using it as BIOS endpoint.",
+                            bios_endpoint
+                        )
+                        return bios_endpoint
+                else:
+                    raise RuntimeError(
+                        "The BIOS endpoint %s is not among the vetted ones, "
+                        "please contact Infra Foundations."
+                    )
+            except KeyError:
+                pass
+            # Default endpoint for historical reasons.
+            return "/redfish/v1/Systems/1/Bios"
+        except RedfishError as e:
+            logger.error("Error while retrieving BIOS settings: %s", e)
+            return {}
+
+    def _get_bios_settings(self):
+        try:
+            if not self.bios_endpoint:
+                self.bios_endpoint = self._get_bios_endpoint()
+            logger.info("Retrieving updated BIOS settings...")
+            bios_settings = self.redfish.request(
+                'GET', self.bios_endpoint
             ).json()
             return bios_settings["Attributes"]
         except RedfishError as e:
@@ -436,12 +481,26 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         # The timeout was increased in T394357 since sretest2010
         # took more time than the default 10 seconds to handle a PATCH
         # call for BIOS settings.
-        self.redfish.request(
-            'PATCH',
-            '/redfish/v1/Systems/1/Bios',
-            json=self.bios_changes,
-            timeout=30
-        )
+        if not self.bios_endpoint:
+            self.bios_endpoint = self._get_bios_endpoint()
+        try:
+            self.redfish.request(
+                'PATCH',
+                self.bios_endpoint,
+                json=self.bios_changes,
+                timeout=30
+            )
+            return
+        except RedfishError as e:
+            if (e.__cause__ is not None
+                    and isinstance(e.__cause__, APIClientResponseError)
+                    and e.__cause__.response is not None  # pylint: disable=no-member
+                    and e.__cause__.response.status_code == 405):  # pylint: disable=no-member
+                logger.info(
+                    "The URI %s is not accepting modifications, please contact Infra Foundations.",
+                    self.bios_endpoint
+                )
+            raise e
 
     def _get_network_info(self):
         """Find registered network NICs and their port link statuses."""
@@ -526,6 +585,10 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             intel_virt_flag = "Enable" if self.args.enable_virtualization else "Disable"
             amd_virt_flag = "Enabled" if self.args.enable_virtualization else "Disabled"
 
+            # In the new X13 BIOS endpoints the Intel flag is "Enabled/Disabled".
+            if self.bios_endpoint[-3:] == "/SD":
+                intel_virt_flag += "d"
+
             # Instead of being very defensive and apply if/else branches for all options,
             # based on the Supermicro model etc.., we can just leverage the fact that options
             # are either there or not, and they don't influence each other.
@@ -550,6 +613,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                 "SOL_COM2ConsoleRedirection": True,
                 "COM2ConsoleRedirection": True,
             }
+
             self._set_in_bios_changes(bios_attributes, proposed_bios_changes_round2)
 
             # Note: It seems that Supermicro's BIOS settings assume
@@ -721,6 +785,16 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             legacy_pxe_setting = "PXE"
         uefi_pxe_setting = "EFI"
         self.bios_changes["Attributes"][pxe_nic] = uefi_pxe_setting if self.uefi else legacy_pxe_setting
+        # For some reason, in some models already set with UEFI the "EFI" setting
+        # becomes "4", and "EFI" is forbidden. To circumvent the problem,
+        # add a specific check for it.
+        # More info: T393053
+        if self.uefi and bios_attributes[pxe_nic] == "4":
+            logger.info(
+                "Found an occurrence of the bug outlined in T393053, "
+                "setting PXE settings to '4'"
+            )
+            self.bios_changes["Attributes"][pxe_nic] = "4"
 
     def _try_bmc_password(self):
         """Test the known BMC passwords, find a working one and configure Redfish."""
