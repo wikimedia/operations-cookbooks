@@ -60,10 +60,6 @@ SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS = (
     'sys-110p-wtr-configa',
 )
 
-SUPERMICRO_UEFI_ONLY = (
-    'as-8125gs-tnmr2',
-)
-
 SUPERMICRO_UEFI_LONG_BOOT_TIME = (
     'as-8125gs-tnmr2',
 )
@@ -288,8 +284,6 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         # Please do not add any EFI/Boot/etc.. related setting in here.
         # More info: https://phabricator.wikimedia.org/T365372#10213162
         self.bios_changes: dict = {"Attributes": {}}
-        if self.device_model_slug not in SUPERMICRO_UEFI_ONLY:
-            self.bios_changes["Attributes"]["BootModeSelect"] = "UEFI" if self.uefi else "Legacy"
 
         # Testing that the management password is correct connecting to the first physical cumin host
         cumin_host = str(next(self.netbox.api.dcim.devices.filter(name__isw='cumin', status='active')))
@@ -488,6 +482,17 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                 return nic_device
         return None
 
+    def _set_in_bios_changes(self, bios_attributes: dict, bios_attribute_changes: dict):
+        """Check if a BIOS attribute is allowed and set it accordingly.
+
+        Util function to avoid repeating the same pattern of checking if a property
+        is among the current BIOS allowed ones or not, and set a value accordingly.
+        """
+        for attribute, value in bios_attribute_changes.items():
+            if attribute in bios_attributes:
+                self.bios_changes["Attributes"][attribute] = value
+                logger.info("Setting %s to %s to Bios changes..", attribute, value)
+
     # pylint: disable=too-many-branches
     def _config_host(self):
         """Provision the BIOS and BMC settings."""
@@ -495,6 +500,10 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             logging.info("Retrieving BIOS settings (first round).")
             bios_attributes = self._get_bios_settings()
             logging.info("Setting up BootMode and basic BIOS settings.")
+            proposed_bios_changes_round1: dict = {
+                "BootModeSelect": "UEFI" if self.uefi else "Legacy"
+            }
+            self._set_in_bios_changes(bios_attributes, proposed_bios_changes_round1)
             should_patch = self._found_diffs_bios_attributes(bios_attributes)
             if should_patch:
                 logger.info(
@@ -515,43 +524,39 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             # Some Supermicro BIOS settings differ on servers with AMD CPUs.
             intel_virt_flag = "Enable" if self.args.enable_virtualization else "Disable"
             amd_virt_flag = "Enabled" if self.args.enable_virtualization else "Disabled"
-            if self.device_model_slug not in SUPERMICRO_AMD_DEVICE_SLUGS:
-                self.bios_changes["Attributes"]["SerialPort2Attribute"] = "SOL"
-                self.bios_changes["Attributes"]["IntelVirtualizationTechnology"] = intel_virt_flag
-            else:
-                self.bios_changes["Attributes"]["SVMMode"] = amd_virt_flag
 
-            if "QuietBoot" in bios_attributes:
-                self.bios_changes["Attributes"]["QuietBoot"] = False
-
-            if "LegacySerialRedirectionPort" in bios_attributes:
-                self.bios_changes["Attributes"]["LegacySerialRedirectionPort"] = "COM1"
-
-            if "HTTPBootPolicy" in bios_attributes:
-                self.bios_changes["Attributes"]["HTTPBootPolicy"] = "Apply to each LAN"
-
+            # Instead of being very defensive and apply if/else branches for all options,
+            # based on the Supermicro model etc.., we can just leverage the fact that options
+            # are either there or not, and they don't influence each other.
+            # For example, the various ConsoleRedirection* options are present in various
+            # forms depending on model and firmwre version, and every time that a new model
+            # comes out we always need to patch if/else branches for no reason.
+            # Let's just try to set the values if they are present in the BIOS config.
+            proposed_bios_changes_round2: dict = {
+                "SerialPort2Attribute": "SOL",
+                "IntelVirtualizationTechnology": intel_virt_flag,
+                "SVMMode": amd_virt_flag,
+                "QuietBoot": False,
+                "LegacySerialRedirectionPort": "COM1",
+                "HTTPBootPolicy": "Apply to each LAN",
                 # The CSMSupport option enables the support of MBR in UEFI systems.
                 # https://en.wikipedia.org/wiki/UEFI#CSM_booting
                 # If this option is not enabled then Supermicro does not present
                 # the option to switch to Legacy boot, i.e. it is required for MBR mode
-                if "CSMSupport" in bios_attributes:
-                    if self.uefi:
-                        self.bios_changes["Attributes"]["CSMSupport"] = "Disabled"
-                    else:
-                        self.bios_changes["Attributes"]["CSMSupport"] = "Enabled"
+                "CSMSupport": "Disabled" if self.uefi else "Enabled",
+                "ConsoleRedirection": False,
+                "COM1ConsoleRedirection": False,
+                "SOL_COM2ConsoleRedirection": True,
+                "COM2ConsoleRedirection": True,
+            }
+            self._set_in_bios_changes(bios_attributes, proposed_bios_changes_round2)
 
-                # Note: It seems that Supermicro's BIOS settings assume
-                # PXE via EFI configs, so we force 'Legacy' in all BIOS settings
-                # having 'EFI' has value. It should be enough to force PXE via IPMI,
-                # without setting any specific boot order.
-                # More info: https://phabricator.wikimedia.org/T365372#10148864
-                self._config_pxe_bios_settings(bios_attributes)
-
-            if "ConsoleRedirection" not in bios_attributes:
-                self.bios_changes["Attributes"]["COM1ConsoleRedirection"] = False
-                self.bios_changes["Attributes"]["SOL_COM2ConsoleRedirection"] = True
-            else:
-                self.bios_changes["Attributes"]["ConsoleRedirection"] = False
+            # Note: It seems that Supermicro's BIOS settings assume
+            # PXE via EFI configs, so we force 'Legacy' in all BIOS settings
+            # having 'EFI' has value. It should be enough to force PXE via IPMI,
+            # without setting any specific boot order.
+            # More info: https://phabricator.wikimedia.org/T365372#10148864
+            self._config_pxe_bios_settings(bios_attributes)
 
             should_patch = self._found_diffs_bios_attributes(bios_attributes)
 
