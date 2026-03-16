@@ -68,6 +68,7 @@ SUPERMICRO_NO_FQDN_MANAGEMENT = (
     'ssg-521e-e1cr24h-configj',
     'as-8125gs-tnmr2',
     'sys-111c-nr',
+    'sys-112c-tn-configg',
 )
 
 # Some Supermicro models are UEFI-only and the BMC don't
