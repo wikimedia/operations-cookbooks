@@ -82,7 +82,7 @@ class RestartRunner(CookbookRunnerBase):
         alertmanager = self.spicerack.alertmanager()
 
         matchers = [
-            {'name': 'alertname', 'value': TARGET_ALERTS, 'is_regex': True}
+            {'name': 'alertname', 'value': TARGET_ALERTS, 'isRegex': True}
         ]
 
         logger.info("Setting downtime for %s", self.args.host)
