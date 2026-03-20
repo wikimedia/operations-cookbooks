@@ -16,14 +16,17 @@ from spicerack.cookbook import (
 )
 from spicerack.k8s import Kubernetes
 from spicerack.remote import RemoteError, RemoteHosts, RemoteExecutionError
-from spicerack.netbox import NetboxServer
 from wmflib.decorators import retry
 from wmflib.interactive import ask_confirmation
 from wmflib.constants import CORE_DATACENTERS
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts.downtime import enrich_argument_parser_with_downtime_duration
-from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES
+from cookbooks.sre.k8s import (
+    ALLOWED_CUMIN_ALIASES,
+    host_expected_bgp_session_count,
+    host_has_l2_adjacency_to_lvs
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,21 +42,6 @@ def validate_rack_format(rack_string: str) -> str:
             "Must be one letter followed by a number (e.g., A1, B5, C10)."
         )
     return rack_string.upper()
-
-
-def rack_has_l2_lvs_adjacency(site: str, rack: str) -> bool:
-    """Checks if the given rack has L2 adjacency between the nodes and the LVS boxes.
-
-    This is true for all rack but those in row E and F in codfw.
-    """
-    if site not in CORE_DATACENTERS:
-        raise ValueError(
-            f"Unknown data center: {site}. Allowed values: {CORE_DATACENTERS}"
-        )
-    rack_row = validate_rack_format(rack)[:1]
-    if site == "codfw" and rack_row in ("E", "F"):
-        return False
-    return True
 
 
 def format_hosts_for_confirmation(hosts: NodeSet) -> str:
@@ -284,37 +272,12 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
         netbox_server = self.spicerack.netbox_server(
             host.split(".")[0], read_write=False
         )
-        rack = netbox_server.as_dict()['rack']['name']
-        site = netbox_server.as_dict()['site']['slug']
         netbox_info = {
-            "has_l2_lvs_adjacency": rack_has_l2_lvs_adjacency(site, rack),
-            "bgp_session_count": self._get_expected_bgp_session_count(netbox_server),
+            "has_l2_lvs_adjacency": host_has_l2_adjacency_to_lvs(netbox_server),
+            "bgp_session_count": host_expected_bgp_session_count(netbox_server),
         }
         logger.info("Netbox info for %s: %s", host, netbox_info)
         return netbox_info
-
-    def _get_expected_bgp_session_count(self, netbox_server: NetboxServer) -> int:
-        """Check how many BGP sessions are expected for this host (new and old topology)"""
-        host = netbox_server.fqdn
-        if netbox_server.virtual:
-            # Ganeti VMs always peer with the core routers like the old VLANs
-            return 4
-
-        vlan = netbox_server.access_vlan
-        session_count = 0
-        # Old-topology vlans only identify the row, not the rack
-        # e.g private1-a-eqiad
-        if re.match(r"private1-\w-(eqiad|codfw)", vlan):
-            logger.info("%s: Old vlan %s, need 4 Established BGP sessions", host, vlan)
-            session_count = 4
-        # New-topology vlans identify the row and the rack
-        # e.g private1-a1-eqiad
-        elif re.match(r"private1-\w{2}-(eqiad|codfw)", vlan):
-            logger.info("%s: New vlan %s, need 2 Established BGP sessions", host, vlan)
-            session_count = 2
-        else:
-            raise RuntimeError(f"Unknown vlan {vlan} for host {host}")
-        return session_count
 
     def check_calico_node_status(self, remote_hosts: RemoteHosts) -> bool:
         """Check calicoctl node status"""
