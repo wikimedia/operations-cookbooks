@@ -1,6 +1,7 @@
 """Kubernetes cluster operations."""
 import json
 import logging
+import re
 from abc import ABCMeta
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
@@ -12,6 +13,7 @@ from kubernetes.client.models import V1Taint
 from spicerack import Spicerack
 from spicerack.cookbook import LockArgs
 from spicerack.k8s import KubernetesApiError, KubernetesNode
+from spicerack.netbox import NetboxServer
 from spicerack.remote import RemoteExecutionError, RemoteHosts
 
 from cookbooks.sre import (PHABRICATOR_BOT_CONFIG_FILE, SREBatchBase,
@@ -347,6 +349,50 @@ def kubectl_version(ctrl_node: RemoteHosts) -> dict[str, dict[str, str]]:
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"Failed to parse kubectl version output: '{message}' with {exc}") from exc
     return version_info
+
+
+# This regex matches VLANs which require BGP peering with the core routers
+re_old_topology_vlan = re.compile(r"private1-[a-z]-(eqiad|codfw)")
+# This regex matches VLANs which require BGP peering with the ToR switches
+re_new_topology_vlan = re.compile(r"private1-[a-z]\d-(eqiad|codfw)")
+# This regex matches VLANs trunked on any of the LVS physical NICs
+re_l2_adjacent_vlan = re.compile(r"private1-(([a-d]-(codfw|eqiad))|([e,f])\d-eqiad)")
+
+
+def host_has_l2_adjacency_to_lvs(netbox_server: NetboxServer) -> bool:
+    """Check if the given host has L2 adjacency to an LVS server."""
+    host = netbox_server.fqdn
+    vlan = netbox_server.access_vlan
+    if re_l2_adjacent_vlan.match(vlan):
+        logger.debug("%s: VLAN %s is L2 adjacent to LVS servers", host, vlan)
+        return True
+    logger.debug("%s: VLAN %s is not L2 adjacent to LVS servers", host, vlan)
+    return False
+
+
+def host_expected_bgp_session_count(netbox_server: NetboxServer) -> int:
+    """Check how many BGP sessions are expected for this host (new and old topology)."""
+    host = netbox_server.fqdn
+    if netbox_server.virtual:
+        # Ganeti VMs always peer with the core routers like the old VLANs
+        logger.debug("%s: Virtual machine, need 4 Established BGP sessions", host)
+        return 4
+
+    vlan = netbox_server.access_vlan
+    session_count = 0
+    # Old-topology vlans only identify the row, not the rack
+    # e.g private1-a-eqiad
+    if re_old_topology_vlan.match(vlan):
+        logger.debug("%s: Old vlan %s, need 4 Established BGP sessions", host, vlan)
+        session_count = 4
+    # New-topology vlans identify the row and the rack
+    # e.g private1-a1-eqiad
+    elif re_new_topology_vlan.match(vlan):
+        logger.debug("%s: New vlan %s, need 2 Established BGP sessions", host, vlan)
+        session_count = 2
+    else:
+        raise RuntimeError(f"Unknown vlan {vlan} for host {host}")
+    return session_count
 
 
 class K8sBatchBase(SREBatchBase, metaclass=ABCMeta):
