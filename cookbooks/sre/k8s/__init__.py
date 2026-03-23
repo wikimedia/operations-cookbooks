@@ -587,7 +587,7 @@ class K8sBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
     def pre_action(self, hosts: RemoteHosts) -> None:
         """Cordon, drain, and depool all nodes in this batch"""
         # The node(s) will be drained prior to being depooled. Not ideal but okay for now.
-        depool_args = ["--k8s-cluster", self._args.k8s_cluster, "depool", f"{str(hosts)}"]
+        depool_args = ["--k8s-cluster", self._args.k8s_cluster, "--force", "depool", f"{str(hosts)}"]
         self._spicerack.run_cookbook('sre.k8s.pool-depool-node', depool_args)
 
     def post_action(self, hosts: RemoteHosts) -> None:
@@ -604,6 +604,7 @@ class K8sBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         pool_args = [
             "--k8s-cluster",
             self._args.k8s_cluster,
+            "--force",
             "pool",
             f"{str(hosts.hosts - failed_hosts)}"
         ]

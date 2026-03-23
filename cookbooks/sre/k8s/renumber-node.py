@@ -184,6 +184,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             [
                 "--reason",
                 f"'Triggered by {__name__}: {self.reason.reason}'",
+                "--force",
                 "depool",
                 str(self.host),
             ],
@@ -202,7 +203,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         logger.info(action_str)
         cookbook_retcode = self.spicerack.run_cookbook(
             "sre.k8s.pool-depool-node",
-            ["--reason", f"'Triggered by {__name__}: {self.reason.reason}'", "pool", str(self.host)],
+            ["--reason", f"'Triggered by {__name__}: {self.reason.reason}'", "--force", "pool", str(self.host)],
         )
         if cookbook_retcode == 0:
             self.host_actions.success(f"Pooled and uncordoned node {self.host}")

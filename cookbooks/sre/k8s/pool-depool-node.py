@@ -104,6 +104,11 @@ class PoolDepoolK8sNodes(CookbookBase):
             help="K8s cluster the nodes are part of",
             choices=ALLOWED_CUMIN_ALIASES.keys(),
         )
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Skip confirmation prompts and proceed with the action",
+        )
         actions = parser.add_subparsers(dest="action", help="The action to perform")
         action_pool = actions.add_parser("pool")
         action_pool.add_argument(
@@ -187,7 +192,7 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
             ) from exc
 
         # Add a guardrail in case there were too many hosts selected
-        if len(self.remote_hosts.hosts) > 1 and args.action != "check":
+        if len(self.remote_hosts.hosts) > 1 and args.action != "check" and not args.force:
             # Use the helper function to format the message
             confirmation_message = format_hosts_for_confirmation(self.remote_hosts.hosts)
             ask_confirmation(confirmation_message)
