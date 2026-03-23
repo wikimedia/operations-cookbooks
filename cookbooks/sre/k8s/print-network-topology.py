@@ -7,7 +7,7 @@ from collections import defaultdict
 from cumin import NodeSet
 from prettytable import PrettyTable
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.cookbook import CookbookBase, CookbookRunnerBase, CookbookInitSuccess
 
 from cookbooks.sre.k8s import (
     host_expected_bgp_session_count,
@@ -55,8 +55,6 @@ class PrintNetworkTopologyRunner(CookbookRunnerBase):
         # Resolve the Cumin query to a NodeSet
         self.hosts = spicerack.remote().query(self.hosts_cumin_query).hosts
 
-    def run(self) -> None:
-        """Check and print network topology details."""
         table = PrettyTable(
             ["Hosts", "VLAN", "Expected BGP session count", "L2 adjacency to LVS"]
         )
@@ -81,3 +79,7 @@ class PrintNetworkTopologyRunner(CookbookRunnerBase):
                 table.add_row([host_set, *properties])
 
         print(table)
+        raise CookbookInitSuccess()
+
+    def run(self):
+        """Run is never executed since we exit early via CookbookInitSuccess."""
