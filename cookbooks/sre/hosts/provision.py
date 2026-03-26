@@ -336,16 +336,22 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         logging.info("Retrieving the BMC's firmware version.")
         bmc_response = self.redfish.request(
             "get", f"{self.redfish.update_service}/FirmwareInventory/BMC").json()
-        logging.info("BMC firmware release date: %s", bmc_response['ReleaseDate'])
-        if bmc_response['ReleaseDate'].startswith('2022-'):
-            ask_confirmation(
-                "The BMC firmware was released in 2022 and it may not support "
-                "all the settings that we need. Please consider upgrading firmware "
-                "first. See https://phabricator.wikimedia.org/T371416 for more info.")
+        if "ReleaseDate" in bmc_response:
+            logging.info("BMC firmware release date: %s", bmc_response['ReleaseDate'])
+            if bmc_response['ReleaseDate'].startswith('2022-'):
+                ask_confirmation(
+                    "The BMC firmware was released in 2022 and it may not support "
+                    "all the settings that we need. Please consider upgrading firmware "
+                    "first. See https://phabricator.wikimedia.org/T371416 for more info.")
+        else:
+            logging.info("No BMC firmware release data available for this host.")
         logging.info("Retrieving the BIOS's firmware version.")
         bios_response = self.redfish.request(
             "get", f"{self.redfish.update_service}/FirmwareInventory/BIOS").json()
-        logging.info("BIOS firmware version: %s", bios_response['Version'])
+        if "Version" in bios_response:
+            logging.info("BIOS firmware version: %s", bios_response['Version'])
+        else:
+            logging.info("Np BIOS version data available for this host.")
         # We save the BMC/BIOS firmware filename since it is easier and more
         # precise to pin-point corner cases when dealing with BIOS settings
         # later on.
