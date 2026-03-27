@@ -569,6 +569,12 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             proposed_bios_changes_round1: dict = {
                 "BootModeSelect": "UEFI" if self.uefi else "Legacy"
             }
+            # If the host is switched from Legacy MBR boot to UEFI all MBR PXE
+            # enabled NICs will have the bogus value '4' in UEFI mode. To work
+            # around this bug, disable PXE on all NICs, prior to switching to
+            # UEFI mode.  More info: T393053
+            if self.uefi:
+                proposed_bios_changes_round1 |= self._disable_pxe(bios_attributes)
             self._set_in_bios_changes(bios_attributes, proposed_bios_changes_round1)
             should_patch = self._found_diffs_bios_attributes(bios_attributes)
             if should_patch:
@@ -697,22 +703,10 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             self.bios_changes["Attributes"]['IPv6HTTPSupport'] = 'Disabled'
             self.bios_changes["Attributes"]['IPv6PXESupport'] = 'Disabled'
 
-    # pylint: disable=too-many-branches
-    # pylint: disable=too-many-locals
-    # pylint: disable=too-many-nested-blocks
-    def _config_pxe_bios_settings(self, bios_attributes: dict):
-        """Set NIC BIOS settings to PXE.
+    def _pxe_nic_devices(self, bios_attributes: dict):
+        """Get list of pxe nics
 
-        Legacy Mode:
-
-        Configure the NIC which has link to PXE boot.
-
-        UEFI Mode:
-
-        Supermicro uses a shared UEFI driver to PXE boot all NICs. As a result
-        only one NIC is shown in the BIOS config when in UEFI mode, regardless
-        of the number NICs on the box. We configure that single device to PXE
-        boot, which in turn causes all the NICs to attempt PXE booting.
+        Returns a list of all pxe nic devices found
         """
         if self.uefi:
             old_value = "Legacy"
@@ -734,6 +728,40 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             if "LAN" in key:
                 logger.info("BIOS - Found a NIC device: %s", key)
                 pxe_nic_devices.append(key)
+        return pxe_nic_devices
+
+    def _disable_pxe(self, bios_attributes: dict):
+        """Disable pxe on all nics
+
+        Disable pxe on all nics, prior to switching to UEFI
+        """
+        proposed_bios_changes: dict = {}
+        pxe_nic_devices = self._pxe_nic_devices(bios_attributes)
+        for nic in pxe_nic_devices:
+            logger.info("Set (PXE) Disabled to the NIC %s", nic)
+            proposed_bios_changes[nic] = "Disabled"
+        return proposed_bios_changes
+
+    # pylint: disable=too-many-branches
+    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-nested-blocks
+    def _config_pxe_bios_settings(self, bios_attributes: dict):
+        """Set NIC BIOS settings to PXE.
+
+        Legacy Mode:
+
+        Configure the NIC which has link to PXE boot.
+
+        UEFI Mode:
+
+        Supermicro uses a shared UEFI driver to PXE boot all NICs. To enable
+        the shared driver the EFI option is only present on the first NIC,
+        regardless of the number NICs on the box. In addition on some models
+        only a single NIC is displayed in the BIOS when in UEFI mode. We
+        configure the first device to PXE boot, which in turn causes all the
+        NICs to attempt PXE booting.
+        """
+        pxe_nic_devices = self._pxe_nic_devices(bios_attributes)
 
         if len(pxe_nic_devices) == 0:
             if self.device_model_slug in SUPERMICRO_NO_BIOS_PXE_NIC_SETTINGS:
@@ -750,7 +778,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                 "Foundations when you read this."
             )
 
-        if len(pxe_nic_devices) == 1:
+        if len(pxe_nic_devices) == 1 or self.uefi:
             pxe_nic = pxe_nic_devices[0]
         else:
             network_info = self._get_network_info()
@@ -791,16 +819,6 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             legacy_pxe_setting = "PXE"
         uefi_pxe_setting = "EFI"
         self.bios_changes["Attributes"][pxe_nic] = uefi_pxe_setting if self.uefi else legacy_pxe_setting
-        # For some reason, in some models already set with UEFI the "EFI" setting
-        # becomes "4", and "EFI" is forbidden. To circumvent the problem,
-        # add a specific check for it.
-        # More info: T393053
-        if self.uefi and bios_attributes[pxe_nic] == "4":
-            logger.info(
-                "Found an occurrence of the bug outlined in T393053, "
-                "setting PXE settings to '4'"
-            )
-            self.bios_changes["Attributes"][pxe_nic] = "4"
 
     def _try_bmc_password(self):
         """Test the known BMC passwords, find a working one and configure Redfish."""
