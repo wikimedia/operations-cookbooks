@@ -152,7 +152,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
     def setup_k8s_remote_host(self):
         """Pull Kubernetes metadata information"""
         # Find the host and its k8s metadata
-        for _, metadata in ALLOWED_CUMIN_ALIASES.items():
+        for cluster_alias, metadata in ALLOWED_CUMIN_ALIASES.items():
             logger.debug("Checking for host %s in %s", self.args.host, metadata["workers"])
             try:
                 self.remote_host = self.spicerack.remote().query(f"P{{{self.args.host}}} and A:{metadata['workers']}")
@@ -171,6 +171,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
                 self.host = self.remote_host.hosts[0]
                 self.host_short = self.host.split(".")[0]
             self.k8s_node = self.k8s_cli.get_node(self.host)
+            self.k8s_cluster = cluster_alias
             logger.debug("Found node %s in %s", self.host, k8s_metadata["workers"])
 
             break
@@ -184,6 +185,8 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             [
                 "--reason",
                 f"'Triggered by {__name__}: {self.reason.reason}'",
+                "--k8s-cluster",
+                self.k8s_cluster,
                 "--force",
                 "depool",
                 str(self.host),
@@ -203,7 +206,14 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         logger.info(action_str)
         cookbook_retcode = self.spicerack.run_cookbook(
             "sre.k8s.pool-depool-node",
-            ["--reason", f"'Triggered by {__name__}: {self.reason.reason}'", "--force", "pool", str(self.host)],
+            [
+                "--reason",
+                f"'Triggered by {__name__}: {self.reason.reason}'",
+                "--k8s-cluster",
+                self.k8s_cluster,
+                "--force",
+                "pool",
+                str(self.host)],
         )
         if cookbook_retcode == 0:
             self.host_actions.success(f"Pooled and uncordoned node {self.host}")
