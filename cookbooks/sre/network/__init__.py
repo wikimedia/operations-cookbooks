@@ -198,6 +198,8 @@ def run_junos_commands(remote_host: RemoteHosts, conf_commands: list) -> None:
         if mode == 'compare':
             ask_confirmation('Commit the above change?')
         elif mode == 'commit':
+            if remote_host.dry_run:
+                return None
             output_lines = RemoteHosts.results_to_list(results_raw)[0][1].split('\n')
             if output_lines[-2] != 'commit complete':
                 raise RuntimeError('JunOS config commit failed - see above - device may need Homer run')
@@ -206,13 +208,12 @@ def run_junos_commands(remote_host: RemoteHosts, conf_commands: list) -> None:
             logger.info('Change confirmed')
 
 
-def parse_results(results_raw, json_output=False):
+def parse_results(results_raw, json_output=False, dry_run: bool=False):
     """Parse a single device cumin output."""
     # Only supports 1 target device at a time
-    results = RemoteHosts.results_to_list(results_raw)
-    if not results:  # In dry run, run_sync/async will return an empty dict
+    if dry_run:
         return None
-    result = results[0][1]
+    result = RemoteHosts.results_to_list(results_raw)[0][1]
     # If empty result (eg. interface not configured)
     if not result:
         return None
@@ -289,7 +290,7 @@ def get_junos_live_interface_config(remote_host: RemoteHosts, interface: str,
                                        print_output=print_output,
                                        print_progress_bars=False)
     try:
-        result_json = parse_results(results_raw, json_output=True)
+        result_json = parse_results(results_raw, json_output=True, dry_run=remote_host.dry_run)
         if isinstance(result_json['configuration'], list):
             old_junos = True
             interface_json = result_json['configuration'][0]['interfaces'][0]['interface'][0]
@@ -323,7 +324,7 @@ def get_junos_optics(remote_host: RemoteHosts, interface: str, print_output: boo
                                        print_output=print_output,
                                        print_progress_bars=False)
 
-    result_json = parse_results(results_raw, json_output=True)
+    result_json = parse_results(results_raw, json_output=True, dry_run=remote_host.dry_run)
     if not result_json:
         logger.error("Interface %s either incorrect or not optical", interface)
         return {}
@@ -361,7 +362,7 @@ def get_junos_interface(remote_host: RemoteHosts, interface: str, print_output: 
                                        print_output=print_output,
                                        print_progress_bars=False)
 
-    result_json = parse_results(results_raw, json_output=True)
+    result_json = parse_results(results_raw, json_output=True, dry_run=remote_host.dry_run)
     if not result_json:
         logger.error("Interface %s not found on the device", interface)
         return None
@@ -412,7 +413,7 @@ def get_junos_logs(remote_host: RemoteHosts, match: str, print_output: bool = Fa
                                        print_output=print_output,
                                        print_progress_bars=False)
 
-    result = parse_results(results_raw)
+    result = parse_results(results_raw, dry_run=remote_host.dry_run)
     if not result:
         logger.debug("No logs matching %s", match)
     return result
@@ -437,7 +438,7 @@ def get_junos_bgp_peer(remote_host: RemoteHosts, peer_ip: str, print_output: boo
                                        print_output=print_output,
                                        print_progress_bars=False)
 
-    result_json = parse_results(results_raw, json_output=True)
+    result_json = parse_results(results_raw, json_output=True, dry_run=remote_host.dry_run)
     # Even if the peer is not configured some json is returned
     if not result_json:
         logger.error("Problem while trying to get data for BGP peer %s", peer_ip)
@@ -468,7 +469,7 @@ def get_junos_bgp_summary(remote_host: RemoteHosts, print_output: bool = False) 
                                        print_output=print_output,
                                        print_progress_bars=False)
 
-    result_json = parse_results(results_raw, json_output=True)
+    result_json = parse_results(results_raw, json_output=True, dry_run=remote_host.dry_run)
     # Even if the peer is not configured some json is returned
     if not result_json or 'bgp-peer' not in result_json['bgp-information'][0]:
         # This should never happen as all routers have BGP
