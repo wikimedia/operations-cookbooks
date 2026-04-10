@@ -48,7 +48,6 @@ def set_logging(caplog):
 @fixture(autouse=True)
 def mock_sr():
     with patch("spicerack.Spicerack", autospec=True) as mock_sr:
-
         dbctl = mock_sr.dbctl()
         dbctl.instance.pool().announce_message = "<<mock dbctl pool announce msg>>"
         dbctl.instance.depool().announce_message = "<<mock dbctl pool announce msg>>"
@@ -57,7 +56,7 @@ def mock_sr():
         mock_sr.admin_reason.return_value.owner = "<<mock owner>>"
         mock_sr.admin_reason.return_value.reason = "<<mock reason>>"
 
-        def z(task, msg):
+        def z(task, msg, raises=False):
             log.info(f"mock phabricator task_comment '{task}' '{msg}'")
 
         mock_sr.phabricator.return_value.task_comment.side_effect = z

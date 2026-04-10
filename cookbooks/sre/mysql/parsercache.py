@@ -83,8 +83,12 @@ def update_phabricator(hns: list, args: Namespace, spicerack: Spicerack, reason,
     if hns and args.task_id:
         phab = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         names = " and ".join(sorted(hns))
-        log.info("Updating Phabricator")
-        phab.task_comment(args.task_id, f"Depooled {names} {reason}")
+        msg = f"Depooled {names} {reason}"
+        if phab.task_accessible(args.task_id, raises=False):
+            log.info("Updating Phabricator")
+            phab.task_comment(args.task_id, msg, raises=False)
+        else:
+            log.warning(f"Unable to access task {args.task_id}: not adding comment '{msg}'")
 
 
 def _get_dbctl_config_diff(dbctl: Dbctl) -> tuple[bool, Generator]:

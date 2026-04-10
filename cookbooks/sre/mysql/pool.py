@@ -385,7 +385,10 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
     def _update_phabricator(self, status: str, desc: str) -> None:
         msg = f"{status} {desc} by {self.reason.owner}: {self.reason.reason}"
-        self.phabricator.task_comment(self.task_id, msg)
+        if self.phabricator.task_accessible(self.task_id, raises=False):
+            self.phabricator.task_comment(self.task_id, msg, raises=False)
+        else:
+            logger.warning(f"Unable to access task {self.task_id}: not adding comment '{msg}'")
 
     def check_action_result(self, action_result: ActionResult, message: str) -> None:
         """Raise on failure and log any messages present in an ActionResult instance."""
