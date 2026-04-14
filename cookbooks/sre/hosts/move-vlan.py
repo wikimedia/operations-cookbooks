@@ -81,6 +81,7 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         self.puppet_server = self.spicerack.puppet_server().remote_hosts
         self.kerberos_kadmin = self.remote.query(KERBEROS_KADMIN_CUMIN_ALIAS)
         self.deployment_host = self.remote.query(self.dns.resolve_cname(DEPLOYMENT_HOST))
+        self.remote_host = self.remote.query(self.netbox_server.fqdn)
         self.authdns_hosts = spicerack.authdns_active_hosts
         self.patterns = get_grep_patterns(self.dns, [self.netbox_server.fqdn], ip_only=True)
         self.post_config = {}
@@ -105,9 +106,6 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         # Check if this host needs to be moved to the new VLAN and run preflight checks if so
         if self.is_move_required and not self.pre_flight():
             raise RuntimeError('The host is not suitable for the migration, see above.')
-
-        if self.args.action == 'inplace':
-            raise NotImplementedError('In-place migration not yet available.')
 
     def _is_move_required(self):
         """Check if the server is in a state to be re-numbered."""
@@ -223,17 +221,37 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         self.rollback_netbox = True
 
         ask_confirmation('At this point, add the new IPs in the repositories listed previously (if any). Continue?')
+
+        if self.args.action == 'inplace':
+            logger.info("Updating the host's /etc/network/interfaces, /etc/hosts and /etc/networks.")
+            commands = [
+                f"sed -i 's|{self.pre_config[4]}|{self.post_config[4]}|g' /etc/network/interfaces",
+                (f"sed -i 's|gateway {list(self.pre_config[4].network.hosts())[0]}|"
+                 f"gateway {list(self.post_config[4].network.hosts())[0]}|g' /etc/network/interfaces"),
+                f"sed -i 's|{self.pre_config[6]}|{self.post_config[6]}|g' /etc/network/interfaces",
+                (f"sed -i 's|{str(self.pre_config[4].ip).replace('.', ':')}|"
+                 f"{str(self.post_config[4].ip).replace('.', ':')}|g' /etc/network/interfaces"),
+                f"sed -i 's|{self.pre_config[4].ip}|{self.post_config[4].ip}|g' /etc/hosts",
+                (f"sed -i 's|{self.pre_config[4].network.network_address}|"
+                 f"{self.post_config[4].network.network_address}|g' /etc/networks"),
+            ]
+            self.remote_host.run_sync(*commands, print_progress_bars=False)
+            logger.info("Restarting the networking service. "
+                        "The host will lose connectivity until the switch port is updated. "
+                        "Automatic rollback not possible from now on.")
+            self.remote_host.run_sync('sudo systemctl restart networking', print_progress_bars=False)
+            self.rollback_netbox = False
+
         # Pass the pre_config to clear the now unused PTR records
         self.propagate_dns('Update', self.pre_config)
 
-        if self.args.action == 'reimage':
-            # Run the sre.network.configure-switch-interfaces cookbook
-            logger.info('Updating the switch port config, the host will lose connectivity.')
-            self.spicerack.run_cookbook('sre.network.configure-switch-interfaces', [self.args.host], confirm=True)
-            # At this point, if the re-image fails, it's better to rollforward and run the re-image cookbook
-            self.rollback_netbox = False
+        # Run the sre.network.configure-switch-interfaces cookbook
+        logger.info('Updating the switch port config, the host will lose connectivity.')
+        self.spicerack.run_cookbook('sre.network.configure-switch-interfaces', [self.args.host], confirm=True)
+        # At this point, if the re-image fails, it's better to rollforward and run the re-image cookbook
+        self.rollback_netbox = False
 
-        logger.info("All done, don't forget to remove the old IPs references in the repos (if any).")
+        logger.info("All done 👍, don't forget to remove the old IPs references in the repos (if any).")
 
     @property
     def lock_args(self):
