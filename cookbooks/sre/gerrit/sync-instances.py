@@ -105,17 +105,33 @@ class SyncInstancesRunner(CookbookRunnerBase):
         ).splitlines()[-1]
         logger.info("Retrieved target Gerrit user: %s", self.target_gerrit_user)
 
+        expected_gerrit_site = GERRIT_DIR_PREFIX.rstrip("/")
+
         self.source_gerrit_site = self.puppetserver.hiera_lookup(
             self.switch_from_host.hosts[0],
             "profile::gerrit::gerrit_site",
         ).splitlines()[-1]
         logger.info("Retrieved source Gerrit site: %s", self.source_gerrit_site)
+        if self.source_gerrit_site.rstrip("/") != expected_gerrit_site:
+            logger.warning(
+                "Source Gerrit site from Hiera (%s) does not match GERRIT_DIR_PREFIX (%s).",
+                self.source_gerrit_site,
+                GERRIT_DIR_PREFIX,
+            )
+            raise RuntimeError("Refusing to continue with mismatched source Gerrit paths.")
 
         self.target_gerrit_site = self.puppetserver.hiera_lookup(
             self.switch_to_host.hosts[0],
             "profile::gerrit::gerrit_site",
         ).splitlines()[-1]
         logger.info("Retrieved target Gerrit site: %s", self.target_gerrit_site)
+        if self.target_gerrit_site.rstrip("/") != expected_gerrit_site:
+            logger.warning(
+                "Target Gerrit site from Hiera (%s) does not match GERRIT_DIR_PREFIX (%s).",
+                self.target_gerrit_site,
+                GERRIT_DIR_PREFIX,
+            )
+            raise RuntimeError("Refusing to continue with mismatched target Gerrit paths.")
 
         # Used when we want to exclude the Git data dir if we trust replication
         self.src_git_dir = self.puppetserver.hiera_lookup(
@@ -192,15 +208,8 @@ class SyncInstancesRunner(CookbookRunnerBase):
                 self.args.replica,
             )
 
-        # /var/lib/gerrit (site data)
-        command_sync_var_lib = (
-            f"/usr/bin/rsync {base_rsync_args} {self.source_gerrit_site}/ "
-            f"rsync://{self.args.replica}/gerrit-var-lib/"
-        )
-
-        # /srv/gerrit (data dir)
         command_sync_data = (
-            f"/usr/bin/rsync {base_rsync_args} /srv/gerrit/ "
+            f"/usr/bin/rsync {base_rsync_args} {GERRIT_DIR_PREFIX} "
             f"rsync://{self.args.replica}/gerrit-data/ "
             "--exclude=*.hprof "
         )
@@ -216,23 +225,14 @@ class SyncInstancesRunner(CookbookRunnerBase):
             )
 
             # TODO double check if protect path is relative or absolute
-            command_sync_data += "--filter='protect /srv/gerrit/git/' "
+            command_sync_data += f"--filter='protect {GERRIT_DIR_PREFIX}git/' "
             command_sync_data += "--filter='protect git/' "
             #  Double protection against accidental deletion of git data
             # https://linux.die.net/man/1/rsync#:~:text=%2D%2Dfilter%20%27protect%20emptydir%2F%27
 
-        # If we distrust replication: rsync everything under /srv/gerrit
+        # If we distrust replication: rsync everything under GERRIT_DIR_PREFIX.
 
-        logger.info("Running rsync on /var/lib data: %s", command_sync_var_lib)
-        self.confirm_before_proceeding()
-        self.switch_from_host.run_sync(
-            command_sync_var_lib,
-            print_progress_bars=False,
-            print_output=True,
-            is_safe=True,
-        )
-
-        logger.info("Running rsync on git/data dir: %s", command_sync_data)
+        logger.info("Running rsync on %s data: %s", GERRIT_DIR_PREFIX, command_sync_data)
         self.confirm_before_proceeding()
         self.switch_from_host.run_sync(
             command_sync_data,
@@ -244,7 +244,7 @@ class SyncInstancesRunner(CookbookRunnerBase):
         if self.args.chown:
             cmd = (
                 f"chown -R {self.target_gerrit_user}:{self.target_gerrit_user} "
-                f"{GERRIT_DIR_PREFIX} {self.target_gerrit_site}"
+                f"{GERRIT_DIR_PREFIX}"
             )
             logger.info("chowning files as --chown has been passed. Will use the following:")
             logger.info(cmd)
