@@ -324,8 +324,6 @@ class PoolDepoolRunner(CookbookRunnerBase):
         logging.getLogger("etcd.client").setLevel(logging.INFO)
         logging.getLogger("conftool").setLevel(logging.INFO)
 
-        ensure_shell_is_durable()
-
         self.args = args
         self.pool = args.operation == "pool"
         self.dbctl = spicerack.dbctl()
@@ -336,6 +334,8 @@ class PoolDepoolRunner(CookbookRunnerBase):
         self._run_cookbook = spicerack.run_cookbook
 
         if self.pool:
+            ensure_shell_is_durable()
+
             if self.args.slow:
                 self.steps: tuple[int, ...] = (
                     1,
@@ -400,7 +400,6 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
     def _pool_s_or_es(self) -> None:
         if self.args.skip_safety_checks is False:
-
             _poll_icinga_notification_status(self._icinga_host, self._hostname)
             logger.debug("Waiting for icinga to go green")
             self._icinga_host.wait_for_optimal()
