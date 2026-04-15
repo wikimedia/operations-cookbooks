@@ -22,14 +22,13 @@ install_requires = [
 extras_require = {
     # Test dependencies
     "tests": [
-        "bandit>=1.5.0",
-        "flake8>=3.2.1",
         "mypy>=0.670",
         "pytest>=6.1.0",
         "types-PyMySQL",
         "types-python-dateutil",
         "types-PyYAML",
         "types-redis",
+        "ruff",
         # Uppe limit because it requires urllib3>2, incompatible with elasticsearch, elasticsearch-curator and botocore
         "types-requests<2.31.0.7",
         "types-setuptools",
