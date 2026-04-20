@@ -1280,6 +1280,6 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         all_nics = self._all_nics(config)
         nic = self._get_pxe_nic(all_nics)
         for attribute in ('Broadcom_LLDPNearestBridge', 'Broadcom_LLDPNearestNonTPMRBridge'):
-            if config.components[nic].get(attribute, '') == 'Enabled':
+            if nic in config.components and config.components[nic].get(attribute, '') == 'Enabled':
                 self.config_changes[nic][attribute] = 'Disabled'
                 logger.info('Disabled LLDP on nic %s, attribute %s', nic, attribute)
