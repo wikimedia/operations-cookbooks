@@ -940,7 +940,6 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
             'ProcCStates': 'Enabled',
             'ProcPwrPerf': 'OsDbpm',
             'SysProfile': 'PerfPerWattOptimizedOs',
-            'UncoreFrequency': 'DynamicUFS',
             'UsbPorts': 'OnlyBackPortsOn',
             'HttpDev1TlsMode': 'None',
         }
@@ -1119,6 +1118,14 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
                 self.config_changes['System.Embedded.1']['ServerPwr.1#PSRapidOn'] = 'Disabled'
             else:
                 logger.info('Skipping ServerPwr.1#PSRapidOn config in System.Embedded.1, not available.')
+
+            # The UncoreFrequency setting changes name between the various iDRAC 10 firmware versions.
+            if 'UncoreFrequency' in config.components['BIOS.Setup.1-1']:
+                self.config_changes['BIOS.Setup.1-1']['UncoreFrequency'] = 'DynamicUFS'
+            if 'UncoreFrequencyCompute' in config.components['BIOS.Setup.1-1']:
+                self.config_changes['BIOS.Setup.1-1']['UncoreFrequencyCompute'] = 'DynamicUFS'
+            if 'UncoreFrequencyIO' in config.components['BIOS.Setup.1-1']:
+                self.config_changes['BIOS.Setup.1-1']['UncoreFrequencyIO'] = 'DynamicUFS'
 
         self._config_pxe(config)
         self._disable_lldp(config)
