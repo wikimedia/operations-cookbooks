@@ -47,6 +47,8 @@ def update_netbox(netbox, netbox_data, keep_mgmt_dns, dry_run):
     device.primary_ip4_id = None
     device.primary_ip6_id = None
     device.status = 'decommissioning'
+    if device.custom_fields['bgp']:
+        device.custom_fields['bgp'] = False
     if not dry_run:
         device.save()
 
