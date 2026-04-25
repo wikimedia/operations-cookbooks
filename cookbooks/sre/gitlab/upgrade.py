@@ -8,6 +8,7 @@ from packaging import version
 
 import gitlab
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable, get_secret
+from spicerack.alertmanager import AlertmanagerError
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError
@@ -23,6 +24,9 @@ BACKUP_DIRECTORY = "/srv/gitlab-backup"
 BACKUP_LOCK_FILE = "/opt/gitlab/embedded/service/gitlab-rails/tmp/backup_restore.pid"
 DISK_HIGH_THRESHOLD = 70
 DOWNTIME_DURATION = 200  # in minutes
+BACKUP_RESTORE_ALERTNAME = "SystemdUnitFailed"
+BACKUP_RESTORE_SERVICE = "gitlab-backup-restore.service"
+BACKUP_RESTORE_DOWNTIME_DURATION = 24 # in hours
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +81,7 @@ class UpgradeRunner(CookbookRunnerBase):
         self.spicerack = spicerack
         self.host = args.host
         self.remote_host = spicerack.remote().query(f'{args.host}.*')
+        self.alertmanager = self.spicerack.alertmanager()
         if len(self.remote_host) != 1:
             raise RuntimeError(f"Found the following hosts: {self.remote_host} for query {args.host}."
                                "Query must return 1 host.")
@@ -92,11 +97,11 @@ class UpgradeRunner(CookbookRunnerBase):
         self.skip_confirm_prompt = args.skip_confirm_prompt
 
         # Skipping backups on production should not be possible
-        if args.skip_replica_backups and not self.check_can_skip_backup():
+        if args.skip_replica_backups and not self.is_replica():
             raise RuntimeError(f"--skip_replica-backups can't be used on {self.url}")
 
         # Remind users to skip backup on replicas
-        if not args.skip_replica_backups and self.check_can_skip_backup():
+        if not args.skip_replica_backups and self.is_replica():
             ask_confirmation("Cookbook is executed on a replica without the "
                              "--skip-replica-backups flag. Are you sure you want to create a "
                              "backup on the replica? This takes 3+ hours.")
@@ -167,6 +172,26 @@ class UpgradeRunner(CookbookRunnerBase):
                 "unavailable once you continue. Ready to go?"
             )
 
+        # silence backup-restore.service failing for 24h (until next restore happened)
+        if self.is_replica():
+            try:
+                matchers=[
+                    {"name": "alertname",
+                        "value": BACKUP_RESTORE_ALERTNAME, "isRegex": False},
+                    {"name": "name", "value": BACKUP_RESTORE_SERVICE,
+                        "isRegex": False},
+                ]
+                self.alertmanager.downtime(
+                    reason=self.admin_reason, matchers=matchers,
+                    duration=timedelta(hours=BACKUP_RESTORE_DOWNTIME_DURATION))
+            except AlertmanagerError as error:
+                logger.warning(
+                    'Failed to create a silence for %s on %s: %s',
+                    BACKUP_RESTORE_SERVICE,
+                    self.host,
+                    error,
+                )
+
         paused_runners = pause_runners(self.token, self.url, dry_run=self.spicerack.dry_run)
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=DOWNTIME_DURATION)):
             # Also create a downtime for the service name (like gitlab.wikimedia.org)
@@ -216,7 +241,7 @@ class UpgradeRunner(CookbookRunnerBase):
         if get_disk_usage_for_path(self.remote_host, BACKUP_DIRECTORY) > DISK_HIGH_THRESHOLD:
             raise RuntimeError(f"Not enough disk space in {BACKUP_DIRECTORY}")
 
-    def check_can_skip_backup(self):
+    def is_replica(self):
         """Check that we aren't running on the "production" host (i.e., gitlab.wm.o)"""
         if "gitlab.wikimedia.org" in self.url:
             return False
