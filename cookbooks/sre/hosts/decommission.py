@@ -221,8 +221,8 @@ class DecommissionHostRunner(CookbookRunnerBase):  # pylint: disable=too-many-in
                     interface=MANAGEMENT_IFACE_NAME, device=hostname).address.split('/')[0]
                 spicerack.actions[fqdn].warning(
                     f'//Unable to find/resolve the mgmt DNS record, using the IP instead: {mgmt_target}//')
-
-            self.ipmi_hosts[hostname] = spicerack.ipmi(mgmt_target)
+            # TODO: fix the decom of x14 supermicros, see T418929
+            self.ipmi_hosts[hostname] = spicerack.ipmi(target=mgmt_target, username="root")
             try:
                 self.ipmi_hosts[hostname].check_connection()
             except IpmiError:

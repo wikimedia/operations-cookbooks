@@ -178,7 +178,7 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):  # pylint: disable
         self.netbox_server = spicerack.netbox_server(self.args.host)
         self.netbox_data = self.netbox_server.as_dict()
         self.fqdn = self.netbox_server.mgmt_fqdn
-        self.ipmi = spicerack.ipmi(self.fqdn)
+        self.ipmi = spicerack.ipmi(target=self.fqdn, username="root")
         self.remote = spicerack.remote()
         self.vendor = self.netbox_data['device_type']['manufacturer']['slug']
         self.verbose = spicerack.verbose

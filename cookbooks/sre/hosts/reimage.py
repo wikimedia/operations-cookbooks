@@ -230,7 +230,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.redfish = spicerack.redfish(self.host)
             self.is_uefi = self.redfish.is_uefi
             if not self.is_uefi:
-                self.ipmi: Ipmi = self.spicerack.ipmi(self.mgmt_fqdn)
+                self.ipmi: Ipmi = self.spicerack.ipmi(target=self.mgmt_fqdn, username="root")
             # Nokia currently cannot insert the server-connected port in
             # Option 82, so error if --opt82 is set
             nb_switch = self.netbox.api.dcim.devices.get(name=self.netbox_server.switches[0])
