@@ -32,7 +32,6 @@ from wmflib.config import load_yaml_config
 from wmflib.interactive import ask_confirmation
 
 from cookbooks.sre.hardware import (
-    DellAPI,
     DellDriverType,
     DellDriverCategory,
     extract_version,
@@ -157,7 +156,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         session = spicerack.requests_session("cookbook.sre.hardware.firmware-upgrade")
         session.proxies = spicerack.requests_proxies
-        self.dell_api = DellAPI(session)
 
     @property
     def runtime_description(self):
@@ -244,53 +242,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
         """
         return self.firmware_store / product_slug / driver_category.name
-
-    def get_latest(
-        self,
-        product_slug: str,
-        driver_type: DellDriverType,
-        driver_category: DellDriverCategory,
-    ) -> tuple[version.Version, Path]:
-        """Download the latest idrac for the specific netbox model
-
-        Arguments:
-            product_slug: the host product slug
-            driver_type: The driver type to get
-            driver_category: The driver category to get
-
-        Returns:
-            A string representing the latest version and the path to the firmware
-
-        """
-        if driver_category == DellDriverCategory.SSD:
-            raise NotImplementedError("SSD firmware fetch from DELL website not yet implemented")
-
-        firmware_path = None
-        product = self.dell_api.fetch(product_slug)
-        drivers = product.find_driver(driver_type, driver_category)
-        if not drivers:
-            raise RuntimeError(f"unable to find any drivers for: {product_slug}\n"
-                               "Please ensure that the slug is correct.")
-        driver = list_picker(sorted(drivers))
-        if len(driver.versions) > 1:
-            # TODO: right now we will only have one version as I haven't worked out
-            # how to get old versions
-            pass
-        driver_version = driver.versions.pop()
-        firmware_path = (
-            self._firmware_path(product_slug, driver_category)
-            / driver_version.url.split("/")[-1]
-        )
-        if firmware_path.is_file():
-            logger.info("%s: Already have: %s", product_slug, firmware_path)
-        else:
-            firmware_path.parent.mkdir(exist_ok=True, parents=True)
-            firmware_path.parent.chmod(0o775)
-            logger.info("%s: Downloading %s", product_slug, driver_version.url)
-            self.dell_api.download(driver_version.url, firmware_path)
-            self._sync_firmware_store()
-        driver_version = driver_version.version
-        return driver_version, firmware_path
 
     def _get_version_odata(
         self, redfish_host: RedfishDell, driver_category: DellDriverCategory, odata_id: str
@@ -558,21 +509,17 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             logger.info("%s: picking %s update file", product_slug, driver_category)
 
         firmware_dir = self._firmware_path(product_slug, driver_category)
-        if not firmware_dir.is_dir():
-            return self.get_latest(product_slug, driver_type, driver_category)
-
         current_files = sorted(
             filter(Path.is_file, firmware_dir.iterdir()),
             key=lambda f: f.stat().st_mtime,
             reverse=True,
         )
+
         if not current_files:
-            return self.get_latest(product_slug, driver_type, driver_category)
+            raise RuntimeError("No available upgrade found on cumin nodes, please contact DCops.")
 
-        selection = list_picker(current_files + ["Download new file"])
+        selection = list_picker(current_files)
 
-        if selection == "Download new file":
-            return self.get_latest(product_slug, driver_type, driver_category)
         return extract_version(selection), cast(Path, selection)
 
     # create a cached version of the above function
@@ -1099,6 +1046,12 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
     def _run_host(self, hostname: str) -> int:
         """Run the cookbook for a single host. Return 1 on failure, 0 on success."""
         netbox_host = self.spicerack.netbox().get_server(hostname)
+        if netbox_host.as_dict()['device_type']['manufacturer']['slug'] != 'dell':
+            logger.error(
+                "Dell is the only vendor supported by the cookbook, skipping %s",
+                hostname
+            )
+            return 0
         redfish_host = self._redfish_host(hostname)
         if redfish_host is None:
             return 0

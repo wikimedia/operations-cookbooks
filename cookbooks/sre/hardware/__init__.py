@@ -3,15 +3,13 @@ import logging
 import re
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
 from packaging import version
-from requests import Session
-from requests.exceptions import RequestException
 
 from wmflib.interactive import ask_input
 
@@ -238,114 +236,3 @@ class DellProduct:
             if category_id.value == driver.category_id:
                 results.add(driver)
         return results
-
-
-class DellAPIError(Exception):
-    """Raise when there is a error with the dell api"""
-
-
-class DellAPI:
-    """Class to interface with dell json API."""
-
-    url_base = "https://www.dell.com/support/driver/en-uk/ips/api/driverlist/fetchdriversbyproduct"
-
-    def __init__(self, session: Session):
-        """Init method.
-
-        Arguments:
-            session (Session): a session object used for preforming requests
-
-        """
-        self.session = session
-        self.data = {
-            "oscode": "RHEL8",
-        }
-        self.session.headers = {
-            "X-Requested-With": "XMLHttpRequest",
-        }
-        # set launguage pref
-        self.session.cookies["lwp"] = "c=uk&l=en&s=bsd&cs=ukbsdt1"
-        self._products: dict[str, DellProduct] = {}
-
-    def refresh_session(self):
-        """Refresh the session with the lastest cookies and csrf token."""
-        # populate cookie store
-        self.session.get("https://www.dell.com/support/home")
-        # We need to grab this page to get the csrf-token
-        response = self.session.get(
-            "https://www.dell.com/support/driver/es-es/ips/driverlist/product/poweredge-r430"
-        )
-
-        parser = ParseMeta()
-        parser.feed(response.content.decode())
-        if not parser.csrf_token:
-            raise DellAPIError("Unable to find drivers-csrf-token")
-
-        self.session.headers.update({'anti-csrf-token': parser.csrf_token})
-
-    def get(self, product: str, force: bool = False) -> DellProduct:
-        """Getter for products, includes caching.
-
-        Arguments:
-            product (str): The product short code e.g. poweredge-r430.
-            force (bool): If true force fetching data from the dell api.
-
-        Returns:
-            DellProduct: The dell product matching the product string.
-
-        """
-        if product not in self._products or force:
-            self._products[product] = self.fetch(product)
-        return self._products[product]
-
-    def fetch(self, product: str) -> DellProduct:
-        """Fetch data from the dell api about a specific product.
-
-        Arguments:
-            product (str): The product short code e.g. poweredge-r430.
-
-        Returns:
-            DellProduct: The dell product matching the product string.
-
-        """
-        dell_product = DellProduct(product)
-        three_years_ago = datetime.now() - timedelta(days=3 * 365)
-
-        self.refresh_session()
-        data = {
-            "productcode": product,
-            # The idrac [mostly] expects to receive an exe self extracting zip targeted for windows
-            "oscode": "W12R2",
-        }
-        try:
-            response = self.session.get(self.url_base, params=data)
-            response.raise_for_status()
-            if response.status_code == 204:
-                raise DellAPIError("No content received from DellAPI")
-            json_data = response.json()
-        except RequestException as error:
-            raise DellAPIError("Unable to fetch dell drivers") from error
-        except ValueError as error:
-            raise DellAPIError("Unable to parse json output") from error
-
-        for driver in json_data["DriverListData"]:
-            if driver["Type"] not in (d.name for d in DellDriverType):
-                continue
-            # ignore files older then 3 years ago
-            if datetime.fromisoformat(driver["ReleaseDateValue"]) < three_years_ago:
-                continue
-            dell_product.add_driver(DellDriver.from_json(driver))
-
-        return dell_product
-
-    def download(self, url: str, save_path: Path):
-        """Download url to save path using the dellapi session.
-
-        Arguments:
-            url (str): The file to download.
-            save_path (Path): The location to save the file.
-
-        """
-        logger.debug("Downloading %s to %s", url, save_path)
-        response = self.session.get(url)
-        save_path.write_bytes(response.content)
