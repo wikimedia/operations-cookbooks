@@ -162,4 +162,4 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
         logger.info('Running Netbox PuppetDB import script to pickup eventual bridge changes.')
         run_script_logs = self.netbox.run_script(name='import_server_facts.ImportPuppetDB',
                                                  commit=True, params={'device': self.fqdn.split('.')[0]})
-        logger.debug('Netbox script logs :\n%s', '\n'.join(run_script_logs))
+        logger.debug('Netbox script logs :\n%s', '\n'.join([log["message"] for log in run_script_logs]))
