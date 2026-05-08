@@ -40,10 +40,11 @@ def argument_parser() -> ArgumentParser:
     ap.add_argument("old_pkg", help="Old MariaDB Debian package e.g. wmf-mariadb106")
     ap.add_argument("-t", "--task-id", help="Phabricator task ID")
     ap.add_argument("--repool", action="store_true", help="Pool in host after upgrade")
+    ap.add_argument("--reimage", help="Reimage with the chosen distro", choices=["bookworm", "trixie", "forky"])
     return ap
 
 
-def pool(run_cookbook, hostname, task_id, reason) -> None:
+def pool(run_cookbook, hostname: str, task_id: None | str, reason) -> None:
     """Pool a host back."""
     step("pool", f"Pooling {hostname}")
     if task_id:
@@ -53,7 +54,7 @@ def pool(run_cookbook, hostname, task_id, reason) -> None:
     run_cookbook("sre.mysql.pool", cbargs, confirm=True)
 
 
-def depool(run_cookbook, hostname, task_id, reason) -> None:
+def depool(run_cookbook, hostname: str, task_id: None | str, reason) -> None:
     """Depool a host."""
     step("depool", f"Depooling {hostname}")
     if task_id:
@@ -96,9 +97,10 @@ def run_upgrade(  # pylint: disable=too-many-arguments,too-many-positional-argum
     phab,
     run_cookbook,
     admin_reason,
-    task_id: str,
+    task_id: None | str,
     do_repool: bool,
     old_pkg: str,
+    reimage: None | str,
 ) -> None:
     """Migrate MariaDB version of a single host."""
     fqdn = _fqdn(host)
@@ -126,28 +128,34 @@ def run_upgrade(  # pylint: disable=too-many-arguments,too-many-positional-argum
     ]
     run_scripts(host, scripts)
 
-    step("remove_pkg", f"Removing old MariaDB package {old_pkg}")
-    # Puppet is not being used to remove packages
-    run_apt_get(host, f"-y remove {old_pkg}")
+    if reimage is None:
+        # Prepare for dist-upgrade
 
-    msg = "Finalize and puppet-merge the patch to Puppet."
-    ask_confirmation(msg)
+        step("remove_pkg", f"Removing old MariaDB package {old_pkg}")
+        # Puppet is not being used to remove packages
+        run_apt_get(host, f"-y remove {old_pkg}")
 
-    # This will install the new package gets installed
-    step("start_run_puppet", "Starting puppet and wait for it to run")
-    host_puppet.enable(admin_reason)
-    host_puppet.wait()
+        msg = "Finalize and puppet-merge the patch to Puppet."
+        ask_confirmation(msg)
 
-    # TODO ensure MariaDB is installed?
+        # This will install the new package gets installed
+        step("start_run_puppet", "Starting puppet and wait for it to run")
+        host_puppet.enable(admin_reason)
+        host_puppet.wait()
 
-    step("apt_update", "Running apt-get update")
-    run_apt_get(host, "update")
+        # TODO ensure MariaDB is installed?
 
-    step("apt_upgrade", "Running apt-get dist-upgrade")
-    upgrade_cmd = "-y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' dist-upgrade"
-    run_apt_get(host, upgrade_cmd)
+        step("apt_update", "Running apt-get update")
+        run_apt_get(host, "update")
 
-    reboot(host)
+        step("apt_upgrade", "Running apt-get dist-upgrade")
+        upgrade_cmd = "-y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' dist-upgrade"
+        run_apt_get(host, upgrade_cmd)
+
+        reboot(host)
+
+    else:
+        reimage_host(hostname, reimage, task_id, run_cookbook)
 
     start_mariadb_and_run_mysql_upgrade(host)
 
@@ -168,6 +176,16 @@ def run_upgrade(  # pylint: disable=too-many-arguments,too-many-positional-argum
 
     step("wait_icinga_s", f"Waiting for icinga to go green for {fqdn}")
     spicerack.icinga_hosts(host.hosts).wait_for_optimal()
+
+
+def reimage_host(hostname: str, distro: str, task_id: None | str, run_cookbook) -> None:
+    step("reimage_os", f"Reimaging host with Debian {distro}")
+    # Do not create nor delete the downtime
+    cbargs = ["--os", distro, "--no-downtime", "--no-check-icinga", hostname]
+    if task_id:
+        cbargs.extend(["-t", task_id])
+
+    run_cookbook("sre.hosts.reimage", cbargs, confirm=True)
 
 
 def start_mariadb_and_run_mysql_upgrade(host):
@@ -200,7 +218,7 @@ def reboot(host):
 @retry(tries=20, delay=timedelta(seconds=5), backoff_mode="constant", exceptions=(RemoteError,))
 def _remotehosts_query(remote: Remote, hostname: str) -> RemoteHosts:
     """Returns RemoteHosts by hostname expecting len() == 1"""
-    if not hostname.isalnum():
+    if not (hostname.isalnum() or hostname.startswith("db-test")):
         raise RuntimeError(f"Unexpected chars in hostname '{hostname}'")
 
     query = "A:db-all and P{%s*}" % hostname
@@ -244,6 +262,7 @@ def run(args: Namespace, spicerack: Spicerack) -> None:
             task_id,
             args.repool,
             args.old_pkg,
+            args.reimage,
         )
 
     hostname = str(host).split(".", maxsplit=1)[0]
