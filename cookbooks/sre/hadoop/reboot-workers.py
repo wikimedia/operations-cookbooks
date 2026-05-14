@@ -57,8 +57,6 @@ class RebootHadoopWorkers(CookbookBase):
         parser.add_argument('--workers-cumin-query', required=False, help='A cumin query string to select '
                             'the Hadoop workers to work on. This overrides the selection of the '
                             'cluster argument. It should used be when only a few hosts need to be rebooted.')
-        parser.add_argument('--dry-run', action='store_true',
-                            help='Dry run mode: print what would be done without actually rebooting hosts.')
 
         return parser
 
@@ -89,7 +87,6 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
         self.reboot_batch_size = args.batch_size
         self.yarn_nm_sleep_seconds = args.yarn_nm_sleep_seconds
         self.workers_cumin_query = args.workers_cumin_query
-        self.dry_run = args.dry_run
         self.reason = spicerack.admin_reason('Reboot.')
 
     @property
@@ -99,24 +96,13 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
 
     def _reboot_hadoop_workers(self, hadoop_workers_batch, stop_journal_daemons=False):
         """Reboot a batch of Hadoop workers"""
-        if self.dry_run:
-            logger.info('[DRY RUN] Would process batch: %s', hadoop_workers_batch.hosts)
-            logger.info('[DRY RUN] Would set downtime for: %s', hadoop_workers_batch.hosts)
-            logger.info('[DRY RUN] Would disable puppet on: %s', hadoop_workers_batch.hosts)
-            logger.info('[DRY RUN] Would stop Yarn Nodemanagers on: %s', hadoop_workers_batch.hosts)
-            logger.info('[DRY RUN] Would wait %s seconds (skipped in dry-run)', self.yarn_nm_sleep_seconds)
-            logger.info('[DRY RUN] Would stop HDFS Datanodes on: %s', hadoop_workers_batch.hosts)
-            if stop_journal_daemons:
-                logger.info('[DRY RUN] Would stop HDFS Journalnode on: %s', hadoop_workers_batch.hosts)
-            logger.info('[DRY RUN] Would reboot hosts: %s', hadoop_workers_batch.hosts)
-            logger.info('[DRY RUN] Would wait for reboot to complete (skipped in dry-run)')
-            logger.info('[DRY RUN] Would enable puppet on: %s', hadoop_workers_batch.hosts)
-            return
-
+        logger.debug('Processing batch: %s', hadoop_workers_batch.hosts)
         with self.spicerack.alerting_hosts(hadoop_workers_batch.hosts).downtimed(
                 self.reason, duration=timedelta(minutes=60)):
+            logger.debug('Set downtime for: %s', hadoop_workers_batch.hosts)
             puppet = self.spicerack.puppet(hadoop_workers_batch)
             puppet.disable(self.reason)
+            logger.debug('Disabled puppet on: %s', hadoop_workers_batch.hosts)
             logger.info('Stopping the Yarn Nodemanagers...')
             confirm_on_failure(
                 hadoop_workers_batch.run_sync, 'systemctl stop hadoop-yarn-nodemanager')
@@ -139,6 +125,7 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
             confirm_on_failure(
                 hadoop_workers_batch.wait_reboot_since, reboot_time)
             puppet.enable(self.reason)
+            logger.debug('Enabled puppet on: %s', hadoop_workers_batch.hosts)
 
     def run(self):
         """Reboot all Hadoop workers of a given cluster"""
