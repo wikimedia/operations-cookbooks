@@ -356,7 +356,7 @@ re_old_topology_vlan = re.compile(r"private1-[a-z]-(eqiad|codfw)")
 # This regex matches VLANs which require BGP peering with the ToR switches
 re_new_topology_vlan = re.compile(r"private1-[a-z]\d-(eqiad|codfw)")
 # This regex matches VLANs trunked on any of the LVS physical NICs
-re_l2_adjacent_vlan = re.compile(r"private1-(([a-d]-(codfw|eqiad))|([e,f])\d-eqiad)")
+re_l2_adjacent_vlan = re.compile(r"private1-(([a-d]\d{0,1}-(codfw|eqiad))|([e,f])\d-eqiad)")
 
 
 def host_has_l2_adjacency_to_lvs(netbox_server: NetboxServer) -> bool:
