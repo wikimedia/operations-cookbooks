@@ -362,6 +362,10 @@ re_l2_adjacent_vlan = re.compile(r"private1-(([a-d]-(codfw|eqiad))|([e,f])\d-eqi
 def host_has_l2_adjacency_to_lvs(netbox_server: NetboxServer) -> bool:
     """Check if the given host has L2 adjacency to an LVS server."""
     host = netbox_server.fqdn
+    if netbox_server.virtual:
+        # Ganeti VMs cannot return the switch interface, so an exception is thrown.
+        logger.debug("%s: Virtual machine, no retrievable L2 adjacency", host)
+        return False
     vlan = netbox_server.access_vlan
     if re_l2_adjacent_vlan.match(vlan):
         logger.debug("%s: VLAN %s is L2 adjacent to LVS servers", host, vlan)
