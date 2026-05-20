@@ -59,6 +59,12 @@ SUPERMICRO_PXE_BUG_SLUGS = (
     'sys-120c-tr-configc',
 )
 
+# These are the multi-GPU nodes that
+# the ML team uses for inference and training.
+SUPERMICRO_GPU_IOMMU_SLUGS = (
+    'as-8125gs-tnmr2',
+)
+
 # The Supermicro Config A hosts don't accept the "PXE" setting
 # when configuring the NIC ports in the BIOS. They need "Legacy".
 SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS = (
@@ -626,6 +632,10 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                 "SOL_COM2ConsoleRedirection": True,
                 "COM2ConsoleRedirection": True,
             }
+
+            if self.device_model_slug in SUPERMICRO_GPU_IOMMU_SLUGS:
+                logger.info("GPU-enabled host, adding IOMMU capabilities.")
+                proposed_bios_changes_round2['IOMMU'] = "Enabled"
 
             self._set_in_bios_changes(bios_attributes, proposed_bios_changes_round2)
 
