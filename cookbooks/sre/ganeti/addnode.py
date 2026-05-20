@@ -137,7 +137,7 @@ class GanetiAddNodeRunner(CookbookRunnerBase):
 
         host_ip = socket.gethostbyname(self.fqdn)
         self.validate_state(
-            f'/usr/local/sbin/validate-ganeti-firewall {host_ip}',
+            f'grep  {host_ip} /etc/nftables/input/10_ganeti_ssh_cluster.nft',
             ('The node cannot be found in the firewall config of the Ganeti master.'
              'Make sure to add it to the profile::ganeti::nodes Hiera config.'),
             run_on_masternode=True,
