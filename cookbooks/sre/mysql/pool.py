@@ -37,6 +37,11 @@ hostname_regex = re.compile(r"[a-z][a-z-]*[a-z](\d{4})")
 logger = logging.getLogger(__name__)  # TODO: rename to log
 
 
+def step(slug: str, msg: str) -> None:
+    """Logging helper."""
+    logger.info("[%s.%s] %s", __name__, slug, msg)
+
+
 @dataclass
 class InstanceMetadata:
     """Instance metadata"""
@@ -303,6 +308,8 @@ class Pool(CookbookBase):
                 action="store_true",
                 help="Repool the host more slowly, with ten steps.",
             )
+        elif self.__class__.__name__ == "Depool":
+            parser.add_argument("--downtime", type=int, help="Add downtime in hours")
 
         # TODO: add support for multiple instances? Based on what? (puppetdb, dbctl, orchestrator)
         parser.add_argument("instance", help="Hostname or FQDN")
@@ -325,8 +332,10 @@ class PoolDepoolRunner(CookbookRunnerBase):
         logging.getLogger("conftool").setLevel(logging.INFO)
 
         self.args = args
+
         self.pool = args.operation == "pool"
         self.dbctl = spicerack.dbctl()
+        self.downtime = getattr(self.args, "downtime", None)
         self.reason = spicerack.admin_reason(args.reason, task_id=args.task_id)
         self.task_id = args.task_id
         self.dry_run = spicerack.dry_run
@@ -366,8 +375,8 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
         self.datacenter = dbi.tags.get("datacenter")
 
-        nodeset = mrhs.remote_hosts.hosts
-        self._icinga_host = spicerack.icinga_hosts(nodeset)
+        self._icinga_host = spicerack.icinga_hosts(mrhs.remote_hosts.hosts)
+        self._alerting_hosts = spicerack.alerting_hosts(mrhs.remote_hosts.hosts)
 
         self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
@@ -412,6 +421,14 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
     def _depool_s_or_es(self) -> None:
         msg = "depool instance {self.args.instance}"
+
+        if self.downtime:
+            step("depool", "Setting downtime")
+            self._alerting_hosts.downtime(
+                self.reason,
+                duration=timedelta(hours=self.downtime)
+            )
+
         self.wait_diff_clean()
 
         ar, dbctl_conf = self.dbctl.config.generate()
@@ -444,6 +461,9 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
         if self.args.task_id:
             cmar.extend(["--task-id", self.args.task_id])
+
+        if self.downtime:
+            cmar.extend(["--downtime", self.downtime])
 
         cmar.extend([section, "depool"])
         self._run_cookbook("sre.mysql.parsercache", cmar)

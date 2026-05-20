@@ -53,7 +53,8 @@ def argument_parser() -> ArgumentParser:
     pool.add_argument("--skip-icinga-checks", action="store_true", help="Skip checks before pooling")
 
     depool = subs.add_parser("depool", help="Depool")
-    depool.add_argument("--downtime-hours", type=int, help="Create downtime (default: no)", default=0)
+    depool.add_argument("--downtime", "--downtime-hours", dest="downtime_hours", type=int,
+                        help="Create downtime (default: no)", default=0)
     return ap
 
 
