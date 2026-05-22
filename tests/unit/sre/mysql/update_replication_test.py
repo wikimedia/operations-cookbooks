@@ -11,16 +11,16 @@ from unittest.mock import MagicMock
 from pytest import fixture
 from spicerack.mysql import Instance as MInst
 
-from conftest import load_cookbook
-
-update_repl = load_cookbook("cookbooks/sre/mysql/update-replication.py")
-
-
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
 
 # Fixtures
+
+
+@fixture()
+def update_repl(load_cookbook):
+    return load_cookbook("cookbooks/sre/mysql/update-replication.py")
 
 
 @fixture(autouse=True)
@@ -65,7 +65,7 @@ def mock_execute(sql, args=()) -> dict:
 # Tests
 
 
-def test_run_basic_dry_run(mocker, caplog):
+def test_run_basic_dry_run(mocker, caplog, update_repl):
     mocker.patch.object(update_repl, "ensure_shell_is_durable")
     mocker.patch.object(update_repl.time, "sleep")
 
@@ -104,7 +104,7 @@ INFO DRY-RUN: would have executed SQL: <START REPLICA>
     assert caplog.text == exp
 
 
-def test_run_basic(mocker, caplog):
+def test_run_basic(mocker, caplog, update_repl):
 
     sr = mocker.MagicMock(name="Spicerack")
     sr.dry_run = False
