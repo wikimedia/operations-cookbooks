@@ -4,7 +4,6 @@ import logging
 
 from collections import defaultdict
 from pprint import pformat
-from time import sleep
 from typing import Union, cast
 from ipaddress import IPv4Address
 from abc import ABCMeta
@@ -185,7 +184,6 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):  # pylint: disable
         self.netbox_server = spicerack.netbox_server(self.args.host)
         self.netbox_data = self.netbox_server.as_dict()
         self.fqdn = self.netbox_server.mgmt_fqdn
-        self.ipmi = spicerack.ipmi(target=self.fqdn, username="root")
         self.remote = spicerack.remote()
         self.vendor = self.netbox_data['device_type']['manufacturer']['slug']
         self.verbose = spicerack.verbose
@@ -224,6 +222,37 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):  # pylint: disable
                 (f"Server's serial is different between Netbox ({netbox_serial})"
                  f" and Redfish ({redfish_serial} or {redfish_sku})"))
         logging.debug("Netbox and Redfish serials match")
+
+
+    def _configure_user(self, username: str, create_if_not_present: bool = False):
+        try:
+            self.redfish.find_account(username)
+            logger.info(
+                "Updating the %s user's password on the BMC.", username)
+            self.redfish.change_user_password(username, self.mgmt_password)
+        except RedfishError as e:
+            logger.info(
+                "The %s user on the BMC is not present. More info: %s", username, e)
+            if create_if_not_present:
+                logger.info(
+                    'Creating the %s user on the BMC.', username)
+                self.redfish.add_account(username, self.mgmt_password)
+
+    def _configure_users(self):
+        if self.args.no_users:
+            logger.info('Skipping admin users password change')
+        else:
+            # Global administrator user, used on Supermicro and Dells
+            self._configure_user('wmfroot', create_if_not_present=True)
+
+            # The ADMIN user is present only on Supermicros.
+            # We need to change its default password to the wmfroot's one.
+            self._configure_user('ADMIN')
+
+            # The root user is present on all Dells, and we used to set it
+            # on all Supermicros before the introduction of the wmfroot user.
+            # We need to change its password to the wmfroot's one.
+            self._configure_user('root')
 
 
 class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance-attributes
@@ -391,34 +420,8 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             self._dhcp_active = False
 
         self.redfish.check_connection()
-        if self.args.no_users:
-            logger.info('Skipping root user password change')
-        else:
-            try:
-                self.redfish.find_account("root")
-            except RedfishError as e:
-                logger.info(
-                    "The root user on the BMC has not been created yet. "
-                    "More info: %s", e)
-                logger.info(
-                    'Creating the root user on the BMC.')
-                self.redfish.add_account('root', self.mgmt_password)
-
-            logger.info(
-                "Updating the root user's password on the BMC.")
-            self.redfish.change_user_password('root', self.mgmt_password)
-
-            try:
-                self.redfish.find_account("ADMIN")
-                logger.info(
-                    "Updating the ADMIN user's password on the BMC.")
-                self.redfish.change_user_password('ADMIN', self.mgmt_password)
-            except RedfishError as e:
-                logger.info(
-                    "The ADMIN user on the BMC is not present, skipping. "
-                    "More info: %s", e)
-
-        sleep(10)  # Trying to avoid a race condition that seems to make IPMI fail right after changing the password
+        self._configure_users()
+        self.ipmi = self.spicerack.ipmi(target=self.fqdn, username="wmfroot")
         self.ipmi.check_connection()
 
     def rollback(self):
@@ -736,7 +739,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                         "only if you don't care about the device.")
                 else:
                     self.bios_changes["Attributes"][key] = new_value
-            if "LAN" in key:
+            if "LAN" in key and "OptionROM_" not in key:
                 logger.info("BIOS - Found a NIC device: %s", key)
                 pxe_nic_devices.append(key)
         return pxe_nic_devices
@@ -834,8 +837,9 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
     def _try_bmc_password(self):
         """Test the known BMC passwords, find a working one and configure Redfish."""
         credentials_to_test = {
-            "wmf_root_mgmt": ("root", self.mgmt_password),
+            "wmf_root_mgmt": ("wmfroot", self.mgmt_password),
             "calvin": ("ADMIN", SUPERMICRO_DEFAULT),
+            "wmf_admin_mgmt": ("ADMIN", self.mgmt_password),
             "BMC_LABEL": ("ADMIN", None),
         }
         for label, (bmc_username, bmc_password) in credentials_to_test.items():
@@ -900,6 +904,8 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         self._dhcp_active = False
 
         self.all_nics: list = []
+
+        self.spicerack = spicerack
 
         if self.netbox_server.status in ('active', 'staged'):
             self.reboot_policy = DellSCPRebootPolicy.GRACEFUL
@@ -1039,13 +1045,11 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
 
         self.redfish.check_connection()
         if self.args.no_users:
-            logger.info('Skipping root user password change')
+            logger.info('Skipping admin users password change')
         else:
-            logger.info(
-                "Updating the root user's password on the BMC.")
-            self.redfish.change_user_password('root', self.mgmt_password)
+            self._configure_users()
 
-        sleep(10)  # Trying to avoid a race condition that seems to make IPMI fail right after changing the password
+        self.ipmi = self.spicerack.ipmi(target=self.fqdn, username="wmfroot")
         self.ipmi.check_connection()
 
     def rollback(self):
