@@ -14,7 +14,7 @@ import time
 from argparse import ArgumentParser
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-from cookbooks.sre.mysql import ensure, MySQLCookbookRunnerBase
+from cookbooks.sre.mysql import MySQLCookbookRunnerBase, ensure
 from spicerack.cookbook import CookbookBase
 from spicerack.mysql import Instance as MInst
 from wmflib.interactive import ensure_shell_is_durable

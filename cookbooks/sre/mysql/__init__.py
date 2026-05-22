@@ -16,15 +16,19 @@ from argparse import (
     ArgumentParser,
     Namespace,
 )
+from collections.abc import Callable
 from configparser import ConfigParser
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import Enum
 from os import getenv
+from typing import Any
 
+import phabricator
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from pydantic import (
     BaseModel,
     Field,
+    PrivateAttr,
 )
 from spicerack import Spicerack
 from spicerack.apiclient import APIClient
@@ -221,6 +225,9 @@ class MySQLCookbookRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
 ## WIP cleanup process for existing cookbooks
 
+
+# # generic helpers # #
+
 log = logging.getLogger(__name__)
 
 
@@ -230,6 +237,22 @@ def ensure(condition: bool, msg: str) -> None:
         return
     log.error("Failed safety check: {msg}", exc_info=True)
     raise AssertionError(msg)
+
+
+def init_step(module_name: str) -> Callable[[str, str], None]:
+    """
+    Log next step in a friendly/greppable format.
+    """
+    # TODO: store the step in zarcillo to create visibility around the automation process
+    # TODO: also log msg in open telemetry format for tracing
+
+    def step(slug: str, msg: str) -> None:
+        log.info("[%s.%s] %s", module_name, slug, msg)
+
+    return step
+
+
+# # Spicerack helpers # #
 
 
 def get_mysqlremotehosts(spicerack, fqdn: str) -> MysqlRemoteHosts:
@@ -272,6 +295,10 @@ class InstanceMetadata(BaseModel):
     candidate_score: int = 0
 
 
+class InstancesMetadataResp(BaseModel):
+    instances: list[InstanceMetadata]
+
+
 class SectionStatus(BaseModel):
     name: str
     instance_cnt: int
@@ -294,3 +321,172 @@ class ZarcilloClient:
             raise RuntimeError(f"Unexpected response {j}")
 
         return SectionStatus(**j)
+
+    def fetch_instances_meta(self, hostname: str) -> list[InstanceMetadata]:
+        """Fetch instances on a host /api/v1/instances/{hostname}"""
+        path = f"/api/v1/instances/{hostname}"
+        resp = self._client.request("GET", path)
+        resp.raise_for_status()
+
+        payload = InstancesMetadataResp.parse_obj(resp.json())
+        return payload.instances
+
+
+# # Phabricator # #
+
+
+class PhabTask(BaseModel):
+    author_phid: str | None = None
+    date_created: datetime | None = None
+    date_modified: datetime | None = None
+    description: str
+    id: int
+    is_closed: bool = False
+    owner_phid: str | None = None
+    phid: str
+    priority: str | None = None
+    project_phids: list[str] = Field(default_factory=list)
+    status: str | None = None
+    title: str
+
+    # # internals # #
+
+    _client: phabricator.Phabricator = PrivateAttr()
+    _parent = PrivateAttr()
+    _pending_txns: list[dict[str, Any]] = PrivateAttr(default_factory=list)
+
+    @classmethod
+    def from_api_dict(cls, task_data: dict[str, Any], client: phabricator.Phabricator, parent) -> "PhabTask":
+        fields = task_data.get("fields", {})
+        raw_desc = fields.get("description", {}).get("raw", "")
+
+        status_data = fields.get("status", {})
+        priority_data = fields.get("priority", {})
+
+        out = cls(
+            author_phid=fields.get("authorPHID"),
+            date_created=fields.get("dateCreated"),
+            date_modified=fields.get("dateModified"),
+            description=raw_desc,
+            id=task_data["id"],
+            is_closed=fields.get("isClosed", False),
+            owner_phid=fields.get("ownerPHID"),
+            phid=task_data["phid"],
+            priority=priority_data.get("name") if isinstance(priority_data, dict) else None,
+            project_phids=fields.get("projectPHIDs", []),
+            status=status_data.get("value") if isinstance(status_data, dict) else None,
+            title=fields.get("name", fields.get("title", "")),
+        )
+        out._client = client
+        out._parent = parent
+        return out
+
+    # # transaction methods # #
+
+    def unassign(self) -> "PhabTask":
+        self._pending_txns.append({"type": "owner", "value": None})
+        return self
+
+    def add_project_tags(self, tags: list[str]) -> "PhabTask":
+        project_phids = self._parent.lookup_project_phids(tags)
+        self._pending_txns.append({"type": "projects.add", "value": project_phids})
+        return self
+
+    def remove_project_tags(self, tags: list[str]) -> "PhabTask":
+        project_phids = self._parent.lookup_project_phids(tags)
+        self._pending_txns.append({"type": "projects.remove", "value": project_phids})
+        return self
+
+    def set_project_tags(self, tags: list[str]) -> "PhabTask":
+        """Set project tags e.g. #DBA removing any previous one"""
+        project_phids = self._parent.lookup_project_phids(tags)
+        self._pending_txns.append({"type": "projects.set", "value": project_phids})
+        return self
+
+    def add_comment(self, text: str) -> "PhabTask":
+        self._pending_txns.append({"type": "comment", "value": text})
+        return self
+
+    def assign_to(self, username: str) -> "PhabTask":
+        phid = self._parent.lookup_user_phid(username)
+        self._pending_txns.append({"type": "owner", "value": phid})
+        return self
+
+    def set_description(self, description: str) -> "PhabTask":
+        self._pending_txns.append({"type": "description", "value": description})
+        return self
+
+    def send(self) -> Any:
+        """Send all changes in an API call"""
+        if not self._pending_txns:
+            return
+
+        out = self._client.maniphest.edit(
+            objectIdentifier=self.phid,
+            transactions=self._pending_txns,
+        )
+        self._pending_txns.clear()
+        return out
+
+
+class Phabricator:
+    """Phabricator client wrapper
+
+    Example:
+
+        >>> phab = phabricator_client(spicerack)
+        >>> t = phab.fetch_task("T434788")
+        >>> print(t.status)
+        >>> print(t.title)
+        >>> print(t.description)
+        >>> res = t.add_comment("comment").assign_to("JDoe-WMF").add_project_tags(["#DBA"]).send()
+        >>> print(res.transactions)
+    """
+
+    # TODO: move into wmflib
+
+    def __init__(self, phab) -> None:
+        self.phab = phab
+
+    @property
+    def _client(self):
+        return self.phab._client
+
+    def task_accessible(self, task_id: str, *, raises: bool = True) -> bool:
+        return self.phab.task_accessible(task_id, raises=raises)
+
+    def task_comment(self, task_id: str, comment: str, *, raises: bool = True) -> None:
+        self.phab.task_comment(task_id, comment, raises=raises)
+
+    def fetch_task(self, task_id: str) -> PhabTask:
+        """Fetch task by ID e.g. T1234 and return a PyDantic obj with the most useful fields"""
+        task_int = int(task_id.strip("T"))
+        task_res = self._client.maniphest.search(constraints={"ids": [task_int]})
+        if not task_res["data"]:
+            raise ValueError(f"Task {task_id} not found.")
+
+        if len(task_res["data"]) != 1:
+            raise ValueError("Expected only one item in `data`")
+
+        return PhabTask.from_api_dict(
+            task_res["data"][0],
+            self._client,
+            self,
+        )
+
+    def lookup_project_phids(self, slugs: list[str]) -> list[str]:
+        resp = self._client.project.search(constraints={"slugs": slugs})
+        return [p["phid"] for p in resp["data"]]
+
+    def lookup_user_phid(self, username: str) -> str:
+        username = username.lstrip("@")
+        resp = self._client.user.search(constraints={"usernames": [username]})
+        if not resp.get("data"):
+            raise ValueError(f"User '{username}' not found.")
+
+        return resp["data"][0]["phid"]
+
+
+def phabricator_client(spicerack: Spicerack) -> Phabricator:
+    wph = spicerack.phabricator("/etc/phabricator_ops-monitoring-bot.conf")
+    return Phabricator(wph)
