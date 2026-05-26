@@ -9,12 +9,11 @@ from datetime import timedelta
 from typing import Generator
 
 from conftool.extensions.dbconfig.action import ActionResult
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from spicerack import Spicerack
 from spicerack.dbctl import Dbctl
 from spicerack.icinga import IcingaHosts
 from spicerack.remote import RemoteHosts
-
-from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 
 # pylint: disable=missing-docstring
 # pylint: disable=R0913,R0917

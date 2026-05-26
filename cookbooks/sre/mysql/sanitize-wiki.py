@@ -4,13 +4,11 @@ import logging
 import re
 from argparse import ArgumentParser
 
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.mysql import Instance as MInst
-from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
-
-from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 # NOTE: this scripts is written defensively. Please prioritize safety and readability,
 # minimize abstractions and state, enable type checking, do assertions, write tests

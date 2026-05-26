@@ -5,28 +5,29 @@
 # pylint: disable=raise-missing-from,redefined-outer-name
 # pydocstyle: disable=D101,D103,D202
 
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass, fields
-from datetime import timedelta
-from time import sleep, monotonic
-from typing import Any, Tuple, Optional
 import json
 import logging
 import re
+from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass, fields
+from datetime import timedelta
+from time import monotonic, sleep
+from typing import Any, Optional, Tuple
 from urllib.request import urlopen
 
 from conftool.extensions.dbconfig.action import ActionResult
 from conftool.extensions.dbconfig.entities import Instance as DBCInst
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.decorators import retry
-from spicerack.icinga import IcingaStatusNotFoundError, HostsStatus as IcingaHostsStatus
-from spicerack.icinga import HostStatus as IcingaStatus, IcingaHosts
-from spicerack.mysql import Instance as MInst, MysqlRemoteHosts
-from spicerack.remote import RemoteHosts, RemoteExecutionError
-from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
-
-from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+from spicerack.icinga import HostsStatus as IcingaHostsStatus
+from spicerack.icinga import HostStatus as IcingaStatus
+from spicerack.icinga import IcingaHosts, IcingaStatusNotFoundError
+from spicerack.mysql import Instance as MInst
+from spicerack.mysql import MysqlRemoteHosts
+from spicerack.remote import RemoteExecutionError, RemoteHosts
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 # TODO: improve handling of spurious changes, right now it bails out
 

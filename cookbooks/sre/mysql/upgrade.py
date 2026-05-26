@@ -8,14 +8,13 @@ from argparse import ArgumentParser, Namespace
 from datetime import datetime, timedelta
 from time import sleep
 
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.mysql import Instance as MInst, Mysql
+from spicerack.mysql import Instance as MInst
+from spicerack.mysql import Mysql
 from spicerack.remote import RemoteHosts
 from wmflib.interactive import AbortError, confirm_on_failure, ensure_shell_is_durable
-
-from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-
 
 log = logging.getLogger(__name__)
 

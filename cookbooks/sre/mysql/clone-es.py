@@ -21,21 +21,25 @@ import time
 from argparse import ArgumentParser
 from contextlib import contextmanager
 from datetime import timedelta
-from typing import Tuple, Dict, Generator, List
+from typing import Dict, Generator, List, Tuple
 
 import transferpy.transfer
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from pymysql.cursors import DictCursor
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.dbctl import Dbctl
 from spicerack.decorators import retry
-from spicerack.mysql import Instance as MInst, Mysql
-from spicerack.remote import Remote, RemoteHosts, RemoteError
+from spicerack.mysql import Instance as MInst
+from spicerack.mysql import Mysql
+from spicerack.remote import Remote, RemoteError, RemoteHosts
 from transferpy.Transferer import Transferer
-from wmflib.interactive import AbortError, confirm_on_failure, ensure_shell_is_durable, ask_confirmation
-
-from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-
+from wmflib.interactive import (
+    AbortError,
+    ask_confirmation,
+    confirm_on_failure,
+    ensure_shell_is_durable,
+)
 
 log = logging.getLogger(__name__)
 

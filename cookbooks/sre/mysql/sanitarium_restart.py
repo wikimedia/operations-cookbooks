@@ -4,12 +4,11 @@ import logging
 from argparse import ArgumentParser, Namespace
 from time import sleep
 
-from spicerack import Spicerack
-from spicerack.mysql import MysqlRemoteHosts, Mysql
-from spicerack.remote import RemoteHosts, Remote
-from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-
+from spicerack import Spicerack
+from spicerack.mysql import Mysql, MysqlRemoteHosts
+from spicerack.remote import Remote, RemoteHosts
+from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 # pylint: disable=missing-docstring
 # pylint: disable=R0913,R0917
