@@ -1,10 +1,5 @@
 """Pool or depool a DB from dbctl."""
 
-# pylint: disable=missing-docstring,too-many-instance-attributes,R0913,R0917
-# pylint: disable=logging-fstring-interpolation,no-else-raise,broad-exception-caught
-# pylint: disable=raise-missing-from,redefined-outer-name
-# pydocstyle: disable=D101,D103,D202
-
 import json
 import logging
 import re
@@ -35,12 +30,12 @@ from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 
 hostname_regex = re.compile(r"[a-z][a-z-]*[a-z](\d{4})")
-logger = logging.getLogger(__name__)  # TODO: rename to log
+log = logging.getLogger(__name__)
 
 
 def step(slug: str, msg: str) -> None:
     """Logging helper."""
-    logger.info("[%s.%s] %s", __name__, slug, msg)
+    log.info("[%s.%s] %s", __name__, slug, msg)
 
 
 @dataclass
@@ -68,7 +63,7 @@ class InstanceMetadata:
 
 def _jget(url: str) -> dict:
     """Fetch json dict"""
-    logger.debug(f"Fetching {url}")
+    log.debug(f"Fetching {url}")
     with urlopen(url, timeout=5) as resp:  # nosec B310
         j = json.loads(resp.read())
     return j
@@ -129,7 +124,7 @@ def ensure(condition: bool, msg: str) -> None:
     """Just some syntactic sugar for readability."""
     if condition:
         return
-    logger.error("Failed safety check: {msg}", exc_info=True)
+    log.error("Failed safety check: {msg}", exc_info=True)
     raise AssertionError(msg)
 
 
@@ -251,11 +246,11 @@ def _poll_icinga_notification_status(icinga_host: IcingaHosts, hostname: str) ->
             s: IcingaStatus = ihs[hostname]
             if s.notifications_enabled:
                 return
-            logger.info(notif_disabled_msg)
+            log.info(notif_disabled_msg)
         except (IcingaStatusNotFoundError, KeyError):
-            logger.info("The host is unknown to Icinga: you might need to add it to puppet.")
+            log.info("The host is unknown to Icinga: you might need to add it to puppet.")
 
-        logger.debug("[%s] polling again in 5 minutes...", attempt)
+        log.debug("[%s] polling again in 5 minutes...", attempt)
         sleep(60 * 5)
 
     raise RuntimeError("Timed out while waiting for Icinga notifications to be enabled")
@@ -397,15 +392,15 @@ class PoolDepoolRunner(CookbookRunnerBase):
         if self.phabricator.task_accessible(self.task_id, raises=False):
             self.phabricator.task_comment(self.task_id, msg, raises=False)
         else:
-            logger.warning(f"Unable to access task {self.task_id}: not adding comment '{msg}'")
+            log.warning(f"Unable to access task {self.task_id}: not adding comment '{msg}'")
 
     def check_action_result(self, action_result: ActionResult, message: str) -> None:
         """Raise on failure and log any messages present in an ActionResult instance."""
         for result_message in action_result.messages:
-            logger.log(logging.INFO if action_result.success else logging.ERROR, result_message)
+            log.log(logging.INFO if action_result.success else logging.ERROR, result_message)
 
         if action_result.announce_message:
-            logger.info(action_result.announce_message)
+            log.info(action_result.announce_message)
 
         if not action_result.success:
             raise RuntimeError(f"Failed to {message}")
@@ -413,7 +408,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
     def _pool_s_or_es(self) -> None:
         if self.args.skip_safety_checks is False:
             _poll_icinga_notification_status(self._icinga_host, self._hostname)
-            logger.debug("Waiting for icinga to go green")
+            log.debug("Waiting for icinga to go green")
             self._icinga_host.wait_for_optimal()
 
         self._update_phabricator("Starting", f"pool of {self.args.instance}")
@@ -471,16 +466,16 @@ class PoolDepoolRunner(CookbookRunnerBase):
             imeta = fetch_host_instance_from_zarcillo(self.args.instance)
             section = imeta.section
         except Exception as e:
-            logger.error(f"Error {e}")
-            logger.info("If you want to continue anyway input the section: ")
+            log.error(f"Error {e}")
+            log.info("If you want to continue anyway input the section: ")
             section = input("Section: ").strip().lower()
 
         _, pool_method = extract_section_kind_and_method(section)
 
         if pool_method == "pc":
             de = "" if self.pool else "de"
-            logger.info("Using parsercache cookbook")
-            logger.info(f"The whole '{section}' section will be {de}pooled")
+            log.info("Using parsercache cookbook")
+            log.info(f"The whole '{section}' section will be {de}pooled")
             if self.pool:
                 self._pool_pc_or_ms(section)
             else:
@@ -517,17 +512,17 @@ class PoolDepoolRunner(CookbookRunnerBase):
             # Skip if all the sections are pooled with a percentage equal or greater than the percentage to set
             if len(current_pooling) == 1 and current_pooling.pop() == (True, True):
                 msg = "Skipping pooling instance %s at %d%%: instance already pooled with higher percentage"
-                logger.info(msg, self.args.instance, percentage)
+                log.info(msg, self.args.instance, percentage)
                 continue
 
             msg = f"Pooling instance {self.args.instance} at {percentage}%"
-            logger.info(msg)
+            log.info(msg)
             self.wait_diff_clean()
             ret = self.dbctl.instance.pool(self.args.instance, percentage=percentage)
             self.check_action_result(ret, msg)
             self.commit_change(msg)
             if percentage == 100:
-                logger.debug("pooling-in completed")
+                log.debug("pooling-in completed")
                 return
 
             sleep(sleep_duration)
@@ -563,22 +558,22 @@ class PoolDepoolRunner(CookbookRunnerBase):
         try:
             minst: MInst = _get_minst(self._mrhs)
         except RemoteExecutionError:
-            logger.error("Failed to list instances on the host: the host is probably unreachable.")
-            logger.info("Skipping the monitoring of wikiuser* connections. The depooling is done.")
+            log.error("Failed to list instances on the host: the host is probably unreachable.")
+            log.info("Skipping the monitoring of wikiuser* connections. The depooling is done.")
             return
 
         timeout = monotonic() + 3600
-        logger.info("Monitoring number of wikiuser* connections")
+        log.info("Monitoring number of wikiuser* connections")
         while monotonic() < timeout:
             wikiuser_cnt = _fetch_instance_connections_count_wikiusers(minst)
             if wikiuser_cnt == 0 or self.dry_run:
-                logger.info("Connection drain completed")
+                log.info("Connection drain completed")
                 return
 
             sleep(10)
 
         d = _fetch_instance_connections_count_detailed(minst)
-        logger.info("Drain timeout! Connection summary: %r", d)
+        log.info("Drain timeout! Connection summary: %r", d)
         raise RuntimeError("The instance failed to drain in an hour")
 
     def get_diff(self) -> ActionResult:
