@@ -23,7 +23,7 @@ from spicerack.decorators import retry
 from spicerack.icinga import IcingaStatusNotFoundError, HostsStatus as IcingaHostsStatus
 from spicerack.icinga import HostStatus as IcingaStatus, IcingaHosts
 from spicerack.mysql import Instance as MInst, MysqlRemoteHosts
-from spicerack.remote import RemoteHosts
+from spicerack.remote import RemoteHosts, RemoteExecutionError
 from wmflib.interactive import ensure_shell_is_durable, ask_confirmation
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -365,8 +365,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
         hostname, _dc, fqdn = validate_hostname_extract_dc_fqdn(args.instance)
 
-        mrhs = _get_mysqlremotehosts(spicerack, fqdn)
-        self._mysql_instance: MInst = _get_minst(mrhs)
+        self._mrhs = _get_mysqlremotehosts(spicerack, fqdn)
 
         dbi: DBCInst = self.dbctl.instance.get(hostname)
         ensure(dbi is not None, f"Unable to find instance {hostname} in dbctl. Aborting.")
@@ -375,8 +374,8 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
         self.datacenter = dbi.tags.get("datacenter")
 
-        self._icinga_host = spicerack.icinga_hosts(mrhs.remote_hosts.hosts)
-        self._alerting_hosts = spicerack.alerting_hosts(mrhs.remote_hosts.hosts)
+        self._icinga_host = spicerack.icinga_hosts(self._mrhs.remote_hosts.hosts)
+        self._alerting_hosts = spicerack.alerting_hosts(self._mrhs.remote_hosts.hosts)
 
         self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
 
@@ -424,10 +423,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
         if self.downtime:
             step("depool", "Setting downtime")
-            self._alerting_hosts.downtime(
-                self.reason,
-                duration=timedelta(hours=self.downtime)
-            )
+            self._alerting_hosts.downtime(self.reason, duration=timedelta(hours=self.downtime))
 
         self.wait_diff_clean()
 
@@ -563,17 +559,24 @@ class PoolDepoolRunner(CookbookRunnerBase):
 
         NOTE: this does not support misc databases
         """
+        try:
+            minst: MInst = _get_minst(self._mrhs)
+        except RemoteExecutionError:
+            logger.error("Failed to list instances on the host: the host is probably unreachable.")
+            logger.info("Skipping the monitoring of wikiuser* connections. The depooling is done.")
+            return
+
         timeout = monotonic() + 3600
         logger.info("Monitoring number of wikiuser* connections")
         while monotonic() < timeout:
-            wikiuser_cnt = _fetch_instance_connections_count_wikiusers(self._mysql_instance)
+            wikiuser_cnt = _fetch_instance_connections_count_wikiusers(minst)
             if wikiuser_cnt == 0 or self.dry_run:
                 logger.info("Connection drain completed")
                 return
 
             sleep(10)
 
-        d = _fetch_instance_connections_count_detailed(self._mysql_instance)
+        d = _fetch_instance_connections_count_detailed(minst)
         logger.info("Drain timeout! Connection summary: %r", d)
         raise RuntimeError("The instance failed to drain in an hour")
 

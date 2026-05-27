@@ -52,6 +52,7 @@ def mock_sr():
         dbctl.instance.pool().announce_message = "<<mock dbctl pool announce msg>>"
         dbctl.instance.depool().announce_message = "<<mock dbctl pool announce msg>>"
         dbctl.config.commit().announce_message = "<<mock dbctl config commit announce msg>>"
+        dbctl.config.generate().announce_message = "<<mock dbctl generate announce msg>>"
 
         mock_sr.admin_reason.return_value.owner = "<<mock owner>>"
         mock_sr.admin_reason.return_value.reason = "<<mock reason>>"
@@ -546,6 +547,88 @@ INFO <<mock dbctl pool announce msg>>
 INFO <<mock dbctl config commit announce msg>>
 DEBUG pooling-in completed
 INFO mock phabricator task_comment 'T0' 'Completed pooling of db1229 by <<mock owner>>: <<mock reason>>'
+"""
+    assert caplog.text == exp
+
+
+@patch("cookbooks.sre.mysql.pool._check_depooling_last_instance", autospec=True)
+def test_runner_s_depool(m_last, mock_sr, m_jget, caplog) -> None:
+    mi = MagicMock()
+    mi.host.hosts = ["db1229.eqiad.wmnet"]
+    mock_sr.dbctl.return_value.instance.get.return_value.name = "db1229"
+
+    mrhs = MagicMock(name="my_mrhs")
+    mrhs.__len__.return_value = 1
+    assert len(mrhs) == 1
+    mock_sr.mysql().get_dbs.return_value = mrhs
+
+    diff_ret = Mock(messages=[], success=True, exit_code=0, announce_message="", name="foo1")
+    mock_sr.dbctl().config.diff.return_value = (diff_ret, None)
+
+    generate_ret = Mock(messages=[], success=True, exit_code=0, name="foo2")
+    generate_ret.announce_message = ""
+    mock_sr.dbctl().config.generate.return_value = (generate_ret, None)
+
+    def jget(url: str) -> dict:
+        if url == "https://zarcillo.wikimedia.org/api/v1/instances/db1229":
+            return {
+                "instances": [
+                    {
+                        "dc": "eqiad",
+                        "fqdn": "db1229.eqiad.wmnet",
+                        "hostname": "db1229",
+                        "instance_group": "core",
+                        "instance_name": "db1229",
+                        "last_start": None,
+                        "mariadb_version": None,
+                        "port": 3306,
+                        "section": "s2",
+                        "alerts": [],
+                        "candidate_score": 0,
+                        "is_candidate_on_dbctl": None,
+                        "is_lagging": None,
+                        "lag": None,
+                        "pooled_value": 1,
+                        "role": "rep",
+                        "kernel_version": None,
+                        "uptime_s": 65915,
+                        "uptime_human": "18 h",
+                        "tags": [
+                            "SystemdUnitFailed wmf_auto_restart_prometheus-mysqld-exporter.service on db1229:9100",
+                            "🎱︎pooled",
+                        ],
+                        "preferred_candidate": False,
+                    }
+                ]
+            }
+
+        assert False, f"Unmocked {url}"
+
+    m_jget.side_effect = jget
+
+    args = Namespace(
+        operation="depool",
+        reason="Depool",
+        task_id="T0",
+        instance="db1229",
+        nocheck_external_loads=False,
+    )
+    runner = PoolDepoolRunner(args, mock_sr)
+    runner.run()
+
+    mock_sr.mysql.return_value.get_dbs.assert_called_with(
+        "P{db1229.eqiad.wmnet} and A:db-all and not A:db-multiinstance"
+    )
+    mock_sr.dbctl.return_value.instance.get.assert_called_with("db1229")
+
+    assert not mock_sr.run_cookbook.called
+
+    exp = """\
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+INFO Monitoring number of wikiuser* connections
+INFO Connection drain completed
+INFO mock phabricator task_comment 'T0' 'Completed depooling of db1229 by <<mock owner>>: <<mock reason>>'
 """
     assert caplog.text == exp
 
