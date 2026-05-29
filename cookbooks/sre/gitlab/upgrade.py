@@ -26,7 +26,7 @@ DISK_HIGH_THRESHOLD = 70
 DOWNTIME_DURATION = 200  # in minutes
 BACKUP_RESTORE_ALERTNAME = "SystemdUnitFailed"
 BACKUP_RESTORE_SERVICE = "gitlab-backup-restore.service"
-BACKUP_RESTORE_DOWNTIME_DURATION = 24 # in hours
+BACKUP_RESTORE_DOWNTIME_DURATION = 48 # in hours
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ class UpgradeRunner(CookbookRunnerBase):
                 "unavailable once you continue. Ready to go?"
             )
 
-        # silence backup-restore.service failing for 24h (until next restore happened)
+        # silence backup-restore.service (until next restore happened)
         if self.is_replica():
             try:
                 matchers=[
