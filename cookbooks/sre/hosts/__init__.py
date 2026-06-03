@@ -43,7 +43,9 @@ LEGACY_VLANS = (
     'private1-a-codfw',
     'private1-b-codfw',
     'private1-c-codfw',
-    'private1-d-codfw'
+    'private1-d-codfw',
+    'private1-eqsin',
+    'public1-eqsin'
 )
 
 
