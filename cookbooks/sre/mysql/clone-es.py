@@ -2,7 +2,6 @@
 # minimize abstractions and state, enable type checking, do assertions, write tests
 # pylint: disable=missing-docstring
 # pylint: disable=R0913,R0917
-# flake8: noqa: D103
 
 # NOTE: For this initial iteration we expect the target host to be a new host
 # TODO: when enabling support for `misc` both source/target/primary might not be known to dbctl
@@ -227,7 +226,6 @@ def _add_host_to_zarcillo(mysql: Mysql, hostname: str, fqdn: str, datacenter: st
         cursor.execute("SET SESSION binlog_format=ROW;")
 
     with transaction(z_inst, "zarcillo") as tx:
-
         sql = """INSERT INTO instances (name, server, port, `group`) VALUES (%s, %s, 3306, 'core')"""
         tx.execute(sql, (hostname, fqdn))
 

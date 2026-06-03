@@ -5,7 +5,7 @@
 
 import logging
 from argparse import ArgumentParser, Namespace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from time import sleep
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -95,6 +95,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
     def upgrade_host(self, host):
         """Upgrade mysql version of a single host."""
         host_puppet = self.puppet(host)
+        # FIXME: if the upgrade fails we should not enable puppet nor remove downtime
         with self.alerting_hosts(host.hosts).downtimed(self.admin_reason, duration=timedelta(hours=24)):
             with host_puppet.disabled(self.admin_reason):
                 self._run_upgrade(host)
@@ -139,7 +140,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         step("stop_mariadb", f"Stopping mariadb on {fqdn}")
         upgrade_cmd = (
             "DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' "
-            + "-o Dpkg::Options::='--force-confold' dist-upgrade"
+            "-o Dpkg::Options::='--force-confold' dist-upgrade"
         )
         scripts = [
             # TODO: Migrate to the new MySQL class in spicecrack
@@ -152,7 +153,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         self._run_scripts(host, scripts)
 
         step("reboot", "Rebooting host")
-        reboot_time = datetime.utcnow()
+        reboot_time = datetime.now(timezone.utc)
         host.reboot()
         host.wait_reboot_since(reboot_time)
 

@@ -1,0 +1,30 @@
+
+extend = "../../../pyproject.toml"
+
+[lint]
+extend-select = [
+    "B",    # Flake8 bugbear
+    "C4",   # Flake8 comprehensions
+    "DTZ",  # Flake8 datetime
+    "INP",  # Flake8 no pep420
+    "ISC",  # Flake8 implicit string concat
+    "PT",   # Flake8 pytest style
+    "PTH",  # Flake8 use pathlib
+    # "SIM", # Flake8 simplify
+    # "S",  # Flake8 bandit
+
+    # "SLF",  # Flake8 self - private member access     1
+    # "RUF",  # Ruff specific rules                     7
+    # "PL",  # Pylint                                  14
+    # "ARG",  # Flake8 unused arguments                19
+    # "FBT",  # Flake8 boolean trap                    23
+    # "TRY",  # Tryceratops                            28
+    # "ANN",  # Flake8 annotations                     48
+]
+
+# ignore = []
+
+extend-ignore = [
+    "C408",   # Unnecessary `dict()` call
+    "SIM108", # Use ternary operator
+]

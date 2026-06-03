@@ -17,7 +17,6 @@ from spicerack.remote import RemoteHosts
 
 # pylint: disable=missing-docstring
 # pylint: disable=R0913,R0917
-# flake8: noqa: D103
 
 log = logging.getLogger(__name__)
 
@@ -52,8 +51,14 @@ def argument_parser() -> ArgumentParser:
     pool.add_argument("--skip-icinga-checks", action="store_true", help="Skip checks before pooling")
 
     depool = subs.add_parser("depool", help="Depool")
-    depool.add_argument("--downtime", "--downtime-hours", dest="downtime_hours", type=int,
-                        help="Create downtime (default: no)", default=0)
+    depool.add_argument(
+        "--downtime",
+        "--downtime-hours",
+        dest="downtime_hours",
+        type=int,
+        help="Create downtime (default: no)",
+        default=0,
+    )
     return ap
 
 
@@ -93,7 +98,7 @@ def update_phabricator(hns: list, args: Namespace, spicerack: Spicerack, reason,
 
 def _get_dbctl_config_diff(dbctl: Dbctl) -> tuple[bool, Generator]:
     """Return True for changes and a diff line generator"""
-    for attempt in range(5):
+    for _attempt in range(5):
         ret, diff = dbctl.config.diff(force_unified=False)
         if ret.success:
             has_changes = bool(ret.exit_code)
@@ -107,9 +112,9 @@ def set_weight_in_dbctl(dbctl: Dbctl, reason, fqdns: list, weight: int) -> bool:
     """Set weight in dbctl and commit"""
     _wait_for_dbctl_diff_empty(dbctl)
     for fqdn in fqdns:
-        hn, dc, _tld = fqdn.split(".")
+        hn, _dc, _tld = fqdn.split(".")
 
-        for attempt in range(5):
+        for _attempt in range(5):
             step("pool", f"Setting weight for {hn} to {weight}")
             res = dbctl.instance.weight(hn, weight)
             _log_dbctl_result(res)

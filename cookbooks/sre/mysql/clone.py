@@ -2,7 +2,6 @@
 # minimize abstractions and state, enable type checking, do assertions, write tests
 # pylint: disable=missing-docstring
 # pylint: disable=R0913,R0917
-# flake8: noqa: D103
 
 # TODO: when enabling support for `misc` both source/target/primary might not be known to dbctl
 
@@ -419,11 +418,11 @@ class CloneMySQLRunner(CookbookRunnerBase):
         self._phab = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         self._run_cookbook = spicerack.run_cookbook
 
-        self.source_hostname, src_dc, self.source_fqdn = validate_hostname_extract_dc_fqdn(args.source)
+        self.source_hostname, _src_dc, self.source_fqdn = validate_hostname_extract_dc_fqdn(args.source)
         self.source_host = _fetch_db_remotehost(self.remote, self.source_fqdn)
         self.source_minst = get_db_instance(self._mysql, self.source_fqdn)
 
-        self.target_hostname, tgt_dc, self.target_fqdn = validate_hostname_extract_dc_fqdn(args.target)
+        self.target_hostname, _tgt_dc, self.target_fqdn = validate_hostname_extract_dc_fqdn(args.target)
         self.target_host = _fetch_db_remotehost(self.remote, self.target_fqdn)
 
         primary_fqdn = _fetch_primary_fqdn(self._mysql, self.source_fqdn)

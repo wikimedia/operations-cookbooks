@@ -5,7 +5,7 @@
 
 import logging
 from argparse import ArgumentParser, Namespace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from time import sleep
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -213,7 +213,7 @@ def reboot(host):
         "swapoff -a",
     ]
     run_scripts(host, scripts)
-    reboot_time = datetime.utcnow()
+    reboot_time = datetime.now(timezone.utc)
     host.reboot()
     host.wait_reboot_since(reboot_time)
 

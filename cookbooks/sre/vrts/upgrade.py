@@ -28,9 +28,7 @@ class Upgrade(CookbookBase):
     def argument_parser(self):
         """Parses arguments"""
         parser = super().argument_parser()
-        parser.add_argument(
-            "--version", required=True, help="Version of new VRTS installation"
-        )
+        parser.add_argument("--version", required=True, help="Version of new VRTS installation")
         parser.add_argument(
             "host",
             help="Short hostname of the VRTS host to upgrade e.g. vrts1001",
@@ -123,9 +121,7 @@ class UpgradeRunner(CookbookRunnerBase):
     def extract_vrts(self):
         """Extract VRTS"""
         logger.info("Extracting VRTS")
-        self.remote_host.run_sync(
-            f"/usr/bin/tar xfz /tmp/znuny-{self.target_version}.tar.gz -C /opt"
-        )
+        self.remote_host.run_sync(f"/usr/bin/tar xfz /tmp/znuny-{self.target_version}.tar.gz -C /opt")
 
     def stop_services(self):
         """Disable services on host"""
@@ -147,9 +143,7 @@ class UpgradeRunner(CookbookRunnerBase):
     def symlink(self):
         """Create symbolic link pointing to new version"""
         logger.info("Symlinking to new version")
-        self.remote_host.run_sync(
-            f"ln -sfnv /opt/znuny-{self.target_version} /opt/otrs"
-        )
+        self.remote_host.run_sync(f"ln -sfnv /opt/znuny-{self.target_version} /opt/otrs")
 
     def configure_install(self):
         """Configure installation"""

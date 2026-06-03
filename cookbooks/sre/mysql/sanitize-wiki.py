@@ -14,7 +14,6 @@ from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 # minimize abstractions and state, enable type checking, do assertions, write tests
 # pylint: disable=missing-docstring
 # pylint: disable=R0913,R0917
-# flake8: noqa: D103
 
 log = logging.getLogger(__name__)
 
