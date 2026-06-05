@@ -213,13 +213,13 @@ def parse_results(results_raw, json_output=False, dry_run: bool=False):
     # Only supports 1 target device at a time
     if dry_run:
         return None
-    result = RemoteHosts.results_to_list(results_raw)[0][1]
+    result = RemoteHosts.results_to_list(results_raw)
     # If empty result (eg. interface not configured)
     if not result:
         return None
     if json_output:
-        return json.loads(result)
-    return result
+        return json.loads(result[0][1])
+    return result[0][1]
 
 
 def junos_interface_to_netbox(config: dict, old_junos: bool) -> dict:
