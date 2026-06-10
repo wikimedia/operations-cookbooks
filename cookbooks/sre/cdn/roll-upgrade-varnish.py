@@ -90,8 +90,15 @@ class RollUpgradeVarnishRunner(SRELBBatchRunnerBase):
         return [
             "prometheus-varnish-exporter@frontend",
             "varnish-frontend",
-            # varnishkafka is linked against libvarnishapi
-            "varnishkafka-all",
+            # varnishkafka is linked against libvarnishapi, so restart that
+            # too.
+            #
+            # Restart with a glob as a hack: Not all cp nodes have varnishkafka
+            # installed. By using a glob it will silently pass even if the unit
+            # doesn't exist. Ideally we'd determine whether this is a
+            # text/upload node and only selectively restart but determining
+            # that is much more complicated. Furrowed brows welcome.
+            "varnishkafka-all*",
             "varnishmtail@default",
             "varnishmtail@internal",
         ]
