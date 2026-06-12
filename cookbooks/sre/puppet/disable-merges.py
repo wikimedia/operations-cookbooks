@@ -47,7 +47,6 @@ class DisablePuppetRunner(CookbookRunnerBase):
         """
         self.args = args
         self.puppetservers = spicerack.remote().query("A:puppetserver")
-        self.reason = spicerack.admin_reason(args.message, task_id=args.task_id)
 
     def run(self) -> int:
         """Generate data"""
