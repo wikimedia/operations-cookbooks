@@ -455,7 +455,7 @@ class PoolDepoolRunner(CookbookRunnerBase):
             cmar.extend(["--task-id", self.args.task_id])
 
         if self.downtime:
-            cmar.extend(["--downtime", self.downtime])
+            cmar.extend(["--downtime", str(self.downtime)])
 
         cmar.extend([section, "depool"])
         self._run_cookbook("sre.mysql.parsercache", cmar)
