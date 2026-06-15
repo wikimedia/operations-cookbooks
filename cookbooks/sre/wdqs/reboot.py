@@ -8,7 +8,7 @@ Usage example:
 import argparse
 import logging
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError
@@ -62,7 +62,7 @@ def run(args, spicerack):
             # explicit shutdown of Blazegraph instance, to ensure they are not killed by systemd if taking too long
             remote_host.run_sync(*('systemctl stop ' + service for service in services))
 
-            reboot_time = datetime.utcnow()
+            reboot_time = datetime.now(timezone.utc)
             remote_host.reboot()
             remote_host.wait_reboot_since(reboot_time)
 

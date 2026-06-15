@@ -13,7 +13,7 @@ Usage example:
 
 import logging
 
-from datetime import datetime
+from datetime import datetime, timezone
 from time import sleep
 
 from requests import Session
@@ -54,7 +54,7 @@ def run(args, spicerack):
                 if uptime < args.since:
                     logger.info('%s: Not rebooting uptime is %d', pdu, uptime)
                     continue
-            reboot_time = datetime.utcnow()
+            reboot_time = datetime.now(timezone.utc)
             version = pdus.get_version(pdu, session)
             pdus.reboot(pdu, version, session)
             # Reboots from expereince take at least 60 seconds

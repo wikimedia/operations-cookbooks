@@ -1,7 +1,7 @@
 """Reboot all Presto nodes in a cluster."""
 import logging
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from time import sleep
 
 from cumin import nodeset
@@ -68,7 +68,7 @@ class RebootPrestoWorkersRunner(CookbookRunnerBase):
             with puppet.disabled(self.admin_reason):
                 logger.info('Stopping the Presto worker daemon..')
                 node.run_async('systemctl stop presto-server')
-                reboot_time = datetime.utcnow()
+                reboot_time = datetime.now(timezone.utc)
                 node.reboot()
                 node.wait_reboot_since(reboot_time)
 

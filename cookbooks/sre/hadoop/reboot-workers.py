@@ -3,7 +3,7 @@ import logging
 import math
 import time
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from wmflib.interactive import confirm_on_failure, ensure_shell_is_durable
 
@@ -117,7 +117,7 @@ class RebootHadoopWorkersRunner(CookbookRunnerBase):
                 confirm_on_failure(
                     hadoop_workers_batch.run_sync, 'systemctl stop hadoop-hdfs-journalnode')
             logger.info('Rebooting hosts..')
-            reboot_time = datetime.utcnow()
+            reboot_time = datetime.now(timezone.utc)
             confirm_on_failure(
                 hadoop_workers_batch.reboot,
                 batch_size=len(hadoop_workers_batch.hosts),

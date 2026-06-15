@@ -4,7 +4,7 @@ from abc import abstractmethod, ABCMeta
 from argparse import ArgumentParser, ArgumentTypeError, Namespace, SUPPRESS
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from logging import getLogger
 from math import ceil
 import time
@@ -311,7 +311,7 @@ class SREBatchRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
 
         """
         puppet = self._spicerack.puppet(hosts)
-        reboot_time = datetime.utcnow()
+        reboot_time = datetime.now(timezone.utc)
         # Avoid exceptions in dry_run mode:
         # * "Uptime higher than threshold"
         # * "Successful Puppet run too old"

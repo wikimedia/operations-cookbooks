@@ -1,7 +1,7 @@
 """Perform rolling operations on elasticsearch servers"""
 import logging
 from contextlib import ExitStack
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum, auto
 from time import sleep
 
@@ -255,7 +255,7 @@ class RollingOperationRunner(CookbookRunnerBase):
         Optionally upgrade Opensearch plugins before proceeding to restart/reboot.
         Optionally performs a full reboot as opposed to just restarting services.
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         logger.info("Starting rolling_operation %s on %s at time %s", self.operation, nodes, start_time)
 
         if self.operation is Operation.UPGRADE:

@@ -6,7 +6,7 @@ import shlex
 from argparse import ArgumentTypeError
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import cache
 from io import BufferedReader
 from pathlib import Path
@@ -1079,7 +1079,7 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
             and manage_power
         ):
             logger.info("%s: host powered off, powering on", netbox_host.fqdn)
-            reboot_time = datetime.now()
+            reboot_time = datetime.now(timezone.utc)
             redfish_host.chassis_reset(ChassisResetPolicy.ON)
             if not self.new:
                 remote = self.spicerack.remote().query(netbox_host.fqdn)

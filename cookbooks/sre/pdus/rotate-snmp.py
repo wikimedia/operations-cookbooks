@@ -1,7 +1,7 @@
 """Update Sentry PDUs 🔌 SNMP communities"""
 # pylint overrides are for https://bugs.python.org/issue31844 but on 3.10 it's fixed, so adding the useless suppression
 # pylint: disable=useless-suppression
-from datetime import datetime
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from logging import getLogger
 from secrets import token_urlsafe
@@ -214,7 +214,7 @@ class ChangeSNMPRunner(CookbookRunnerBase):
             try:
                 if not self.spicerack.dry_run:
                     if self.change_snmp(pdu, version):
-                        reboot_time = datetime.utcnow()
+                        reboot_time = datetime.now(timezone.utc)
                         pdus.reboot(pdu, version, self.session)
                         # Reboots from experience take at least 60 seconds
                         logger.info('%s: sleep while reboot', pdu)

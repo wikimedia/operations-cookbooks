@@ -21,7 +21,7 @@ import logging
 import math
 import time
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import attr
 
@@ -112,7 +112,7 @@ def reboot_with_downtime(spicerack, remote_hosts, results, no_fail_on_icinga):
     reason = spicerack.admin_reason('Rebooting hosts {}'.format(remote_hosts))
     try:
         with alerting_hosts.downtimed(reason, duration=timedelta(minutes=20)):
-            reboot_time = datetime.utcnow()
+            reboot_time = datetime.now(timezone.utc)
             remote_hosts.reboot(batch_size=len(remote_hosts))
             remote_hosts.wait_reboot_since(reboot_time)
             puppet.wait_since(reboot_time)

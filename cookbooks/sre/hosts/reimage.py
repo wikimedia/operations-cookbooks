@@ -6,7 +6,7 @@ import os
 import re
 import time
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from requests.exceptions import RequestException
@@ -557,7 +557,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
     def _install_os(self):
         """Perform the OS reinstall."""
-        pxe_reboot_time = datetime.utcnow()
+        pxe_reboot_time = datetime.now(timezone.utc)
 
         # iPXE based boot
         if hasattr(self, 'identifier') and self.identifier:
@@ -590,7 +590,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
 
         self.remote_installer.wait_reboot_since(pxe_reboot_time, print_progress_bars=False)
         time.sleep(30)  # Avoid race conditions, the host is in the d-i, need to wait anyway
-        di_reboot_time = datetime.utcnow()
+        di_reboot_time = datetime.now(timezone.utc)
         env_command = f'grep -q "{di_cmdline_pattern}" /proc/cmdline'
         try:
             self.remote_installer.run_sync(env_command, print_output=False, print_progress_bars=False)
@@ -878,7 +878,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                                       'configmaster.wikimedia.org with the new host SSH public key for '
                                       'wmf-update-known-hosts-production//')
 
-        reboot_time = datetime.utcnow()
+        reboot_time = datetime.now(timezone.utc)
         self.remote_host.reboot()
         time.sleep(60)  # Temporary workaround to prevent a race condition
         self.remote_host.wait_reboot_since(reboot_time, print_progress_bars=False)

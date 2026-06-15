@@ -2,7 +2,7 @@
 import logging
 import time
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.icinga import IcingaError
@@ -112,7 +112,7 @@ class RebootSingleHostRunner(CookbookRunnerBase):
                 self.remote_host.run_async('depool')
                 logger.info('Waiting a 30 second grace period after depooling')
                 time.sleep(30)
-            reboot_time = datetime.utcnow()
+            reboot_time = datetime.now(timezone.utc)
             self.remote_host.reboot()
             self.remote_host.wait_reboot_since(reboot_time, print_progress_bars=False)
 

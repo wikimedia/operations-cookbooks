@@ -1,7 +1,7 @@
 """Reboot all Druid nodes in a cluster."""
 import logging
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from time import sleep
 
 from cumin import nodeset
@@ -90,7 +90,7 @@ class RebootDruidWorkersRunner(CookbookRunnerBase):
 
                 node.run_async(*stop_process_commands)
 
-                reboot_time = datetime.utcnow()
+                reboot_time = datetime.now(timezone.utc)
                 node.reboot()
                 node.wait_reboot_since(reboot_time)
 

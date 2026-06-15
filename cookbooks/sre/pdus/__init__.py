@@ -1,7 +1,7 @@
 """PDU Operations"""
 
 from argparse import ArgumentParser
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from logging import getLogger
 from re import match
 from typing import Optional
@@ -168,7 +168,7 @@ def wait_reboot_since(pdu, since, session):
         RemoteCheckError: if unable to connect to the host or the uptime is higher than expected.
 
     """
-    delta = (datetime.utcnow() - since).total_seconds()
+    delta = (datetime.now(timezone.utc) - since).total_seconds()
     uptime = parse_uptime(get_uptime(pdu, session))
     if uptime >= delta:
         raise UptimeError('{}: uptime is higher than threshold: {} > {}'.format(
