@@ -128,7 +128,7 @@ def check_db_role_on_zarcillo(mysql: Mysql, fqdn: str, expect_db_is_master: bool
     return section_row["section"]
 
 
-def check_if_already_in_zacillo(mysql: Mysql, fqdn: str, hostname: str) -> None:
+def check_if_already_in_zarcillo(mysql: Mysql, fqdn: str, hostname: str) -> None:
     # TODO: use Zarcillo's API
     sql = "SELECT COUNT(*) AS cnt FROM instances WHERE server = %s"
     r = query_zarcillo_one_row(mysql, sql, (fqdn,))
@@ -469,7 +469,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         step("check", "Running pre-flight checks")
 
-        check_if_already_in_zacillo(self._mysql, self.target_fqdn, self.target_hostname)
+        check_if_already_in_zarcillo(self._mysql, self.target_fqdn, self.target_hostname)
 
         # TODO: check if target is pooled in
 

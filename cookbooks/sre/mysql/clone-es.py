@@ -135,7 +135,7 @@ def check_db_role_on_zarcillo(mysql: Mysql, fqdn: str, expect_db_is_master: bool
     return section_row["section"]
 
 
-def ensure_db_not_in_zacillo(mysql: Mysql, fqdn: str, hostname: str) -> None:
+def ensure_db_not_in_zarcillo(mysql: Mysql, fqdn: str, hostname: str) -> None:
     sql = "SELECT COUNT(*) AS cnt FROM instances WHERE server = %s"
     r = query_zarcillo_one_row(mysql, sql, (fqdn,))
     ensure(r["cnt"] == 0, f"{fqdn} found in instances table on zarcillo")
@@ -435,7 +435,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
         step("check", "Running pre-flight checks")
 
         if not args.ignore_existing:
-            ensure_db_not_in_zacillo(self._mysql, self.target_fqdn, self.target_hostname)
+            ensure_db_not_in_zarcillo(self._mysql, self.target_fqdn, self.target_hostname)
 
         # TODO: check if target is pooled in
 
