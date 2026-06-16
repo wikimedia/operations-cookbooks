@@ -7,7 +7,10 @@ tox -e py313-lint_unit -- tests/unit/sre/mysql/upgrade_test.py -vv
 
 from argparse import Namespace
 from datetime import datetime
-from pytest import fixture
+from pytest import (
+    fixture,
+    raises,
+)
 from unittest import mock
 from unittest.mock import MagicMock, patch
 import logging
@@ -21,7 +24,7 @@ from cookbooks.sre.mysql.upgrade import (
 log = logging.getLogger()
 
 
-# # fixtures
+# Fixtures
 
 
 @fixture(autouse=True)
@@ -36,7 +39,7 @@ def set_logging(caplog):
     caplog.handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
 
 
-# # tests
+# Tests
 
 
 def test_get_db_instance():
@@ -49,6 +52,21 @@ def test_get_db_instance():
 
     assert get_db_instance(mock_mysql, "db1001.eqiad.wmnet") == mock_inst
     mock_mysql.get_dbs.assert_called_once_with("db1001.eqiad.wmnet")
+
+
+@patch("spicerack.Spicerack", autospec=True)
+def test_run_multiple_hosts_raises(m_sr):
+    mock_hosts = MagicMock()
+    mock_hosts.__len__.return_value = 2  # simulate >1 matched host
+
+    m_sr.remote.return_value.query.return_value = mock_hosts
+
+    args = Namespace(
+        query="db11[76-77]", repool=True, task_id="T12345", reason="Upgrading"
+    )
+
+    with raises(ValueError, match="Multiple hosts have been matched"):
+        UpgradeMySQLRunner(args, m_sr)
 
 
 @patch("cookbooks.sre.mysql.upgrade.sleep")
@@ -71,10 +89,7 @@ def test_run(
     # mock_host.__str__.return_value = "db1176.eqiad.wmnet"
     setattr(mock_host, "__str__", MagicMock(return_value="db1176.eqiad.wmnet"))
 
-    mock_remote_hosts = MagicMock()
-    mock_remote_hosts.split.return_value = [mock_host]
-
-    m_sr.remote.return_value.query.return_value = mock_remote_hosts
+    m_sr.remote.return_value.query.return_value = mock_host
     m_sr.run_cookbook = mock.Mock()
 
     mock_dbi = MagicMock(spec=MInst)

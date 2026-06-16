@@ -76,12 +76,13 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         self._do_repool = args.repool
         self.task_id = args.task_id
         self.admin_reason = spicerack.admin_reason(args.reason)
-        if not self.hosts:
-            print("No hosts have been found, exiting")
-        if len(self.hosts) <= 5:
-            self.hosts_message = str(self.hosts)
-        else:
-            self.hosts_message = f"{len(self.hosts)} hosts"
+
+        # We can only reach this point with hosts, else
+        # spicerack.remote().query(query) would have raised spicerack.remote.RemoteError
+        if len(self.hosts) > 1:
+            raise ValueError("Multiple hosts have been matched, exiting - see T429230")
+
+        self.hosts_message = f"{len(self.hosts)} hosts"
 
     @property
     def runtime_description(self) -> str:
@@ -117,8 +118,7 @@ class UpgradeMySQLRunner(CookbookRunnerBase):
         """Required by the Spicerack API."""
         # Guard against useless conftool messages
         logging.getLogger("conftool").setLevel(logging.WARNING)
-        for host in self.hosts.split(1):
-            self.upgrade_host(host)
+        self.upgrade_host(self.hosts)
 
     def _run_upgrade(self, host: RemoteHosts) -> None:
         """Upgrade mysql version of a single host."""
