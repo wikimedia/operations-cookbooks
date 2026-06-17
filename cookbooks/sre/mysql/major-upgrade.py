@@ -9,6 +9,10 @@ from datetime import datetime, timedelta, timezone
 from time import sleep
 
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+from cookbooks.sre.mysql.pool import (
+    fetch_host_instance_from_zarcillo,
+    validate_hostname_extract_dc_fqdn,
+)
 from spicerack import Spicerack
 from spicerack.decorators import retry
 from spicerack.mysql import Instance as MInst
@@ -243,6 +247,10 @@ def run(args: Namespace, spicerack: Spicerack) -> None:
 
     phab = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
     admin_reason = spicerack.admin_reason(f"Migrate MariaDB on {args.hostname}")
+
+    _, dc, _ = validate_hostname_extract_dc_fqdn(args.hostname)
+    imeta = fetch_host_instance_from_zarcillo(args.hostname)
+    spicerack.sal_logger.info("dbmaint on %s@%s %s", imeta.section, dc, args.task_id or "")
 
     host = _remotehosts_query(spicerack.remote(), args.hostname)
 
