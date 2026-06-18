@@ -56,6 +56,6 @@ class DisablePuppetRunner(CookbookRunnerBase):
             confirm_on_failure(self.puppetservers.run_sync, command)
             return 0
 
-        command = f'sudo /usr/local/bin/puppet-merge --lockout-tagout "{self.args.message}"'
+        command = f'sudo /usr/bin/echo "{self.args.message}" > /var/lock/puppet-merge-lockout-tagout'
         confirm_on_failure(self.puppetservers.run_sync, command)
         return 0
