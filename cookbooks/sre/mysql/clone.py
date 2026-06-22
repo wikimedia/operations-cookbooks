@@ -412,6 +412,7 @@ class CloneMySQLRunner(CookbookRunnerBase):
 
         self._mysql = spicerack.mysql()
         self._zarc_api_client = spicerack.api_client("https://zarcillo.wikimedia.org/")
+        self._zarc_api_client.http_session.headers.update({"X-WMF-Username": spicerack.username})
         self.alerting_hosts = spicerack.alerting_hosts
         self.admin_reason = spicerack.admin_reason("MySQL Clone")
         self.remote = spicerack.remote()
