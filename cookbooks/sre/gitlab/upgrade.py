@@ -135,6 +135,8 @@ class UpgradeRunner(CookbookRunnerBase):
             f"Cookbook {__name__} started by {self.admin_reason.owner} executed with errors:\n"
             f"{self.runtime_description}\n"
         )
+        logger.info("Applying apt hold on gitlab-ce package")
+        self.remote_host.run_sync("apt-mark hold gitlab-ce")
 
     def run(self):
         """Run the cookbook."""
@@ -149,6 +151,9 @@ class UpgradeRunner(CookbookRunnerBase):
         except gitlab.exceptions.GitlabCreateError as e:
             raise RuntimeError("Unable to create broadcast message."
                                "Make sure your access token uses scope api and admin_mode.") from e
+
+        logger.info("Releasing apt hold on gitlab-ce package")
+        self.remote_host.run_sync("apt-mark unhold gitlab-ce")
 
         self.preload_debian_package()
         if self.skip_replica_backups:
@@ -204,6 +209,8 @@ class UpgradeRunner(CookbookRunnerBase):
                 logger.info('Wait for blackbox checks and monitoring to catch up.')
                 time.sleep(180)
                 self.remote_host.run_sync("systemctl unmask sync-gitlab-group-with-ldap.service")
+                logger.info("Applying apt hold on gitlab-ce package")
+                self.remote_host.run_sync("apt-mark hold gitlab-ce")
 
         self.phabricator.task_comment(
             self.task_id,
