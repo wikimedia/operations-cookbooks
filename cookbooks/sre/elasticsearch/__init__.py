@@ -1,6 +1,7 @@
 """Elasticsearch Clusters Operations"""
 import argparse
 import logging
+from datetime import timezone
 
 from dateutil.parser import parse
 
@@ -16,9 +17,9 @@ def valid_datetime_type(datetime_str):
     """Custom argparse type for user datetime values given from the command line"""
     try:
         dt = parse(datetime_str)
-        if dt.tzinfo is not None and dt.tzinfo.utcoffset(dt) is not None:
-            raise argparse.ArgumentTypeError('datetime should be naive (without timezone information)')
-        return dt
+        if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
     except ValueError as e:
         msg = "Error reading datetime ({0})!".format(datetime_str)
         raise argparse.ArgumentTypeError(msg) from e

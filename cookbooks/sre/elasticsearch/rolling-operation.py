@@ -102,7 +102,7 @@ class RollingOperation(CookbookBase):
     def get_runner(self, args):
         """Orchestrates cluster operations"""
         if args.start_datetime is None:
-            args.start_datetime = datetime.utcnow()
+            args.start_datetime = datetime.now(timezone.utc)
 
         clustergroup = args.clustergroup
         write_queue_datacenters = args.write_queue_datacenters
