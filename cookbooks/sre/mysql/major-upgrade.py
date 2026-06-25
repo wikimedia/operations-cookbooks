@@ -258,11 +258,18 @@ def run(args: Namespace, spicerack: Spicerack) -> None:
     task_id = args.task_id
 
     minst = get_db_instance(spicerack.mysql(), _fqdn(host))
-    first_replica = minst.fetch_one_row("SHOW REPLICA HOSTS")
-    if first_replica != {}:
-        msg = f"{host} appears to be a master, having at least a replica: {first_replica}"
+
+    total_replicas = 0
+    with minst.cursor(database="mysql") as (connection, cursor):
+        if cursor.execute("SHOW REPLICA HOSTS"):
+            total_replicas = len(cursor.fetchall())
+
+    if total_replicas > 1:
+        msg = f"{host} appears to be a master with {total_replicas} replicas"
         log.error(msg)
         raise ValueError(msg)
+    if total_replicas == 1:
+        ask_confirmation("A single replica has been detected, proceed anyway?")
 
     with spicerack.alerting_hosts(host.hosts).downtimed(admin_reason, duration=timedelta(hours=24)):
         run_upgrade(
