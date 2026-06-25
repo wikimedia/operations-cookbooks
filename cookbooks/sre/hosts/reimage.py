@@ -226,11 +226,17 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.mac = ganeti_macs[0]
             self.dhcp_config = self._get_dhcp_config_virtual(mac=self.mac)
         else:
+            # Temporary before we have the wmfroot user deployed on all hosts
+            # More info: https://phabricator.wikimedia.org/T426180
+            if self.netbox_data['device_type']['manufacturer']['slug'] == SUPERMICRO_VENDOR_SLUG:
+                username = "ADMIN"
+            else:
+                username = "root"
             self.mgmt_fqdn = self.netbox_server.mgmt_fqdn
-            self.redfish = spicerack.redfish(self.host)
+            self.redfish = spicerack.redfish(self.host, username=username)
             self.is_uefi = self.redfish.is_uefi
             if not self.is_uefi:
-                self.ipmi: Ipmi = self.spicerack.ipmi(target=self.mgmt_fqdn, username="root")
+                self.ipmi: Ipmi = self.spicerack.ipmi(target=self.mgmt_fqdn, username=username)
             # Nokia currently cannot insert the server-connected port in
             # Option 82, so error if --opt82 is set
             nb_switch = self.netbox.api.dcim.devices.get(name=self.netbox_server.switches[0])
