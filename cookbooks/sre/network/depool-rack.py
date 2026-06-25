@@ -134,7 +134,7 @@ class DepoolRackRunner(CookbookRunnerBase):
                 for identifier_type in ('name', 'fqdn'):
                     if '{' + identifier_type + '}' in policy_command['command']:
                         command_with_host = policy_command['command'].format_map(
-                            {identifier_type: netbox_server.getattr(identifier_type)})
+                            {identifier_type: getattr(netbox_server, identifier_type)})
                         break
                 cookbook_name = command_with_host.split(' ')[0]
                 if '.' not in cookbook_name:  # Safeguard
