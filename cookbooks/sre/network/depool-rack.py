@@ -1,6 +1,7 @@
 """Pool/depool all servers from a given rack."""
 import json
 import logging
+import shlex
 
 from collections import defaultdict
 from urllib.request import urlopen
@@ -24,6 +25,10 @@ class DepoolRack(CookbookBase):
         cookbook sre.network.depool-rack --site codfw --rack C5 depool --show
 
     """
+
+    owner_team = 'Infrastructure Foundations'
+    argument_reason_required = False
+    argument_task_required = False
 
     def argument_parser(self):
         """As specified by Spicerack API."""
@@ -56,6 +61,9 @@ class DepoolRackRunner(CookbookRunnerBase):
         self.dry_run = spicerack.dry_run
         self.run_cookbook = spicerack.run_cookbook
         self.k8s_clusters = set()
+
+        self.reason = spicerack.admin_reason(
+            f'{self.args.site} rack {self.args.rack} {self.args.action} for maintenance')
 
         # Get all active servers from the given rack
         # Possible improvements:
@@ -111,7 +119,7 @@ class DepoolRackRunner(CookbookRunnerBase):
         if self.args.action == 'pool':
             logger.info("Removing downtime is not supported.")
             return
-        cookbook_args = ['-r', f'"Rack {self.args.rack} {self.args.action}"',
+        cookbook_args = ['-r', self.reason.reason,
                          '-H', '4',
                          f"'P{{P:netbox::host%location ~ \"{self.args.rack}.*{self.args.site}\"}}'"]
         ask_confirmation(f'Proceed to run sre.hosts.downtime {" ".join(map(str, cookbook_args))} ?')
@@ -146,11 +154,13 @@ class DepoolRackRunner(CookbookRunnerBase):
                         command_with_host = policy_command['command'].format_map(
                             {identifier_type: getattr(netbox_server, identifier_type)})
                         break
-                cookbook_name = command_with_host.split(' ')[0]
+                # Split the full CLI command following shell parameters boundaries,
+                # in order to re-use the parameters as cookbook_args
+                cookbook_name = shlex.split(command_with_host)[0]
                 if '.' not in cookbook_name:  # Safeguard
                     logger.error("%s: skipping host (invalid cookbook name '%s')", netbox_server.name, cookbook_name)
                     continue
-                cookbook_args = command_with_host.split(' ')[1:]
+                cookbook_args = shlex.split(command_with_host)[1:]
                 ret_val = self.run_cookbook(cookbook_name, cookbook_args)
                 if ret_val != 0:
                     logger.error("%s: cookbook '%s' didn't run successfully", netbox_server.name, command_with_host)
@@ -196,7 +206,7 @@ class DepoolRackRunner(CookbookRunnerBase):
                     continue
                 if zarcillo_response['can_depool']:
                     hiera_data['policy'] = 'cookbook'
-                    hiera_data['command'] = f'sre.mysql.{self.args.action} -r "rack {self.args.action}" {{name}}'
+                    hiera_data['command'] = f"sre.mysql.{self.args.action} -r '{self.reason.reason}' {{name}}"
                 else:
                     logger.info("%s: skipping host (manual %s needed)",
                                 netbox_server.name,
