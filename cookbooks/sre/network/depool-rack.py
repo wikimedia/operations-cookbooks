@@ -10,6 +10,9 @@ from spicerack.netbox import NetboxServer
 from spicerack.remote import RemoteExecutionError
 from wmflib.constants import ALL_DATACENTERS
 from wmflib.interactive import ask_confirmation
+
+from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES
+
 # TODO wishlist: add Phab logging
 logger = logging.getLogger(__name__)
 
@@ -52,8 +55,7 @@ class DepoolRackRunner(CookbookRunnerBase):
         self.remote = spicerack.remote()
         self.dry_run = spicerack.dry_run
         self.run_cookbook = spicerack.run_cookbook
-        # Store if a k8s node is in the rack for special treatment
-        self.k8s = False
+        self.k8s_clusters = set()
 
         # Get all active servers from the given rack
         # Possible improvements:
@@ -81,14 +83,22 @@ class DepoolRackRunner(CookbookRunnerBase):
         if self.args.downtime:
             self.downtime()
         self.run_actions(self.definitions)
-        if self.k8s:
+        if self.k8s_clusters:
             self.run_k8s_pool_depool_node()
 
     def run_k8s_pool_depool_node(self) -> None:
         """Call the sre.k8s.pool-depool-node cookbook."""
-        k8s_clusters_prefixes = ('staging', 'ml-staging', 'aux', 'ml-serve', 'dse', 'wikikube')
-        for prefix in k8s_clusters_prefixes:
-            cookbook_args = ['--k8s-cluster', f'{prefix}-{self.args.site}',
+
+        for cluster_name in self.k8s_clusters:
+            cookbook_cumin_alias = ""
+            for cumin_alias, attributes in ALLOWED_CUMIN_ALIASES.items():
+                if attributes["k8s-cluster"] == cluster_name:
+                    cookbook_cumin_alias = cumin_alias
+                    break
+            else:
+                logger.error("Skipping k8s cookbook run for cluster %s (can't find matching alias)", cluster_name)
+                continue
+            cookbook_args = ['--k8s-cluster', cookbook_cumin_alias,
                              self.args.action,  # TODO add --force once the cookbook is more trusted
                              '--rack', self.args.rack]
             ask_confirmation(f'Proceed to run sre.k8s.pool-depool-node {" ".join(cookbook_args)} ?')
@@ -170,7 +180,15 @@ class DepoolRackRunner(CookbookRunnerBase):
                             hiera_data.get('message', 'no depool needed'))
                 continue
             if hiera_data['policy'] == 'k8s':
-                self.k8s = True
+                try:
+                    k8s_cluster_name: str = json.loads(
+                        self.puppetserver.hiera_lookup(netbox_server.fqdn,
+                                                       "profile::kubernetes::cluster_name",
+                                                       fmt="json"))
+                    self.k8s_clusters.add(k8s_cluster_name)
+                except (ValueError, json.JSONDecodeError, StopIteration, RemoteExecutionError):
+                    logger.info("%s: Couldn't get or parse %s Hiera key", netbox_server.name, self.args.action)
+                    continue
             elif hiera_data['policy'] == 'zarcillo':
                 zarcillo_response = _query_zarcillo(netbox_server.name)
                 if not zarcillo_response:
