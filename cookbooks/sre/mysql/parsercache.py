@@ -48,7 +48,9 @@ def argument_parser() -> ArgumentParser:
     subs.add_parser("show", help="Show")
 
     pool = subs.add_parser("pool", help="Pool")
-    pool.add_argument("--skip-icinga-checks", action="store_true", help="Skip checks before pooling")
+    pool.add_argument(
+        "--skip-safety-checks", "--skip-icinga-checks", action="store_true", help="Skip checks before pooling"
+    )
 
     depool = subs.add_parser("depool", help="Depool")
     depool.add_argument(
@@ -168,7 +170,7 @@ def pool(spicerack: Spicerack, args: Namespace, alerting_hosts: IcingaHosts, dbc
     desc = f"pool all hosts in '{args.section}': {fq}"
     log.info(f"Preparing to {desc}")
 
-    run_icinga_checks = not getattr(args, "skip_icinga_checks", False)
+    run_icinga_checks = not getattr(args, "skip_safety_checks", False)
     if run_icinga_checks:
         step("pool", "Rechecking and waiting for Icinga to be green")
         alerting_hosts.recheck_all_services()
