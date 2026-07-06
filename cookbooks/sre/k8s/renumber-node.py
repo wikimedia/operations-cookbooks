@@ -291,7 +291,7 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
         logger.info("Running puppet agent on A:deployment-servers")
         deploy_hosts = self.spicerack.remote().query("A:deployment-servers")
         try:
-            self.spicerack.puppet(deploy_hosts).run()
+            self.spicerack.puppet(deploy_hosts).run(timeout=600, attempts=2)
             self.host_actions.success("Successfully ran puppet agent on deployment servers")
         except Exception:
             self.host_actions.failure("**Failed to run puppet agent on deployment servers**")
