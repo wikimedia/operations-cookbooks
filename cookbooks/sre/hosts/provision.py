@@ -1049,7 +1049,8 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         else:
             self._configure_users()
 
-        self.ipmi = self.spicerack.ipmi(target=self.fqdn, username="wmfroot")
+        # FIXME: once the wmfroot user is rolled out to all servers, replace _username with it.
+        self.ipmi = self.spicerack.ipmi(target=self.fqdn, username=self.redfish._username)
         self.ipmi.check_connection()
 
     def rollback(self):
