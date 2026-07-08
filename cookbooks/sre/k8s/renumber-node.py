@@ -13,6 +13,7 @@ from wmflib.interactive import ask_confirmation, confirm_on_failure
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.hosts import OS_VERSIONS
 from cookbooks.sre.k8s import ALLOWED_CUMIN_ALIASES
+from cookbooks.sre.network import run_homer
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,8 @@ class RenumberSingleHost(CookbookBase):
         parser.add_argument(
             "host", help="A single host to be renumbered (specified in Cumin query syntax)"
         )
+        parser.add_argument("--run_homer_inline", action="store_true",
+                            help="Run homer inline, rather than prompting a run externally")
 
         return parser
 
@@ -262,6 +265,16 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             self.host_actions.failure("**Failed to confirm homer commands**")
             raise
 
+    def run_homer_inline(self):
+        """Run homer inline to update BGP configuration"""
+        run_homer(queries=[f'{switch}.*' for switch in self.switches_to_update],
+                  dry_run=self.spicerack.dry_run)
+        try:
+            ask_confirmation("Verify that homer did not encounter failures before proceeding.")
+        except Exception:
+            self.host_actions.failure("**Failed to confirm homer commands**")
+            raise
+
     def netbox_commit(self):
         """Change device setting for BGP in Netbox"""
         logger.info("Setting BGP to true in Netbox")
@@ -313,7 +326,10 @@ class RenumberSingleHostRunner(CookbookRunnerBase):
             self.netbox_commit()
             self.setup_k8s_remote_host()
 
-        self.prompt_homer()
+        if self.args.run_homer_inline:
+            self.run_homer_inline()
+        else:
+            self.prompt_homer()
         confirm_on_failure(self.run_puppet_agent_deploy)
         confirm_on_failure(self.run_puppet_agent_registry)
         self.pool()
