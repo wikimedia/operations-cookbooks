@@ -66,6 +66,8 @@ class SanitizeWiki(CookbookBase):
             action="append",
             help="Name of the wiki (can be repeated)",
         )
+        # we are only adding wikis to s5 for the foreseeable future
+        parser.add_argument("--section", default="s5", help="Section (defaults to s5)")
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
             "--check-only",
@@ -80,8 +82,6 @@ class SanitizeWiki(CookbookBase):
             action="store_true",
             help=help_text,
         )
-        # we are only adding wikis to s5 for the foreseeable future
-        group.add_argument("--section", default="s5", help="Section (defaults to s5)")
         return parser
 
     def get_runner(self, args):
