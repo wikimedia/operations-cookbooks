@@ -140,9 +140,10 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                 logger.info("\n===== Updating %s =====\n", hostname)
                 netbox_server = self.spicerack.netbox_server(hostname)
                 netbox_data = netbox_server.as_dict()
-                manufacturer_slug = netbox_data['device_type']['manufacturer']['slug']
                 if netbox_data['is_virtual']:
                     logger.info("The host %s is virtual, skipping.", hostname)
+                    continue
+                manufacturer_slug = netbox_data['device_type']['manufacturer']['slug']
             except NetboxError as error:
                 logger.warning('Unable to get the mgmt address from Netbox for %s: %s', hostname, error)
                 self.host_status['fail_netbox'].add(host)
