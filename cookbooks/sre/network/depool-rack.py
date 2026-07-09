@@ -119,7 +119,7 @@ class DepoolRackRunner(CookbookRunnerBase):
         if self.args.action == 'pool':
             logger.info("Removing downtime is not supported.")
             return
-        cookbook_args = ['-r', self.reason.reason,
+        cookbook_args = ['-r', f"'{self.reason.reason}'",
                          '-H', '4',
                          f"'P{{P:netbox::host%location ~ \"{self.args.rack}.*{self.args.site}\"}}'"]
         ask_confirmation(f'Proceed to run sre.hosts.downtime {" ".join(map(str, cookbook_args))} ?')
@@ -177,13 +177,17 @@ class DepoolRackRunner(CookbookRunnerBase):
                     self.puppetserver.hiera_lookup(netbox_server.fqdn, "profile::contacts::role_contacts", fmt="json"))
                 for role_contact in role_contacts:
                     contacts_servers[role_contact].append(netbox_server.name)
-                hiera_data = json.loads(
-                    self.puppetserver.hiera_lookup(netbox_server.fqdn,
-                                                   f"profile::server_{self.args.action}",
-                                                   fmt="json"))
-            except (ValueError, json.JSONDecodeError, StopIteration, RemoteExecutionError):
-                logger.info("%s: Couldn't get or parse %s Hiera key", netbox_server.name, self.args.action)
+                raw_data = self.puppetserver.hiera_lookup(netbox_server.fqdn,
+                                                          f"profile::server_{self.args.action}",
+                                                          fmt="json")
+                hiera_data = json.loads(raw_data)
+            except json.JSONDecodeError:
+                logger.info("%s: Couldn't parse %s", netbox_server.name, raw_data)
                 continue
+            except (ValueError, StopIteration, RemoteExecutionError):
+                logger.info("%s: Couldn't get %s Hiera key", netbox_server.name, self.args.action)
+                continue
+
             if 'policy' not in hiera_data or hiera_data['policy'] == "skip" or not hiera_data['policy']:
                 logger.info("%s: skipping host (%s)",
                             netbox_server.name,
