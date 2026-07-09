@@ -157,6 +157,7 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                 raise RuntimeError(f'Manufacturer not supported for host {hostname}')
 
             try:
+                logger.info("Setting up a basic Redfish session with user %s", manufacturer_admin)
                 # We need to use an admin user that we are sure it is present on every host
                 # from a certain vendor.
                 redfish = self.spicerack.redfish(hostname, username=manufacturer_admin, password=mgmt_password)
@@ -177,6 +178,10 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                         and e.__cause__.response is not None  # pylint: disable=no-member
                         and e.__cause__.response.status_code == 401):  # pylint: disable=no-member
                     try:
+                        logger.info(
+                            "The ADMIN user on Supermicro seems not configured with the right password, "
+                            "trying to fallback to the root user."
+                        )
                         redfish = self.spicerack.redfish(
                             hostname, username="root", password=mgmt_password)
                         # confirm redfish credentials work
