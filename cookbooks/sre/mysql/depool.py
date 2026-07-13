@@ -9,12 +9,15 @@ from typing import Any
 from conftool.extensions.dbconfig.action import ActionResult
 from conftool.extensions.dbconfig.entities import Instance as DBCInst
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-from cookbooks.sre.mysql import ensure
+from cookbooks.sre.mysql import ZarcilloClient, ensure
 from cookbooks.sre.mysql.pool import (
+    InstanceMetadata,
+    dbctl_set_section_ro_or_rw,
     extract_section_kind_and_method,
     fetch_host_instance_from_zarcillo,
     get_minst,
     get_mysqlremotehosts,
+    is_es_section_rw,
     validate_hostname_extract_dc_fqdn,
 )
 from spicerack import Spicerack
@@ -138,6 +141,7 @@ class DepoolRunner(CookbookRunnerBase):
         self.dry_run = spicerack.dry_run
         self._mysql = spicerack.mysql()
         self._run_cookbook = spicerack.run_cookbook
+        self._zarcillo_client = ZarcilloClient(spicerack)
 
         hostname, _dc, fqdn = validate_hostname_extract_dc_fqdn(args.instance)
 
@@ -193,7 +197,7 @@ class DepoolRunner(CookbookRunnerBase):
         else:
             log.warning(f"Unable to access task {self.task_id}: not adding comment '{msg}'")
 
-    def _depool_s_or_es(self) -> None:
+    def _depool_s(self) -> None:
         msg = "depool instance {self.args.instance}"
         if self.downtime:
             step("depool", "Setting downtime")
@@ -209,6 +213,92 @@ class DepoolRunner(CookbookRunnerBase):
         self.commit_change(msg)
 
         self.wait_for_connection_drain()
+
+    def _depool_es(self, imeta: InstanceMetadata, section: str) -> str:
+        """Depool esX host, see T430769
+
+        Returns a msg describing the action being taken
+
+        | Role    | Section  | Action         |
+        | replica | *        | depool         |
+        | master  | RO       | switchover     |
+        | master  | RW       | set section RO |
+        """
+        if imeta.role in ["rep", "replica"]:
+            # regardless of being a RO or RW sections, just depool the replica
+
+            msg = f"depool {section} replica {self.args.instance}"
+
+            if self.downtime:
+                step("depool", "Setting downtime")
+                self._alerting_hosts.downtime(self.reason, duration=timedelta(hours=self.downtime))
+
+            self.wait_diff_clean()
+
+            ar, dbctl_conf = self.dbctl.config.generate()
+            self.check_action_result(ar, "Failed to generate dbctl conf")
+            _check_depooling_last_instance(dbctl_conf, self.args.instance, self.args.nocheck_external_loads)
+            ret = self.dbctl.instance.depool(self.args.instance)
+            self.check_action_result(ret, msg)
+            self.commit_change(msg)
+
+            self.wait_for_connection_drain()
+            return msg
+
+        # we are depooling a RW master or RO fake-master
+
+        is_rw_section = is_es_section_rw(section)
+        log.debug(f"is_rw_section: {is_rw_section}")
+
+        if is_rw_section:
+            # Depooling a real master in a read-write section: we cannot alter the replication topology
+            # so set the whole section as read-only.
+            msg = (
+                f"{self.args.instance} is a primary or DC master of {section} (RW): setting whole section as read-only!"
+            )
+            log.warning(msg)
+
+            if self.downtime:
+                log.warning(f"Setting a downtime on {self.args.instance}")
+                self._alerting_hosts.downtime(self.reason, duration=timedelta(hours=self.downtime))
+
+            self.wait_diff_clean()
+            dbctl_set_section_ro_or_rw(self.dbctl, section, True)
+            self.commit_change(msg)
+            return f"setting read-write section {section} as read-only"
+
+        # Depooling a "fake-master" in a read-only section: we can safely pick a healthy replica in the same DC
+        # and do a "fake" switchover in dbctl
+        log.warning(f"The fake-master {self.args.instance} in RO section {section} is being depooled")
+        log.warning("doing a master/replica switchover")
+
+        # Look for a replica in the same DC to switchover to
+
+        section_status = self._zarcillo_client.fetch_section_status(section)
+        instances = [i for i in section_status.instances if i.dc == imeta.dc]
+        preferred_candidates = [i for i in instances if i.role != "master" and i.preferred_candidate]
+        if len(preferred_candidates) != 1:
+            raise ValueError(f"Expected one preferred candidate, found {preferred_candidates}")
+
+        new_master = preferred_candidates[0]
+        log.info(f"Found {new_master.hostname} as preferred candidate")
+
+        if self.downtime:
+            step("depool", "Setting downtime")
+            self._alerting_hosts.downtime(self.reason, duration=timedelta(hours=self.downtime))
+
+        msg = f"fake-switchover from {self.args.instance} to new master {new_master.hostname}"
+        self.wait_diff_clean()
+        dbc_new_master: DBCInst = self.dbctl.instance.get(new_master.hostname, dc=new_master.dc)
+        if dbc_new_master is None:
+            raise RuntimeError(f"Unable to find dbctl entity for {new_master.hostname} in {new_master.dc}")
+
+        ret = self.dbctl.section.set_master(section, new_master.dc, dbc_new_master)
+        self.check_action_result(ret, msg)
+        ret = self.dbctl.instance.depool(self.args.instance)
+        self.check_action_result(ret, msg)
+        self.commit_change(msg)
+        return msg
 
     def _depool_pc_or_ms(self, section: str) -> None:
         cmar = []
@@ -230,6 +320,7 @@ class DepoolRunner(CookbookRunnerBase):
             imeta = fetch_host_instance_from_zarcillo(self.args.instance)
             section = imeta.section
         except Exception as e:
+            imeta = None
             log.error(f"Error {e}")
             log.info("If you want to continue anyway input the section: ")
             section = input("Section: ").strip().lower()
@@ -246,7 +337,15 @@ class DepoolRunner(CookbookRunnerBase):
 
         elif pool_method == "s":
             msg = f"depooling of {self.args.instance}"
-            self._depool_s_or_es()
+            self._depool_s()
+            self._update_phabricator("Completed", msg)
+
+        elif pool_method == "es":
+            msg = f"depooling of {self.args.instance}"
+            if imeta is None:
+                raise ValueError("Depooling es sections requires InstanceMetadata from Zarcillo")
+
+            msg = self._depool_es(imeta, section)
             self._update_phabricator("Completed", msg)
 
     # # dbctl related # #
@@ -263,7 +362,7 @@ class DepoolRunner(CookbookRunnerBase):
             raise RuntimeError(f"Failed to {message}")
 
     def commit_change(self, message: str) -> None:
-        """Check the diff and commit the changepy."""
+        """Check the diff and commit the change."""
         ret = self.get_diff()
         self.check_action_result(ret, f"get diff to {message}")
 

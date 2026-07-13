@@ -41,6 +41,7 @@ def mock_sr():
         dbctl.instance.pool().announce_message = "<<mock dbctl pool announce msg>>"
         dbctl.instance.depool().announce_message = "<<mock dbctl pool announce msg>>"
         dbctl.config.commit().announce_message = "<<mock dbctl config commit announce msg>>"
+        dbctl.section.set_readonly().announce_message = "<<mock dbctl section set_readonly announce msg>>"
         dbctl.config.generate().announce_message = "<<mock dbctl generate announce msg>>"
 
         mock_sr.admin_reason.return_value.owner = "<<mock owner>>"
@@ -216,7 +217,10 @@ def test_runner_pc_section(m_jget, caplog) -> None:
     ffz("pc1015")
 
 
-def test_runner_parsercache_pool(mock_sr, m_jget):
+# # parsercache # #
+
+
+def test_pool_parsercache(mock_sr, m_jget):
     mi = MagicMock()
     mi.host.hosts = ["pc1015.eqiad.wmnet"]
     mock_sr.dbctl.return_value.instance.get.return_value.name = "pc1015"
@@ -282,7 +286,10 @@ def test_runner_parsercache_pool(mock_sr, m_jget):
     )
 
 
-def test_runner_s_pool(mock_sr, m_jget, caplog) -> None:
+# # s # #
+
+
+def test_pool_s(mock_sr, m_jget, caplog) -> None:
     mi = MagicMock()
     mi.host.hosts = ["db1229.eqiad.wmnet"]
     mock_sr.dbctl.return_value.instance.get.return_value.name = "db1229"
@@ -377,7 +384,264 @@ INFO mock phabricator task_comment 'T0' 'Completed pooling of db1229 by <<mock o
     assert caplog.text == exp
 
 
-def test_runner_x_pool(mock_sr, m_jget, caplog) -> None:
+# # es # #
+
+
+def test_pool_es_replica(mock_sr, m_jget, caplog) -> None:
+    mi = MagicMock()
+    mi.host.hosts = ["es1052.eqiad.wmnet"]
+    mock_sr.dbctl.return_value.instance.get.return_value.name = "es1052"
+
+    mrhs = MagicMock(name="my_mrhs")
+    mrhs.__len__.return_value = 1
+    assert len(mrhs) == 1
+    mock_sr.mysql().get_dbs.return_value = mrhs
+
+    diff_ret = Mock(messages=[], success=True, exit_code=0, announce_message="")
+    mock_sr.dbctl().config.diff.return_value = (diff_ret, None)
+
+    generate_ret = Mock(messages=[], success=True, exit_code=0)
+    mock_sr.dbctl().config.generate.return_value = (generate_ret, None)
+
+    def jget(url: str) -> dict:
+        assert url == "https://zarcillo.wikimedia.org/api/v1/instances/es1052"
+        return {
+            "instances": [
+                {
+                    "dc": "eqiad",
+                    "fqdn": "es1052.eqiad.wmnet",
+                    "hostname": "es1052",
+                    "instance_group": "core",
+                    "instance_name": "es1052",
+                    "last_start": None,
+                    "mariadb_version": "10.11.16-MariaDB-log",
+                    "port": 3306,
+                    "section": "es1",
+                    "alerts": [],
+                    "candidate_score": 0,
+                    "is_candidate_on_dbctl": None,
+                    "is_lagging": None,
+                    "lag": None,  # readonly section
+                    "pooled_value": 1,
+                    "role": "rep",
+                    "kernel_version": None,
+                    "uptime_s": None,
+                    "uptime_human": "52 days",
+                    "tags": [],
+                    "preferred_candidate": False,
+                }
+            ]
+        }
+
+    m_jget.side_effect = jget
+
+    args = parse_args(mock_sr, ["--reason", "Ready to pool", "--task-id", "T0", "es1052"])
+    runner = PoolRunner(args, mock_sr)
+    runner.run()
+
+    mock_sr.mysql.return_value.get_dbs.assert_called_with(
+        "P{es1052.eqiad.wmnet} and A:db-all and not A:db-multiinstance"
+    )
+    mock_sr.dbctl.return_value.instance.get.assert_called_with("es1052")
+
+    assert not mock_sr.run_cookbook.called
+
+    exp = """\
+DEBUG Waiting for icinga to go green
+INFO Removing downtime ahead of pooling
+INFO Pooling in the host
+INFO mock phabricator task_comment 'T0' 'Starting pool of es1052 by <<mock owner>>: <<mock reason>>'
+INFO Pooling instance es1052 at 6%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+INFO Pooling instance es1052 at 25%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+INFO Pooling instance es1052 at 56%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+INFO Pooling instance es1052 at 100%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+DEBUG pooling-in completed
+INFO mock phabricator task_comment 'T0' 'Completed pooling of es1052 by <<mock owner>>: <<mock reason>>'
+"""
+    assert caplog.text == exp
+
+
+def test_pool_es_readonly_master(mock_sr, m_jget, caplog) -> None:
+    mi = MagicMock()
+    mi.host.hosts = ["es1050.eqiad.wmnet"]
+    mock_sr.dbctl.return_value.instance.get.return_value.name = "es1050"
+
+    mrhs = MagicMock(name="my_mrhs")
+    mrhs.__len__.return_value = 1
+    assert len(mrhs) == 1
+    mock_sr.mysql().get_dbs.return_value = mrhs
+
+    diff_ret = Mock(messages=[], success=True, exit_code=0, announce_message="")
+    mock_sr.dbctl().config.diff.return_value = (diff_ret, None)
+
+    generate_ret = Mock(messages=[], success=True, exit_code=0)
+    mock_sr.dbctl().config.generate.return_value = (generate_ret, None)
+
+    def jget(url: str) -> dict:
+        assert url == "https://zarcillo.wikimedia.org/api/v1/instances/es1050"
+        return {
+            "instances": [
+                {
+                    "dc": "eqiad",
+                    "fqdn": "es1050.eqiad.wmnet",
+                    "hostname": "es1050",
+                    "instance_group": "core",
+                    "instance_name": "es1050",
+                    "last_start": None,
+                    "mariadb_version": "10.11.16-MariaDB-log",
+                    "port": 3306,
+                    "section": "es1",
+                    "alerts": [],
+                    "candidate_score": 0,
+                    "is_candidate_on_dbctl": None,
+                    "is_lagging": None,
+                    "lag": None,
+                    "pooled_value": 0,
+                    "role": "master",
+                    "kernel_version": None,
+                    "uptime_s": None,
+                    "uptime_human": "58 days",
+                    "tags": [],
+                    "preferred_candidate": False,
+                }
+            ]
+        }
+
+    m_jget.side_effect = jget
+
+    args = parse_args(mock_sr, ["--reason", "Ready to pool", "--task-id", "T0", "es1050"])
+    runner = PoolRunner(args, mock_sr)
+    runner.run()
+
+    mock_sr.mysql.return_value.get_dbs.assert_called_with(
+        "P{es1050.eqiad.wmnet} and A:db-all and not A:db-multiinstance"
+    )
+    mock_sr.dbctl.return_value.instance.get.assert_called_with("es1050")
+
+    assert not mock_sr.run_cookbook.called
+
+    exp = """\
+DEBUG Waiting for icinga to go green
+INFO Removing downtime ahead of pooling
+INFO Pooling in the host
+INFO mock phabricator task_comment 'T0' 'Starting pool of es1050 by <<mock owner>>: <<mock reason>>'
+INFO Pooling instance es1050 at 6%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+INFO Pooling instance es1050 at 25%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+INFO Pooling instance es1050 at 56%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+INFO Pooling instance es1050 at 100%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+DEBUG pooling-in completed
+INFO mock phabricator task_comment 'T0' 'Completed pooling of es1050 by <<mock owner>>: <<mock reason>>'
+"""
+    assert caplog.text == exp
+
+
+def test_pool_es_readwrite_master(mock_sr, m_jget, caplog) -> None:
+    mi = MagicMock()
+    mi.host.hosts = ["es1035.eqiad.wmnet"]
+    mock_sr.dbctl.return_value.instance.get.return_value.name = "es1035"
+
+    mrhs = MagicMock(name="my_mrhs")
+    mrhs.__len__.return_value = 1
+    assert len(mrhs) == 1
+    mock_sr.mysql().get_dbs.return_value = mrhs
+
+    diff_ret = Mock(messages=[], success=True, exit_code=0, announce_message="")
+    mock_sr.dbctl().config.diff.return_value = (diff_ret, None)
+
+    generate_ret = Mock(messages=[], success=True, exit_code=0)
+    mock_sr.dbctl().config.generate.return_value = (generate_ret, None)
+
+    def jget(url: str) -> dict:
+        assert url == "https://zarcillo.wikimedia.org/api/v1/instances/es1035"
+        return {
+            "instances": [
+                {
+                    "dc": "eqiad",
+                    "fqdn": "es1035.eqiad.wmnet",
+                    "hostname": "es1035",
+                    "instance_group": "core",
+                    "instance_name": "es1035",
+                    "last_start": None,
+                    "mariadb_version": "10.11.16-MariaDB-log",
+                    "port": 3306,
+                    "section": "es7",
+                    "alerts": [],
+                    "candidate_score": 0,
+                    "is_candidate_on_dbctl": None,
+                    "is_lagging": False,
+                    "lag": 0.585912,
+                    "pooled_value": 1,
+                    "role": "master",
+                    "kernel_version": None,
+                    "uptime_s": None,
+                    "uptime_human": "30 days",
+                    "tags": ["🎱︎pooled"],
+                    "preferred_candidate": False,
+                }
+            ]
+        }
+
+    m_jget.side_effect = jget
+
+    args = parse_args(mock_sr, ["--reason", "Ready to pool", "--task-id", "T0", "es1035"])
+    runner = PoolRunner(args, mock_sr)
+    runner.run()
+
+    mock_sr.mysql.return_value.get_dbs.assert_called_with(
+        "P{es1035.eqiad.wmnet} and A:db-all and not A:db-multiinstance"
+    )
+    mock_sr.dbctl.return_value.instance.get.assert_called_with("es1035")
+
+    assert not mock_sr.run_cookbook.called
+
+    exp = """\
+DEBUG Waiting for icinga to go green
+WARNING Setting section es7 as read-write
+INFO <<mock dbctl section set_readonly announce msg>>
+DEBUG Setting dbctl es7 in codfw
+INFO <<mock dbctl section set_readonly announce msg>>
+DEBUG Setting dbctl es7 in eqiad
+INFO <<mock dbctl config commit announce msg>>
+INFO mock phabricator task_comment 'T0' 'Completed Setting section es7 as read-write by <<mock owner>>: <<mock reason>>'
+INFO mock phabricator task_comment 'T0' 'Starting pool of es1035 by <<mock owner>>: <<mock reason>>'
+INFO Pooling instance es1035 at 6%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+INFO Pooling instance es1035 at 25%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+INFO Pooling instance es1035 at 56%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+INFO Pooling instance es1035 at 100%
+INFO <<mock dbctl pool announce msg>>
+INFO <<mock dbctl config commit announce msg>>
+DEBUG pooling-in completed
+INFO mock phabricator task_comment 'T0' 'Completed pooling of es1035 by <<mock owner>>: <<mock reason>>'
+"""
+    assert caplog.text == exp
+
+
+# # x # #
+
+
+def test_pool_x(mock_sr, m_jget, caplog) -> None:
     mi = MagicMock()
     mi.host.hosts = ["db2249.codfw.wmnet"]
     mock_sr.dbctl.return_value.instance.get.return_value.name = "db2249"

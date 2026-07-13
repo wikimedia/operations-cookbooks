@@ -16,6 +16,7 @@ from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from cookbooks.sre.mysql import ensure, get_mysqlremotehosts
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
+from spicerack.dbctl import Dbctl
 from spicerack.decorators import retry
 from spicerack.icinga import HostsStatus as IcingaHostsStatus
 from spicerack.icinga import HostStatus as IcingaStatus
@@ -27,8 +28,8 @@ from wmflib.interactive import ensure_shell_is_durable
 
 # TODO: improve handling of spurious changes, right now it bails out
 
-# TODO: use httpx ideally
-
+ES_RO_SECTIONS = {"es1", "es2", "es3", "es4", "es5"}
+ES_RW_SECTIONS = {"es6", "es7"}
 
 hostname_regex = re.compile(r"[a-z][a-z-]*[a-z](\d{4})")
 log = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ def step(slug: str, msg: str) -> None:
     log.info("[%s.%s] %s", __name__, slug, msg)
 
 
+# TODO: move this into __init__
 @dataclass
 class InstanceMetadata:
     """Instance metadata"""
@@ -71,7 +73,9 @@ def _jget(url: str) -> dict:
 
 
 def fetch_host_instance_from_zarcillo(hn: str) -> InstanceMetadata:
-    """Fetch InstanceMetadata"""
+    """Fetch InstanceMetadata: we need to know which section `hn` belongs to and
+    its role"""
+    # TODO: move into __init__
     url = f"https://zarcillo.wikimedia.org/api/v1/instances/{hn}"
     j = _jget(url)
     if "instances" not in j:
@@ -111,7 +115,7 @@ def extract_section_kind_and_method(section_name: str) -> Tuple[str, str]:
     supported = {
         "ms": "pc",  # parsercache cookbook
         "pc": "pc",  # parsercache cookbook
-        "es": "s",
+        "es": "es",  # T430769
         "s": "s",
         "x": "s",
     }
@@ -150,6 +154,41 @@ def validate_hostname_extract_dc_fqdn(hn_or_fqdn: str) -> tuple[str, str, str]:
         ensure(tmp_dc == dc and fqdn == hn_or_fqdn, f"Invalid FQDN '{hn_or_fqdn}'")
 
     return (hn, dc, fqdn)
+
+
+def is_es_section_rw(section: str) -> bool:
+    """Determine if a esX is RO or RW"""
+    if section in ES_RW_SECTIONS:
+        return True
+    if section in ES_RO_SECTIONS:
+        return False
+
+    raise ValueError(f"Unmanaged esX section {section}")
+
+
+def log_dbctl_result(res: ActionResult) -> None:
+    for msg in res.messages:
+        log.info(msg) if res.success else log.error(msg)
+
+    if res.announce_message:
+        log.info(res.announce_message)
+
+
+def dbctl_set_section_ro_or_rw(dbctl: Dbctl, section: str, readonly_flag: bool) -> None:
+    """Set a section as read-only or read-write in dbctl across both DCs without committing"""
+    for dc in ["codfw", "eqiad"]:
+        for _attempt in range(20):
+            res = dbctl.section.set_readonly(section, dc, readonly_flag)
+            log_dbctl_result(res)
+            if res.success:
+                log.debug(f"Setting dbctl {section} in {dc}")
+                break
+            log.debug(f"Failed to set {section} in {dc}, waiting 5s")
+            sleep(5)
+
+        else:
+            log.error("Failed to update, exiting immediately. Remember to clean up dbctl if needed.")
+            raise RuntimeError("Failed to update dbctl")
 
 
 def _run_cmd(host: RemoteHosts, cmd: str, is_safe: bool = False) -> str:
@@ -338,7 +377,7 @@ class PoolRunner(CookbookRunnerBase):
         if not action_result.success:
             raise RuntimeError(f"Failed to {message}")
 
-    def _pool_s_or_es(self) -> None:
+    def _pool_s(self) -> None:
         if self.args.skip_safety_checks is False:
             _poll_icinga_notification_status(self._icinga_host, self._hostname)
             log.debug("Waiting for icinga to go green")
@@ -369,12 +408,52 @@ class PoolRunner(CookbookRunnerBase):
         cmar.extend([section, "pool"])
         self._run_cookbook("sre.mysql.parsercache", cmar)
 
+    def _pool_es(self, imeta: InstanceMetadata) -> None:
+        """Pool esX host, see T430769
+
+        | Role    | Section  | Action         |
+        | replica | *        | pool           |
+        | master  | RO       | pool           |
+        | master  | RW       | set section RW |
+        """
+        if self.args.skip_safety_checks is False:
+            _poll_icinga_notification_status(self._icinga_host, self._hostname)
+            log.debug("Waiting for icinga to go green")
+            self._icinga_host.wait_for_optimal()
+
+        is_section_rw = is_es_section_rw(imeta.section)
+        just_pool = (imeta.role in ["rep", "replica"]) or (imeta.role == "master" and not is_section_rw)
+
+        if just_pool:
+            if not self.args.no_remove_downtime:
+                log.info("Removing downtime ahead of pooling")
+                # TODO: include alerting_hosts once able to find a matching downtime
+                self._icinga_host.remove_downtime()
+
+            log.info("Pooling in the host")
+            self._update_phabricator("Starting", f"pool of {self.args.instance}")
+            self.gradual_pooling()
+            return
+
+        msg = f"Setting section {imeta.section} as read-write"
+        log.warning(msg)
+        self.wait_diff_clean()
+        dbctl_set_section_ro_or_rw(self.dbctl, imeta.section, False)
+        self.commit_change(msg)
+        self._update_phabricator("Completed", msg)
+
+        # Also pool in the host just in case
+        self._update_phabricator("Starting", f"pool of {self.args.instance}")
+        self.gradual_pooling()
+
     def run(self) -> None:
         """As required by the Spicerack API."""
         try:
             imeta = fetch_host_instance_from_zarcillo(self.args.instance)
             section = imeta.section
         except Exception as e:
+            # Fallback in case Zarcillo is not available
+            imeta = None
             log.error(f"Error {e}")
             log.info("If you want to continue anyway input the section: ")
             section = input("Section: ").strip().lower()
@@ -391,7 +470,14 @@ class PoolRunner(CookbookRunnerBase):
 
         elif pool_method == "s":
             msg = f"pooling of {self.args.instance}"
-            self._pool_s_or_es()
+            self._pool_s()
+            self._update_phabricator("Completed", msg)
+
+        elif pool_method == "es":
+            msg = f"pooling of {self.args.instance}"
+            if imeta is None:
+                raise ValueError("Pooling es sections requires InstanceMetadata from Zarcillo")
+            self._pool_es(imeta)
             self._update_phabricator("Completed", msg)
 
     def _fetch_current_pooling(self, i: str, percentage: int) -> set[tuple[bool, bool]]:
@@ -428,7 +514,7 @@ class PoolRunner(CookbookRunnerBase):
             sleep(sleep_duration)
 
     def commit_change(self, message: str) -> None:
-        """Check the diff and commit the changepy."""
+        """Check the diff and commit the change."""
         ret = self.get_diff()
         self.check_action_result(ret, f"get diff to {message}")
 

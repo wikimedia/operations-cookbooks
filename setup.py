@@ -10,6 +10,7 @@ install_requires = [
     "packaging",
     "prettytable",
     "prometheus-client==0.9.0",
+    "pydantic",
     "python-dateutil",
     "python-gitlab==3.11.0",
     "scapy>=2.4.4",
