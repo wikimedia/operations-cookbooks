@@ -5,20 +5,20 @@ Test using:
 tox -e py313-lint_unit -- tests/unit/sre/mysql/upgrade_test.py -vv
 """
 
+import logging
 from argparse import Namespace
 from datetime import datetime
-from pytest import (
-    fixture,
-    raises,
-)
 from unittest import mock
 from unittest.mock import MagicMock, patch
-import logging
 
 from cookbooks.sre.mysql.upgrade import (
     MInst,
     UpgradeMySQLRunner,
     get_db_instance,
+)
+from pytest import (
+    fixture,
+    raises,
 )
 
 log = logging.getLogger()

@@ -8,22 +8,22 @@ tox -e py311-unit -- tests/unit/sre/mysql/clone_test.py -vv
 # pylint: disable=missing-docstring,line-too-long
 # flake8: noqa: D103
 
+import logging
 from argparse import Namespace
-from pytest import fixture
 from unittest import mock
 from unittest.mock import MagicMock, patch
-import logging
+
 import pytest
 
 # from spicerack.remote import RemoteHosts
-
 from cookbooks.sre.mysql.clone import (
-    MInst,
-    parse_db_host_fqdn,
-    _parse_replication_status,
-    _check_if_target_is_already_on_dbctl,
     CloneMySQLRunner,
+    MInst,
+    _check_if_target_is_already_on_dbctl,
+    _parse_replication_status,
+    parse_db_host_fqdn,
 )
+from pytest import fixture
 
 log = logging.getLogger()
 

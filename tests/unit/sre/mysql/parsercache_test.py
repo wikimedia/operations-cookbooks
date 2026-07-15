@@ -10,11 +10,11 @@ tox -e py311-unit -- tests/unit/sre/mysql/parsercache_test.py -vv
 
 import logging
 from argparse import Namespace
-from pytest import fixture
 from unittest import mock
 from unittest.mock import MagicMock
 
-from cookbooks.sre.mysql.parsercache import pool, depool
+from cookbooks.sre.mysql.parsercache import depool, pool
+from pytest import fixture
 
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)

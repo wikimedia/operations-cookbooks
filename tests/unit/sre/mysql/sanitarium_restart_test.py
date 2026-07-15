@@ -3,12 +3,12 @@
 
 import logging
 from argparse import Namespace
-from unittest.mock import patch, MagicMock
-
-from spicerack.mysql import MysqlRemoteHosts, Instance as MInst
-from spicerack.remote import RemoteHosts
+from unittest.mock import MagicMock, patch
 
 from cookbooks.sre.mysql.sanitarium_restart import run
+from spicerack.mysql import Instance as MInst
+from spicerack.mysql import MysqlRemoteHosts
+from spicerack.remote import RemoteHosts
 
 
 @patch("cookbooks.sre.mysql.sanitarium_restart.sleep", autospec=True)
