@@ -1,12 +1,15 @@
 """WDQS data transfer cookbook for source node
 
-Usage example for hosts behind lvs:
+Usage example for transferring the main WDQS journal and categories between hosts behind lvs:
     cookbook sre.wdqs.data-transfer --source wdqs1004.eqiad.wmnet --dest wdqs1003.eqiad.wmnet \
     --lvs-strategy both --reason "allocator troubles" --blazegraph_instance wdqs-all --task-id T12345
 
-Usage example for test hosts (not lvs managed):
+Usage example for transferring a Wikidata main journal between test hosts (not lvs managed):
     cookbook sre.wdqs.data-transfer --source wdqs1009.eqiad.wmnet --dest wdqs1010.eqiad.wmnet \
-    --lvs-strategy neither --reason "moving away from legacy updater" --blazegraph_instance wdqs-all --task-id T12345
+    --lvs-strategy neither --reason "moving away from legacy updater" --blazegraph_instance wikidata_main \
+    --task-id T12345
+
+wdqs-all is limited to wikidata_main hosts because categories are not present on other WDQS roles.
 
 """
 import logging
@@ -137,7 +140,15 @@ class DataTransferRunner(CookbookRunnerBase):
     def run(self):
         """Run the data transfer on each indicated instance."""
         if self.blazegraph_instance == 'wdqs-all':
-            self.run_for_instance('wikidata', BLAZEGRAPH_INSTANCES['wikidata'])
+            primary_instance = 'wikidata_main'
+            data_path = cast(str, BLAZEGRAPH_INSTANCES[primary_instance]['data_path'])
+            source_graph_type = self.get_graph_type_from_host(self.r_source, data_path + '/data_loaded')
+            if source_graph_type != primary_instance:
+                raise ValueError(
+                    f"wdqs-all requires a {primary_instance} source, but {self.r_source} "
+                    f"has graph type {source_graph_type!r}"
+                )
+            self.run_for_instance(primary_instance, BLAZEGRAPH_INSTANCES[primary_instance])
             self.run_for_instance('categories', BLAZEGRAPH_INSTANCES['categories'])
         else:
             self.run_for_instance(self.blazegraph_instance, BLAZEGRAPH_INSTANCES[self.blazegraph_instance])
