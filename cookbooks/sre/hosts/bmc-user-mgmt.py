@@ -87,7 +87,7 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
-        return 'for host {}'.format(self.remote_hosts.hosts)
+        return f'for {len(self.remote_hosts.hosts)} hosts'
 
     @property
     def lock_args(self):
@@ -246,6 +246,12 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                     continue
                 else:
                     try:
+                        # For some reason, sometimes deleting an user on Supermicro doesn't
+                        # work because some active sessions are still registered, even if
+                        # there are none. From some tests it seems that simply calling
+                        # the Sessions endpoint causes some sort of state reset, that allows
+                        # the deletion.
+                        redfish.request("GET", "/redfish/v1/SessionService/Sessions")
                         redfish.delete_account("root")
                     except (RedfishError, APIClientResponseError) as e:
                         logger.error(
