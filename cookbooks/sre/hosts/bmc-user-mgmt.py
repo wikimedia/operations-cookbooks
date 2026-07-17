@@ -131,7 +131,7 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
             'success': NodeSet(),
             'fail_netbox': NodeSet(),
             'fail_redfish': NodeSet(),
-            'root_on_supermicro': NodeSet(),
+            'fail_root_remove': NodeSet(),
         }
         password_to_enforce: str = new_password if new_password else mgmt_password
         for host in self.remote_hosts:
@@ -235,11 +235,8 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                 try:
                     redfish.find_account("root")
                     logger.info(
-                        "Found root account on Supermicro, please remove it: %s", hostname)
-                    self.host_status['root_on_supermicro'].add(host.hosts)
-                except RedfishError:
-                    pass
-                except APIClientResponseError as e:
+                        "Found root account on Supermicro, removing it: %s", hostname)
+                except (RedfishError, APIClientResponseError) as e:
                     logger.error(
                         "An error happened while trying to find the root's account "
                         "on %s: %s", hostname, e
@@ -247,6 +244,17 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                     self.host_status['fail_redfish'].add(host.hosts)
                     self._check_overall_failures()
                     continue
+                else:
+                    try:
+                        redfish.delete_account("root")
+                    except (RedfishError, APIClientResponseError) as e:
+                        logger.error(
+                            "An error happened while trying to delete the root's account "
+                            "on %s: %s", hostname, e
+                        )
+                        self.host_status['fail_root_remove'].add(host.hosts)
+                        self._check_overall_failures()
+                        continue
 
             logger.info("Checking that wmfroot and the manufacturer's admin can reach Redfish")
             for admin_user in ['wmfroot', manufacturer_admin]:
@@ -276,10 +284,11 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
 
         The following hosts had redfish failures:
             {}
-        The following Supermico hosts have the root account set (delete it):
+
+        The following Supermico hosts had issues when removing the root account:
             {}
             '''.format(
                     self.host_status['success'], self.host_status['fail_netbox'],
-                    self.host_status['fail_redfish'], self.host_status['root_on_supermicro']
+                    self.host_status['fail_redfish'], self.host_status['fail_root_remove']
                 )
         logger.info(message)
