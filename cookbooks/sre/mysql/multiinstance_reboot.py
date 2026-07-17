@@ -196,17 +196,23 @@ class MultiinstanceRebootRunner(CookbookRunnerBase):
         instances = mysql_dbs.list_hosts_instances()
 
         for instance in instances:
-            total_replicas = 0
-            with instance.cursor(database="mysql") as (connection, cursor):
-                if cursor.execute("SHOW REPLICA HOSTS"):
-                    total_replicas = len(cursor.fetchall())
+            # Check if the are active replicas. Ideally we would always check,
+            # but instance.cursor() does not work on multi-instance hosts,
+            # so we only check this when 'len(instances) == 1'.
+            # TODO: remove the "if" when spicerack.mysql.Instance.cursor() is
+            # updated to support multi-instance hosts.
+            if len(instances) == 1:
+                total_replicas = 0
+                with instance.cursor(database="mysql") as (connection, cursor):
+                    if cursor.execute("SHOW REPLICA HOSTS"):
+                        total_replicas = len(cursor.fetchall())
 
-            if total_replicas > 1:
-                msg = f"{instance} on {fqdn} appears to be a master with {total_replicas} replicas"
-                log.error(msg)
-                raise ValueError(msg)
-            if total_replicas == 1:
-                ask_confirmation("A single replica has been detected, proceed anyway?")
+                if total_replicas > 1:
+                    msg = f"{instance} on {fqdn} appears to be a master with {total_replicas} replicas"
+                    log.error(msg)
+                    raise ValueError(msg)
+                if total_replicas == 1:
+                    ask_confirmation("A single replica has been detected, proceed anyway?")
 
             step("stop_mariadb", f"Stopping MariaDB instance {instance} on {fqdn}")
             # TODO: use instance.stop_slave(), when that method will be
