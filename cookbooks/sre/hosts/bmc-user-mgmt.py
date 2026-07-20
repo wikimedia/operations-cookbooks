@@ -192,29 +192,32 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                 else:
                     continue
 
+            try:
+                accounts = redfish.find_accounts()
+            except RedfishError as e:
+                logger.info(
+                    "Failed to retrieve the BMC accounts user from Redfish: %s", e
+                )
+                self.host_status['fail_redfish'].add(host.hosts)
+                self._check_overall_failures()
+                continue
 
             # Global administrator user, used on Supermicro and Dells
             try:
-                redfish.find_account("wmfroot")
-            except RedfishError as e:
-                logger.info(
-                    "The wmfroot user on the BMC has not been created yet. "
-                    "More info: %s", e)
-                logger.info(
-                    'Creating the wmfroot user on the BMC.')
-                redfish.add_account('wmfroot', password_to_enforce)
-            else:
-                try:
+                if "wmfroot" not in accounts:
+                    logger.info("Creating the wmfroot user on the BMC.")
+                    redfish.add_account('wmfroot', password_to_enforce)
+                else:
                     logger.info(
                         "Updating the wmfroot user's password on the BMC.")
                     redfish.change_user_password('wmfroot', password_to_enforce)
-                except (RedfishError, APIClientResponseError) as e:
-                    logger.error(
-                        "An error happened while trying to change the wmfroot's password "
-                        "on %s: %s", hostname, e
-                    )
-                    self.host_status['fail_redfish'].add(host.hosts)
-                    self._check_overall_failures()
+            except RedfishError as e:
+                logger.info(
+                    "Failed add or modify the wmfroot account in Redfish: %s", e
+                )
+                self.host_status['fail_redfish'].add(host.hosts)
+                self._check_overall_failures()
+                continue
 
             logger.info(
                 "Updating the %s user's password on the BMC.", manufacturer_admin
@@ -229,38 +232,28 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                 self.host_status['fail_redfish'].add(host.hosts)
                 self._check_overall_failures()
 
-            # TODO: add the delete account functionality to Spicerack to avoid any
-            # manual actions for the user.
             if manufacturer_slug == 'supermicro':
                 try:
-                    redfish.find_account("root")
-                    logger.info(
-                        "Found root account on Supermicro, removing it: %s", hostname)
-                except (RedfishError, APIClientResponseError) as e:
-                    logger.error(
-                        "An error happened while trying to find the root's account "
-                        "on %s: %s", hostname, e
-                    )
-                    self.host_status['fail_redfish'].add(host.hosts)
-                    self._check_overall_failures()
-                    continue
-                else:
-                    try:
+                    if "root" in accounts:
                         # For some reason, sometimes deleting an user on Supermicro doesn't
                         # work because some active sessions are still registered, even if
                         # there are none. From some tests it seems that simply calling
                         # the Sessions endpoint causes some sort of state reset, that allows
                         # the deletion.
-                        redfish.request("GET", "/redfish/v1/SessionService/Sessions")
+                        sessions = redfish.request("GET", "/redfish/v1/SessionService/Sessions").json()
+                        if "Members" in sessions:
+                            logger.info("Current active sessions: %s", sessions["Members"])
+                        else:
+                            logger.info("Unable to find active sessions for the BMC.")
                         redfish.delete_account("root")
-                    except (RedfishError, APIClientResponseError) as e:
-                        logger.error(
-                            "An error happened while trying to delete the root's account "
-                            "on %s: %s", hostname, e
-                        )
-                        self.host_status['fail_root_remove'].add(host.hosts)
-                        self._check_overall_failures()
-                        continue
+                except (RedfishError, APIClientResponseError) as e:
+                    logger.error(
+                        "An error happened while trying to delete the root's account "
+                        "on %s: %s", hostname, e
+                    )
+                    self.host_status['fail_root_remove'].add(host.hosts)
+                    self._check_overall_failures()
+                    continue
 
             logger.info("Checking that wmfroot and the manufacturer's admin can reach Redfish")
             for admin_user in ['wmfroot', manufacturer_admin]:
