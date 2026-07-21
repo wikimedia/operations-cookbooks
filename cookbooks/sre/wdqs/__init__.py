@@ -2,6 +2,7 @@
 __owner_team__ = "Data Platform"
 
 import logging
+import math
 from datetime import timedelta, datetime
 
 from spicerack import RemoteHosts, ConftoolEntity
@@ -41,7 +42,16 @@ def wait_for_updater(prometheus, site, remote_host):
     host = remote_host.hosts[0].split(".")[0]
     query = "scalar(time() - blazegraph_lastupdated{instance=~'%s:919[35]'})" % host
     result = prometheus.query(query, site)
+    if not result:
+        raise ValueError("Empty response from Prometheus for query [{}]".format(query))
     lag = float(result[1])
+    # scalar() returns NaN if blazegraph_lastupdated is missing (e.g. host not
+    # scraped yet) and the exporter itself reports NaN while Blazegraph is
+    # down/unreachable. NaN compares false against the threshold, so without
+    # this check an unhealthy host would incorrectly pass as caught up
+    if not math.isfinite(lag):
+        raise ValueError("No valid lag data for {} (got {}); Blazegraph or its exporter "
+                         "may be down or not yet scraped".format(host, lag))
     if lag > 1200.0:
         raise ValueError("Let's wait for updater to catch up (lag of {} is too high)".format(lag))
 
