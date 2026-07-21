@@ -532,15 +532,15 @@ class MungeFromNFS(Runnable):
 
     NFS_DUMPS = {
         'wikidata': NfsDump(
-            read_path='/mnt/nfs/dumps-clouddumps1001.wikimedia.org/wikidatawiki/entities/latest-all.ttl.bz2',
+            read_path='/mnt/data/xmldatadumps/public/wikidatawiki/entities/latest-all.ttl.bz2',
             munge_path='/srv/wdqs/munged',
         ),
         'lexeme': NfsDump(
-            read_path='/mnt/nfs/dumps-clouddumps1001.wikimedia.org/wikidatawiki/entities/latest-lexemes.ttl.bz2',
+            read_path='/mnt/data/xmldatadumps/public/wikidatawiki/entities/latest-lexemes.ttl.bz2',
             munge_path='/srv/wdqs/lex-munged',
         ),
         'commons': NfsDump(
-            read_path='/mnt/nfs/dumps-clouddumps1001.wikimedia.org/commonswiki/entities',
+            read_path='/mnt/data/xmldatadumps/public/commonswiki/entities',
             munge_path='/srv/query_service/munged',
             munge_jar_args=' --wikibaseHost commons.wikimedia.org'
                            ' --conceptUri http://www.wikidata.org'
