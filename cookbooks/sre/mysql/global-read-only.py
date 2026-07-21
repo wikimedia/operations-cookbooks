@@ -97,7 +97,7 @@ def update_phabricator(
 
 def _get_dbctl_config_diff(dbctl: Dbctl) -> tuple[bool, Generator]:
     """Return True for changes and a diff line generator"""
-    for attempt in range(5):
+    for _attempt in range(5):
         ret, diff = dbctl.config.diff(force_unified=False)
         if ret.success:
             has_changes = bool(ret.exit_code)
@@ -110,7 +110,7 @@ def _get_dbctl_config_diff(dbctl: Dbctl) -> tuple[bool, Generator]:
 def _prepare_dbctl_changes(sections: list[str], dbctl: Dbctl, readonly_flag: bool) -> None:
     for sec in sections:
         for dc in ["codfw", "eqiad"]:
-            for attempt in range(20):
+            for _attempt in range(20):
                 res = dbctl.section.set_readonly(sec, dc, readonly_flag)
                 _log_dbctl_result(res)
                 if res.success:
