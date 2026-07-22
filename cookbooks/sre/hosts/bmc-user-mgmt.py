@@ -11,6 +11,7 @@ from spicerack.netbox import NetboxError
 from spicerack.redfish import RedfishError
 
 from getpass import getpass
+from urllib3.exceptions import HTTPError
 
 logger = logging.getLogger(__name__)
 
@@ -144,8 +145,8 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                     logger.info("The host %s is virtual, skipping.", hostname)
                     continue
                 manufacturer_slug = netbox_data['device_type']['manufacturer']['slug']
-            except NetboxError as error:
-                logger.warning('Unable to get the mgmt address from Netbox for %s: %s', hostname, error)
+            except (NetboxError, HTTPError) as e:
+                logger.warning('Unable to get the mgmt address from Netbox for %s: %s', hostname, e)
                 self.host_status['fail_netbox'].add(host)
                 continue
 
