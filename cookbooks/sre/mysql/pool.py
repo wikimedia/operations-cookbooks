@@ -225,6 +225,11 @@ class Pool(CookbookBase):
         """CLI parsing, as required by the Spicerack API."""
         parser = super().argument_parser()
         parser.add_argument("--skip-safety-checks", action="store_true", help="Skip checking for Icinga status")
+        parser.add_argument(
+            "--no-remove-downtime",
+            action="store_true",
+            help="Leave existing downtime in place; N.B. pcX and msX clusters ignore this - see T427378",
+        )
         profile = parser.add_mutually_exclusive_group()
         profile.add_argument(
             "--fast",
@@ -298,6 +303,7 @@ class PoolRunner(CookbookRunnerBase):
         self.datacenter = dbi.tags.get("datacenter")
 
         self._icinga_host = spicerack.icinga_hosts(self._mrhs.remote_hosts.hosts)
+        # TODO: include alerting_hosts once able to find a matching downtime
         # self._alerting_hosts = spicerack.alerting_hosts(self._mrhs.remote_hosts.hosts)
 
         self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
@@ -338,12 +344,20 @@ class PoolRunner(CookbookRunnerBase):
             log.debug("Waiting for icinga to go green")
             self._icinga_host.wait_for_optimal()
 
+        if not self.args.no_remove_downtime:
+            log.info("Removing downtime ahead of pooling")
+            # TODO: include alerting_hosts once able to find a matching downtime
+            self._icinga_host.remove_downtime()
+
         self._update_phabricator("Starting", f"pool of {self.args.instance}")
         self.gradual_pooling()
 
     def _pool_pc_or_ms(self, section: str) -> None:
         if self.args.skip_safety_checks:
             raise RuntimeError("Flag not supported")
+
+        if not self.args.no_remove_downtime:
+            pass  # TODO: sre.mysql.parsercache currently handles downtime removal - see T427378
 
         cmar = []
         if self.args.reason:

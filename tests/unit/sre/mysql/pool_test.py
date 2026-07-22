@@ -8,7 +8,6 @@ import logging
 from pytest import fixture, raises
 from unittest import mock
 from unittest.mock import MagicMock, patch, Mock
-from argparse import Namespace
 
 
 import cookbooks.sre.mysql.pool
@@ -19,7 +18,6 @@ from cookbooks.sre.mysql.pool import (
 
 
 log = logging.getLogger()
-
 # # Fixtures
 
 
@@ -44,8 +42,12 @@ def mock_sr():
         dbctl = mock_sr.dbctl()
         dbctl.instance.pool().announce_message = "<<mock dbctl pool announce msg>>"
         dbctl.instance.depool().announce_message = "<<mock dbctl pool announce msg>>"
-        dbctl.config.commit().announce_message = "<<mock dbctl config commit announce msg>>"
-        dbctl.config.generate().announce_message = "<<mock dbctl generate announce msg>>"
+        dbctl.config.commit().announce_message = (
+            "<<mock dbctl config commit announce msg>>"
+        )
+        dbctl.config.generate().announce_message = (
+            "<<mock dbctl generate announce msg>>"
+        )
 
         mock_sr.admin_reason.return_value.owner = "<<mock owner>>"
         mock_sr.admin_reason.return_value.reason = "<<mock reason>>"
@@ -63,7 +65,7 @@ def m_jget():
     with patch("cookbooks.sre.mysql.pool._jget") as m:
         yield m
 
-
+argument_parser = cookbooks.sre.mysql.pool.Pool(spicerack=mock_sr).argument_parser()
 # # Tests
 
 
@@ -87,7 +89,11 @@ def test_runner_init_from_hostname(mock_sr):
     mock_sr.mysql().get_dbs.return_value = mrhs
 
     mock_sr.mysql().get_dbs.return_value.list_hosts_instances.return_value = [mi]
-    args = Namespace(operation="pool", reason="test", task_id="T0", slow=None, fast=None, instance="db1234")
+    args = argument_parser.parse_args([
+        "--reason", "test",
+        "--task-id", "T0",
+        "db1234",
+    ])
     PoolRunner(args, mock_sr)
 
     mock_sr.mysql.return_value.get_dbs.assert_called_with(
@@ -106,7 +112,11 @@ def test_runner_init_from_fqdn(mock_sr):
     assert len(mrhs) == 1
     mock_sr.mysql().get_dbs.return_value = mrhs
 
-    args = Namespace(operation="pool", reason="test", task_id="T0", slow=None, fast=None, instance="db1000.eqiad.wmnet")
+    args = argument_parser.parse_args([
+        "--reason", "test",
+        "--task-id", "T0",
+        "db1000.eqiad.wmnet",
+    ])
     PoolRunner(args, mock_sr)
 
     mock_sr.mysql.return_value.get_dbs.assert_called_with(
@@ -241,9 +251,11 @@ def test_runner_parsercache_pool(mock_sr, m_jget):
 
     m_jget.side_effect = jget
 
-    args = Namespace(
-        operation="pool", reason="test", task_id="T0", slow=None, fast=None, instance="pc1015", skip_safety_checks=False
-    )
+    args = argument_parser.parse_args([
+        "--reason", "test",
+        "--task-id", "T0",
+        "pc1015",
+    ])
     runner = PoolRunner(args, mock_sr)
     runner.run()
 
@@ -310,15 +322,11 @@ def test_runner_s_pool(mock_sr, m_jget, caplog) -> None:
 
     m_jget.side_effect = jget
 
-    args = Namespace(
-        operation="pool",
-        reason="Ready to pool",
-        task_id="T0",
-        slow=None,
-        fast=None,
-        instance="db1229",
-        skip_safety_checks=False,
-    )
+    args = argument_parser.parse_args([
+        "--reason", "Ready to pool",
+        "--task-id", "T0",
+        "db1229",
+    ])
     runner = PoolRunner(args, mock_sr)
     runner.run()
 
@@ -331,6 +339,7 @@ def test_runner_s_pool(mock_sr, m_jget, caplog) -> None:
 
     exp = """\
 DEBUG Waiting for icinga to go green
+INFO Removing downtime ahead of pooling
 INFO mock phabricator task_comment 'T0' 'Starting pool of db1229 by <<mock owner>>: <<mock reason>>'
 INFO Pooling instance db1229 at 6%
 INFO <<mock dbctl pool announce msg>>
@@ -398,15 +407,11 @@ def test_runner_x_pool(mock_sr, m_jget, caplog) -> None:
 
     m_jget.side_effect = jget
 
-    args = Namespace(
-        operation="pool",
-        reason="Ready to pool",
-        task_id="T0",
-        slow=None,
-        fast=None,
-        instance="db2249",
-        skip_safety_checks=False,
-    )
+    args = argument_parser.parse_args([
+        "--reason", "Ready to pool",
+        "--task-id", "T0",
+        "db2249",
+    ])
     runner = PoolRunner(args, mock_sr)
     runner.run()
 
@@ -419,6 +424,7 @@ def test_runner_x_pool(mock_sr, m_jget, caplog) -> None:
 
     exp = """\
 DEBUG Waiting for icinga to go green
+INFO Removing downtime ahead of pooling
 INFO mock phabricator task_comment 'T0' 'Starting pool of db2249 by <<mock owner>>: <<mock reason>>'
 INFO Pooling instance db2249 at 6%
 INFO <<mock dbctl pool announce msg>>
