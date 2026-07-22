@@ -1,17 +1,12 @@
 """
-Unit tests for sre.mysql.clone
+Unit tests for sre.mysql.parsercache
 
 Test using:
-tox -e py311-unit -- tests/unit/sre/mysql/parsercache_test.py -vv
+tox -e py313-lint_unit -- tests/unit/sre/mysql/parsercache_test.py -vv
 """
-
-# pylint: disable=missing-docstring,line-too-long
-# flake8: noqa: D103
 
 import logging
 from argparse import Namespace
-from unittest import mock
-from unittest.mock import MagicMock
 
 from cookbooks.sre.mysql.parsercache import depool, pool
 from pytest import fixture
@@ -25,24 +20,16 @@ def set_logging(caplog):
     caplog.set_level(logging.DEBUG)
     caplog.handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
 
-    # mock_sr.admin_reason.return_value.owner = "<<mock owner>>"
-    # mock_sr.admin_reason.return_value.reason = "<<mock reason>>"
 
-    # def z(task, msg):
-    #     log.info(f"mock phabricator task_comment '{task}' '{msg}'")
+def test_pool(mocker, caplog):
+    sr = mocker.MagicMock(name="Spicerack")
+    al = mocker.MagicMock(name="IcingaHosts")
+    dbctl = mocker.MagicMock(name="Dbctl")
 
-    # mock_sr.phabricator.return_value.task_comment.side_effect = z
-
-    # yield mock_sr
-
-
-@mock.patch("spicerack.icinga.IcingaHosts", autospec=True)
-@mock.patch("spicerack.dbctl.Dbctl", autospec=True)
-@mock.patch("spicerack.Spicerack", autospec=True)
-def test_pool(sr, dbctl, al, caplog):
-    ret = MagicMock(success=True, exit_code=0)
+    ret = mocker.MagicMock(success=True, exit_code=0)
     dbctl.config.diff.return_value = (ret, None)
     dbctl.instance.weight().announce_message = "<<mock dbctl weight announce msg>>"
+
     args = Namespace(reason="foo", task_id=None, section="pc0")
     pool(sr, args, al, dbctl, ["pc2000.codfw.wmnet"])
 
@@ -58,11 +45,12 @@ INFO No changes to dbctl were made. Perhaps the hosts were already pooled in?
     assert caplog.text == exp
 
 
-@mock.patch("spicerack.icinga.IcingaHosts", autospec=True)
-@mock.patch("spicerack.dbctl.Dbctl", autospec=True)
-@mock.patch("spicerack.Spicerack", autospec=True)
-def test_depool(sr, dbctl, al, caplog):
-    ret = MagicMock(success=True, exit_code=0)
+def test_depool(mocker, caplog):
+    sr = mocker.MagicMock(name="Spicerack")
+    al = mocker.MagicMock(name="IcingaHosts")
+    dbctl = mocker.MagicMock(name="Dbctl")
+
+    ret = mocker.MagicMock(success=True, exit_code=0)
     dbctl.config.diff.return_value = (ret, None)
 
     dbctl.instance.pool().announce_message = "<<mock dbctl pool announce msg>>"

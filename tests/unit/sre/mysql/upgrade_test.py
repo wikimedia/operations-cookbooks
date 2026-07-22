@@ -8,8 +8,6 @@ tox -e py313-lint_unit -- tests/unit/sre/mysql/upgrade_test.py -vv
 import logging
 from argparse import Namespace
 from datetime import datetime
-from unittest import mock
-from unittest.mock import MagicMock, patch
 
 from cookbooks.sre.mysql.upgrade import (
     MInst,
@@ -28,9 +26,8 @@ log = logging.getLogger()
 
 
 @fixture(autouse=True)
-def mock_durable_shell():
-    with patch("cookbooks.sre.mysql.upgrade.ensure_shell_is_durable", autospec=True):
-        yield
+def mock_durable_shell(mocker):
+    mocker.patch("cookbooks.sre.mysql.upgrade.ensure_shell_is_durable")
 
 
 @fixture(autouse=True)
@@ -42,10 +39,10 @@ def set_logging(caplog):
 # Tests
 
 
-def test_get_db_instance():
-    mock_mysql = MagicMock()
-    mock_dbs = MagicMock()
-    mock_inst = MagicMock(spec=MInst)
+def test_get_db_instance(mocker):
+    mock_mysql = mocker.MagicMock()
+    mock_dbs = mocker.MagicMock()
+    mock_inst = mocker.MagicMock(spec=MInst)
 
     mock_mysql.get_dbs.return_value = mock_dbs
     mock_dbs.list_hosts_instances.return_value = [mock_inst]
@@ -54,45 +51,37 @@ def test_get_db_instance():
     mock_mysql.get_dbs.assert_called_once_with("db1001.eqiad.wmnet")
 
 
-@patch("spicerack.Spicerack", autospec=True)
-def test_run_multiple_hosts_raises(m_sr):
-    mock_hosts = MagicMock()
+def test_run_multiple_hosts_raises(mocker):
+    m_sr = mocker.MagicMock(name="Spicerack")
+    mock_hosts = mocker.MagicMock()
     mock_hosts.__len__.return_value = 2  # simulate >1 matched host
 
     m_sr.remote.return_value.query.return_value = mock_hosts
 
-    args = Namespace(
-        query="db11[76-77]", repool=True, task_id="T12345", reason="Upgrading"
-    )
+    args = Namespace(query="db11[76-77]", repool=True, task_id="T12345", reason="Upgrading")
 
     with raises(ValueError, match="Multiple hosts have been matched"):
         UpgradeMySQLRunner(args, m_sr)
 
 
-@patch("cookbooks.sre.mysql.upgrade.sleep")
-@patch("cookbooks.sre.mysql.upgrade.datetime", autospec=True)
-@patch("cookbooks.sre.mysql.upgrade.get_db_instance", autospec=True)
-@patch("cookbooks.sre.mysql.upgrade.confirm_on_failure", autospec=True)
-@patch("spicerack.Spicerack", autospec=True)
-def test_run(
-    m_sr,
-    m_confirm,
-    m_gdbi,
-    m_datetime,
-    m_sleep,
-    caplog,
-):
+def test_run(mocker, caplog):
+    mocker.patch("cookbooks.sre.mysql.upgrade.sleep")
+    m_datetime = mocker.patch("cookbooks.sre.mysql.upgrade.datetime")
+    m_gdbi = mocker.patch("cookbooks.sre.mysql.upgrade.get_db_instance")
+    m_confirm = mocker.patch("cookbooks.sre.mysql.upgrade.confirm_on_failure")
+
+    m_sr = mocker.MagicMock(name="Spicerack")
+
     m_datetime.now.return_value = datetime(2026, 5, 22, 0, 0, 0)
 
-    mock_host = MagicMock()
+    mock_host = mocker.MagicMock()
     mock_host.hosts = ["db1176.eqiad.wmnet"]
-    # mock_host.__str__.return_value = "db1176.eqiad.wmnet"
-    setattr(mock_host, "__str__", MagicMock(return_value="db1176.eqiad.wmnet"))
+    mock_host.__str__.return_value = "db1176.eqiad.wmnet"
 
     m_sr.remote.return_value.query.return_value = mock_host
-    m_sr.run_cookbook = mock.Mock()
+    m_sr.run_cookbook = mocker.Mock()
 
-    mock_dbi = MagicMock(spec=MInst)
+    mock_dbi = mocker.MagicMock(spec=MInst)
     m_gdbi.return_value = mock_dbi
 
     def mock_run(func, cmd):

@@ -24,6 +24,7 @@ extras_require = {
     "tests": [
         "mypy>=0.670",
         "pytest>=6.1.0",
+        "pytest-mock",
         "types-PyMySQL",
         "types-python-dateutil",
         "types-PyYAML",
