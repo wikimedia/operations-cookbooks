@@ -164,7 +164,7 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                 redfish = self.spicerack.redfish(hostname, username=manufacturer_admin, password=mgmt_password)
                 # confirm redfish credentials work
                 redfish.get_power_state()
-            except RedfishError as e:
+            except (RedfishError, NetboxError, HTTPError) as e:
                 logger.error("Failed to establish a Redfish session for %s: %s", hostname, e)
                 self.host_status['fail_redfish'].add(host.hosts)
                 self._check_overall_failures()
@@ -258,13 +258,13 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
 
             logger.info("Checking that wmfroot and the manufacturer's admin can reach Redfish")
             for admin_user in ['wmfroot', manufacturer_admin]:
-                redfish_newpass_check = self.spicerack.redfish(
-                    hostname, username=admin_user, password=password_to_enforce
-                )
-                # Check if the new username and password work with a basic Redfish call
                 try:
+                    # Check if the new username and password work with a basic Redfish call
+                    redfish_newpass_check = self.spicerack.redfish(
+                        hostname, username=admin_user, password=password_to_enforce
+                    )
                     redfish_newpass_check.get_power_state()
-                except RedfishError as e:
+                except (RedfishError, NetboxError, HTTPError) as e:
                     logger.error(
                         "Failed to verify get_power_state for user %s on host %s: %s",
                         admin_user, hostname, e
