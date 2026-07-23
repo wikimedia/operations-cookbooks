@@ -8,6 +8,7 @@ tox -e py313-lint_unit -- tests/unit/sre/mysql/multiinstance_reboot_test.py -vv
 import logging
 from argparse import Namespace
 from datetime import datetime, timezone
+from typing import cast
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -25,19 +26,15 @@ def mock_run_sync(*args, **kwargs):
     return iter([(MagicMock(), MagicMock())])
 
 
-def mock_filter_objects(tags, name):
-    obj = MagicMock()
-    obj.__repr__ = lambda self: f'name="{name}"'
-    return [obj]
-
-
 def mock_update_objects(changes, objects):
     log.info(f"Mock-running 'confctl update_objects {changes},{objects}'")
 
 
 def mock_icinga_hosts(hosts):
     m = MagicMock()
-    m.wait_for_optimal.side_effect = lambda: log.info(f"Mock-running 'icinga_hosts.wait_for_optimal {hosts}'")
+    m.wait_for_optimal.side_effect = lambda: log.info(
+        f"Mock-running 'icinga_hosts.wait_for_optimal {hosts}'"
+    )
     return m
 
 
@@ -48,22 +45,10 @@ def set_logging(caplog):
 
 
 @fixture(autouse=True)
-def m_sr():
-    with mock.patch("spicerack.Spicerack", autospec=True) as m:
-        yield m
-
-
-@fixture(autouse=True)
 def m_cursor():
     with mock.patch("spicerack.mysql.Instance.cursor") as m:
         m.return_value.__enter__.return_value = (mock.MagicMock(), mock.MagicMock())
         yield
-
-
-@fixture(autouse=True)
-def m_step():
-    with mock.patch("cookbooks.sre.mysql.multiinstance_reboot.step") as m:
-        yield m
 
 
 @fixture(autouse=True)
@@ -73,13 +58,13 @@ def m_datetime():
         yield m
 
 
-def test_run_clouddb_multiinstance(
-    m_sr,
-    caplog,
-):
+def test_run_clouddb_multiinstance(caplog, mocker):
+    m_sr = mocker.patch("spicerack.Spicerack", autospec=True)
+    mocker.patch("cookbooks.sre.mysql.multiinstance_reboot.step")
+
     mock_host = MagicMock()
     mock_host.hosts = ["clouddb1001.eqiad.wmnet"]
-    mock_host.__str__ = MagicMock(return_value="clouddb1001.eqiad.wmnet")
+    cast(MagicMock, mock_host.__str__).return_value = "clouddb1001.eqiad.wmnet"
     m_sr.remote.return_value.query.return_value = [mock_host]
 
     mock_host.run_sync.side_effect = mock_run_sync
@@ -91,16 +76,33 @@ def test_run_clouddb_multiinstance(
     mock_mysql_dbs = MagicMock()
     mock_instance_s1 = Instance(mock_host, name="s1")
     mock_instance_s2 = Instance(mock_host, name="s2")
-    mock_mysql_dbs.list_hosts_instances.return_value = [mock_instance_s1, mock_instance_s2]
+    mock_mysql_dbs.list_hosts_instances.return_value = [
+        mock_instance_s1,
+        mock_instance_s2,
+    ]
     m_sr.mysql.return_value.get_dbs.return_value = mock_mysql_dbs
 
     m_confctl = m_sr.confctl.return_value
+
+    def mock_filter_objects(tags, name):
+        class FilterOut:
+            def __repr__(self) -> str:
+                return f'name="{name}"'
+
+        return [FilterOut()]
+
     m_confctl.filter_objects.side_effect = mock_filter_objects
     m_confctl.update_objects.side_effect = mock_update_objects
 
     m_sr.icinga_hosts.side_effect = mock_icinga_hosts
 
-    args = Namespace(query="clouddb*", repool=True, upgrade=True, task_id="T12345", reason="Rebooting")
+    args = Namespace(
+        query="clouddb*",
+        repool=True,
+        upgrade=True,
+        task_id="T12345",
+        reason="Rebooting",
+    )
     runner = MultiinstanceRebootRunner(args, m_sr)
     runner.run()
 
