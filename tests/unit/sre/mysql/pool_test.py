@@ -42,12 +42,8 @@ def mock_sr():
         dbctl = mock_sr.dbctl()
         dbctl.instance.pool().announce_message = "<<mock dbctl pool announce msg>>"
         dbctl.instance.depool().announce_message = "<<mock dbctl pool announce msg>>"
-        dbctl.config.commit().announce_message = (
-            "<<mock dbctl config commit announce msg>>"
-        )
-        dbctl.config.generate().announce_message = (
-            "<<mock dbctl generate announce msg>>"
-        )
+        dbctl.config.commit().announce_message = "<<mock dbctl config commit announce msg>>"
+        dbctl.config.generate().announce_message = "<<mock dbctl generate announce msg>>"
 
         mock_sr.admin_reason.return_value.owner = "<<mock owner>>"
         mock_sr.admin_reason.return_value.reason = "<<mock reason>>"
@@ -65,7 +61,11 @@ def m_jget():
     with patch("cookbooks.sre.mysql.pool._jget") as m:
         yield m
 
-argument_parser = cookbooks.sre.mysql.pool.Pool(spicerack=mock_sr).argument_parser()
+
+def parse_args(mock_sr, args: list):
+    return cookbooks.sre.mysql.pool.Pool(spicerack=mock_sr).argument_parser().parse_args(args)
+
+
 # # Tests
 
 
@@ -89,11 +89,16 @@ def test_runner_init_from_hostname(mock_sr):
     mock_sr.mysql().get_dbs.return_value = mrhs
 
     mock_sr.mysql().get_dbs.return_value.list_hosts_instances.return_value = [mi]
-    args = argument_parser.parse_args([
-        "--reason", "test",
-        "--task-id", "T0",
-        "db1234",
-    ])
+    args = parse_args(
+        mock_sr,
+        [
+            "--reason",
+            "test",
+            "--task-id",
+            "T0",
+            "db1234",
+        ],
+    )
     PoolRunner(args, mock_sr)
 
     mock_sr.mysql.return_value.get_dbs.assert_called_with(
@@ -112,11 +117,16 @@ def test_runner_init_from_fqdn(mock_sr):
     assert len(mrhs) == 1
     mock_sr.mysql().get_dbs.return_value = mrhs
 
-    args = argument_parser.parse_args([
-        "--reason", "test",
-        "--task-id", "T0",
-        "db1000.eqiad.wmnet",
-    ])
+    args = parse_args(
+        mock_sr,
+        [
+            "--reason",
+            "test",
+            "--task-id",
+            "T0",
+            "db1000.eqiad.wmnet",
+        ],
+    )
     PoolRunner(args, mock_sr)
 
     mock_sr.mysql.return_value.get_dbs.assert_called_with(
@@ -251,11 +261,16 @@ def test_runner_parsercache_pool(mock_sr, m_jget):
 
     m_jget.side_effect = jget
 
-    args = argument_parser.parse_args([
-        "--reason", "test",
-        "--task-id", "T0",
-        "pc1015",
-    ])
+    args = parse_args(
+        mock_sr,
+        [
+            "--reason",
+            "test",
+            "--task-id",
+            "T0",
+            "pc1015",
+        ],
+    )
     runner = PoolRunner(args, mock_sr)
     runner.run()
 
@@ -322,11 +337,16 @@ def test_runner_s_pool(mock_sr, m_jget, caplog) -> None:
 
     m_jget.side_effect = jget
 
-    args = argument_parser.parse_args([
-        "--reason", "Ready to pool",
-        "--task-id", "T0",
-        "db1229",
-    ])
+    args = parse_args(
+        mock_sr,
+        [
+            "--reason",
+            "Ready to pool",
+            "--task-id",
+            "T0",
+            "db1229",
+        ],
+    )
     runner = PoolRunner(args, mock_sr)
     runner.run()
 
@@ -407,11 +427,16 @@ def test_runner_x_pool(mock_sr, m_jget, caplog) -> None:
 
     m_jget.side_effect = jget
 
-    args = argument_parser.parse_args([
-        "--reason", "Ready to pool",
-        "--task-id", "T0",
-        "db2249",
-    ])
+    args = parse_args(
+        mock_sr,
+        [
+            "--reason",
+            "Ready to pool",
+            "--task-id",
+            "T0",
+            "db2249",
+        ],
+    )
     runner = PoolRunner(args, mock_sr)
     runner.run()
 
