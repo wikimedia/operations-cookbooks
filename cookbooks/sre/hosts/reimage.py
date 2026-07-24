@@ -419,6 +419,25 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             distro=self.args.os
         )
 
+    def _get_dhcp_filename_ipxe(self, uefi: bool) -> str:
+        """Helper to create the IPXE's dhcp filename."""
+        # After the iPXE boot loader is fetched via UEFI HTTP Boot, iPXE
+        # tries to fetch autoexec.ipxe from the base directory of the boot
+        # loader URL. However, on some Dell servers iPXE is not able to
+        # obtain the domain name server, though this works on Supermicro
+        # servers and via Grub. Consequently, iPXE is not able to resolve
+        # the boot URL and pull down autoexec.ipxe. As a workaround, use
+        # the IP:
+        # - iPXE bug report: https://github.com/ipxe/ipxe/issues/1316
+        # - Failed: Dell R440 Bios version: 2.22.1, purchased 2019-04-01
+        # - Succeeded: Dell R450 Bios version: 1.15.2, purchased 2023-04-10
+        # We could re-evaluate this hack as old hardware ages out of the
+        # fleet.
+        apt_ip = self.dns.resolve_ipv4('apt.wikimedia.org')[0]
+        if uefi:
+            return f'http://{apt_ip}/efiboot/snponly.efi'
+        return f'http://{apt_ip}/efiboot/autoexec.ipxe'
+
     def _get_dhcp_config_baremetal(  # pylint: disable=too-many-locals
         self, force_tftp: bool = False, identifier: str = ""
     ) -> DHCPConfiguration:
@@ -437,22 +456,9 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
         else:
             installer_suffix = f"{self.args.os}-installer"
         dhcp_filename_ipxe = ''
-        # After the iPXE boot loader is fetched via UEFI HTTP Boot, iPXE
-        # tries to fetch autoexec.ipxe from the base directory of the boot
-        # loader URL. However, on some Dell servers iPXE is not able to
-        # obtain the domain name server, though this works on Supermicro
-        # servers and via Grub. Consequently, iPXE is not able to resolve
-        # the boot URL and pull down autoexec.ipxe. As a workaround, use
-        # the IP:
-        # - iPXE bug report: https://github.com/ipxe/ipxe/issues/1316
-        # - Failed: Dell R440 Bios version: 2.22.1, purchased 2019-04-01
-        # - Succeeded: Dell R450 Bios version: 1.15.2, purchased 2023-04-10
-        # We could re-evaluate this hack as old hardware ages out of the
-        # fleet.
-        apt_ip = self.dns.resolve_ipv4('apt.wikimedia.org')[0]
         # UEFI boot
         if self.is_uefi:
-            dhcp_filename = f'http://{apt_ip}/efiboot/snponly.efi'
+            dhcp_filename = self._get_dhcp_filename_ipxe(uefi=True)
             dhcp_options = {
                 # HACK: root-path is used by ipxe to construct the installer URL
                 # we could in the future have ipxe query the os version via some
@@ -475,7 +481,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
                     # other method.
                     'root-path': installer_suffix,
                 }
-                dhcp_filename_ipxe = f'http://{apt_ip}/efiboot/autoexec.ipxe'
+                dhcp_filename_ipxe = self._get_dhcp_filename_ipxe(uefi=False)
                 dhcp_filename_exclude_vendor = ""
             # via Debian's pxelinux
             else:
@@ -584,7 +590,10 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             # Prepare a physical host for reboot and PXE or UEFI HTTP boot
             # for reimaging.
             if self.is_uefi:
-                self.redfish.force_http_boot_once()
+                if self.netbox_data['device_type']['manufacturer']['slug'] == SUPERMICRO_VENDOR_SLUG:
+                    self.redfish.force_http_boot_once(self._get_dhcp_filename_ipxe(uefi=True))
+                else:
+                    self.redfish.force_http_boot_once()
                 self.host_actions.success('Forced UEFI HTTP Boot for next reboot')
                 self.redfish.chassis_reset(ChassisResetPolicy.FORCE_RESTART)
                 self.host_actions.success('Host rebooted via Redfish')
