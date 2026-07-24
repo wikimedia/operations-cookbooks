@@ -302,6 +302,8 @@ class DataReloadRunner(CookbookRunnerBase):
                 DataReloadRunner._stop_service_if_active(self.reload_profile.blazegraph_service),
                 f'rm -fv {self.reload_profile.journal_path}',
                 f'/usr/bin/systemctl start {self.reload_profile.blazegraph_service}',
+                f'/usr/bin/systemctl start '
+                f'prometheus-blazegraph-exporter-{self.reload_profile.blazegraph_service}',
             )
         # wait for blazegraph to start
         # TODO: sleeping is far from ideal, consider using another technique (ping some blazegraph API?)

@@ -88,7 +88,8 @@ class CategoryReloadRunner(CookbookRunnerBase):
             self.remote_host.run_sync(
                 'systemctl stop wdqs-categories',
                 'rm -fv /srv/wdqs/categories.jnl',
-                'systemctl start wdqs-categories'
+                'systemctl start wdqs-categories',
+                'systemctl start prometheus-blazegraph-exporter-wdqs-categories',
             )
 
         # Wait for blazegraph to be up

@@ -29,38 +29,39 @@ from cookbooks.sre.wdqs import wait_for_updater, get_site, get_hostname, MUTATIO
 
 BLAZEGRAPH_INSTANCES = {
 
+    # Stop exporters explicitly; reversed startup restores each one before its updater
     'categories': {
-        'services': ['wdqs-categories'],
+        'services': ['prometheus-blazegraph-exporter-wdqs-categories', 'wdqs-categories'],
         'data_path': '/srv/wdqs',
         'files': ['/srv/wdqs/categories.jnl', '/srv/wdqs/aliases.map'],
         'valid_on': 'wdqs',
     },
     'wikidata': {
-        'services': ['wdqs-updater', 'wdqs-blazegraph'],
+        'services': ['wdqs-updater', 'prometheus-blazegraph-exporter-wdqs-blazegraph', 'wdqs-blazegraph'],
         'data_path': '/srv/wdqs',
         'files': ['/srv/wdqs/wikidata.jnl'],
         'valid_on': 'wdqs',
     },
     'wikidata_full': {
-        'services': ['wdqs-updater', 'wdqs-blazegraph'],
+        'services': ['wdqs-updater', 'prometheus-blazegraph-exporter-wdqs-blazegraph', 'wdqs-blazegraph'],
         'data_path': '/srv/wdqs',
         'files': ['/srv/wdqs/wikidata.jnl'],
         'valid_on': 'wdqs',
     },
     'wikidata_main': {
-        'services': ['wdqs-updater', 'wdqs-blazegraph'],
+        'services': ['wdqs-updater', 'prometheus-blazegraph-exporter-wdqs-blazegraph', 'wdqs-blazegraph'],
         'data_path': '/srv/wdqs',
         'files': ['/srv/wdqs/wikidata.jnl'],
         'valid_on': 'wdqs',
     },
     'scholarly_articles': {
-        'services': ['wdqs-updater', 'wdqs-blazegraph'],
+        'services': ['wdqs-updater', 'prometheus-blazegraph-exporter-wdqs-blazegraph', 'wdqs-blazegraph'],
         'data_path': '/srv/wdqs',
         'files': ['/srv/wdqs/wikidata.jnl'],
         'valid_on': 'wdqs',
     },
     'commons': {
-        'services': ['wcqs-updater', 'wcqs-blazegraph'],
+        'services': ['wcqs-updater', 'prometheus-blazegraph-exporter-wcqs-blazegraph', 'wcqs-blazegraph'],
         'data_path': '/srv/query_service',
         'files': ['/srv/query_service/wcqs.jnl'],
         'valid_on': 'wcqs',
