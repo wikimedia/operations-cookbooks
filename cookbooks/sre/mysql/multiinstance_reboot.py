@@ -198,10 +198,10 @@ class MultiinstanceRebootRunner(CookbookRunnerBase):
         for instance in instances:
             # Check if the are active replicas. Ideally we would always check,
             # but instance.cursor() does not work on multi-instance hosts,
-            # so we only check this when 'len(instances) == 1'.
+            # so we only check this when 'instance.name == ""'..
             # TODO: remove the "if" when spicerack.mysql.Instance.cursor() is
             # updated to support multi-instance hosts.
-            if len(instances) == 1:
+            if instance.name == "":
                 total_replicas = 0
                 with instance.cursor(database="mysql") as (connection, cursor):
                     if cursor.execute("SHOW REPLICA HOSTS"):
