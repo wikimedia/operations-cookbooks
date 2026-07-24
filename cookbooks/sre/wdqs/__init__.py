@@ -20,6 +20,14 @@ MUTATION_TOPICS = {
 logger = logging.getLogger(__name__)
 
 
+class UpdaterMetricUnavailable(RuntimeError):
+    """Updater lag cannot be determined from Prometheus."""
+
+
+class UpdaterLagTooHigh(ValueError):
+    """Updater lag is valid but above the repooling threshold."""
+
+
 def check_hosts_are_valid(remote_hosts, remote):
     """Remote hosts must be exclusively wdqs or wcqs hosts"""
     all_wdqs = remote.query("A:wdqs-all")
@@ -32,28 +40,39 @@ def check_hosts_are_valid(remote_hosts, remote):
         hosts=remote_hosts.hosts))
 
 
-@retry(tries=1000, delay=timedelta(minutes=10), backoff_mode='constant', exceptions=(ValueError,))
-def wait_for_updater(prometheus, site, remote_host):
-    """Wait for query service updater to catch up on updates.
-
-    This might take a while to complete and is completely normal.
-    Hence, the long wait time.
-    """
+@retry(tries=30, delay=timedelta(minutes=1), backoff_mode='constant',
+       exceptions=(UpdaterMetricUnavailable,))
+def get_updater_lag(prometheus, site, remote_host) -> float:
+    """Return updater lag, failing when Prometheus has no usable value."""
     host = remote_host.hosts[0].split(".")[0]
     query = "scalar(time() - blazegraph_lastupdated{instance=~'%s:919[35]'})" % host
     result = prometheus.query(query, site)
     if not result:
-        raise ValueError("Empty response from Prometheus for query [{}]".format(query))
+        raise UpdaterMetricUnavailable("Empty response from Prometheus for query [{}]".format(query))
     lag = float(result[1])
     # scalar() returns NaN if blazegraph_lastupdated is missing (e.g. host not
     # scraped yet) and the exporter itself reports NaN while Blazegraph is
     # down/unreachable. NaN compares false against the threshold, so without
     # this check an unhealthy host would incorrectly pass as caught up
     if not math.isfinite(lag):
-        raise ValueError("No valid lag data for {} (got {}); Blazegraph or its exporter "
-                         "may be down or not yet scraped".format(host, lag))
+        raise UpdaterMetricUnavailable(
+            "No valid lag data for {} (got {}); Blazegraph or its exporter "
+            "may be down or not yet scraped".format(host, lag)
+        )
+    return lag
+
+
+@retry(tries=1000, delay=timedelta(minutes=10), backoff_mode='constant',
+       exceptions=(UpdaterLagTooHigh,))
+def wait_for_updater(prometheus, site, remote_host):
+    """Wait for query service updater to catch up on updates.
+
+    A finite high lag can take days to drain, so it retains the long retry
+    budget. Missing or invalid metrics use a separate bounded retry budget.
+    """
+    lag = get_updater_lag(prometheus, site, remote_host)
     if lag > 1200.0:
-        raise ValueError("Let's wait for updater to catch up (lag of {} is too high)".format(lag))
+        raise UpdaterLagTooHigh("Let's wait for updater to catch up (lag of {} is too high)".format(lag))
 
 
 def get_site(host, netbox):
