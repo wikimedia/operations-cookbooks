@@ -5,17 +5,15 @@ tox -e py311-unit -- tests/unit/sre/mysql/pool_test.py -vv
 """
 
 import logging
-from pytest import fixture, raises
 from unittest import mock
-from unittest.mock import MagicMock, patch, Mock
-
+from unittest.mock import MagicMock, Mock, patch
 
 import cookbooks.sre.mysql.pool
 from cookbooks.sre.mysql.pool import (
     PoolRunner,
     _poll_icinga_notification_status,
 )
-
+from pytest import fixture, raises
 
 log = logging.getLogger()
 # # Fixtures

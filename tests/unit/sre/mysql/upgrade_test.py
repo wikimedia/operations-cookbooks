@@ -7,7 +7,7 @@ tox -e py313-lint_unit -- tests/unit/sre/mysql/upgrade_test.py -vv
 
 import logging
 from argparse import Namespace
-from datetime import datetime
+from datetime import datetime, timezone
 
 from cookbooks.sre.mysql.upgrade import (
     MInst,
@@ -20,6 +20,10 @@ from pytest import (
 )
 
 log = logging.getLogger()
+
+
+def utc_datetime(y, m, d) -> datetime:
+    return datetime(y, m, d, 0, 0, 0, tzinfo=timezone.utc)
 
 
 # Fixtures
@@ -72,7 +76,7 @@ def test_run(mocker, caplog):
 
     m_sr = mocker.MagicMock(name="Spicerack")
 
-    m_datetime.now.return_value = datetime(2026, 5, 22, 0, 0, 0)
+    m_datetime.now.return_value = utc_datetime(2026, 5, 22)
 
     mock_host = mocker.MagicMock()
     mock_host.hosts = ["db1176.eqiad.wmnet"]
@@ -100,7 +104,7 @@ def test_run(mocker, caplog):
     runner = UpgradeMySQLRunner(args, m_sr)
     runner.run()
 
-    mock_host.wait_reboot_since.assert_called_once_with(datetime(2026, 5, 22, 0, 0, 0))
+    mock_host.wait_reboot_since.assert_called_once_with(utc_datetime(2026, 5, 22))
     mock_host.wait_reboot_since.assert_called_once()
     mock_dbi.wait_for_replication.assert_called_once()
     m_sr.icinga_hosts.assert_called_once_with(["db1176.eqiad.wmnet"])

@@ -5,22 +5,20 @@ tox -e py311-unit -- tests/unit/sre/mysql/depool_test.py -vv
 """
 
 import json
-from pytest import fixture
 import logging
+from argparse import Namespace
 from pathlib import Path
 from unittest import mock
-from unittest.mock import MagicMock, patch, Mock
-from argparse import Namespace
-
+from unittest.mock import MagicMock, Mock, patch
 
 import cookbooks.sre.mysql.pool
-
 from cookbooks.sre.mysql.depool import (
-    _check_depooling_last_instance,
     DepoolRunner,
-    _fetch_instance_connections_count_wikiusers,
+    _check_depooling_last_instance,
     _fetch_instance_connections_count_detailed,
+    _fetch_instance_connections_count_wikiusers,
 )
+from pytest import fixture
 
 log = logging.getLogger()
 

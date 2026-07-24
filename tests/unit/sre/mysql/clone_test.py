@@ -5,9 +5,6 @@ Test using:
 tox -e py311-unit -- tests/unit/sre/mysql/clone_test.py -vv
 """
 
-# pylint: disable=missing-docstring,line-too-long
-# flake8: noqa: D103
-
 import logging
 from argparse import Namespace
 from unittest import mock
@@ -129,9 +126,9 @@ def test_check_if_target_is_already_on_dbctl(dbctl):
     assert not _check_if_target_is_already_on_dbctl(dbctl, "db0000", "s0")
 
     # Examples:
-    {"s1": {"groups": {"api": {"pooled": True, "weight": 100}}, "percentage": 100, "pooled": True, "weight": 200}}
-    {"pc7": {"percentage": 100, "pooled": True, "weight": 1}}
-    {"es7": {"percentage": 100, "pooled": True, "weight": 100}}
+    # {"s1": {"groups": {"api": {"pooled": True, "weight": 100}}, "percentage": 100, "pooled": True, "weight": 200}}
+    # {"pc7": {"percentage": 100, "pooled": True, "weight": 1}}
+    # {"es7": {"percentage": 100, "pooled": True, "weight": 100}}
 
     dbci.sections = {"s0": {"pooled": False}}
     assert _check_if_target_is_already_on_dbctl(dbctl, "db0000", "s0")

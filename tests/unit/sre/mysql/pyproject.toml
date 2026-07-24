@@ -6,3 +6,6 @@ extend-select = [
     # "SIM",   # Simplify
     "UP",    # Python 3.11 syntax
 ]
+extend-ignore = [
+    "C408",
+]

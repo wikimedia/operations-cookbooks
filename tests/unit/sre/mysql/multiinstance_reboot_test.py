@@ -7,14 +7,14 @@ tox -e py313-lint_unit -- tests/unit/sre/mysql/multiinstance_reboot_test.py -vv
 
 import logging
 from argparse import Namespace
-from datetime import datetime
-from pytest import fixture
+from datetime import datetime, timezone
 from unittest import mock
 from unittest.mock import MagicMock
 
 from cookbooks.sre.mysql.multiinstance_reboot import MultiinstanceRebootRunner
-from spicerack.mysql import Instance
+from pytest import fixture
 from spicerack.apt import AptGetHosts
+from spicerack.mysql import Instance
 
 log = logging.getLogger(__name__)
 
@@ -46,10 +46,12 @@ def set_logging(caplog):
     caplog.set_level(logging.INFO)
     caplog.handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
 
+
 @fixture(autouse=True)
 def m_sr():
     with mock.patch("spicerack.Spicerack", autospec=True) as m:
         yield m
+
 
 @fixture(autouse=True)
 def m_cursor():
@@ -57,16 +59,19 @@ def m_cursor():
         m.return_value.__enter__.return_value = (mock.MagicMock(), mock.MagicMock())
         yield
 
+
 @fixture(autouse=True)
 def m_step():
     with mock.patch("cookbooks.sre.mysql.multiinstance_reboot.step") as m:
         yield m
 
+
 @fixture(autouse=True)
 def m_datetime():
     with mock.patch("cookbooks.sre.mysql.multiinstance_reboot.datetime") as m:
-        m.now.return_value = datetime(2026, 5, 22, 0, 0, 0)
+        m.now.return_value = datetime(2026, 5, 22, 0, 0, 0, tzinfo=timezone.utc)
         yield m
+
 
 def test_run_clouddb_multiinstance(
     m_sr,
@@ -74,7 +79,7 @@ def test_run_clouddb_multiinstance(
 ):
     mock_host = MagicMock()
     mock_host.hosts = ["clouddb1001.eqiad.wmnet"]
-    setattr(mock_host, "__str__", MagicMock(return_value="clouddb1001.eqiad.wmnet"))
+    mock_host.__str__ = MagicMock(return_value="clouddb1001.eqiad.wmnet")
     m_sr.remote.return_value.query.return_value = [mock_host]
 
     mock_host.run_sync.side_effect = mock_run_sync

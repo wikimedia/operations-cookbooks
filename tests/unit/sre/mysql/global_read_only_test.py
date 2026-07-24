@@ -2,14 +2,14 @@
 Unit tests for sre.mysql.global-read-only
 """
 
-from argparse import Namespace
-from pytest import fixture
-
-from unittest.mock import patch, MagicMock, DEFAULT as mock_default
 import importlib
 import logging
+from argparse import Namespace
+from unittest.mock import DEFAULT as mock_default
+from unittest.mock import MagicMock, patch
 
 from conftool.extensions.dbconfig.action import ActionResult
+from pytest import fixture
 
 gro = importlib.import_module("cookbooks.sre.mysql.global-read-only")
 
@@ -40,7 +40,7 @@ def mock_sr():
 
         mock_sr.sal_logger.info.side_effect = lambda msg: log.info(f"Mock SAL log <<{msg}>>")
 
-        setattr(gro, "ask_confirmation", lambda msg: log.info(f"Mock ask '{msg}'"))
+        gro.ask_confirmation = lambda msg: log.info(f"Mock ask '{msg}'")
         gro.time.sleep = MagicMock()
 
         # has diffs

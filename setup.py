@@ -30,7 +30,7 @@ extras_require = {
         "types-PyYAML",
         "types-redis",
         "ruff",
-        # Uppe limit because it requires urllib3>2, incompatible with elasticsearch, elasticsearch-curator and botocore
+        # Upper limit because it requires urllib3>2, incompatible with elasticsearch, elasticsearch-curator and botocore
         "types-requests<2.31.0.7",
         "types-setuptools",
         "setuptools<82.0.0",
