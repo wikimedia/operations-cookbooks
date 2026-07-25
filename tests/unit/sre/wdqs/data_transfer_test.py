@@ -57,3 +57,16 @@ def test_stops_at_the_first_failed_file():
             )
 
     assert transferer.return_value.run.call_count == 2
+
+
+def test_transferpy_cumin_reporter_stays_off():
+    """transferpy's internal commands must not bury the cookbook's own output."""
+    runner = make_runner()
+
+    with mock.patch.object(data_transfer, "Transferer") as transferer:
+        transferer.return_value.run.return_value = [0]
+
+        runner.transfer_datafiles("/srv/wdqs", ["/srv/wdqs/wikidata.jnl"])
+
+    tp_opts = transferer.call_args.args[4]
+    assert tp_opts["verbose"] is False

@@ -476,7 +476,9 @@ class HdfsCopy(Runnable):
         tp_opts = dict(transferpy.transfer.parse_configurations(transferpy.transfer.CONFIG_FILE))
         # this also handles string->bool conversion where necessary
         tp_opts = transferpy.transfer.assign_default_options(tp_opts)
-        tp_opts['verbose'] = True
+        # Keep transferpy's Cumin reporter off: it reports every internal command it
+        # runs, burying this cookbook's own output. The return codes below catch failures.
+        tp_opts['verbose'] = False
         transfer = Transferer(str(self.stat_host.hosts), str(source_folder), qs_hosts, qs_dirs, options=tp_opts)
         ret = transfer.run()
         # ret is an array of error codes that can be 0 (success) or <> 0 (errors)

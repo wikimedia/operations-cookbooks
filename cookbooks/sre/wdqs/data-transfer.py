@@ -172,7 +172,11 @@ class DataTransferRunner(CookbookRunnerBase):
         tp_opts = dict(transferpy.transfer.parse_configurations(transferpy.transfer.CONFIG_FILE))
         # this also handles string->bool conversion where necessary
         tp_opts = transferpy.transfer.assign_default_options(tp_opts)
-        tp_opts['verbose'] = True
+        # Keep transferpy's Cumin reporter off: it reports every internal command it
+        # runs, burying this cookbook's own output. Spicerack's own run_sync reports
+        # are unaffected, and failures still raise below. To debug a transfer with
+        # full Cumin output, run transfer.py --verbose on the cumin host directly.
+        tp_opts['verbose'] = False
         tp_opts['encrypt'] = self.encrypt
         logger.debug("Creating transfer object with args: %s %s %s %s", path, self.r_source, files, self.r_dest)
 
