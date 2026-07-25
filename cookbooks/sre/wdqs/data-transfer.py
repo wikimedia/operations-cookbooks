@@ -177,7 +177,13 @@ class DataTransferRunner(CookbookRunnerBase):
         logger.debug("Creating transfer object with args: %s %s %s %s", path, self.r_source, files, self.r_dest)
 
         for file in files:
-            Transferer(str(self.r_source), file, [str(self.r_dest)], [path], tp_opts).run()
+            # run() returns one exit code per target host: 0 on success, non-zero for a
+            # failed sanity check, copy, or checksum mismatch. transferpy has already
+            # logged the specific cause, so only the file and the codes are repeated here.
+            results = Transferer(str(self.r_source), file, [str(self.r_dest)], [path], tp_opts).run()
+            if sum(map(abs, results)) > 0:
+                raise RuntimeError(
+                    f"Failed to transfer {file} from {self.r_source} to {self.r_dest}: exit codes {results}")
 
     @staticmethod
     def _pool_host(host_type, host):
