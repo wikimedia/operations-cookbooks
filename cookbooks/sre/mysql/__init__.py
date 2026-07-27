@@ -17,9 +17,11 @@ from argparse import (
     Namespace,
 )
 from configparser import ConfigParser
+from datetime import timedelta
 from enum import Enum
 from os import getenv
 
+from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
 from pydantic import (
     BaseModel,
     Field,
@@ -30,8 +32,11 @@ from spicerack.cookbook import (
     CookbookBase,
     CookbookRunnerBase,
 )
+from spicerack.decorators import retry
+from spicerack.mysql import Instance as MInst
 from spicerack.mysql import MysqlRemoteHosts
 from spicerack.remote import (
+    RemoteError,
     RemoteExecutionError,
     RemoteHosts,
 )
@@ -41,9 +46,6 @@ from wmflib.interactive import (
     confirm_on_failure,
     ensure_shell_is_durable,
 )
-
-from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
-
 
 ## WIP - cleanup process for all cookbooks, starting with T433044
 
@@ -203,6 +205,18 @@ class MySQLCookbookRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         my_cnf.read("/root/.my.cnf")
         clientreplication = my_cnf["clientreplication"]
         return clientreplication["user"], clientreplication["password"]
+
+    # occasional "spicerack.remote.RemoteError: No hosts provided" has been raised
+    @retry(tries=20, delay=timedelta(seconds=5), backoff_mode="constant", exceptions=(RemoteError,))
+    def get_minst(self, hostname: str) -> MInst:
+        """Retrieves a `spicerack.mysql` `Instance` as `MInst`
+        ensuring it's just one instance.
+        """
+        query = "P{%s*} and A:db-all and not A:db-multiinstance" % hostname
+        mrhs: MysqlRemoteHosts = self.spicerack.mysql().get_dbs(query)
+        ensure(len(mrhs) == 1, f"{len(mrhs)} Mysql instances found, expected one")
+        instances: list[MInst] = mrhs.list_hosts_instances()
+        return instances[0]
 
 
 ## WIP cleanup process for existing cookbooks
