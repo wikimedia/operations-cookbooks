@@ -133,6 +133,7 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
             'fail_netbox': NodeSet(),
             'fail_redfish': NodeSet(),
             'fail_root_remove': NodeSet(),
+            'fail_dell_ipmi': NodeSet(),
         }
         password_to_enforce: str = new_password if new_password else mgmt_password
         for host in self.remote_hosts:
@@ -256,6 +257,30 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                     self._check_overall_failures()
                     continue
 
+            if manufacturer_slug == 'dell':
+                # IPMI on Dell iDRAC requires an extra settings to allow the BMC to accept IPMI commands.
+                logger.info("Setting IPMI settings for the wmfroot user.")
+                try:
+                    accounts_dell = redfish.find_accounts()
+                    if "wmfroot" in accounts_dell and "Id" in accounts_dell["wmfroot"]:
+                        wmfroot_id = accounts_dell["wmfroot"]["Id"]
+                    else:
+                        logger.error("Account id for wmfroot not found.")
+                        self.host_status['fail_dell_ipmi'].add(host.hosts)
+                        self._check_overall_failures()
+                        continue
+                    redfish.request(
+                        "patch", f"{redfish.oob_manager}/Attributes",
+                        json = { "Attributes": { f"Users.{wmfroot_id}.IpmiLanPrivilege": "Administrator" } }
+                    )
+                except RedfishError as e:
+                    logger.info(
+                        "Failed to set the IPMI settings for Dell: %s", e
+                    )
+                    self.host_status['fail_dell_ipmi'].add(host.hosts)
+                    self._check_overall_failures()
+                    continue
+
             logger.info("Checking that wmfroot and the manufacturer's admin can reach Redfish")
             for admin_user in ['wmfroot', manufacturer_admin]:
                 try:
@@ -287,8 +312,13 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
 
         The following Supermico hosts had issues when removing the root account:
             {}
+
+        The following Dell hosts had issues when setting the IPMI settings:
+            {}
+
             '''.format(
                     self.host_status['success'], self.host_status['fail_netbox'],
-                    self.host_status['fail_redfish'], self.host_status['fail_root_remove']
+                    self.host_status['fail_redfish'], self.host_status['fail_root_remove'],
+                    self.host_status['fail_dell_ipmi'],
                 )
         logger.info(message)
