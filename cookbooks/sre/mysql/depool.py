@@ -6,6 +6,8 @@ from datetime import timedelta
 from time import monotonic, sleep
 from typing import Any
 
+from pymysql.err import OperationalError
+
 from conftool.extensions.dbconfig.action import ActionResult
 from conftool.extensions.dbconfig.entities import Instance as DBCInst
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
@@ -24,6 +26,7 @@ from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.decorators import retry
 from spicerack.mysql import Instance as MInst
+from spicerack.remote import RemoteExecutionError
 from wmflib.interactive import ask_confirmation
 
 log = logging.getLogger(__name__)
@@ -146,7 +149,6 @@ class DepoolRunner(CookbookRunnerBase):
         hostname, _dc, fqdn = validate_hostname_extract_dc_fqdn(args.instance)
 
         self._mrhs = get_mysqlremotehosts(spicerack, fqdn)
-        self._mysql_instance: MInst = get_minst(self._mrhs)
 
         dbi: DBCInst = self.dbctl.instance.get(hostname)
         ensure(dbi is not None, f"Unable to find instance {hostname} in dbctl. Aborting.")
@@ -176,17 +178,34 @@ class DepoolRunner(CookbookRunnerBase):
 
         NOTE: this does not support misc databases
         """
+        try:
+            minst: MInst = get_minst(self._mrhs)
+        except RemoteExecutionError:
+            log.error("Failed to list instances on the host: the host is probably unreachable.")
+            log.info("Skipping the monitoring of wikiuser* connections. The depooling is done.")
+            return
+
         timeout = monotonic() + 3600
         log.info("Monitoring number of wikiuser* connections")
         while monotonic() < timeout:
-            wikiuser_cnt = _fetch_instance_connections_count_wikiusers(self._mysql_instance)
+            for attempt in range(3):
+                try:
+                    wikiuser_cnt = _fetch_instance_connections_count_wikiusers(minst)
+                    log.debug("Found %d connection(s), checking count", wikiuser_cnt)
+                    break
+                except OperationalError as err:
+                    if attempt == 2:
+                        ask_confirmation("CAUTION: we failed to check the connections 3 times, proceed anyway?")
+                        return
+                    else:
+                        log.warning("Failed to connect to the database on attempt %d: %s", attempt, err)
+                        sleep(1)
             if wikiuser_cnt == 0 or self.dry_run:
                 log.info("Connection drain completed")
                 return
-
             sleep(10)
 
-        d = _fetch_instance_connections_count_detailed(self._mysql_instance)
+        d = _fetch_instance_connections_count_detailed(minst)
         log.info("Drain timeout! Connection summary: %r", d)
         raise RuntimeError("The instance failed to drain in an hour")
 
