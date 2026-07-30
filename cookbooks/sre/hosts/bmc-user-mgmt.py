@@ -269,8 +269,12 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                         self.host_status['fail_dell_ipmi'].add(host.hosts)
                         self._check_overall_failures()
                         continue
+                    if redfish.hw_model >= 10:
+                        attributes_uri = f"{redfish.oob_manager}/Oem/Dell/DellAttributes/iDRAC.Embedded.1"
+                    else:
+                        attributes_uri = f"{redfish.oob_manager}/Attributes"
                     redfish.request(
-                        "patch", f"{redfish.oob_manager}/Attributes",
+                        "patch", attributes_uri,
                         json = { "Attributes": { f"Users.{wmfroot_id}.IpmiLanPrivilege": "Administrator" } }
                     )
                 except RedfishError as e:
