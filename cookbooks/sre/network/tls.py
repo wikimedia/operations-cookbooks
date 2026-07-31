@@ -104,6 +104,14 @@ class TlsRunner(CookbookRunnerBase):
         """Return a nicely formatted string that represents the cookbook action."""
         return f"for network device {self.device}"
 
+    @property
+    def srlinux_session(self):
+        """Return the SR-Linux requests session, prompting for credentials on first use."""
+        if self.remote_host.auth is None:
+            password = get_secret(f"{self.username} password")
+            self.remote_host.auth = (self.username, password)
+        return self.remote_host
+
     def run(self):
         """Required by Spicerack API."""
         new_cert_bundle = {}
@@ -268,24 +276,16 @@ class TlsRunner(CookbookRunnerBase):
     def deploy_cert_srlinux(self, cert_bundle):
         """Deploy the needed certification on SR-Linux."""
         logger.debug("Deploying everything on SR-Linux.")
-
+        prefix = 'server-' if self.get_srlinux_version() <= 25 else ''
         # NOTE: Storing the CSR on the device is not supported
         config: list[dict] = [
             {
                 "action": "delete",
-                "path": "/system/tls/server-profile"
+                "path": f"/system/tls/{prefix}profile"
             },
             {
                 "action": "update",
-                "path": "/system/tls/server-profile[name=wmf-default]",
-                "value": {
-                    "key": cert_bundle['key'],
-                    "certificate": cert_bundle['cert']
-                }
-            },
-            {
-                "action": "update",
-                "path": "/system/tls/server-profile[name=wmf-default]",
+                "path": f"/system/tls/{prefix}profile[name=wmf-default]",
                 "value": {
                     "key": cert_bundle['key'],
                     "certificate": cert_bundle['cert']
@@ -310,10 +310,6 @@ class TlsRunner(CookbookRunnerBase):
 
         If in dry-run, get a diff instead.
         """
-        # Only ask for the password there so we don't ask for it too soon
-        password = get_secret(f"{self.username} password")
-        self.remote_host.auth = (self.username, password)
-
         if self.dry_run:
             diff_payload = {
                 "jsonrpc": "2.0",
@@ -372,9 +368,30 @@ class TlsRunner(CookbookRunnerBase):
 
     def send_jsonrpc_request(self, payload: dict):
         """Send a JSON-RPC request, verify that it went well and return the response."""
-        response = self.remote_host.post(f"https://{self.device_fqdn}:{self.port}/jsonrpc", json=payload)
+        response = self.srlinux_session.post(f"https://{self.device_fqdn}:{self.port}/jsonrpc", json=payload)
         if response.status_code >= 400:
-            raise RuntimeError(response.text)
+            raise RuntimeError(f"{self.device}: HTTP {response.status_code} from JSON-RPC: "
+                               f"{response.text or '(empty body)'}")
         if 'error' in response.json():
             raise RuntimeError(response.json()['error']['message'])
         return response
+
+    def get_srlinux_version(self) -> int:
+        """Return the SR-Linux major version number."""
+        version_payload = {
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "get",
+            "params": {
+                "commands": [
+                    {
+                        "path": "/system/information/version",
+                        "datastore": "state"
+                    }
+                ]
+            }
+        }
+        response = self.send_jsonrpc_request(version_payload).json()
+        if 'result' in response and len(response['result']) > 0:
+            return int(response['result'][0].split(".")[0].lstrip("v"))
+        raise RuntimeError(f"Unknown response trying to get the SR-Linux version: {response}")
