@@ -366,7 +366,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             confirm_on_failure(self._try_bmc_password)
         else:
             # Initialize redfish with the WMF mgmt password
-            self.redfish = self.spicerack.redfish(self.args.host)
+            self.redfish = self.spicerack.redfish(self.args.host, username="wmfroot")
             confirm_on_failure(self.redfish.check_connection)
 
         logging.info("Retrieving the BMC's firmware version.")
