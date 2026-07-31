@@ -7,6 +7,7 @@ from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 from spicerack.apiclient import APIClientResponseError
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
+from spicerack.ipmi import IpmiError
 from spicerack.netbox import NetboxError
 from spicerack.redfish import RedfishError
 
@@ -134,6 +135,7 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
             'fail_redfish': NodeSet(),
             'fail_root_remove': NodeSet(),
             'fail_dell_ipmi': NodeSet(),
+            'fail_ipmi': NodeSet(),
         }
         password_to_enforce: str = new_password if new_password else mgmt_password
         for host in self.remote_hosts:
@@ -285,7 +287,8 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                     self._check_overall_failures()
                     continue
 
-            logger.info("Checking that wmfroot and the manufacturer's admin can reach Redfish")
+            logger.info(
+                "Checking that wmfroot and the manufacturer's admin can reach Redfish and use IPMI")
             for admin_user in ['wmfroot', manufacturer_admin]:
                 try:
                     # Check if the new username and password work with a basic Redfish call
@@ -300,9 +303,20 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
                     )
                     self.host_status['fail_redfish'].add(host.hosts)
                     break
+                try:
+                    ipmi = self.spicerack.ipmi(target=netbox_server.mgmt_fqdn, username=admin_user)
+                    ipmi.check_connection()
+                except IpmiError as e:
+                    logger.error(
+                        "Failed to verify ipmi check_connection for user %s on host %s: %s",
+                        admin_user, hostname, e
+                    )
+                    self.host_status['fail_ipmi'].add(host.hosts)
+                    break
             else:
                 logger.info('password updated successfully for: %s', host.hosts)
                 self.host_status['success'].add(host.hosts)
+
 
         message = '''
         The following hosts completed successfully:
@@ -320,9 +334,12 @@ class BMCUserMgmtRunner(CookbookRunnerBase):
         The following Dell hosts had issues when setting the IPMI settings:
             {}
 
+        The following hosts had issues when checking a basic IPMI connection:
+            {}
+
             '''.format(
                     self.host_status['success'], self.host_status['fail_netbox'],
                     self.host_status['fail_redfish'], self.host_status['fail_root_remove'],
-                    self.host_status['fail_dell_ipmi'],
+                    self.host_status['fail_dell_ipmi'], self.host_status['fail_ipmi']
                 )
         logger.info(message)
