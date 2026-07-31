@@ -11,6 +11,7 @@ from abc import ABCMeta
 from spicerack.apiclient import APIClientResponseError
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.dhcp import DHCPConfMac, DHCPConfMgmt
+from spicerack.ipmi import IpmiError
 from spicerack.netbox import MANAGEMENT_IFACE_NAME
 from spicerack.redfish import (
     ChassisResetPolicy,
@@ -421,8 +422,15 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
 
         self.redfish.check_connection()
         self._configure_users()
-        self.ipmi = self.spicerack.ipmi(target=self.fqdn, username="wmfroot")
-        self.ipmi.check_connection()
+        try:
+            self.ipmi = self.spicerack.ipmi(target=self.fqdn, username="wmfroot")
+            self.ipmi.check_connection()
+        except IpmiError as e:
+            logger.error(
+                "Failed to verify ipmi check_connection for user %s on host %s: %s"
+                "wmfroot. This may not be relevant if UEFI is set, but please report it to "
+                "dcops or I/F. Consider to report this in T426180.", self.fqdn, e
+            )
 
     def rollback(self):
         """Rollback the DHCP setup if present."""
