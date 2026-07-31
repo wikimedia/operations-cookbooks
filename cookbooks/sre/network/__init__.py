@@ -100,14 +100,9 @@ def junos_set_interface_config(netbox_data: dict, live_interface: Optional[dict]
         # Status
         if live_interface and not live_interface['enabled']:
             commands.append(f'delete interfaces {nb_switch_interface} disable')
-        # Description
-        description = device_name
-        # Safeguard for accidental " that would be interpreted as an end of comment by Junos
-        cable_label = nb_switch_interface.cable.label
-        if cable_label and '"' not in cable_label:
-            description += f" {{#{cable_label}}}"
-        if not live_interface or live_interface['description'] != description:
-            commands.append(f'set interfaces {nb_switch_interface} description "{description}"')
+        # Description is only the device name
+        if not live_interface or live_interface['description'] != device_name:
+            commands.append(f'set interfaces {nb_switch_interface} description "{device_name}"')
 
         # MTU
         if nb_switch_interface.mtu and (not live_interface or live_interface['mtu'] != nb_switch_interface.mtu):
