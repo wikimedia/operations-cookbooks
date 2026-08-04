@@ -22,6 +22,17 @@ DISK_HIGH_THRESHOLD = 40
 logger = logging.getLogger(__name__)
 
 
+def dns_names_for(public_hostname: str) -> tuple:
+    """Derive the (discovery FQDN, SSH FQDN) pair from a GitLab public hostname.
+
+    gitlab.wikimedia.org -> (gitlab.discovery.wmnet, gitlab-ssh.wikimedia.org)
+    gitlab-replica-a.wikimedia.org -> (gitlab-replica-a.discovery.wmnet, gitlab-ssh-replica-a.wikimedia.org)
+    """
+    label = public_hostname.split(".")[0]
+    ssh_label = label.replace("gitlab", "gitlab-ssh", 1)
+    return f"{label}.discovery.wmnet", f"{ssh_label}.wikimedia.org"
+
+
 class Failover(CookbookBase):
     """Performs a failover from one Gitlab host to another
 
@@ -33,20 +44,23 @@ class Failover(CookbookBase):
     (don't merge them until you've been prompted to do so though.):
 
     * Changing `profile::gitlab::service_name` to be `gitlab.wikimedia.org` on the host that will become
-      the new primary, and `gitlab-replica.wikimedia.org` on the host that will become the replica.
-      (Substitute this with `gitlab-replica` and `gitlab-replica-old`, or others if switching replicas)
+      the new primary, and `gitlab-replica-a.wikimedia.org` (or `-b`) on the host that will become the
+      replica.
 
       Example: https://gerrit.wikimedia.org/r/c/operations/puppet/+/891863
 
 
-    * Changing the DNS A, AAAA, and PTR records to point the public recorsds to the correct hosts.
+    * An operations/dns change swapping, for both hosts:
 
-      Example: https://gerrit.wikimedia.org/r/c/operations/dns/+/891888
+      - the `gitlab*.discovery.wmnet` CNAMEs (under `$ORIGIN discovery.wmnet.` in templates/wmnet).
+        ATS resolves these to route the public HTTPS names, which stay on the CDN (text-lb) and must
+        not be touched.
+      - the public `gitlab-ssh*.wikimedia.org` A/AAAA records, which still point directly at the hosts.
 
 
     Usage example:
 
-    # Changes gitlab.wmo from gitlab1003 to gitlab2002, and gitlab-replica.wmo from gitlab2002 to gitlab1003
+    # Changes gitlab.wmo from gitlab1003 to gitlab2002, and gitlab-replica-a.wmo from gitlab2002 to gitlab1003
     cookbook sre.gitlab.failover --switch-from-host gitlab1003 --switch-to-host gitlab2002 -t T12345
     """
 
@@ -58,12 +72,12 @@ class Failover(CookbookBase):
         parser.add_argument(
             "--switch-from-host",
             required=True,
-            help="Host that we want to switch away from (e.g., existing gitlab.wm.o, will become gitlab-replica.wm.o)",
+            help="Host that we want to switch away from (e.g., existing gitlab.wm.o, will become a replica)",
         )
         parser.add_argument(
             "--switch-to-host",
             required=True,
-            help="Host that we want to switch to (e.g., existing gitlab-replica.wm.o, will become gitlab.wm.o)",
+            help="Host that we want to switch to (e.g., existing gitlab-replica-a.wm.o, will become gitlab.wm.o)",
         )
 
         return parser
@@ -98,10 +112,20 @@ class FailoverRunner(CookbookRunnerBase):
         self.switch_from_gitlab_url = get_gitlab_url(self.switch_from_host)
         self.switch_to_gitlab_url = get_gitlab_url(self.switch_to_host)
 
+        from_hostname = urlparse(self.switch_from_gitlab_url).hostname
+        to_hostname = urlparse(self.switch_to_gitlab_url).hostname
+        if from_hostname is None or to_hostname is None:
+            raise ValueError("One of the GitLab URLs is missing a hostname.")
+
+        self.switch_from_discovery, self.switch_from_ssh = dns_names_for(from_hostname)
+        self.switch_to_discovery, self.switch_to_ssh = dns_names_for(to_hostname)
+
         self.dns = self.spicerack.dns()
-        self.pre_migration_ips = {
-            self.switch_from_gitlab_url: sorted(self.dns.resolve_ips(urlparse(self.switch_from_gitlab_url).netloc)),
-            self.switch_to_gitlab_url: sorted(self.dns.resolve_ips(urlparse(self.switch_to_gitlab_url).netloc)),
+        self.pre_migration_dns = {
+            self.switch_from_discovery: self.dns.resolve_cname(self.switch_from_discovery),
+            self.switch_to_discovery: self.dns.resolve_cname(self.switch_to_discovery),
+            self.switch_from_ssh: sorted(self.dns.resolve_ips(self.switch_from_ssh)),
+            self.switch_to_ssh: sorted(self.dns.resolve_ips(self.switch_to_ssh)),
         }
 
         # Until we merge any changes to puppet or DNS, we can effectively roll back by unpausing runners
@@ -152,8 +176,11 @@ class FailoverRunner(CookbookRunnerBase):
         self.start_restore_process()
 
         ask_confirmation(
-            f"Please merge a DNS update to point `{self.switch_from_gitlab_url}` to {self.switch_to_host} "
-            f"and `{self.switch_to_gitlab_url}` to {self.switch_from_host}"
+            "Please merge the DNS change swapping the discovery CNAMEs "
+            f"(`{self.switch_from_discovery}` -> {self.switch_to_host}, "
+            f"`{self.switch_to_discovery}` -> {self.switch_from_host}) and the public "
+            f"`{self.switch_from_ssh}`/`{self.switch_to_ssh}` records accordingly, then run authdns-update. "
+            "The public HTTPS names stay on the CDN and must not be changed."
         )
         confirm_on_failure(self.check_for_correct_dns)
 
@@ -301,35 +328,36 @@ class FailoverRunner(CookbookRunnerBase):
         self.switch_to_host.run_sync(f"{GITLAB_RESTORE_PATH}/gitlab-restore.sh -F", print_progress_bars=False)
 
     def check_for_correct_dns(self) -> None:
-        """Raises an exception if the IP addresses haven't changed since before the migration started"""
-        # The tool underlying the wipe-cache cookbook takes space-separated arguments, but run_cookbook needs a list
-        from_hostname = urlparse(self.switch_from_gitlab_url).hostname
-        to_hostname = urlparse(self.switch_to_gitlab_url).hostname
-
-        if from_hostname is None or to_hostname is None:
-            raise ValueError("One of the GitLab URLs is missing a hostname.")
-
+        """Raises an exception if the discovery CNAMEs and gitlab-ssh records haven't swapped yet"""
         self.spicerack.run_cookbook(
             'sre.dns.wipe-cache',
-            args=[from_hostname, to_hostname],
+            args=[
+                self.switch_from_discovery,
+                self.switch_to_discovery,
+                self.switch_from_ssh,
+                self.switch_to_ssh,
+            ],
             raises=True,
         )
 
-        switch_from_host_ips = sorted(self.dns.resolve_ips(urlparse(self.switch_from_gitlab_url).netloc))
-        switch_to_host_ips = sorted(self.dns.resolve_ips(urlparse(self.switch_to_gitlab_url).netloc))
-
-        if switch_from_host_ips != self.pre_migration_ips[self.switch_to_gitlab_url]:
-            raise RuntimeError(
-                f"IP for {self.switch_from_gitlab_url} doesn't match the pre-migration IPs for "
-                f"{self.switch_to_gitlab_url}. Has the DNS change been merged? Or maybe it's cached somewhere. "
-                f"(Should be {self.pre_migration_ips[self.switch_to_gitlab_url]}, but is {switch_from_host_ips})"
-            )
-        if switch_to_host_ips != self.pre_migration_ips[self.switch_from_gitlab_url]:
-            raise RuntimeError(
-                f"IP for {self.switch_to_gitlab_url} doesn't match the pre-migration IPs for "
-                f"{self.switch_from_gitlab_url}. Has the DNS change been merged? Or maybe it's cached somewhere. "
-                f"(Should be {self.pre_migration_ips[self.switch_from_gitlab_url]}, but is {switch_to_host_ips})"
-            )
+        # Each name must now hold the pre-migration value of its counterpart.
+        checks = (
+            (self.switch_from_discovery, self.dns.resolve_cname(self.switch_from_discovery),
+             self.pre_migration_dns[self.switch_to_discovery]),
+            (self.switch_to_discovery, self.dns.resolve_cname(self.switch_to_discovery),
+             self.pre_migration_dns[self.switch_from_discovery]),
+            (self.switch_from_ssh, sorted(self.dns.resolve_ips(self.switch_from_ssh)),
+             self.pre_migration_dns[self.switch_to_ssh]),
+            (self.switch_to_ssh, sorted(self.dns.resolve_ips(self.switch_to_ssh)),
+             self.pre_migration_dns[self.switch_from_ssh]),
+        )
+        for name, current, expected in checks:
+            if current != expected:
+                raise RuntimeError(
+                    f"{name} resolves to {current}, expected {expected} (the pre-migration value of its "
+                    "counterpart). Has the DNS change been merged and authdns-update run? "
+                    "Or maybe it's still cached somewhere."
+                )
 
     def maybe_task_comment(self, message: str) -> None:
         """Comments on a phabricator task with a message, if the task ID is set and we can access phabricator"""
