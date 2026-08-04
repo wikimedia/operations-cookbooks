@@ -21,8 +21,8 @@ def get_gitlab_url(host: RemoteHosts) -> str:
     for _, output in results:
         lines = output.message().decode()
         for line in lines.splitlines():
-            return line.split('"')[1]
-    raise RuntimeError("Could not retrieve external_url from #{host}")
+            return line.split('"')[1].rstrip('/')
+    raise RuntimeError(f"Could not retrieve external_url from {host}")
 
 
 def get_disk_usage_for_path(host: RemoteHosts, path: str) -> int:
@@ -63,8 +63,8 @@ def pause_runners(token: str, url: str, dry_run: bool = True):
     failure_message='Waiting for GitLab API to become available again',
     exceptions=(gitlab.exceptions.GitlabUpdateError, gitlab.exceptions.GitlabHttpError,))
 def unpause_runners(paused_runners, dry_run=True):
-    """Unpause a list of runners"""
-    for runner in paused_runners:
+    """Unpause a list of runners, tolerating None (e.g. rollback before any runner was paused)"""
+    for runner in paused_runners or []:
         if not dry_run:
             runner.paused = False
             runner.save()

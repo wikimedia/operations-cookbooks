@@ -92,7 +92,7 @@ class FailoverRunner(CookbookRunnerBase):
 
     # Customize Cookbook lock
     max_concurrency = 1
-    lock_ttl = 10800
+    lock_ttl = 21600
 
     def __init__(self, args, spicerack) -> None:
         """Initialize failover runner"""
