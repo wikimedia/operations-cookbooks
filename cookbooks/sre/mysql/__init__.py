@@ -10,7 +10,7 @@ __owner_team__ = "Data Persistence"
 import logging
 from abc import (
     ABCMeta,
-    abstractproperty,
+    abstractmethod,
 )
 from argparse import (
     ArgumentParser,
@@ -114,7 +114,8 @@ class MySQLCookbookRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         self.phabricator = spicerack.phabricator(PHABRICATOR_BOT_CONFIG_FILE)
         self.puppet = spicerack.puppet
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def max_hosts(self) -> int:
         """Control the maximum host count for the runner.
 
@@ -125,29 +126,10 @@ class MySQLCookbookRunnerBase(CookbookRunnerBase, metaclass=ABCMeta):
         n - a positive integer greater than 1 should be used with care
         """
 
-    @max_hosts.setter
-    def max_hosts(self, val) -> None:
-        """Prevent changes to the max_hosts"""
-        raise AttributeError("max_hosts is read-only")
-
-    @max_hosts.deleter
-    def max_hosts(self) -> None:
-        """Prevent deletion of max_hosts"""
-        raise AttributeError("max_hosts is read-only")
-
-    @abstractproperty
+    @property
+    @abstractmethod
     def permitted_sections(self) -> list:
         """Provide a list of permitted sections."""
-
-    @permitted_sections.setter
-    def permitted_sections(self, val) -> None:
-        """Prevent changes to the max_hosts"""
-        raise AttributeError("max_hosts is read-only")
-
-    @permitted_sections.deleter
-    def permitted_sections(self) -> None:
-        """Prevent deletion of max_hosts"""
-        raise AttributeError("max_hosts is read-only")
 
     def ensure(self, condition: bool, msg: str, error_cls: type[Exception] = AssertionError) -> None:
         """Just some syntactic sugar for readability."""
