@@ -81,7 +81,6 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         self.puppet_server = self.spicerack.puppet_server().remote_hosts
         self.kerberos_kadmin = self.remote.query(KERBEROS_KADMIN_CUMIN_ALIAS)
         self.deployment_host = self.remote.query(self.dns.resolve_cname(DEPLOYMENT_HOST))
-        self.remote_host = self.remote.query(self.netbox_server.fqdn)
         self.authdns_hosts = spicerack.authdns_active_hosts
         self.patterns = get_grep_patterns(self.dns, [self.netbox_server.fqdn], ip_only=True)
         self.post_config = {}
@@ -106,6 +105,9 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
         # Check if this host needs to be moved to the new VLAN and run preflight checks if so
         if self.is_move_required and not self.pre_flight():
             raise RuntimeError('The host is not suitable for the migration, see above.')
+
+        if self.is_move_required and self.args.action == 'inplace':
+            self.remote_host = self.remote.query(self.netbox_server.fqdn)
 
     def _is_move_required(self):
         """Check if the server is in a state to be re-numbered."""
