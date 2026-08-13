@@ -10,21 +10,13 @@ from typing import Generator
 
 from conftool.extensions.dbconfig.action import ActionResult
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+from cookbooks.sre.mysql import ensure
 from spicerack import Spicerack
 from spicerack.dbctl import Dbctl
 from spicerack.icinga import IcingaHosts
 from spicerack.remote import RemoteHosts
 
-# pylint: disable=missing-docstring
-# pylint: disable=R0913,R0917
-
 log = logging.getLogger(__name__)
-
-
-def ensure(condition: bool, msg: str) -> None:
-    if not condition:
-        log.error("Failed safety check: {msg}", exc_info=True)
-        raise AssertionError(msg)
 
 
 def step(slug: str, msg: str) -> None:
@@ -195,6 +187,7 @@ def run(args: Namespace, spicerack: Spicerack) -> None:
     hosts: RemoteHosts = spicerack.remote().query(query)
     fqdns = list(hosts.hosts)
     log.info("Hosts found: %s", " ".join(sorted(fqdns)))
+
     ensure(len(fqdns) == 2, f"2 hosts expected, found: {fqdns}")
 
     alerting_hosts = spicerack.icinga_hosts(fqdns)
