@@ -26,6 +26,7 @@ DISK_HIGH_THRESHOLD = 70
 DOWNTIME_DURATION = 200  # in minutes
 BACKUP_RESTORE_ALERTNAME = "SystemdUnitFailed"
 BACKUP_RESTORE_SERVICE = "gitlab-backup-restore.service"
+RESTORE_STALENESS_ALERTNAMES = "GitLabRestoreStale|GitLabReplicaDataStale|GitLabRestoreVersionMismatch"
 BACKUP_RESTORE_DOWNTIME_DURATION = 48 # in hours
 
 logger = logging.getLogger(__name__)
@@ -177,25 +178,35 @@ class UpgradeRunner(CookbookRunnerBase):
                 "unavailable once you continue. Ready to go?"
             )
 
-        # silence backup-restore.service (until next restore happened)
+        # silence backup-restore.service and the gitlab restore staleness
+        # alerts (until next restore happened)
         if self.is_replica():
-            try:
-                matchers=[
+            silences = [
+                [
                     {"name": "alertname",
                         "value": BACKUP_RESTORE_ALERTNAME, "isRegex": False},
                     {"name": "name", "value": BACKUP_RESTORE_SERVICE,
                         "isRegex": False},
-                ]
-                self.alertmanager.downtime(
-                    reason=self.admin_reason, matchers=matchers,
-                    duration=timedelta(hours=BACKUP_RESTORE_DOWNTIME_DURATION))
-            except AlertmanagerError as error:
-                logger.warning(
-                    'Failed to create a silence for %s on %s: %s',
-                    BACKUP_RESTORE_SERVICE,
-                    self.host,
-                    error,
-                )
+                ],
+                [
+                    {"name": "alertname",
+                        "value": RESTORE_STALENESS_ALERTNAMES, "isRegex": True},
+                    {"name": "host", "value": self.host.split(".")[0],
+                        "isRegex": False},
+                ],
+            ]
+            for matchers in silences:
+                try:
+                    self.alertmanager.downtime(
+                        reason=self.admin_reason, matchers=matchers,
+                        duration=timedelta(hours=BACKUP_RESTORE_DOWNTIME_DURATION))
+                except AlertmanagerError as error:
+                    logger.warning(
+                        'Failed to create a silence for %s on %s: %s',
+                        matchers,
+                        self.host,
+                        error,
+                    )
 
         paused_runners = pause_runners(self.token, self.url, dry_run=self.spicerack.dry_run)
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=DOWNTIME_DURATION)):
