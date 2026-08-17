@@ -120,13 +120,13 @@ class DecommissionRunner(CookbookRunnerBase):
     def handover_task_to_dcops(self, task_id: str, dc: str) -> None:
         """Update task
         - unassign
-        - replace tags with: dc-ops, ops-<dc> and DBA
+        - replace tags with: dc-ops, ops-<dc> and DBA, decommission-hardware
         - tick boxes in the service owner section
         - add comment
         """
         t = self.phab.fetch_task(task_id)
         new_desc = self.update_phab_desc_tick_boxes(t.description)
-        project_tags = ["dc-ops", f"ops-{dc.lower()}", "DBA"]
+        project_tags = ["dc-ops", f"ops-{dc.lower()}", "DBA", "decommission-hardware"]
         cm = "This host is ready for DC-Ops to decommission"
         t.unassign().set_project_tags(project_tags).add_comment(cm).set_description(new_desc)
 

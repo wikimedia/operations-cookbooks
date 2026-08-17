@@ -236,7 +236,9 @@ def test_handover_task_to_dcops_dryrun(mocker, caplog):
     dr.handover_task_to_dcops("T1234", "eqiad")
 
     mock_phab._client.maniphest.search.assert_called_once_with(constraints={"ids": [1234]})
-    mock_phab._client.project.search.assert_called_once_with(constraints={"slugs": ["dc-ops", "ops-eqiad", "DBA"]})
+    mock_phab._client.project.search.assert_called_once_with(
+        constraints={"slugs": ["dc-ops", "ops-eqiad", "DBA", "decommission-hardware"]}
+    )
 
     exp = """\
 INFO DRY-RUN: not running phabricator transaction: [{'type': 'owner', 'value': None}, {'type': 'projects.set', 'value': ['PHID-PROJ-dcops', 'PHID-PROJ-opseqiad']}, {'type': 'comment', 'value': 'This host is ready for DC-Ops to decommission'}, {'type': 'description', 'value': 'Steps for service owner:\\n[x] - step 1'}]
