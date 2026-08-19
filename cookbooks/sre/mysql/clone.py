@@ -1,7 +1,5 @@
 # NOTE: this scripts is written defensively. Please prioritize safety and readability,
 # minimize abstractions and state, enable type checking, do assertions, write tests
-# pylint: disable=missing-docstring
-# pylint: disable=R0913,R0917
 
 # TODO: when enabling support for `misc` both source/target/primary might not be known to dbctl
 
@@ -23,6 +21,7 @@ from typing import Dict, Generator, List, Tuple
 
 import transferpy.transfer
 from cookbooks.sre import PHABRICATOR_BOT_CONFIG_FILE
+from cookbooks.sre.mysql import ensure
 from pymysql.cursors import DictCursor
 from spicerack import Spicerack
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
@@ -43,14 +42,6 @@ SLUG = "cookbooks.sre.mysql.clone"
 
 
 # General utility functions to be moved to a shared module later on
-
-
-def ensure(condition: bool, msg: str) -> None:
-    # just some syntactic sugar for readability
-    if condition:
-        return
-    log.error("Failed safety check: {msg}", exc_info=True)
-    raise AssertionError(msg)
 
 
 def ensure_or_ask(condition: bool, msg: str) -> None:
@@ -445,8 +436,6 @@ class CloneMySQLRunner(CookbookRunnerBase):
         (src_active, src_site, _) = _fetch_netbox_data(spicerack, self.source_hostname)
         (tgt_active, self.target_site, self.target_rack_name) = _fetch_netbox_data(spicerack, self.target_hostname)
         (_, prim_site, _) = validate_hostname_extract_dc_fqdn(self.primary_hostname)
-
-        ensure(self.target_site == prim_site, f"Target site {self.target_site} does not match primary {prim_site}")
 
         # Ensure hosts are flagged as active on netbox
         ensure(src_active, f"{self.source_hostname} not active on netbox")
