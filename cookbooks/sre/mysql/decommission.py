@@ -73,6 +73,7 @@ class Decommission(CookbookBase):
 
     def argument_parser(self) -> ArgumentParser:
         ap = super().argument_parser()
+        ap.add_argument("--no-handover", action="store_true", help="Do not handover the task to DC-ops")
         ap.add_argument("hostname")
         return ap
 
@@ -207,6 +208,7 @@ class DecommissionRunner(CookbookRunnerBase):
         step("phabricator", "Update phabricator task")
         phab.task_comment(task_id, f"{hostname} has been decommissioned by Data Persistence")
 
-        log.info("-" * 80)
-        step("handover", "Update the task and send it to dcops")
-        self.handover_task_to_dcops(task_id, dc)
+        if not spicerack.dry_run and not self.args.no_handover:
+            log.info("-" * 80)
+            step("handover", "Update the task and send it to dcops")
+            self.handover_task_to_dcops(task_id, dc)
