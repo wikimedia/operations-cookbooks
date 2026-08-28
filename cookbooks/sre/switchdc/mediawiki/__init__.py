@@ -31,7 +31,6 @@ MEDIAWIKI_SERVICES = (
     "mw-api-ext-next",
     "mw-api-int",
     "mw-jobrunner",
-    "mw-parsoid",
 )
 # Read-only mediawiki services that are active-active by default and won't be touched by this switchover.
 MEDIAWIKI_RO_SERVICES = (
