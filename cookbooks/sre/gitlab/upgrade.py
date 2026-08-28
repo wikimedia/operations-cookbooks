@@ -27,7 +27,7 @@ DOWNTIME_DURATION = 200  # in minutes
 BACKUP_RESTORE_ALERTNAME = "SystemdUnitFailed"
 BACKUP_RESTORE_SERVICE = "gitlab-backup-restore.service"
 RESTORE_STALENESS_ALERTNAMES = "GitLabRestoreStale|GitLabReplicaDataStale|GitLabRestoreVersionMismatch"
-BACKUP_RESTORE_DOWNTIME_DURATION = 48 # in hours
+BACKUP_RESTORE_DOWNTIME_DURATION = 60 # in hours
 
 logger = logging.getLogger(__name__)
 
