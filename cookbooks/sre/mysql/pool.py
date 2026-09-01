@@ -111,13 +111,13 @@ def extract_section_kind_and_method(section_name: str) -> Tuple[str, str]:
     # "matomo",
     # "tendril",
     # "staging",
-    # "test-s",
     supported = {
         "ms": "pc",  # parsercache cookbook
         "pc": "pc",  # parsercache cookbook
         "es": "es",  # T430769
         "s": "s",
         "x": "s",
+        "test-s": "s",
     }
     if kind not in supported:
         raise RuntimeError(f"Unsupported section kind: {kind}")
