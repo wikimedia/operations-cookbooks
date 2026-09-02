@@ -75,14 +75,6 @@ SUPERMICRO_UEFI_LONG_BOOT_TIME = (
     'as-8125gs-tnmr2',
 )
 
-SUPERMICRO_NO_FQDN_MANAGEMENT = (
-    'ssg-521e-e1cr24h-configj',
-    'as-8125gs-tnmr2',
-    'sys-111c-nr',
-    'sys-112c-tn-configg',
-    'sg-521e-e1cr24l',
-)
-
 # Some Supermicro models are UEFI-only and the BMC don't
 # allow to set any PXE setting for NICs in the BIOS.
 SUPERMICRO_NO_BIOS_PXE_NIC_SETTINGS = (
@@ -313,15 +305,17 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             },
             'DHCPv4': {
                 'DHCPEnabled': False,
-            }
+            },
+            # Please note: in some Supermicro models, this option
+            # is present if we GET the /v2/Managers/1/EthernetInterfaces/1
+            # URI, but if we try to set it via PATCH we get:
+            # "The property FQDN is not in the list of valid properties for the resource."
+            # It is not clear why this happens, but rather than maintaining an allow-list
+            # of models that cannot have it set, we prefer to try to set it and fallback
+            # to removing it if an exception is raised (see more details where we apply
+            # the mgmt network settings).
+            "FQDN": self.fqdn
         }
-
-        # TODO: make this check a dynamic one
-        # The main issue at the moment is that the "FQDN" key is present
-        # and set to "None", but trying to set it leads to an exception
-        # for some reason.
-        if self.device_model_slug not in SUPERMICRO_NO_FQDN_MANAGEMENT:
-            self.mgmt_network_changes["FQDN"] = self.fqdn
 
         # From various tests it seems that the value of BootModeSelect
         # (EFI/Legacy) varies the allowed values of other BIOS options as well.
@@ -660,13 +654,29 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             should_patch = self._found_diffs_bios_attributes(bios_attributes)
 
             logger.info("Applying Network changes to the BMC.")
-            self.redfish.request(
-                'PATCH',
-                '/redfish/v1/Managers/1/EthernetInterfaces/1',
-                json=self.mgmt_network_changes
-            )
-            # As precaution we reboot after the BMC network settings are applied,
-            # even if not strictly needed.
+            try:
+                self.redfish.request(
+                    'PATCH',
+                    '/redfish/v1/Managers/1/EthernetInterfaces/1',
+                    json=self.mgmt_network_changes
+                )
+            except RedfishError as e:
+                no_fqdn_err = (
+                    "The property FQDN is not in the list of valid properties for the resource.")
+                if (e.__cause__ is not None
+                        and isinstance(e.__cause__, APIClientResponseError)
+                        and e.__cause__.response is not None  # pylint: disable=no-member
+                        and e.__cause__.response.status_code == 400  # pylint: disable=no-member
+                        and no_fqdn_err in str(e.__cause__.response.text)):  # pylint: disable=no-member
+                    logger.info("The FQDN property cannot be set, removing it and retrying.")
+                    del self.mgmt_network_changes["FQDN"]
+                    self.redfish.request(
+                        'PATCH',
+                        '/redfish/v1/Managers/1/EthernetInterfaces/1',
+                        json=self.mgmt_network_changes
+                    )
+                else:
+                    raise e
             if should_patch:
                 logger.info(
                     "Found differences between our desired status and the current "
