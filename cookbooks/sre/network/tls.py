@@ -23,6 +23,8 @@ from cookbooks.sre.network import parse_results
 
 NETWORK_ROLES = ('cloudsw', 'asw', 'cr', 'mr', 'pfw', 'msw')
 RENEW_EXPIRATION_DELTA = datetime.timedelta(weeks=4)
+# See profile::netops::netdev_intermediate_ca in the Puppet repo
+NETDEV_INTERMEDIATE_CA_PATH = '/usr/local/share/ca-certificates/network_devices.pem'
 logger = logging.getLogger(__name__)
 
 
@@ -33,8 +35,6 @@ class Tls(CookbookBase):
         cookbook sre.network.tls lsw1-e8-eqiad
         cookbook sre.network.tls all (TODO)
 
-    TODO maybe later add the CA to the bundle, but that might enable mTLS on some platforms
-
     """
 
     def argument_parser(self):
@@ -42,6 +42,7 @@ class Tls(CookbookBase):
         parser = super().argument_parser()
         parser.add_argument('device', help='Short hostname (or all).')
         parser.add_argument('--system', action='store_true', help="No ensure_shell_is_durable.")
+        parser.add_argument('--force', action='store_true', help="Force the Refresh of the certificate.")
         return parser
 
     def get_runner(self, args):
@@ -58,6 +59,7 @@ class TlsRunner(CookbookRunnerBase):
         self.dry_run = spicerack.dry_run
         self.remote = spicerack.remote()
         self.device = args.device
+        self.force = args.force
 
         self.netbox = spicerack.netbox()
         # TODO implement "any" selector
@@ -112,6 +114,24 @@ class TlsRunner(CookbookRunnerBase):
             self.remote_host.auth = (self.username, password)
         return self.remote_host
 
+    def generate_bundle(self, leaf_cert: str) -> str:
+        """Concat the TLS leaf certificate with the WMF's network intermediate public cert."""
+        try:
+            with open(NETDEV_INTERMEDIATE_CA_PATH, "r", encoding="utf8") as f:
+                intermediate_cert = f.read()
+        except OSError as exc:
+            raise RuntimeError(
+                f"Can't read the network intermediate from {NETDEV_INTERMEDIATE_CA_PATH}: {exc}") from exc
+
+        # The chain order matters: the leaf certificate first, then the intermediate(s)
+        return f"{leaf_cert.rstrip()}\n{intermediate_cert.rstrip()}"
+
+    def generate_new_cert_bundle(self) -> dict:
+        """Generate a new CSR/key/cert bundle, with the intermediate added to the leaf certificate."""
+        cert_bundle = self.generate_new_cert()
+        cert_bundle['cert'] = self.generate_bundle(cert_bundle['cert'])
+        return cert_bundle
+
     def run(self):
         """Required by Spicerack API."""
         new_cert_bundle = {}
@@ -120,14 +140,14 @@ class TlsRunner(CookbookRunnerBase):
 
         # If there is a cert (eg. self signed) or no cert, or nothing listening
         if self.need_initial_setup(cert):
-            new_cert_bundle = self.generate_new_cert()
-        elif self.need_cert_refresh(cert):
+            new_cert_bundle = self.generate_new_cert_bundle()
+        elif self.need_cert_refresh(cert) or self.force:
             new_cert = self.refresh_cert()
             if new_cert:  # If we can refresh the cert from the CSR
-                new_cert_bundle['cert'] = new_cert
+                new_cert_bundle['cert'] = self.generate_bundle(new_cert)
             else:  # If we can't (eg. CSR missing), then start over
                 logger.info("%s: Missing CSR on the device, generating a new one.", self.device)
-                new_cert_bundle = self.generate_new_cert()
+                new_cert_bundle = self.generate_new_cert_bundle()
 
         if new_cert_bundle:
             logger.info("%s: ⚙️ Deploy needed.", self.device)
