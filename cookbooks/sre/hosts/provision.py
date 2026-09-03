@@ -854,10 +854,13 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
 
     def _try_bmc_password(self):
         """Test the known BMC passwords, find a working one and configure Redfish."""
+        # Note: Supermicro's BMC defaults set a specific user locked out after three
+        # failed attempts (usually it gets back to a normal state after 30s).
+        # Be mindful when adding multiple user/password combination here for the same
+        # user!
         credentials_to_test = {
             "wmf_root_mgmt": ("wmfroot", self.mgmt_password),
             "calvin": ("ADMIN", SUPERMICRO_DEFAULT),
-            "wmf_admin_mgmt": ("ADMIN", self.mgmt_password),
             "BMC_LABEL": ("ADMIN", None),
         }
         for label, (bmc_username, bmc_password) in credentials_to_test.items():
