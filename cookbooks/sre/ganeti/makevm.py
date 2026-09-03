@@ -12,6 +12,7 @@ from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.ganeti import INSTANCE_LINKS, STORAGE_TYPES
+from spicerack.netbox import NetboxHostNotFoundError
 
 from cookbooks.sre.ganeti import add_location_args, set_default_group
 from cookbooks.sre.hosts import OS_VERSIONS
@@ -109,6 +110,13 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
         self.skip_v6 = args.skip_v6
         self.spicerack = spicerack
         self.netbox = self.spicerack.netbox(read_write=True)
+
+        try:
+            spicerack.netbox_server(self.hostname)
+            raise RuntimeError(f'A server with name {self.hostname} already exists.')
+        except NetboxHostNotFoundError:
+            pass
+
         self.fqdn = make_fqdn(self.hostname, self.network, self.group.site)
         self.allocated = []  # Store allocated IPs to rollback them on failure
         self.dns_propagated = False  # Whether to run the DNS cookbook on rollback
@@ -295,7 +303,7 @@ class GanetiMakeVMRunner(CookbookRunnerBase):  # pylint: disable=too-many-instan
             return hiera_ret
 
         # Configure parameters for reimaging cookbook.
-        params = ['--new', '--os', self.args.os]
+        params = ['--force', '--new', '--os', self.args.os]
         if self.args.task_id:
             params.extend(['--task-id', self.args.task_id])
         params.append(self.hostname)
