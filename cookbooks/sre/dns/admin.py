@@ -21,6 +21,7 @@ class DNSAdmin(CookbookBase):
         cookbook sre.dns.admin pool magru   # [pools magru for everything]
         cookbook sre.dns.admin --service upload-addrs -- depool codfw      # [depool codfw for upload-addrs]
         cookbook sre.dns.admin depool esams --service text-addrs text-next # [depool esams for text*]
+        cookbook sre.dns.admin --depool-dns-hosts depool eqsin             # [depool eqsin and also its DNS hosts]
     """
 
     argument_reason_required = False
@@ -37,6 +38,8 @@ class DNSAdmin(CookbookBase):
                             help="The service in the site/DC on which the action should be performed.")
         parser.add_argument("-f", "--force", action="store_true",
                             help="If passed, do not prompt for any actions (default: prompt)")
+        parser.add_argument("--depool-dns-hosts", action="store_true",
+                            help="If passed, also depool the DNS hosts in the given site for all services")
         parser.add_argument("--emergency-depool-policy", action="store_true",
                             help="If passed, override the depool threshold and ignore all depool safety checks")
         return parser
@@ -58,6 +61,7 @@ class DNSAdminRunner(CookbookRunnerBase):
         self.args = args
         self.spicerack = spicerack
         self.confctl = spicerack.confctl("geodns")
+        self.confctl_node = spicerack.confctl("node")
 
         self.pooled_state = "yes" if self.args.action == "pool" else "no"
         self.reason = self.args.reason if self.args.reason is not None else "no reason specified"
@@ -141,6 +145,23 @@ class DNSAdminRunner(CookbookRunnerBase):
             self.confctl.set_and_verify("pooled", self.pooled_state, geodns=self.service, name=self.args.site)
         else:
             self.confctl.set_and_verify("pooled", self.pooled_state, name=self.args.site)
+
+        # The user wants the DNS hosts in the given site to be depooled as well
+        # for all services. That includes authdns-update, recdns, nsX, ntp.
+        #
+        # We don't do anything for pooling, since it's possible a DNS host was
+        # depooled for another reason (we have no way of discovering that) and
+        # we don't want to pool it during the operation of this cookbook.
+        if self.args.action == "depool" and self.args.depool_dns_hosts:
+            # Get all the (pooled) DNS hosts in a given site.
+            dns_hosts = [host.name for host in self.confctl_node.filter_objects({'pooled': 'yes'},
+                                                                                cluster='dnsbox',
+                                                                                dc=self.args.site)]
+            # Depool all the currently pooled DNS hosts.
+            for each_dns_host in set(dns_hosts):
+                self.confctl_node.set_and_verify("pooled", self.pooled_state, name=each_dns_host)
+            print(f"==> DNS hosts {', '.join(set(dns_hosts))} depooled for all services. "
+                  "Please remember to manually pool them later.")
 
         self._print_summary("APPLIED")
 
