@@ -28,6 +28,11 @@ BACKUP_RESTORE_ALERTNAME = "SystemdUnitFailed"
 BACKUP_RESTORE_SERVICE = "gitlab-backup-restore.service"
 RESTORE_STALENESS_ALERTNAMES = "GitLabRestoreStale|GitLabReplicaDataStale|GitLabRestoreVersionMismatch"
 BACKUP_RESTORE_DOWNTIME_DURATION = 60 # in hours
+ATS_BACKEND_ALERTNAME = "ATSBackendErrorsHigh"
+ATS_BACKEND = "gitlab.discovery.wmnet"
+# ATSBackendErrorsHigh needs 15 minutes of sustained errors on top of a 5 minutes rate window,
+# so its silence has to outlive the upgrade window instead of ending with it.
+ATS_DOWNTIME_DURATION = DOWNTIME_DURATION + 30  # in minutes
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +212,18 @@ class UpgradeRunner(CookbookRunnerBase):
                         self.host,
                         error,
                     )
+
+        if not self.is_replica():
+            try:
+                matchers = [
+                    {"name": "alertname", "value": ATS_BACKEND_ALERTNAME, "isRegex": False},
+                    {"name": "backend", "value": ATS_BACKEND, "isRegex": False},
+                ]
+                self.alertmanager.downtime(
+                    reason=self.admin_reason, matchers=matchers,
+                    duration=timedelta(minutes=ATS_DOWNTIME_DURATION))
+            except AlertmanagerError as error:
+                logger.warning('Failed to create a silence for ATS backend %s: %s', ATS_BACKEND, error)
 
         paused_runners = pause_runners(self.token, self.url, dry_run=self.spicerack.dry_run)
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=DOWNTIME_DURATION)):
