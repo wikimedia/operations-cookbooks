@@ -28,6 +28,7 @@ class RollRestartWorkers(CookbookBase):
       cookbook sre.hadoop.roll-restart-workers analytics
       cookbook sre.hadoop.roll-restart-workers --yarn-nm-batch-size 2 --hdfs-dn-batch-size 1 test
       cookbook sre.hadoop.roll-restart-workers --yarn-nm-sleep-seconds 60 --hdfs-dn-sleep-seconds 180 backup
+      cookbook sre.hadoop.roll-restart-workers --skip-hosts 'P{an-worker100[1-3]*}' analytics
 
 
     """
@@ -47,6 +48,8 @@ class RollRestartWorkers(CookbookBase):
                             help="Size of each batch of Yarn Nodemanager restarts.")
         parser.add_argument('--hdfs-dn-batch-size', type=int, default=2,
                             help="Size of each batch of HDFS Datanode restarts.")
+        parser.add_argument('--skip-hosts',
+                            help='Cumin query matching hosts to exclude from the rolling restart.')
 
         return parser
 
@@ -72,8 +75,16 @@ class RollRestartWorkersRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
 
         self.cluster = args.cluster
-        self.hadoop_workers = spicerack.remote().query(self.cluster_cumin_alias)
-        self.hadoop_hdfs_journal_workers = spicerack.remote().query(self.hdfs_jn_cumin_alias)
+        remote = spicerack.remote()
+        if args.skip_hosts:
+            self.cluster_cumin_alias += f' and not ({args.skip_hosts})'
+
+        self.hadoop_workers = remote.query(self.cluster_cumin_alias)
+        journal_workers = remote.query(self.hdfs_jn_cumin_alias)
+        journal_hosts = journal_workers.hosts.intersection(self.hadoop_workers.hosts)
+        self.hadoop_hdfs_journal_workers = (
+            journal_workers.get_subset(journal_hosts) if journal_hosts else None
+        )
         self.alerting_hosts = spicerack.alerting_hosts(self.hadoop_workers.hosts)
         self.admin_reason = spicerack.admin_reason('Roll restart of jvm daemons for openjdk upgrade.')
 
@@ -119,10 +130,11 @@ class RollRestartWorkersRunner(CookbookRunnerBase):
                 'systemctl restart hadoop-hdfs-datanode',
                 batch_size=self.hdfs_dn_batch_size, batch_sleep=self.hdfs_dn_sleep)
 
-            logger.info("Restarting HDFS Journalnodes with batch size %s and sleep %s..",
-                        self.hdfs_jn_batch_size, self.hdfs_jn_sleep)
-            self.hadoop_hdfs_journal_workers.run_sync(
-                'systemctl restart hadoop-hdfs-journalnode',
-                batch_size=self.hdfs_jn_batch_size, batch_sleep=self.hdfs_jn_sleep)
+            if self.hadoop_hdfs_journal_workers:
+                logger.info("Restarting HDFS Journalnodes with batch size %s and sleep %s..",
+                            self.hdfs_jn_batch_size, self.hdfs_jn_sleep)
+                self.hadoop_hdfs_journal_workers.run_sync(
+                    'systemctl restart hadoop-hdfs-journalnode',
+                    batch_size=self.hdfs_jn_batch_size, batch_sleep=self.hdfs_jn_sleep)
 
         logger.info("All jvm restarts completed!")
