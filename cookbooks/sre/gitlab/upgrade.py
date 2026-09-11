@@ -2,12 +2,13 @@
 
 import logging
 from datetime import timedelta
+from functools import cached_property
 import re
 import time
 from packaging import version
 
 import gitlab
-from wmflib.interactive import ask_confirmation, ensure_shell_is_durable, get_secret
+from wmflib.interactive import ask_confirmation, ask_input, ensure_shell_is_durable, get_secret
 from spicerack.alertmanager import AlertmanagerError
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 from spicerack.decorators import retry
@@ -33,6 +34,8 @@ ATS_BACKEND = "gitlab.discovery.wmnet"
 # ATSBackendErrorsHigh needs 15 minutes of sustained errors on top of a 5 minutes rate window,
 # so its silence has to outlive the upgrade window instead of ending with it.
 ATS_DOWNTIME_DURATION = DOWNTIME_DURATION + 30  # in minutes
+# Hiera key holding the FQDN of the active (primary) GitLab host, any other host is a replica
+ACTIVE_HOST_HIERA_KEY = "profile::gitlab::active_host"
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +69,10 @@ class Upgrade(CookbookBase):
         parser.add_argument('--host', required=True, help='Short hostname of the gitlab host to upgrade, not FQDN')
         parser.add_argument('--version', required=True,
                             help='Version of new GitLab Debian package in Debian versioning schema')
-        parser.add_argument('-s', '--skip-replica-backups', help='Skips creating a backup on replica hosts',
-                            action='store_true')
-        parser.add_argument("-c", "--skip-confirm-prompt", default=False,
-                            help="Skip confirmation prompt before restarting hosts")
+        parser.add_argument('-s', '--skip-replica-backups', action='store_true',
+                            help='Skip creating a backup on replica hosts without asking')
+        parser.add_argument("-c", "--skip-confirm-prompt", action='store_true',
+                            help="Skip confirmation prompts before restarting hosts")
         return parser
 
     def get_runner(self, args):
@@ -91,6 +94,7 @@ class UpgradeRunner(CookbookRunnerBase):
         if len(self.remote_host) != 1:
             raise RuntimeError(f"Found the following hosts: {self.remote_host} for query {args.host}."
                                "Query must return 1 host.")
+        self.fqdn = self.remote_host.hosts[0]
         self.url = get_gitlab_url(self.remote_host)
 
         self.alerting_hosts = spicerack.alerting_hosts(self.remote_host.hosts)
@@ -102,17 +106,19 @@ class UpgradeRunner(CookbookRunnerBase):
         self.target_version = args.version
         self.skip_confirm_prompt = args.skip_confirm_prompt
 
-        # Skipping backups on production should not be possible
-        if args.skip_replica_backups and not self.is_replica():
-            raise RuntimeError(f"--skip_replica-backups can't be used on {self.url}")
-
-        # Remind users to skip backup on replicas
-        if not args.skip_replica_backups and self.is_replica():
-            ask_confirmation("Cookbook is executed on a replica without the "
-                             "--skip-replica-backups flag. Are you sure you want to create a "
-                             "backup on the replica? This takes 3+ hours.")
+        # Skipping backups on the active host should not be possible
+        if args.skip_replica_backups and not self.is_replica:
+            raise RuntimeError(f"--skip-replica-backups can't be used on the active host {self.fqdn}")
 
         self.skip_replica_backups = args.skip_replica_backups
+        # A replica's data comes from the active host's backup, so a local one is mostly
+        # redundant: offer to skip it, without requiring -s. --skip-confirm-prompt is
+        # deliberately not honoured here, skipping a backup is a decision of its own and
+        # not a confirmation before a restart. Pass -s to run unattended on a replica.
+        if not self.skip_replica_backups and self.is_replica:
+            self.skip_replica_backups = ask_input(
+                f"{self.fqdn} is a replica, OK to skip the local backup? "
+                "Creating one takes about 15 minutes.", ["skip", "backup"]) == "skip"
 
         self.token = get_secret('GitLab API Token')
         self.gitlab_instance = gitlab.Gitlab(self.url, private_token=self.token)
@@ -185,7 +191,7 @@ class UpgradeRunner(CookbookRunnerBase):
 
         # silence backup-restore.service and the gitlab restore staleness
         # alerts (until next restore happened)
-        if self.is_replica():
+        if self.is_replica:
             silences = [
                 [
                     {"name": "alertname",
@@ -213,7 +219,7 @@ class UpgradeRunner(CookbookRunnerBase):
                         error,
                     )
 
-        if not self.is_replica():
+        if not self.is_replica:
             try:
                 matchers = [
                     {"name": "alertname", "value": ATS_BACKEND_ALERTNAME, "isRegex": False},
@@ -276,11 +282,15 @@ class UpgradeRunner(CookbookRunnerBase):
         if get_disk_usage_for_path(self.remote_host, BACKUP_DIRECTORY) > DISK_HIGH_THRESHOLD:
             raise RuntimeError(f"Not enough disk space in {BACKUP_DIRECTORY}")
 
-    def is_replica(self):
-        """Check that we aren't running on the "production" host (i.e., gitlab.wm.o)"""
-        if "gitlab.wikimedia.org" in self.url:
-            return False
-        return True
+    @cached_property
+    def is_replica(self) -> bool:
+        """Check that we aren't running on the active host, as defined in hiera."""
+        active_host = self.spicerack.puppet_server().hiera_lookup(self.fqdn, ACTIVE_HOST_HIERA_KEY).strip()
+        # An empty or bogus lookup must not make the active host look like a replica
+        if "." not in active_host:
+            raise RuntimeError(f"Unable to look up {ACTIVE_HOST_HIERA_KEY} for {self.fqdn}: got '{active_host}'")
+        logger.info("Active GitLab host according to hiera: %s", active_host)
+        return active_host != self.fqdn
 
     def create_data_backup(self):
         """Create data backup"""
