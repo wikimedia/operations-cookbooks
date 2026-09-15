@@ -1127,6 +1127,11 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         if 'WebServer.1#HostHeaderCheck' in config.components['iDRAC.Embedded.1']:
             self.config_changes['iDRAC.Embedded.1']['WebServer.1#HostHeaderCheck'] = 'Disabled'
 
+        # Some iDRAC 9 models may need an explicit config to allow plaintext HTTP boot
+        # See T424895
+        if 'HttpDev1TlsMode' in config.components['BIOS.Setup.1-1']:
+            self.config_changes['BIOS.Setup.1-1']['HttpDev1TlsMode'] = 'None'
+
         if self.redfish.hw_model >= 10:
             # In single CPU systems running on IDRAC 10 some options
             # may not be tunable (for example, cpu virtualization enabled by default)
