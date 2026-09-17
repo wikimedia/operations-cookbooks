@@ -421,9 +421,9 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
             self.ipmi.check_connection()
         except IpmiError as e:
             logger.error(
-                "Failed to verify ipmi check_connection for user %s on host %s: %s"
-                "wmfroot. This may not be relevant if UEFI is set, but please report it to "
-                "dcops or I/F. Consider to report this in T426180.", self.fqdn, e
+                "Failed to verify ipmi check_connection for user %s on host %s: %s "
+                "\nThis may not be relevant if UEFI is set, but please report it to "
+                "dcops or I/F. Consider to report this in T426180.", "wmfroot", self.fqdn, e
             )
 
     def rollback(self):
