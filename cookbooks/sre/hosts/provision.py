@@ -52,6 +52,7 @@ VETTED_BIOS_ENDPOINTS = [
 SUPERMICRO_AMD_DEVICE_SLUGS = (
     'as-2014s-tr',
     'as-8125gs-tnmr2',
+    'as-8126gs-tnmr',
 )
 
 # T387577
@@ -63,6 +64,7 @@ SUPERMICRO_PXE_BUG_SLUGS = (
 # the ML team uses for inference and training.
 SUPERMICRO_GPU_IOMMU_SLUGS = (
     'as-8125gs-tnmr2',
+    'as-8126gs-tnmr',
 )
 
 # The Supermicro Config A hosts don't accept the "PXE" setting
@@ -73,12 +75,14 @@ SUPERMICRO_CONFIG_A_PXE_LEGACY_SLUGS = (
 
 SUPERMICRO_UEFI_LONG_BOOT_TIME = (
     'as-8125gs-tnmr2',
+    'as-8126gs-tnmr',
 )
 
 # Some Supermicro models are UEFI-only and the BMC don't
 # allow to set any PXE setting for NICs in the BIOS.
 SUPERMICRO_NO_BIOS_PXE_NIC_SETTINGS = (
-    'as-8125gs-tnmr2'
+    'as-8125gs-tnmr2',
+    'as-8126gs-tnmr'
 )
 
 # Hostname prefixes that usually need --enable-virtualization
@@ -802,12 +806,12 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                     self.device_model_slug
                 )
                 return
-            raise RuntimeError(
+            ask_confirmation(
                 "No NIC devices found among the BIOS settings, please check if "
                 "they are racked and configured properly. Some recent UEFI-only "
                 "hosts don't require this step since the BMC will try every NIC "
-                "until a positive reply is returned. Follow up with Infrastructure "
-                "Foundations when you read this."
+                "until a positive reply is returned. You can continue, but please "
+                "follow up with Infrastructure Foundations later on."
             )
 
         if len(pxe_nic_devices) == 1 or self.uefi:
