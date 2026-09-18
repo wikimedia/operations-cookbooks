@@ -1,7 +1,6 @@
 """Audit and if necessary update firmware on a host."""
 # pylint: disable=too-many-lines
 import logging
-import shlex
 
 from argparse import ArgumentTypeError
 from collections.abc import Iterator
@@ -11,14 +10,12 @@ from functools import cache
 from io import BufferedReader
 from pathlib import Path
 from socket import getfqdn
-from subprocess import CalledProcessError, run
 from tempfile import TemporaryDirectory
 from typing import cast, Optional
 from zipfile import ZipFile
 
 from packaging import version
 
-from spicerack.constants import KEYHOLDER_SOCK
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from spicerack.decorators import retry
 from spicerack.netbox import NetboxError, NetboxServer
@@ -154,9 +151,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
                     f"{host}: unable to upgrade, unsupported manufacturer ({manufacturer})"
                 )
 
-        session = spicerack.requests_session("cookbook.sre.hardware.firmware-upgrade")
-        session.proxies = spicerack.requests_proxies
-
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the cookbook action."""
@@ -217,16 +211,6 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
         # small hack to get around some slugs having the config in them e.g.
         # poweredge-r440-configc-202107
         return netbox_host.as_dict()["device_type"]["slug"].split("-config")[0]
-
-    def _sync_firmware_store(self) -> None:
-        """Sync the firmware store to all cumin hosts."""
-        environment = {"SSH_AUTH_SOCK": KEYHOLDER_SOCK}
-        for host in self._cumin_hosts:
-            command = f"rsync --archive --rsh=ssh {self.firmware_store}/ {host}:{self.firmware_store}"
-            try:
-                run(shlex.split(command), check=True, env=environment)
-            except CalledProcessError:
-                logger.warning("unable to sync {self.firmware_store} to {host}")
 
     def _firmware_path(
         self, product_slug: str, driver_category: DellDriverCategory
