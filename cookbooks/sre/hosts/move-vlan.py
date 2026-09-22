@@ -4,7 +4,7 @@ import logging
 from ipaddress import ip_interface
 
 
-from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
+from wmflib.interactive import ask_confirmation, confirm_on_failure, ensure_shell_is_durable
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
 
@@ -241,7 +241,12 @@ class MoveVlanRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-a
             logger.info("Restarting the networking service. "
                         "The host will lose connectivity until the switch port is updated. "
                         "Automatic rollback not possible from now on.")
-            self.remote_host.run_sync('sudo systemctl restart networking', print_progress_bars=False)
+            logger.info("If you get a failure below:"
+                        " * Type 'abort' if the host is still reachable"
+                        " * type 'skip' if it's NOT reachable anymore")
+            confirm_on_failure(self.remote_host.run_sync,
+                               'sudo systemctl restart networking',
+                               print_progress_bars=False)
             self.rollback_netbox = False
 
         # Pass the pre_config to clear the now unused PTR records
