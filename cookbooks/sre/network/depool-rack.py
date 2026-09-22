@@ -191,7 +191,13 @@ class DepoolRackRunner(CookbookRunnerBase):
             if 'policy' not in hiera_data or hiera_data['policy'] == "skip" or not hiera_data['policy']:
                 logger.info("%s: skipping host (%s)",
                             netbox_server.name,
-                            hiera_data.get('message', 'no depool needed'))
+                            hiera_data.get('message', f'no {self.args.action} needed'))
+                continue
+            if hiera_data['policy'] == "manual":
+                logger.info("%s: requires manual %s (%s)",
+                            netbox_server.name,
+                            self.args.action,
+                            hiera_data.get('message', 'extra info missing from Hiera, please add a `message` key'))
                 continue
             if hiera_data['policy'] == 'k8s':
                 try:
@@ -212,7 +218,7 @@ class DepoolRackRunner(CookbookRunnerBase):
                     hiera_data['policy'] = 'cookbook'
                     hiera_data['command'] = f"sre.mysql.{self.args.action} -r '{self.reason.reason}' {{name}}"
                 else:
-                    logger.info("%s: skipping host (manual %s needed)",
+                    logger.info("%s: requires manual %s",
                                 netbox_server.name,
                                 self.args.action)
                     continue
