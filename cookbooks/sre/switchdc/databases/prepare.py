@@ -1,5 +1,6 @@
 """Perform all the Database related preparatory steps before the switch datacenter."""
 import logging
+from collections.abc import Callable
 from datetime import timedelta
 from time import sleep
 
@@ -156,9 +157,12 @@ class PrepareSection:
             "Last_SQL_Errno": 0,
             "Using_Gtid": MasterUseGTID.NO.value.capitalize(),
         }
-        status = self.master_to.show_slave_status()
         try:
-            self._validate_slave_status(f"MASTER_TO {self.master_to.host}", status, expected)
+            self._validate_slave_status(
+                f"MASTER_TO {self.master_to.host}",
+                self.master_to.show_slave_status,
+                expected,
+            )
         except RuntimeError as e:
             message = f"Failed to verify disabled GTID on {self.master_to.host}"
             self.actions.failure(f"**{message}**")
@@ -256,8 +260,11 @@ class PrepareSection:
             "Last_IO_Errno": 0,
             "Last_SQL_Errno": 0,
         }
-        status = self.master_from.show_slave_status()
-        self._validate_slave_status(f"MASTER_FROM {self.master_from.host}", status, expected)
+        self._validate_slave_status(
+            f"MASTER_FROM {self.master_from.host}",
+            self.master_from.show_slave_status,
+            expected,
+        )
         self.actions.success(
             f"MASTER_FROM {self.master_from.host} replication from MASTER_TO {self.master_to.host} verified")
 
@@ -276,11 +283,14 @@ class PrepareSection:
             "Last_IO_Errno": 0,
             "Last_SQL_Errno": 0,
         }
-        sleep(5)
-        status = self.master_to.show_slave_status()
-        self._validate_slave_status(f"MASTER_TO {self.master_to.host}", status, expected)
+        self._validate_slave_status(
+            f"MASTER_TO {self.master_to.host}",
+            self.master_to.show_slave_status,
+            expected,
+        )
         self.actions.success(
-            f"MASTER_TO {self.master_to.host} replication from MASTER_FROM {self.master_from.host} verified")
+            f"MASTER_TO {self.master_to.host} replication from MASTER_FROM {self.master_from.host} verified",
+        )
 
     def master_from_check_replication(self) -> None:
         """Check the replication on MASTER_FROM."""
@@ -300,16 +310,40 @@ class PrepareSection:
             "Last_IO_Errno": 0,
             "Last_SQL_Errno": 0,
         }
-        sleep(5)
-        status = self.master_from.show_slave_status()
-        self._validate_slave_status(f"MASTER_FROM {self.master_from.host}", status, expected)
+        self._validate_slave_status(
+            f"MASTER_FROM {self.master_from.host}",
+            self.master_from.show_slave_status,
+            expected,
+        )
         self.actions.success(
             f"MASTER_FROM {self.master_from.host} replication from MASTER_TO {self.master_to.host} verified after "
             "pt-heartbeat"
         )
 
-    def _validate_slave_status(self, prefix: str, status: dict, expected: dict):
+    def _validate_slave_status(
+            self,
+            prefix: str,
+            check_status: Callable[[], dict],
+            expected: dict,
+    ) -> None:
         """Ensure that SHOW SLAVE STATUS provided keys have the expected values."""
+        retries = 3
+        for attempt in range(1, retries + 1):
+            status = check_status()
+            missing_fields = expected.keys() - status.keys()
+            if missing_fields:
+                raise RuntimeError(f"SHOW SLAVE STATUS is missing required fields: {missing_fields}")
+
+            needs_retry = [
+                key for key in ["Slave_IO_Running", "Slave_SQL_Running"]
+                if status[key] != expected[key] and status[key] in ["Connecting", "No", "Preparing"]
+            ]
+            if needs_retry and attempt != retries:
+                logger.info("[%s] %s SLAVE STATUS %s settling, attempt %d/%d", self.section, prefix,
+                            ", ".join(f"{key}={status[key]}" for key in needs_retry), attempt, retries)
+                sleep(5)
+            else:
+                break
         for key, value in expected.items():
             logger.info("[%s] %s checking SLAVE STATUS %s=%s", self.section, prefix, key, status[key])
             if status[key] != value:
