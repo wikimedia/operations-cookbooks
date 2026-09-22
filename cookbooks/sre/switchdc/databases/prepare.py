@@ -276,6 +276,7 @@ class PrepareSection:
             "Last_IO_Errno": 0,
             "Last_SQL_Errno": 0,
         }
+        sleep(5)
         status = self.master_to.show_slave_status()
         self._validate_slave_status(f"MASTER_TO {self.master_to.host}", status, expected)
         self.actions.success(
@@ -299,6 +300,7 @@ class PrepareSection:
             "Last_IO_Errno": 0,
             "Last_SQL_Errno": 0,
         }
+        sleep(5)
         status = self.master_from.show_slave_status()
         self._validate_slave_status(f"MASTER_FROM {self.master_from.host}", status, expected)
         self.actions.success(
