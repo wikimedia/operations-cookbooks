@@ -8,11 +8,11 @@ from spicerack.decorators import retry
 from spicerack.remote import RemoteExecutionError, RemoteHosts
 
 from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
+from cookbooks.sre.ceph import CLUSTER_CHOICES
 
 logger = logging.getLogger(__name__)
 
 
-CLUSTER_CHOICES = ("cephosd-codfw", "cephosd-eqiad")
 DAEMON_CHOICES = ("mon", "mgr", "osd", "mds", "radosgw", "crash")
 
 
