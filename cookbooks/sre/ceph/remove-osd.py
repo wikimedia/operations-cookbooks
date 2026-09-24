@@ -164,8 +164,9 @@ class RemoveCephOsdRunner(CookbookRunnerBase):
         if not self.spicerack.dry_run:
             self.wait_until_all_pgs_are_remapped()
 
-        logger.info(f"Stopping {self.osd_systemd_service} service")
+        logger.info(f"Stopping and disabling {self.osd_systemd_service} service")
         self.remote_ceph_host.run_sync(f"systemctl stop {self.osd_systemd_service}")
+        self.remote_ceph_host.run_sync(f"systemctl disable {self.osd_systemd_service}")
 
         logger.info(f"Removing osd.{self.osd} from the CRUSH rules")
         self.remote_ceph_admin_host.run_sync(f"ceph osd crush remove osd.{self.osd}")
