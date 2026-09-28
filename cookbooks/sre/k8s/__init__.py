@@ -10,6 +10,7 @@ from typing import Union
 
 from cumin import NodeSet
 from kubernetes.client.models import V1Taint
+from packaging.version import InvalidVersion, Version
 from spicerack import Spicerack
 from spicerack.cookbook import LockArgs
 from spicerack.k8s import KubernetesApiError, KubernetesNode
@@ -386,6 +387,8 @@ def ensure_k8s_services_active(hosts: RemoteHosts) -> bool:
 re_old_topology_vlan = re.compile(r"private1-[a-z]-(eqiad|codfw)")
 # This regex matches VLANs which require BGP peering with the ToR switches
 re_new_topology_vlan = re.compile(r"private1-[a-z]\d-(eqiad|codfw)")
+# This regex matches VLANs trunked on any of the LVS physical NICs
+re_l2_adjacent_vlan = re.compile(r"private1-(([a-d]\d{0,1}-(codfw|eqiad))|([e,f])\d-eqiad)")
 
 
 def host_expected_bgp_session_count(netbox_server: NetboxServer) -> int:
@@ -411,6 +414,14 @@ def host_expected_bgp_session_count(netbox_server: NetboxServer) -> int:
     else:
         raise RuntimeError(f"Unknown vlan {vlan} for host {host}")
     return session_count
+
+
+def parse_k8s_version(version: str) -> Version:
+    """Parse a Kubernetes version string (e.g. 'v1.31.4' or '1.31.4-1') into a Version object."""
+    try:
+      return Version(version)
+    except InvalidVersion as e:
+        raise RuntimeError(f"Unable to parse Kubernetes version '{version}'") from e
 
 
 class K8sBatchBase(SREBatchBase, metaclass=ABCMeta):
