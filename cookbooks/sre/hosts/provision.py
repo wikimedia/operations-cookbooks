@@ -94,7 +94,7 @@ class Provision(CookbookBase):
     """Provision a new physical host setting up it's BIOS, management console, NICs, network.
 
     Actions performed:
-        * Validate that the host is a physical host and the vendor is supported (only Dell at this time)
+        * Validate that the host is a physical host and the vendor is supported (only Dell and Supermicro this time)
         * Fail if the host is active on Netbox but --no-dhcp and --no-users are not set as a precautionary measure
         * [unless --no-dhcp is set] Setup the temporary DHCP so that the management console can get a connection and
           become reachable
