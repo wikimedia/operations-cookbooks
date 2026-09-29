@@ -2,6 +2,7 @@
 import json
 import logging
 
+from collections import defaultdict
 from ipaddress import ip_address
 from subprocess import CalledProcessError, run
 from typing import Optional
@@ -203,7 +204,7 @@ def run_junos_commands(remote_host: RemoteHosts, conf_commands: list) -> None:
             logger.info('Change confirmed')
 
 
-def parse_results(results_raw, json_output=False, dry_run: bool=False):
+def parse_results(results_raw, json_output=False, dry_run: bool = False):
     """Parse a single device cumin output."""
     # Only supports 1 target device at a time
     if dry_run:
@@ -414,8 +415,8 @@ def get_junos_logs(remote_host: RemoteHosts, match: str, print_output: bool = Fa
     return result
 
 
-def get_junos_bgp_peer(remote_host: RemoteHosts, peer_ip: str, print_output: bool = False) -> dict:
-    """Returns informations about a BGP peer
+def get_junos_bgp_details(remote_host: RemoteHosts, peer_ip: str = '', print_output: bool = False) -> dict:
+    """Returns detailed informations about all or one BGP peer
 
     Arguments:
         remote_host: Spicerack RemoteHosts instance
@@ -423,27 +424,24 @@ def get_junos_bgp_peer(remote_host: RemoteHosts, peer_ip: str, print_output: boo
         print_output: Display a more verbose output
 
     Returns:
-        Dict of relevant peer data
+        Dict of relevant peers data, keyed by remote IP
 
     """
-    # TODO: replace with SNMP or LibreNMS API to speed up and get time since last up?
-    logger.debug("Fetching BGP status for peer %s", peer_ip)
+    logger.debug("Fetching BGP status for peer %s", peer_ip if peer_ip else "[ALL]")
     results_raw = remote_host.run_sync(f"show bgp neighbor {peer_ip} | display json",
                                        is_safe=True,
                                        print_output=print_output,
                                        print_progress_bars=False)
-
     result_json = parse_results(results_raw, json_output=True, dry_run=remote_host.dry_run)
     # Even if the peer is not configured some json is returned
     if not result_json:
-        logger.error("Problem while trying to get data for BGP peer %s", peer_ip)
-        return {'status': 'Error fetching status'}
+        logger.error("Problem while trying to get data for BGP peer %s", peer_ip if peer_ip else "[ALL]")
+        return {}
+    if peer_ip and 'bgp-peer' not in result_json['bgp-information'][0]:
+        return {ip_address(peer_ip): {'peer-state': 'Not configured'}}
 
-    if 'bgp-peer' not in result_json['bgp-information'][0]:
-        return {'status': 'Not configured'}
-    bgp_peer = result_json['bgp-information'][0]['bgp-peer'][0]
-    peer_state = bgp_peer['peer-state'][0]['data']
-    return {'status': peer_state}
+    extra_keys = ('peer-group', 'local-as', 'local-address')
+    return format_peers(result_json['bgp-information'][0]['bgp-peer'], extra_keys)
 
 
 def get_junos_bgp_summary(remote_host: RemoteHosts, print_output: bool = False) -> dict:
@@ -474,21 +472,28 @@ def get_junos_bgp_summary(remote_host: RemoteHosts, print_output: bool = False) 
 
     bgp_peers = result_json['bgp-information'][0]['bgp-peer']
 
-    formatted_peers = {}
+    # TODO add received/accepted prefix count
+    return format_peers(bgp_peers, ('elapsed-time',))
 
+
+def format_peers(bgp_peers: dict, extra_keys: tuple = ()) -> dict:
+    """Mangle Junos BGP JSON output into a more friendly dict."""
+    formatted_peers: dict = defaultdict(dict)
+
+    keys = ('description', 'peer-state', 'peer-as')
     for bgp_peer in bgp_peers:
-        peer_address = ip_address(bgp_peer['peer-address'][0]['data'])
-        peer_as = int(bgp_peer['peer-as'][0]['data'])
-        formatted_peers[peer_address] = {'peer-as': peer_as}
-        # TODO add received/accepted prefix count
-        for key in ('elapsed-time',
-                    'description',
-                    'peer-state'):
+        peer_address = ip_address(bgp_peer['peer-address'][0]['data'].split('+')[0])
+        for key in (keys + extra_keys):
             try:
-                formatted_peers[peer_address][key] = bgp_peer.get(key)[0].get('data')
+                data = bgp_peer.get(key)[0].get('data')
+                if key in ('peer-as', 'local-as'):
+                    formatted_peers[peer_address][key] = int(data)
+                elif key in ('local-address',):
+                    formatted_peers[peer_address][key] = ip_address(data.split('+')[0])
+                else:
+                    formatted_peers[peer_address][key] = data
             except TypeError:
                 logger.error("Key '%s' not present in returned data for %s", key, peer_address)
-
     return formatted_peers
 
 
