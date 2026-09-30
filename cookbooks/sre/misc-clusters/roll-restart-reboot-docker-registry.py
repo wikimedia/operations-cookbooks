@@ -35,4 +35,5 @@ class DockerRegistryRestartRebootRunner(SRELBBatchRunnerBase):
     def restart_daemons(self):
         """Return a list of daemons to restart when using the restart action"""
         return ['nginx', 'docker-registry-ha-jwt', 'docker-registry-ml',
-                'docker-registry-restricted', 'docker-registry-swift']
+                'docker-registry-restricted', 'docker-registry-releng',
+                'docker-registry-main']
