@@ -87,7 +87,7 @@ SUPERMICRO_NO_BIOS_PXE_NIC_SETTINGS = (
 )
 
 # Hostname prefixes that usually need --enable-virtualization
-VIRT_PREFIXES = ('ganeti', 'cloudvirt')
+VIRT_PREFIXES = ('ganeti', 'cloudvirt', 'wikikube-worker')
 logger = logging.getLogger(__name__)
 
 
