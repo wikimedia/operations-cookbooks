@@ -5,15 +5,11 @@ import logging
 from collections import defaultdict
 from pprint import pformat
 from time import sleep
-from typing import Union, cast
-from ipaddress import IPv4Address
 from abc import ABCMeta
 
 from spicerack.apiclient import APIClientResponseError
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
-from spicerack.dhcp import DHCPConfMac, DHCPConfMgmt
 from spicerack.ipmi import IpmiError
-from spicerack.netbox import MANAGEMENT_IFACE_NAME
 from spicerack.redfish import (
     ChassisResetPolicy,
     DellSCPPowerStatePolicy,
@@ -187,6 +183,7 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):  # pylint: disable
         self.verbose = spicerack.verbose
         self.device_model_slug = self.netbox_data['device_type']['slug']
         self.mgmt_password = spicerack.management_password()
+        self.spicerack = spicerack
         self.uefi = not self.args.legacy
         if self.netbox_server.status in ('active', 'staged'):
             self.chassis_reset_policy = ChassisResetPolicy.GRACEFUL_RESTART
@@ -252,6 +249,12 @@ class ProvisionRunner(CookbookRunnerBase, metaclass=ABCMeta):  # pylint: disable
             # We need to change its password to the wmfroot's one.
             self._configure_user('root')
 
+    def _run_dhcp_cookbook(self, action: str):
+        """Push or remove the host's mgmt DHCP config via the DHCP cookbook."""
+        logger.info("Run the DHCP cookbook with action %s", action)
+        self.spicerack.run_cookbook(
+            'sre.hosts.dhcp', ['--mgmt', f"--{action}", self.args.host], raises=True)
+
 
 class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance-attributes
     """As required by Spicerack API."""
@@ -262,7 +265,6 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         """Initiliaze the provision runner."""
         super().__init__(args, spicerack)
         ensure_shell_is_durable()
-        self.spicerack = spicerack
         self.bmc_firmware_filename = None
         self.bios_firmware_filename = None
         # In recent (X13+) firmware versions the BIOS endpoint is different,
@@ -285,16 +287,6 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         # The real initialization happens in run().
         self.redfish: RedfishSupermicro = spicerack.redfish(self.args.host, 'fake')
 
-        # DHCP automation
-        self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
-        logger.info("Using the BMC's MAC address for the DHCP config.")
-        self.dhcp_config: Union[DHCPConfMac, DHCPConfMgmt] = DHCPConfMac(
-            hostname=self.fqdn,
-            ipv4=cast(IPv4Address, self.redfish.interface.ip),
-            mac=self.netbox.api.dcim.interfaces.get(device=self.args.host, name=MANAGEMENT_IFACE_NAME).mac_address,
-            ttys=0,
-            distro="",
-        )
         self._dhcp_active = False
 
         self.mgmt_network_changes = {
@@ -359,7 +351,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         super().run()
 
         if not self.args.no_dhcp:
-            self.dhcp.push_configuration(self.dhcp_config)
+            self._run_dhcp_cookbook(action="push")
             self._dhcp_active = True
 
         if not self.args.no_users:
@@ -416,7 +408,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
                 reboot_chassis(self.vendor, self.redfish)
 
         if not self.args.no_dhcp:
-            self.dhcp.remove_configuration(self.dhcp_config)
+            self._run_dhcp_cookbook(action="remove")
             self._dhcp_active = False
 
         self.redfish.check_connection()
@@ -437,7 +429,7 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
         """Rollback the DHCP setup if present."""
         if self._dhcp_active:
             logger.info('Rolling back DHCP setup')
-            self.dhcp.remove_configuration(self.dhcp_config)
+            self._run_dhcp_cookbook(action="remove")
 
     def _detect_hw_raid(self):
         """Get if a hardware raid configuration is set for a Supermicro host."""
@@ -920,20 +912,9 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         self.redfish: RedfishDell = spicerack.redfish(
             self.args.host, username='root', password=password)
 
-        # DHCP automation
-        self.dhcp = spicerack.dhcp(self.netbox_data["site"]["slug"])
-        self.dhcp_config = DHCPConfMgmt(
-            datacenter=self.netbox_data['site']['slug'],
-            serial=self.netbox_data['serial'],
-            manufacturer=self.netbox_data['device_type']['manufacturer']['slug'],
-            fqdn=self.fqdn,
-            ipv4=cast(IPv4Address, self.redfish.interface.ip),
-        )
         self._dhcp_active = False
 
         self.all_nics: list = []
-
-        self.spicerack = spicerack
 
         if self.netbox_server.status in ('active', 'staged'):
             self.reboot_policy = DellSCPRebootPolicy.GRACEFUL
@@ -1027,7 +1008,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         super().run()
 
         if not self.args.no_dhcp:
-            self.dhcp.push_configuration(self.dhcp_config)
+            self._run_dhcp_cookbook(action="push")
             self._dhcp_active = True
 
         def check_connection():
@@ -1068,7 +1049,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
             confirm_on_failure(self._config_host)
 
         if not self.args.no_dhcp:
-            self.dhcp.remove_configuration(self.dhcp_config)
+            self._run_dhcp_cookbook(action="remove")
             self._dhcp_active = False
 
         self.redfish.check_connection()
@@ -1085,7 +1066,7 @@ class DellProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-instance
         """Rollback the DHCP setup if present."""
         if self._dhcp_active:
             logger.info('Rolling back DHCP setup')
-            self.dhcp.remove_configuration(self.dhcp_config)
+            self._run_dhcp_cookbook(action="remove")
 
     def _detect_hw_raid(self):
         """Get if a hardware raid configuration is set for a Dell host."""
