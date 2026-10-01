@@ -4,6 +4,7 @@ import logging
 
 from collections import defaultdict
 from pprint import pformat
+from time import sleep
 from typing import Union, cast
 from ipaddress import IPv4Address
 from abc import ABCMeta
@@ -420,6 +421,8 @@ class SupermicroProvisionRunner(ProvisionRunner):  # pylint: disable=too-many-in
 
         self.redfish.check_connection()
         self._configure_users()
+        logger.info("Sleeping 10s to avoid race conditions between user propagation and ipmi")
+        sleep(10)
         try:
             self.ipmi = self.spicerack.ipmi(target=self.fqdn, username="wmfroot")
             self.ipmi.check_connection()
