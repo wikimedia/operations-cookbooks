@@ -3,8 +3,12 @@ import logging
 
 from datetime import timedelta
 
+from ClusterShell.NodeSet import NodeSet
+from dateutil.parser import parse as parse_datetime
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
+
+from cookbooks.sre.elasticsearch import valid_datetime_type
 
 from . import HADOOP_CLUSTER_NAMES
 
@@ -29,6 +33,7 @@ class RollRestartWorkers(CookbookBase):
       cookbook sre.hadoop.roll-restart-workers --yarn-nm-batch-size 2 --hdfs-dn-batch-size 1 test
       cookbook sre.hadoop.roll-restart-workers --yarn-nm-sleep-seconds 60 --hdfs-dn-sleep-seconds 180 backup
       cookbook sre.hadoop.roll-restart-workers --skip-hosts 'P{an-worker100[1-3]*}' analytics
+      cookbook sre.hadoop.roll-restart-workers --start-datetime 2026-10-01T00:00:00 analytics
 
 
     """
@@ -50,6 +55,9 @@ class RollRestartWorkers(CookbookBase):
                             help="Size of each batch of HDFS Datanode restarts.")
         parser.add_argument('--skip-hosts',
                             help='Cumin query matching hosts to exclude from the rolling restart.')
+        parser.add_argument('--start-datetime', type=valid_datetime_type,
+                            help='Skip each daemon started at or after this ISO 8601 datetime '
+                                 '(e.g. 2026-10-01T00:00:00; defaults to UTC).')
 
         return parser
 
@@ -75,6 +83,7 @@ class RollRestartWorkersRunner(CookbookRunnerBase):
         ensure_shell_is_durable()
 
         self.cluster = args.cluster
+        self.start_datetime = args.start_datetime
         remote = spicerack.remote()
         if args.skip_hosts:
             self.cluster_cumin_alias += f' and not ({args.skip_hosts})'
@@ -120,21 +129,42 @@ class RollRestartWorkersRunner(CookbookRunnerBase):
         with self.alerting_hosts.downtimed(self.admin_reason, duration=timedelta(minutes=120)):
             logger.info("Restarting Yarn Nodemanagers with batch size %s and sleep %s..",
                         self.yarn_nm_batch_size, self.yarn_nm_sleep)
-            self.hadoop_workers.run_sync(
-                'systemctl restart hadoop-yarn-nodemanager',
+            self._restart_service(
+                self.hadoop_workers, 'hadoop-yarn-nodemanager',
                 batch_size=self.yarn_nm_batch_size, batch_sleep=self.yarn_nm_sleep)
 
             logger.info("Restarting HDFS Datanodes with batch size %s and sleep %s..",
                         self.hdfs_dn_batch_size, self.hdfs_dn_sleep)
-            self.hadoop_workers.run_sync(
-                'systemctl restart hadoop-hdfs-datanode',
+            self._restart_service(
+                self.hadoop_workers, 'hadoop-hdfs-datanode',
                 batch_size=self.hdfs_dn_batch_size, batch_sleep=self.hdfs_dn_sleep)
 
             if self.hadoop_hdfs_journal_workers:
                 logger.info("Restarting HDFS Journalnodes with batch size %s and sleep %s..",
                             self.hdfs_jn_batch_size, self.hdfs_jn_sleep)
-                self.hadoop_hdfs_journal_workers.run_sync(
-                    'systemctl restart hadoop-hdfs-journalnode',
+                self._restart_service(
+                    self.hadoop_hdfs_journal_workers, 'hadoop-hdfs-journalnode',
                     batch_size=self.hdfs_jn_batch_size, batch_sleep=self.hdfs_jn_sleep)
 
         logger.info("All jvm restarts completed!")
+
+    def _restart_service(self, workers, service, *, batch_size, batch_sleep):
+        """Restart only daemons whose current process predates the requested cutoff."""
+        if self.start_datetime is not None:
+            hosts = NodeSet()
+            results = workers.run_sync(
+                f'TZ=UTC systemctl show {service} --property=ExecMainStartTimestamp --value',
+                is_safe=True)
+            for nodes, output in results:
+                timestamp = '\n'.join(line.decode() for line in output.lines()).strip()
+                # A daemon that has never started has no timestamp and still needs a restart.
+                if not timestamp or parse_datetime(timestamp) < self.start_datetime:
+                    hosts.update(nodes)
+                else:
+                    logger.info('Skipping %s on %s: started at %s', service, nodes, timestamp)
+            if not hosts:
+                logger.info('No %s daemons need restarting.', service)
+                return
+            workers = workers.get_subset(hosts)
+
+        workers.run_sync(f'systemctl restart {service}', batch_size=batch_size, batch_sleep=batch_sleep)
