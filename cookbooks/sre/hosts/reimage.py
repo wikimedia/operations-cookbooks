@@ -226,12 +226,7 @@ class ReimageRunner(CookbookRunnerBase):  # pylint: disable=too-many-instance-at
             self.mac = ganeti_macs[0]
             self.dhcp_config = self._get_dhcp_config_virtual(mac=self.mac)
         else:
-            # Temporary before we have the wmfroot user deployed on all hosts
-            # More info: https://phabricator.wikimedia.org/T426180
-            if self.netbox_data['device_type']['manufacturer']['slug'] == SUPERMICRO_VENDOR_SLUG:
-                username = "ADMIN"
-            else:
-                username = "root"
+            username = 'wmfroot'
             self.mgmt_fqdn = self.netbox_server.mgmt_fqdn
             self.redfish = spicerack.redfish(self.host, username=username)
             self.is_uefi = self.redfish.is_uefi
