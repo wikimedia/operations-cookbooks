@@ -174,21 +174,20 @@ def log_dbctl_result(res: ActionResult) -> None:
         log.info(res.announce_message)
 
 
-def dbctl_set_section_ro_or_rw(dbctl: Dbctl, section: str, readonly_flag: bool) -> None:
+def dbctl_set_section_ro_or_rw(dbctl: Dbctl, section: str, readonly_flag: bool, dc: str) -> None:
     """Set a section as read-only or read-write in dbctl across both DCs without committing"""
-    for dc in ["codfw", "eqiad"]:
-        for _attempt in range(20):
-            res = dbctl.section.set_readonly(section, dc, readonly_flag)
-            log_dbctl_result(res)
-            if res.success:
-                log.debug(f"Setting dbctl {section} in {dc}")
-                break
-            log.debug(f"Failed to set {section} in {dc}, waiting 5s")
-            sleep(5)
+    for _attempt in range(20):
+        res = dbctl.section.set_readonly(section, dc, readonly_flag)
+        log_dbctl_result(res)
+        if res.success:
+            log.debug(f"Setting dbctl {section} in {dc}")
+            break
+        log.debug(f"Failed to set {section} in {dc}, waiting 5s")
+        sleep(5)
 
-        else:
-            log.error("Failed to update, exiting immediately. Remember to clean up dbctl if needed.")
-            raise RuntimeError("Failed to update dbctl")
+    else:
+        log.error("Failed to update, exiting immediately. Remember to clean up dbctl if needed.")
+        raise RuntimeError("Failed to update dbctl")
 
 
 def _run_cmd(host: RemoteHosts, cmd: str, is_safe: bool = False) -> str:
@@ -437,9 +436,13 @@ class PoolRunner(CookbookRunnerBase):
 
         msg = f"Setting section {imeta.section} as read-write"
         log.warning(msg)
-        self.wait_diff_clean()
-        dbctl_set_section_ro_or_rw(self.dbctl, imeta.section, False)
-        self.commit_change(msg)
+
+        for dc in ("codfw", "eqiad"):
+            dbctl_set_section_ro_or_rw(self.dbctl, imeta.section, False, dc)
+            # self.commit_change(msg) would not be enough: we need to commit in both dc, see T438831
+            ret = self.dbctl.config.commit(batch=True, datacenter=dc, comment=self.reason.reason)
+            self.check_action_result(ret, f"commit change to {msg}")
+
         self._update_phabricator("Completed", msg)
 
         # Also pool in the host just in case

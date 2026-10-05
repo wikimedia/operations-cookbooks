@@ -615,6 +615,7 @@ DEBUG Waiting for icinga to go green
 WARNING Setting section es7 as read-write
 INFO <<mock dbctl section set_readonly announce msg>>
 DEBUG Setting dbctl es7 in codfw
+INFO <<mock dbctl config commit announce msg>>
 INFO <<mock dbctl section set_readonly announce msg>>
 DEBUG Setting dbctl es7 in eqiad
 INFO <<mock dbctl config commit announce msg>>

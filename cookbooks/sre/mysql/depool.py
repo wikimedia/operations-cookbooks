@@ -281,9 +281,12 @@ class DepoolRunner(CookbookRunnerBase):
                 log.warning(f"Setting a downtime on {self.args.instance}")
                 self._alerting_hosts.downtime(self.reason, duration=timedelta(hours=self.downtime))
 
-            self.wait_diff_clean()
-            dbctl_set_section_ro_or_rw(self.dbctl, section, True)
-            self.commit_change(msg)
+            for dc in ("codfw", "eqiad"):
+                dbctl_set_section_ro_or_rw(self.dbctl, imeta.section, True, dc)
+                # self.commit_change(msg) would not be enough: we need to commit in both dc, see T438831
+                ret = self.dbctl.config.commit(batch=True, datacenter=dc, comment=self.reason.reason)
+                self.check_action_result(ret, f"commit change to {msg}")
+
             return f"setting read-write section {section} as read-only"
 
         # Depooling a "fake-master" in a read-only section: we can safely pick a healthy replica in the same DC

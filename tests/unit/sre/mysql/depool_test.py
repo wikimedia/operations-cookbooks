@@ -43,18 +43,10 @@ def mock_sr():
         dbctl = mock_sr.dbctl()
         dbctl.instance.pool().announce_message = "<<mock dbctl pool announce msg>>"
         dbctl.instance.depool().announce_message = "<<mock dbctl pool announce msg>>"
-        dbctl.config.commit().announce_message = (
-            "<<mock dbctl config commit announce msg>>"
-        )
-        dbctl.section.set_readonly().announce_message = (
-            "<<mock dbctl section set_readonly announce msg>>"
-        )
-        dbctl.section.set_master().announce_message = (
-            "<<mock dbctl set_master announce msg>>"
-        )
-        dbctl.config.generate().announce_message = (
-            "<<mock dbctl generate announce msg>>"
-        )
+        dbctl.config.commit().announce_message = "<<mock dbctl config commit announce msg>>"
+        dbctl.section.set_readonly().announce_message = "<<mock dbctl section set_readonly announce msg>>"
+        dbctl.section.set_master().announce_message = "<<mock dbctl set_master announce msg>>"
+        dbctl.config.generate().announce_message = "<<mock dbctl generate announce msg>>"
 
         def mock_set_master(section, dc, master_host):
             ret = MagicMock()
@@ -81,11 +73,7 @@ def m_jget():
 
 
 def parse_args(mock_sr, args: list):
-    return (
-        cookbooks.sre.mysql.depool.Depool(spicerack=mock_sr)
-        .argument_parser()
-        .parse_args(args)
-    )
+    return cookbooks.sre.mysql.depool.Depool(spicerack=mock_sr).argument_parser().parse_args(args)
 
 
 # # Tests
@@ -100,9 +88,7 @@ def test_runner_s_depool(m_last, mock_sr, m_jget, caplog) -> None:
     assert len(mrhs) == 1
     mock_sr.mysql().get_dbs.return_value = mrhs
 
-    diff_ret = Mock(
-        messages=[], success=True, exit_code=0, announce_message="", name="foo1"
-    )
+    diff_ret = Mock(messages=[], success=True, exit_code=0, announce_message="", name="foo1")
     mock_sr.dbctl().config.diff.return_value = (diff_ret, None)
 
     generate_ret = Mock(messages=[], success=True, exit_code=0, name="foo2")
@@ -176,9 +162,7 @@ INFO mock phabricator task_comment 'T0' 'Completed depooling of db1229 by <<mock
 """
     assert caplog.text == exp
 
-    with patch(
-        "cookbooks.sre.mysql.depool._fetch_instance_connections_count_wikiusers"
-    ) as m_fetch:
+    with patch("cookbooks.sre.mysql.depool._fetch_instance_connections_count_wikiusers") as m_fetch:
         m_fetch.side_effect = OperationalError
         with raises(InputError):
             runner.run()
@@ -666,6 +650,7 @@ DEBUG is_rw_section: True
 WARNING es1035 is a primary or DC master of es7 (RW): setting whole section as read-only!
 INFO <<mock dbctl section set_readonly announce msg>>
 DEBUG Setting dbctl es7 in codfw
+INFO <<mock dbctl config commit announce msg>>
 INFO <<mock dbctl section set_readonly announce msg>>
 DEBUG Setting dbctl es7 in eqiad
 INFO <<mock dbctl config commit announce msg>>
@@ -748,6 +733,7 @@ DEBUG is_rw_section: True
 WARNING es2039 is a primary or DC master of es7 (RW): setting whole section as read-only!
 INFO <<mock dbctl section set_readonly announce msg>>
 DEBUG Setting dbctl es7 in codfw
+INFO <<mock dbctl config commit announce msg>>
 INFO <<mock dbctl section set_readonly announce msg>>
 DEBUG Setting dbctl es7 in eqiad
 INFO <<mock dbctl config commit announce msg>>
