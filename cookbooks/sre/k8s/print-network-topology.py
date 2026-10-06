@@ -7,12 +7,9 @@ from collections import defaultdict
 from cumin import NodeSet
 from prettytable import PrettyTable
 from spicerack import Spicerack
-from spicerack.cookbook import CookbookBase, CookbookRunnerBase, CookbookInitSuccess
+from spicerack.cookbook import CookbookBase, CookbookInitSuccess, CookbookRunnerBase
 
-from cookbooks.sre.k8s import (
-    host_expected_bgp_session_count,
-    host_has_l2_adjacency_to_lvs,
-)
+from cookbooks.sre.k8s import host_expected_bgp_session_count
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +53,7 @@ class PrintNetworkTopologyRunner(CookbookRunnerBase):
         self.hosts = spicerack.remote().query(self.hosts_cumin_query).hosts
 
         table = PrettyTable(
-            ["Hosts", "VLAN", "Expected BGP session count", "L2 adjacency to LVS"]
+            ["Hosts", "VLAN", "Expected BGP session count"]
         )
         results = defaultdict(list)
         for host in self.hosts:
@@ -65,8 +62,7 @@ class PrintNetworkTopologyRunner(CookbookRunnerBase):
             )
             vlan = netbox_server.access_vlan
             bgp_session_count = host_expected_bgp_session_count(netbox_server)
-            l2_adjacency = host_has_l2_adjacency_to_lvs(netbox_server)
-            properties = (vlan, bgp_session_count, l2_adjacency)
+            properties = (vlan, bgp_session_count)
             if self.args.expand:
                 table.add_row([host, *properties])
             else:

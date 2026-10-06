@@ -25,7 +25,6 @@ from cookbooks.sre.hosts.downtime import enrich_argument_parser_with_downtime_du
 from cookbooks.sre.k8s import (
     ALLOWED_CUMIN_ALIASES,
     host_expected_bgp_session_count,
-    host_has_l2_adjacency_to_lvs
 )
 
 logger = logging.getLogger(__name__)
@@ -74,13 +73,13 @@ class PoolDepoolK8sNodes(CookbookBase):
     """Change pooled status of nodes in a Kubernetes cluster
 
     Workflow:
-    - Set the nodes pool status to inactive (if requited, won't happen for rows without LVS L2 adjacency)
+    - Set the nodes pool status to inactive (if requited)
     - Cordon all nodes (to prevent evicted pods from being scheduled on other to be depooled nodes)
     - For each node (one by one):
       - Drain node
     Or:
     - Uncordon the nodes
-    - Set their pooled status to yes (if required, won't happen for rows without LVS L2 adjacency)
+    - Set their pooled status to yes (if required)
 
     Usage example:
         cookbook sre.k8s.pool-depool-node --k8s-cluster wikikube-codfw pool wikikube-worker200[1-5].codfw.wmnet
@@ -202,20 +201,11 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
         for host in self.remote_hosts.hosts:
             self.netbox_info[host] = self._get_netbox_info(host)
 
-        # If all hosts are in racks without L2 adjacency, we won't find any confctl services
         self.confctl = self.spicerack.confctl("node")
         self.confctl_services: Iterator[Any] = iter([])
-        if any(info["has_l2_lvs_adjacency"] for info in self.netbox_info.values()):
-            # Hosts without LVS L2 adjacency won't appear in confctl, so keeping them in the query is safe
-            self.confctl_services = self.confctl.filter_objects(
-                {}, name="|".join(self.remote_hosts.hosts.striter())
-            )
-            if not self.confctl_services:
-                raise RuntimeError(
-                    f"No confctl objects found for hosts {self.remote_hosts.hosts}"
-                )
-        else:
-            logger.info("All selected hosts are in racks without LVS L2 adjacency, skipping confctl service lookup")
+        self.confctl_services = self.confctl.filter_objects(
+            {}, name="|".join(self.remote_hosts.hosts.striter())
+        )
 
         self.k8s_cli = Kubernetes(
             group=ALLOWED_CUMIN_ALIASES[self.k8s_cluster]["k8s-group"],
@@ -278,7 +268,6 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
             host.split(".")[0], read_write=False
         )
         netbox_info = {
-            "has_l2_lvs_adjacency": host_has_l2_adjacency_to_lvs(netbox_server),
             "bgp_session_count": host_expected_bgp_session_count(netbox_server),
         }
         logger.info("Netbox info for %s: %s", host, netbox_info)
@@ -384,9 +373,7 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
                 duration=self.downtime_duration,
             )
         logger.info("Depooling %s from %s", self.remote_hosts.hosts, self.k8s_cluster)
-        # If all nodes are in racks without LVS L2 adjacency, we won't have confctl services
-        if self.confctl_services:
-            self.confctl.update_objects({"pooled": "inactive"}, self.confctl_services)
+        self.confctl.update_objects({"pooled": "inactive"}, self.confctl_services)
         self._k8s_node_action(self.remote_hosts.hosts, "cordon")
         logger.info("Draining %s", self.remote_hosts.hosts)
         self._k8s_node_action(self.remote_hosts.hosts, "drain")
@@ -403,11 +390,9 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
         logger.info("Checking calicoctl node status")
         self.wait_for_calico_node_status_ok(self.remote_hosts)
         logger.info("Pooling %s in %s", self.remote_hosts.hosts, self.k8s_cluster)
-        # If all nodes are in racks without LVS L2 adjacency, we won't have confctl services
-        if self.confctl_services:
-            self.confctl.update_objects(
-                {"pooled": "yes", "weight": 10}, self.confctl_services
-            )
+        self.confctl.update_objects(
+            {"pooled": "yes", "weight": 10}, self.confctl_services
+        )
         self._k8s_node_action(self.remote_hosts.hosts, "uncordon")
         self.actions[str(self.remote_hosts.hosts)].success(
             f"Host {self.remote_hosts.hosts} pooled in {self.k8s_cluster}"
