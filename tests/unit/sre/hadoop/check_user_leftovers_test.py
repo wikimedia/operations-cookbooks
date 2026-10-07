@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 
 
-check_user_leftovers = importlib.import_module("cookbooks.sre.idm.check-user-leftovers")
+check_user_leftovers = importlib.import_module("cookbooks.sre.hadoop.check-user-leftovers")
 
 
 def _make_runner():

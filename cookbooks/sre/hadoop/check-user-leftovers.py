@@ -123,8 +123,8 @@ class CheckUserLeftovers(CookbookBase):
     report's "found"/"unreachable_hosts" fields for that.
 
     Usage example:
-        cookbook sre.idm.check-user-leftovers jdoe
-        cookbook sre.idm.check-user-leftovers --output /tmp/jdoe-leftovers.json jdoe
+        cookbook sre.hadoop.check-user-leftovers jdoe
+        cookbook sre.hadoop.check-user-leftovers --output /tmp/jdoe-leftovers.json jdoe
     """
 
     def argument_parser(self):
