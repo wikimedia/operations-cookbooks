@@ -1,6 +1,5 @@
 """Wipe a kubernetes cluster."""
 
-import json
 import logging
 from argparse import ArgumentParser, Namespace
 from datetime import timedelta
@@ -11,7 +10,6 @@ from spicerack import Spicerack
 from spicerack.alerting import AlertingHosts
 from spicerack.alertmanager import Alertmanager
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
-from spicerack.remote import RemoteHosts
 from wmflib.constants import CORE_DATACENTERS
 from wmflib.interactive import (
     ask_confirmation,
@@ -24,6 +22,7 @@ from cookbooks.sre.hosts.downtime import enrich_argument_parser_with_downtime_du
 from cookbooks.sre.k8s import (
     ALLOWED_CUMIN_ALIASES,
     PROMETHEUS_MATCHERS,
+    ensure_k8s_services_active,
     etcd_cluster_healthy,
     etcdctl,
     kubectl_version,
@@ -158,35 +157,6 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
                 puppet.run, batch_size=50, enable_reason=self.admin_reason
             )
 
-    def _ensure_k8s_services_active(self, hosts: RemoteHosts) -> bool:
-        """Ensure that all k8s services are active."""
-        command = "/usr/bin/systemctl list-units 'kube*.service' --output=json"
-        for subhosts, output in hosts.run_sync(
-            command,
-            is_safe=True,
-            print_progress_bars=False,
-            print_output=False,
-        ):
-            try:
-                units = json.loads(output.message())
-            except json.JSONDecodeError as exc:
-                ask_confirmation(
-                    f"Failed to parse systemctl output for {subhosts}: {exc}"
-                    "Please verify the services state manually using the following command or type 'go' to retry."
-                    f"\n{command}"
-                )
-                return False
-            for unit in units:
-                if unit["active"] != "active":
-                    ask_confirmation(
-                        f"Unit {unit['unit']} on {subhosts} is not active. "
-                        "Please check the logs and fix the issue. Type 'go' to recheck."
-                    )
-                    # Return right away without checking the rest of the units
-                    # to get fresh data about them on the next iteration.
-                    return False
-        return True
-
     def _downtime_services(
         self, alert_host: Alertmanager, downtime_duration: timedelta
     ) -> None:
@@ -307,12 +277,12 @@ class WipeK8sClusterRunner(CookbookRunnerBase):
         logger.info("Verifying that all kubernetes services are active...")
         control_plane_ok = False
         while not control_plane_ok:
-            control_plane_ok = self._ensure_k8s_services_active(
+            control_plane_ok = ensure_k8s_services_active(
                 self.control_plane_nodes
             )
         worker_ok = False
         while not worker_ok:
-            worker_ok = self._ensure_k8s_services_active(self.worker_nodes)
+            worker_ok = ensure_k8s_services_active(self.worker_nodes)
 
         # Additional sanity check: ensure that the cluster has been initialized
         # with the expected kubernetes version before proceeding.

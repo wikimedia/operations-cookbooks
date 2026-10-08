@@ -15,6 +15,7 @@ from spicerack.cookbook import LockArgs
 from spicerack.k8s import KubernetesApiError, KubernetesNode
 from spicerack.netbox import NetboxServer
 from spicerack.remote import RemoteExecutionError, RemoteHosts
+from wmflib.interactive import ask_confirmation
 
 from cookbooks.sre import (PHABRICATOR_BOT_CONFIG_FILE, SREBatchBase,
                            SREBatchRunnerBase)
@@ -349,6 +350,36 @@ def kubectl_version(ctrl_node: RemoteHosts) -> dict[str, dict[str, str]]:
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"Failed to parse kubectl version output: '{message}' with {exc}") from exc
     return version_info
+
+
+def ensure_k8s_services_active(hosts: RemoteHosts) -> bool:
+    """Ensure that all k8s services are active."""
+    command = "/usr/bin/systemctl list-units 'kube*.service' --output=json"
+    for subhosts, output in hosts.run_sync(
+        command,
+        is_safe=True,
+        print_progress_bars=False,
+        print_output=False,
+    ):
+        try:
+            units = json.loads(output.message())
+        except json.JSONDecodeError as exc:
+            ask_confirmation(
+                f"Failed to parse systemctl output for {subhosts}: {exc}. "
+                "Please verify the services state manually using the following command or type 'go' to retry."
+                f"\n{command}"
+            )
+            return False
+        for unit in units:
+            if unit["active"] != "active":
+                ask_confirmation(
+                    f"Unit {unit['unit']} on {subhosts} is not active. "
+                    "Please check the logs and fix the issue. Type 'go' to recheck."
+                )
+                # Return right away without checking the rest of the units
+                # to get fresh data about them on the next iteration.
+                return False
+    return True
 
 
 # This regex matches VLANs which require BGP peering with the core routers
