@@ -763,16 +763,16 @@ class FirmwareUpgradeRunner(CookbookRunnerBase):
 
     @staticmethod
     def _filter_storage(members: list[str]) -> Optional[str]:
-        """Filter the list of storage members to a single raid controller
+        """Filter the list of storage members to storage controllers
 
         Arguments:
             members: list storage controller odata uri's
 
         """
-        # for now we just filter for raid controllers
         results = []
         for member in members:
-            if member.split('/')[-1].startswith('RAID'):
+            basename = member.split('/')[-1]
+            if basename.startswith(('RAID', 'NonRAID')):
                 results.append(member)
 
         if not results:
