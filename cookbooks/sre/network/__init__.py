@@ -311,7 +311,7 @@ def get_junos_optics(remote_host: RemoteHosts, interface: str, print_output: boo
         print_output: Display a more verbose output
 
     Returns:
-        Dict of relevant input/ouput optic levels/power or None
+        Dict of relevant input/output optic levels/power or None
 
     """
     logger.debug("Fetching the interface optical status")
