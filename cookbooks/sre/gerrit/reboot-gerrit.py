@@ -65,7 +65,7 @@ class RebootRunner(CookbookRunnerBase):
                 f"{self.args.host} is not the primary Gerrit host "
                 f"(primary: {self.cluster_primary}). "
                 "Please use the following command instead: "
-                f"sudo cookbook sre.hosts.reboot-single {self.target_host.fqdn.split('.')[0]}"
+                f"sudo cookbook sre.hosts.reboot-single {self.target_host.fqdn}"
             )
 
     @property
@@ -75,7 +75,7 @@ class RebootRunner(CookbookRunnerBase):
 
     def _reboot_host(self):
         logger.info("Rebooting Gerrit host %s via sre.hosts.reboot-single", self.args.host)
-        reboot_args = [self.args.host, "--reason", self.message]
+        reboot_args = [self.target_host.fqdn, "--reason", self.message]
         if self.args.task_id is not None:
             reboot_args.extend(["--task-id", self.args.task_id])
 
