@@ -1,5 +1,5 @@
 """PKI roll operations cookbook."""
-from cookbooks.sre import SREBatchBase, SREDiscoveryNoLVSBatchRunnerBase
+from cookbooks.sre import SREBatchBase, SRELBBatchRunnerBase
 
 
 class PKIRestartReboot(SREBatchBase):
@@ -22,7 +22,7 @@ class PKIRestartReboot(SREBatchBase):
         return PKIRestartRebootRunner(args, self.spicerack)
 
 
-class PKIRestartRebootRunner(SREDiscoveryNoLVSBatchRunnerBase):
+class PKIRestartRebootRunner(SRELBBatchRunnerBase):
     """Roll reboot/restart an PKI cluster"""
 
     service_name = 'pki'
