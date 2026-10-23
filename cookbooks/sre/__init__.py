@@ -485,6 +485,7 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         By default this function just sleeps for `depool_sleep` seconds
 
         """
+        self.logger.info("Wait %s seconds after depool.", self.depool_sleep)
         self._sleep(self.depool_sleep)
 
     def wait_for_repool(self):
@@ -493,6 +494,7 @@ class SRELBBatchRunnerBase(SREBatchRunnerBase, metaclass=ABCMeta):
         By default this function just sleeps for `repool_sleep` seconds
 
         """
+        self.logger.info("Wait %s seconds after repool.", self.repool_sleep)
         self._sleep(self.repool_sleep)
 
     def action(self, hosts: RemoteHosts) -> None:
