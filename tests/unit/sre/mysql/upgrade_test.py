@@ -7,7 +7,7 @@ tox -e py313-lint_unit -- tests/unit/sre/mysql/upgrade_test.py -vv
 
 import logging
 from argparse import Namespace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from cookbooks.sre.mysql.upgrade import (
     MInst,
@@ -23,7 +23,7 @@ log = logging.getLogger()
 
 
 def utc_datetime(y, m, d) -> datetime:
-    return datetime(y, m, d, 0, 0, 0, tzinfo=timezone.utc)
+    return datetime(y, m, d, 0, 0, 0, tzinfo=UTC)
 
 
 # Fixtures

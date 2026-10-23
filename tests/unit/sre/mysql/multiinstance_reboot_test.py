@@ -7,7 +7,7 @@ tox -e py313-lint_unit -- tests/unit/sre/mysql/multiinstance_reboot_test.py -vv
 
 import logging
 from argparse import Namespace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 from unittest import mock
 from unittest.mock import MagicMock
@@ -54,7 +54,7 @@ def m_cursor():
 @fixture(autouse=True)
 def m_datetime():
     with mock.patch("cookbooks.sre.mysql.multiinstance_reboot.datetime") as m:
-        m.now.return_value = datetime(2026, 5, 22, 0, 0, 0, tzinfo=timezone.utc)
+        m.now.return_value = datetime(2026, 5, 22, 0, 0, 0, tzinfo=UTC)
         yield m
 
 
