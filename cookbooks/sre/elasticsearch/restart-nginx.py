@@ -28,8 +28,8 @@ class ElasticRestartNginxRunner(SREBatchRunnerBase):
     @property
     def allowed_aliases(self):
         """Required by SREBatchRunnerBase"""
-        return ['cloudelastic', 'elastic', 'elastic-canary', 'elastic-codfw',
-                'elastic-eqiad', 'relforge']
+        return ['cloudelastic', 'cirrussearch', 'cirrussearch-canary', 'cirrussearch-codfw',
+                'cirrussearch-eqiad', 'relforge']
 
     @property
     def restart_daemons(self):
