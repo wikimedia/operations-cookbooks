@@ -2,9 +2,11 @@
 import ipaddress
 import json
 import logging
+from datetime import timedelta
 from typing import cast
 
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase, LockArgs
+from spicerack.decorators import retry
 from spicerack.dhcp import DHCPConfOpt82, DHCPConfMac, DHCPConfMgmt, DHCPConfiguration, DHCPError, DHCPConfUUID
 from spicerack.ganeti import Ganeti, GanetiRAPI, GntInstance
 from spicerack.netbox import MANAGEMENT_IFACE_NAME
@@ -85,6 +87,8 @@ class DhcpRunner(CookbookRunnerBase):
         """Initiliaze the DHCP runner."""
         ensure_shell_is_durable()
         self.args = args
+        # Picked up by spicerack's @retry to reduce the tries to one in DRY-RUN mode.
+        self._dry_run = spicerack.dry_run
 
         self.netbox = spicerack.netbox()
         self.netbox_server = spicerack.netbox_server(self.args.host)
@@ -116,7 +120,7 @@ class DhcpRunner(CookbookRunnerBase):
             if args.mgmt:
                 self.dhcp_config = self._get_mgmt_dhcp_config()
             else:
-                self.is_uefi = self.redfish.is_uefi
+                self.is_uefi = self._get_is_uefi()
                 self.dhcp_config = self._get_dhcp_config_baremetal(
                     force_tftp=self.use_tftp, identifier=self._get_host_identifier()
                 )
@@ -136,6 +140,22 @@ class DhcpRunner(CookbookRunnerBase):
     def lock_args(self):
         """Make the cookbook lock per-host."""
         return LockArgs(suffix=self.host, concurrency=1, ttl=3600)
+
+    @retry(
+        tries=10,
+        delay=timedelta(seconds=30),
+        backoff_mode="constant",
+        exceptions=(RedfishError,),
+    )
+    def _get_is_uefi(self) -> bool:
+        """Return whether the host boots via UEFI, tolerating a temporarily unresponsive BMC.
+
+        This cookbook is run by sre.hosts.reimage right after the host has rebooted into the
+        freshly installed OS, to remove the DHCP config. At that point the BMC can still answer
+        HTTP 503 to a GET of its /Bios endpoint. The retry logic of the Redfish HTTP session is
+        only worth a handful of seconds, so retry here for up to five minutes instead.
+        """
+        return self.redfish.is_uefi
 
     def _get_host_identifier(self) -> str:
         # If Dell, generate the uuid from the serial, once all boxes support
