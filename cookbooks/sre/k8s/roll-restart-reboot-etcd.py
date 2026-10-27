@@ -1,39 +1,36 @@
 """etcd roll operations cookbook."""
 
-from argparse import ArgumentParser
+import logging
+
+from argparse import Namespace
 from datetime import timedelta
-from itertools import product
+from spicerack import Spicerack
 from spicerack.remote import RemoteExecutionError, RemoteHosts
 from spicerack.decorators import retry
+from spicerack.remote import RemoteError
 from cookbooks.sre import SREBatchBase, SREBatchRunnerBase
+from cookbooks.sre.k8s import etcdctl, ALLOWED_CUMIN_ALIASES
 
-K8S_CLUSTERS = ("aux", "wikikube", "wikikube-staging", "ml-serve", "dse-k8s")
-SITES = ("codfw", "eqiad")
-ALLOWED_ALIASES = [f"{cluster}-etcd-{site}" for cluster, site in product(K8S_CLUSTERS, SITES)] + ["ml-staging-etcd"]
+ALLOWED_ALIASES = [k8s_data["etcd"] for k8s_data in ALLOWED_CUMIN_ALIASES.values()]
+
+
+logger = logging.getLogger(__name__)
 
 
 class EtcdRestartReboot(SREBatchBase):
     """Cookbook to perform a rolling reboot/restart of etcd
 
     Usage example:
-        cookbook sre.etcd.roll-restart-reboot \
+        cookbook sre.k8s.roll-restart-reboot-etcd \
            --reason "Rolling reboot to pick up new kernel" reboot
 
-        cookbook sre.etcd.roll-restart-reboot \
+        cookbook sre.k8s.roll-restart-reboot-etcd \
         --reason "Rolling restart to pick new OpenSSL" restart_daemons
 
     """
 
     batch_default = 1
     grace_sleep = 30
-
-    def argument_parser(self) -> ArgumentParser:
-        """Parse arguments"""
-        parser = super().argument_parser()
-        for action in parser._actions:
-            if action.dest == "alias":
-                action.choices = ALLOWED_ALIASES
-        return parser
 
     def get_runner(self, args):
         """As specified by Spicerack API."""
@@ -43,10 +40,27 @@ class EtcdRestartReboot(SREBatchBase):
 class EtcdRestartRebootRunner(SREBatchRunnerBase):
     """Roll reboot/restart an etcd cluster"""
 
+    def __init__(self, args: Namespace, spicerack: Spicerack) -> None:
+        """Fail at init if attempting to rolling reboot stacked master nodes"""
+        try:
+            super().__init__(args, spicerack)
+        except RemoteError as exc:
+            logger.error(
+                "Never rolling reboot stacked control planes with this cookbook. Use sre.k8s.reboot-nodes instead."
+            )
+            raise RemoteError from exc
+
     @property
     def allowed_aliases(self):
         """Required by SREBatchRunnerBase"""
         return ALLOWED_ALIASES
+
+    def _query(self) -> str:
+        """Return the formatted query"""
+        query = super()._query()
+        if self._args.action == "reboot":
+            query += " and not P{P:kubernetes::master}"
+        return query
 
     @property
     def restart_daemons(self):
@@ -65,4 +79,4 @@ class EtcdRestartRebootRunner(SREBatchRunnerBase):
     @property
     def post_scripts(self) -> list:
         """Ensure that etcd is running and healthy"""
-        return ["etcdctl endpoint health --endpoints=https://$(hostname -f):2379"]
+        return [etcdctl("endpoint health")]
