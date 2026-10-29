@@ -194,15 +194,16 @@ class TlsRunner(CookbookRunnerBase):
         """Check a certificate and return if it needs to be renewed"""
         if not cert_x509:
             return True
-        if datetime.datetime.now() > cert_x509.not_valid_after:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        if now > cert_x509.not_valid_after_utc:
             logger.info("%s: 🕔 Certificate expired. refresh needed.",
                         self.device)
             return True
-        if datetime.datetime.now() + RENEW_EXPIRATION_DELTA > cert_x509.not_valid_after:
+        if now + RENEW_EXPIRATION_DELTA > cert_x509.not_valid_after_utc:
             logger.info("%s: 🕔 Certificate expires in less than %s. refresh needed.",
                         self.device, RENEW_EXPIRATION_DELTA)
             return True
-        logger.debug("Certificate expires on %s. no refresh needed.", cert_x509.not_valid_after)
+        logger.debug("Certificate expires on %s. no refresh needed.", cert_x509.not_valid_after_utc)
         return False
 
     def _cfssl_command(self, operation: str, data_in: str):
