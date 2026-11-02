@@ -244,7 +244,7 @@ class PoolDepoolK8sNodesRunner(CookbookRunnerBase):
         return (
             f"To repool the nodes and remove the downtime, run:\n"
             f"`cookbook sre.k8s.pool-depool-node --k8s-cluster '{self.args.k8s_cluster}' "
-            f"{extra_args}pool --downtime-id {downtime_id} '{self.hosts_target}'`\n"
+            f"{extra_args}pool --downtime-id {downtime_id} {self.hosts_target}`\n"
         )
 
     def post_to_phab(
