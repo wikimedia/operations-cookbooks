@@ -90,10 +90,21 @@ class UpgradeAPIServersInplaceRunner(CookbookRunnerBase):
 
     def install_package(self, hosts: RemoteHosts, package_name) -> None:
         """Install specified debian package with self.target_version on hosts."""
+        # Use --allow-change-held-packages to allow upgrading the hold package.
+        # Hold is removed after the install
         hosts.run_sync(
             "DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get install -y "
-            "-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "
+            "-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold --allow-change-held-packages "
             f"{package_name}={self.target_version}-*",
+            is_safe=False,
+            print_progress_bars=False,
+            print_output=False,
+        )
+
+    def hold_package(self, hosts: RemoteHosts) -> None:
+        """Apply hold on kubernetes-node and kubernetes-master package."""
+        hosts.run_sync(
+            "apt-mark hold kubernetes-node kubernetes-master",
             is_safe=False,
             print_progress_bars=False,
             print_output=False,
@@ -157,20 +168,27 @@ class UpgradeAPIServersInplaceRunner(CookbookRunnerBase):
         """
         This will:
         1. Depool all but the first control-plane node.
-        2. Run puppet on all control-plane nodes.
-        3. Disable puppet on all control-plane nodes.
-        4. Stop all apiserver components on all but one control-plane node.
-        5. Install the new kubernetes-master package on the remaining control-plane node.
-        6. Restart the apiserver on the upgraded control-plane node.
-        7. Wait for the apiserver to be ready.
-        8. Install the new kubernetes-master package on the remaining control-plane nodes.
-        9. Restart the apiserver on the remaining control-plane nodes.
-        10. Wait for the apiserver to be ready on all control-plane nodes.
-        11. Re-enable and run puppet on all control-plane nodes.
-        12. Pool the remaining control-plane nodes.
+        2. Apply hold kubernetes-node and kubernetes-master package
+        3. Run puppet on all control-plane nodes.
+        4. Disable puppet on all control-plane nodes.
+        5. Stop all apiserver components on all but one control-plane node.
+        6. Install the new kubernetes-master package on the remaining control-plane node.
+        7. Restart the apiserver on the upgraded control-plane node.
+        8. Wait for the apiserver to be ready.
+        9. Install the new kubernetes-master package on the remaining control-plane nodes.
+        10. Restart the apiserver on the remaining control-plane nodes.
+        11. Wait for the apiserver to be ready on all control-plane nodes.
+        12. Re-enable and run puppet on all control-plane nodes.
+        13. Pool the remaining control-plane nodes.
         """
         # Depool all but the first control-plane since we stop apiserver components on them
         self.pool_depool(self.remaining_control_planes, action="depool")
+
+        # Hold kubernetes-node and kubernetes-master package.
+        # The first puppet run after switching the kubernetes version will install a new kubernetes-clientXY package.
+        # That apt-get install call would also update kubernetes-master and kubernetes-node since both
+        # will be available from the new apt component.
+        self.hold_package(self.all_control_planes)
 
         ask_confirmation(
             "At this point you should puppet-merge the hieradata/common/kubernetes.yaml change updating the k8s version"
