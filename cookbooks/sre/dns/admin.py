@@ -130,7 +130,10 @@ class DNSAdminRunner(CookbookRunnerBase):
     @property
     def runtime_description(self):
         """Return a nicely formatted string that represents the DNS action."""
-        return f"DNS admin: {self.action_string} [reason: {self.reason}, {self.task_id}]"
+        depool_dns_hosts = ""
+        if self.args.action == "depool":
+            depool_dns_hosts = f" (depool_dns_hosts: {self.args.depool_dns_hosts})"
+        return f"DNS admin: {self.action_string}{depool_dns_hosts} [reason: {self.reason}, {self.task_id}]"
 
     def run(self):
         """Perform administrative DNS action on the given DC/service."""
