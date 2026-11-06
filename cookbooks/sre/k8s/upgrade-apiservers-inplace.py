@@ -12,6 +12,7 @@ from wmflib.interactive import AbortError, ask_confirmation, ensure_shell_is_dur
 from cookbooks.sre import Results
 from cookbooks.sre.k8s import (
     ALLOWED_CUMIN_ALIASES,
+    ensure_k8s_services_active,
     kubectl_version,
 )
 
@@ -200,18 +201,24 @@ class UpgradeAPIServersInplaceRunner(CookbookRunnerBase):
         # Stop all apiserver components on all but the first control-plane node
         self.stop_apiserver(self.remaining_control_planes)
 
-        logger.info("Installing kubernetes-master package on the first control-plane")
+        first_control_plane_name = self.first_control_plane.hosts[0]
+        logger.info("Installing kubernetes-master package on the first control-plane: %s", first_control_plane_name)
         self.install_package(self.first_control_plane, "kubernetes-master")
-        logger.info("Restarting apiserver on the first control-plane")
+        logger.info("Restarting apiserver on the first control-plane: %s", first_control_plane_name)
         self.restart_apiserver(self.first_control_plane)
         # Validate the first control-plane is ready
+        ensure_k8s_services_active(self.first_control_plane)
         self.wait_for_ready(self.first_control_plane)
 
         # At this point the kubernetes cluster has practically been upgraded.
         # Now update the remaining control-plane nodes and ensure the apiservers run the expected version
-        logger.info("Installing kubernetes-master package on the remaining control-planes")
+        logger.info(
+            "Installing kubernetes-master package on the remaining control-planes %s",
+            self.remaining_control_planes,
+        )
         self.install_package(self.remaining_control_planes, "kubernetes-master")
         self.restart_apiserver(self.remaining_control_planes)
+        ensure_k8s_services_active(self.remaining_control_planes)
         self.wait_for_ready(self.remaining_control_planes)
 
         # All done, re-enable puppet and run on all control-planes
