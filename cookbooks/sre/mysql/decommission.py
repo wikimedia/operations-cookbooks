@@ -19,6 +19,7 @@ from argparse import ArgumentParser
 import requests
 from cookbooks.sre.mysql import Phabricator, ZarcilloClient, init_step, phabricator_client
 from spicerack.cookbook import CookbookBase, CookbookRunnerBase
+from spicerack.remote import RemoteHosts
 from wmflib.interactive import ask_confirmation, ensure_shell_is_durable
 
 log = logging.getLogger(__name__)
@@ -62,6 +63,20 @@ def _delete_from_zarcillo(hostname: str) -> None:
         err = f"Zarcillo API error: {err}"
         log.error(err)
         raise RuntimeError(err)
+
+
+def _forget_from_orchestrator(orc: RemoteHosts, hostname: str, port: int) -> None:
+    """Forget an instance in Orchestrator, skipping instances it does not know about."""
+    find_cmd = rf"orchestrator -c find --pattern '^{hostname}(\.(eqiad|codfw)\.wmnet)?:{port}$' --quiet"
+    log.debug(f"Running on orchestrator: {find_cmd}")
+    results = orc.run_sync(find_cmd, is_safe=True, print_output=False, print_progress_bars=False)
+    if not "".join(msg.message().decode() for _, msg in results).strip():
+        log.warning(f"{hostname}:{port} not found in orchestrator, it was probably already removed. Skipping.")
+        return
+
+    forget_cmd = f"orchestrator -c forget -i {hostname}:{port}"
+    log.debug(f"Running on orchestrator: {forget_cmd}")
+    orc.run_sync(forget_cmd)
 
 
 def diy(s: str) -> None:
@@ -201,9 +216,7 @@ class DecommissionRunner(CookbookRunnerBase):
         step("orchestrator", "Running orchestrator cleanup")
         orc = spicerack.remote().query("dborch1002.wikimedia.org")
         for i in instances:
-            cmd = f"orchestrator -c forget -i {i.hostname}:{i.port}"
-            log.debug(f"Running on orchestrator: {cmd}")
-            orc.run_sync(cmd)
+            _forget_from_orchestrator(orc, i.hostname, i.port)
 
         step("phabricator", "Update phabricator task")
         phab.task_comment(task_id, f"{hostname} has been decommissioned by Data Persistence")

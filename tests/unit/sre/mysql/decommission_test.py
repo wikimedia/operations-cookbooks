@@ -1,5 +1,5 @@
 import logging
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 from cookbooks.sre.mysql import Phabricator
@@ -72,6 +72,10 @@ def test_run_full(mocker, caplog):
         None,
     ]
 
+    m_msg = MagicMock()
+    m_msg.message.return_value = b"db1176.eqiad.wmnet:3306\n"
+    mock_sr.remote.return_value.query.return_value.run_sync.return_value = [("dborch1002.wikimedia.org", m_msg)]
+
     run_cb(Decommission, DecommissionRunner, mock_sr, ["db1176", "-t", "T12345"])
 
     exp = """\
@@ -96,6 +100,7 @@ INFO ▶ ssh puppetserver1001.eqiad.wmnet -t sudo -i puppet-merge
 DEBUG Mock ask 'Done?'
 INFO [cookbooks.sre.mysql.decommission.zarcillo_cleanup] Removing host from zarcillo
 INFO [cookbooks.sre.mysql.decommission.orchestrator] Running orchestrator cleanup
+DEBUG Running on orchestrator: orchestrator -c find --pattern '^db1176(\\.(eqiad|codfw)\\.wmnet)?:3306$' --quiet
 DEBUG Running on orchestrator: orchestrator -c forget -i db1176:3306
 INFO [cookbooks.sre.mysql.decommission.phabricator] Update phabricator task
 INFO --------------------------------------------------------------------------------
@@ -244,3 +249,45 @@ def test_handover_task_to_dcops_dryrun(mocker, caplog):
 INFO DRY-RUN: not running phabricator transaction: [{'type': 'owner', 'value': None}, {'type': 'projects.set', 'value': ['PHID-PROJ-dcops', 'PHID-PROJ-opseqiad']}, {'type': 'comment', 'value': 'This host is ready for DC-Ops to decommission'}, {'type': 'description', 'value': 'Steps for service owner:\\n[x] - step 1'}]
 """
     assert caplog.text == exp
+
+
+def _cumin_results(output: bytes):
+    msg = MagicMock()
+    msg.message.return_value = output
+    return [("dborch1002.wikimedia.org", msg)]
+
+
+FIND_CMD = r"orchestrator -c find --pattern '^clouddb1015(\.(eqiad|codfw)\.wmnet)?:3314$' --quiet"
+FORGET_CMD = "orchestrator -c forget -i clouddb1015:3314"
+FIND_KWARGS = {"is_safe": True, "print_output": False, "print_progress_bars": False}
+
+
+def test_forget_from_orchestrator_known_instance(caplog):
+    from cookbooks.sre.mysql.decommission import _forget_from_orchestrator
+
+    orc = MagicMock()
+    orc.run_sync.side_effect = [_cumin_results(b"clouddb1015.eqiad.wmnet:3314\n"), None]
+    _forget_from_orchestrator(orc, "clouddb1015", 3314)
+    assert orc.run_sync.call_args_list == [call(FIND_CMD, **FIND_KWARGS), call(FORGET_CMD)]
+    assert "not found in orchestrator" not in caplog.text
+
+
+def test_forget_from_orchestrator_unknown_instance(caplog):
+    from cookbooks.sre.mysql.decommission import _forget_from_orchestrator
+
+    orc = MagicMock()
+    orc.run_sync.return_value = _cumin_results(b"")
+    _forget_from_orchestrator(orc, "clouddb1015", 3314)
+    orc.run_sync.assert_called_once_with(FIND_CMD, **FIND_KWARGS)
+    assert "clouddb1015:3314 not found in orchestrator" in caplog.text
+
+
+def test_forget_from_orchestrator_find_fails():
+    from cookbooks.sre.mysql.decommission import _forget_from_orchestrator
+    from spicerack.remote import RemoteExecutionError
+
+    orc = MagicMock()
+    orc.run_sync.side_effect = RemoteExecutionError(1, "Cumin execution failed", iter([]))
+    with pytest.raises(RemoteExecutionError):
+        _forget_from_orchestrator(orc, "clouddb1015", 3314)
+    orc.run_sync.assert_called_once_with(FIND_CMD, **FIND_KWARGS)
