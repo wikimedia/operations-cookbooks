@@ -70,6 +70,7 @@ class UpgradeAPIServersInplaceRunner(CookbookRunnerBase):
         self.spicerack_remote = spicerack.remote()
         self.reason = spicerack.admin_reason(args.reason)
         self.dry_run = spicerack.dry_run
+        self.confctl = spicerack.confctl("node")
 
         self.all_control_planes = self.spicerack_remote.query(f"A:{self.k8s_metadata['control-plane']}")
         # Select one control plane that will keep running and receive the upgrade first
@@ -182,7 +183,15 @@ class UpgradeAPIServersInplaceRunner(CookbookRunnerBase):
         12. Re-enable and run puppet on all control-plane nodes.
         13. Pool the remaining control-plane nodes.
         """
+        # The manual conftool depool is done so that the following pool_depool will be routed to
+        # self.first_control_plane to not block the drain calls by depooling the control-plane the drain
+        # call was sent to.
+        self.confctl.update_objects(
+            {"pooled": "inactive"},
+            self.confctl.filter_objects({}, name="|".join(self.remaining_control_planes.hosts.striter())),
+        )
         # Depool all but the first control-plane since we stop apiserver components on them
+        # Since the nodes are already depooled from the call above, this will effectively just cordon the nodes.
         self.pool_depool(self.remaining_control_planes, action="depool")
 
         # Hold kubernetes-node and kubernetes-master package.
