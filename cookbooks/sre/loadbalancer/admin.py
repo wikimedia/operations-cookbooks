@@ -43,6 +43,9 @@ class LibericaAdmin(SREBatchBase):
 class LibericaAdminRunner(SREBatchRunnerBase):
     """Controller class for Liberica admin operations"""
 
+    depool_sleep = 60
+    pool_sleep = 60
+
     def __init__(self, args: argparse.Namespace, spicerack: Spicerack) -> None:
         """Initializes the parent class, also adds an http session"""
         super().__init__(args, spicerack)
@@ -85,6 +88,7 @@ class LibericaAdminRunner(SREBatchRunnerBase):
         puppet.disable(self._puppet_reason, verbatim_reason=True)
         depool_cmd = "/bin/systemctl stop liberica-cp.service"
         confirm_on_failure(hosts.run_sync, depool_cmd)
+        self._sleep(self.depool_sleep)
 
     def _pool_action(self, hosts: RemoteHosts, _: Reason) -> None:
         """Pool liberica instance by starting the control plane service"""
@@ -92,6 +96,7 @@ class LibericaAdminRunner(SREBatchRunnerBase):
         pool_cmd = "/bin/systemctl start liberica-cp.service"
         confirm_on_failure(hosts.run_sync, pool_cmd)
         puppet.enable(self._puppet_reason, verbatim_reason=True)
+        self._sleep(self.pool_sleep)
 
     def _config_reload_action(self, hosts: RemoteHosts, _: Reason) -> None:
         reload_cmd = "/bin/systemctl reload liberica-cp.service"
