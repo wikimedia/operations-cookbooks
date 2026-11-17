@@ -212,9 +212,10 @@ class UpgradeAPIServersInplaceRunner(CookbookRunnerBase):
 
         # At this point the kubernetes cluster has practically been upgraded.
         # Now update the remaining control-plane nodes and ensure the apiservers run the expected version
-        logger.info(
-            "Installing kubernetes-master package on the remaining control-planes %s",
-            self.remaining_control_planes,
+        ask_confirmation(
+            f"The next step is installing the kubernetes-master package on the remaining control-planes "
+            f"({self.remaining_control_planes}). Please confirm the updated apiserver ({first_control_plane_name}) "
+            "does work as expected before continuing.",
         )
         self.install_package(self.remaining_control_planes, "kubernetes-master")
         self.restart_apiserver(self.remaining_control_planes)
